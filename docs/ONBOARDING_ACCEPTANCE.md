@@ -10,7 +10,7 @@ chapter-two or chapter-three state between legs.
 Assisted Guided careers use universe seeds `1`, `42`, and `12648430`
 (`0xC0FFEE`). Every seed completes the home Signal Run, origin-system body
 transfer, first intersystem jump, three station returns, and the final
-open-exploration handoff. The existing Advanced/Pilot planetary recovery
+open-exploration handoff. The existing Advanced planetary recovery
 scenario remains anchored to seed 42 and must observe its bounded thermal
 abort/recovery consequence.
 

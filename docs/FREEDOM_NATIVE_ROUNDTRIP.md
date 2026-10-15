@@ -7,7 +7,7 @@ drive. After arrival and a bounded ship observation, the pilot jumps home,
 intercepts the moving station, docks, replenishes and disembarks through the
 original entry. No mission, earned capability, money or upgrade is required.
 
-Two opt-in Pilot traces deliberately align both departures or hold a twenty-degree
+Two opt-in Advanced traces deliberately align both departures or hold a twenty-degree
 heading offset. The test pilot brakes drift and rotates with real actuators before
 each spool, including a physical quarter-turn for the return reversal. Commitment
 must retain the selected grade, a clear actual arrival and its documented envelope:
@@ -54,13 +54,13 @@ python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
   --test native_roundtrip --test native_roundtrip_pilot
 ```
 
-For the deliberate Pilot grades, select `--test native_roundtrip_pilot_aligned`
+For the deliberate Advanced grades, select `--test native_roundtrip_pilot_aligned`
 and `--test native_roundtrip_pilot_offset`. Their committed heading, drift and
 uncertainty display are checked against C++ evidence as well as complete saves.
 
 These are accelerated semantic-input and headless integration checks. They do
 not qualify manual controller handling, performance or fun. A separate graphical
-review replays both deliberate Pilot trips with the Compatibility/llvmpipe software
+review replays both deliberate Advanced trips with the Compatibility/llvmpipe software
 renderer, captures all nineteen checkpoints per trip, and preserves the same full
 saves during frame waits. The neighboring body, home direction, actual station and
 displayed commitment consequences follow the authoritative world. Source, command,

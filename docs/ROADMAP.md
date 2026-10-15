@@ -260,7 +260,7 @@ The retained historical jump adapter preserves its atomic charge accounting.
 [Mission-free native neighboring travel](FREEDOM_NATIVE_TRAVEL.md) now persists
 actual spool, commitment, transit and arrival. The
 [continuous round trip](FREEDOM_NATIVE_ROUNDTRIP.md) qualifies normal station
-departure, actual ALIGNED/OFFSET Pilot arrival, neighboring observation, physical
+departure, actual ALIGNED/OFFSET Advanced arrival, neighboring observation, physical
 return docking, replenishment and disembarking with both compilers and native
 replays. [Explicit standard recovery](FREEDOM_RECOVERY.md) preserves the world and
 knowledge while replacing a declared lost craft. These selected consumers
@@ -302,10 +302,10 @@ replacement recovery #247 and final native visual qualification remain open.
 
 [The bounded normal trip](FREEDOM_NATIVE_ROUNDTRIP.md) now starts with actual
 station walking/boarding and returns through physical moving-station capture,
-service and disembarking. Assisted/Pilot traces retain an uninterrupted session
+service and disembarking. Assisted/Advanced traces retain an uninterrupted session
 beside each checkpoint-resumed session, meter actual thrust, and leave one jump
 charge before service. Native replay consumes the same controls and checks full
-C++ saves, current-world cues and pilot continuity. Deliberate Pilot traces align
+C++ saves, current-world cues and pilot continuity. Deliberate Advanced traces align
 both departures or hold a twenty-degree offset with real actuators, retaining
 the offset's larger arrival envelope through the actual return. Both also complete
 a separate Compatibility/llvmpipe graphical replay with matching saves at nineteen

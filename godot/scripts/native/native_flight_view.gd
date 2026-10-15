@@ -495,7 +495,7 @@ func build_ui() -> void:
 	pause_button.pressed.connect(toggle_pause)
 	column.add_child(pause_button)
 	assist_button = CheckButton.new()
-	assist_button.text = "Assisted piloting"
+	assist_button.text = "Flight assistance"
 	assist_button.button_pressed = state.assistance
 	assist_button.focus_mode = Control.FOCUS_NONE
 	assist_button.toggled.connect(request_assistance)

@@ -1,4 +1,4 @@
-# Deterministic FTL Transit and Pilot Alignment
+# Deterministic FTL Transit and Advanced Alignment
 
 Version 4 implements the bounded first-contract route without continuous
 interstellar flight. The application owns the authoritative fixed-step state,
@@ -25,7 +25,7 @@ phase.
 
 Outbound commitment resolves the mission planet ephemeris at the future
 arrival tick. Assisted mode places the handoff ten planet radii behind its
-velocity vector and matches the planet's system-inertial velocity. Pilot mode
+velocity vector and matches the planet's system-inertial velocity. Advanced mode
 derives its base alignment sample from the independent `jump_alignment=11`
 seed domain, then deterministically adds the live craft's station-local yaw and
 normalized relative speed. During the cancelable spool, A/D changes heading
@@ -58,7 +58,7 @@ coordinate.
 
 ## Persistence and presentation
 
-Save format 16 stores the frozen outbound origin craft, active Pilot alignment,
+Save format 16 stores the frozen outbound origin craft, active Advanced alignment,
 and the immutable committed assessment in addition to the arrival solution's
 canonical finite binary64 decimal strings, destination/reference identities,
 and arrival tick. A save
@@ -79,8 +79,8 @@ The transit image and reticle are bounded code-rendered RGBA derived only from
 the semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit
 text. The snapshot exposes phase, destination, progress, commitment,
 cancelability, error, and quality without relying on color.
-`--intersystem-jump-acceptance --report PATH` runs Assisted plus all Pilot
-placements, saves and resumes a committed Pilot result, and reports
+`--intersystem-jump-acceptance --report PATH` runs Assisted plus all Advanced
+placements, saves and resumes a committed Advanced result, and reports
 authoritative placement and framebuffer checksums separately. Its schema 3
 report identifies `evidence_scope: application_framebuffer`; actual Kitty/ANSI
 encoding is covered by the headless benchmark and system-navigation acceptance.

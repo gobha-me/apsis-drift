@@ -77,7 +77,7 @@ The committed state has no meaningful continuous interstellar position. It
 simulates a bounded deterministic transition and advances authoritative time;
 camera motion, flashes, skipped frames, and no-animation/headless completion
 are presentation choices. Assisted arrival uses the documented ten-radius
-matched-velocity target corridor. Pilot grades fixed-point heading and velocity
+matched-velocity target corridor. Advanced grades fixed-point heading and velocity
 alignment and binds an aligned, offset, or opposite-phase pose inside the same
 correct target system, but cannot change its identity.
 
@@ -163,7 +163,7 @@ unchanged.
 A poor entry may be recovered by atmospheric or surface travel, or by climbing
 back through the existing regimes into orbit and departing the planet again.
 No first-loop recovery requires fuel, repair, damage, or a new objective. At
-the thermal limit, Pilot forces a bounded climb to orbit, clears held descent,
+the thermal limit, Advanced forces a bounded climb to orbit, clears held descent,
 cools, and permits deliberate reentry. The consequence cannot turn a valid
 location into corrupt mission state.
 

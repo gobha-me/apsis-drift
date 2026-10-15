@@ -6,12 +6,17 @@ from [the starting chart](FREEDOM_TOPOLOGY.md). The [native travel consumer](FRE
 in-range jumps in Godot. Existing jump-version-4 contracts, missions and saved games retain
 their previous behavior.
 
+The native runtime Flight assistance setting selects this request's compensation
+profile: on selects Assisted, off selects Advanced. It remains a runtime setting,
+separate from the retained terminal career choice in
+[Rule Profiles](RULE_PROFILES.md).
+
 ## Actual geometry
 
 The request names the universe seed, seed-derived starter craft, actual
-canonical Wayfarer rigid state, selected destination, Assisted/Pilot profile
-and nonzero attempt ordinal. The source is the named planet-relative inertial
-frame in physical catalog/ephemeris 2. Its local position must fit the existing
+canonical Wayfarer rigid state, selected destination, Assisted/Advanced
+jump-compensation profile and nonzero attempt ordinal. The source is the named
+planet-relative inertial frame in physical catalog/ephemeris 2. Its local position must fit the existing
 100-billion-metre coordinate domain. System barycentric body positions are
 not constrained to that local domain.
 
@@ -54,7 +59,7 @@ explicit provisional 60 km/s reference, capped at one and rounded to basis
 points. This is speed relative to that body, not velocity-direction alignment
 or the legacy keyboard trim. Rounding boundaries are part of the policy.
 
-Pilot uses the existing thresholds: aligned at heading ≤3° and drift ≤2%;
+Advanced uses the existing thresholds: aligned at heading ≤3° and drift ≤2%;
 offset at heading ≤45° and drift ≤20%; opposed otherwise. Assisted records
 the real assessment but compensates its envelope grade to aligned. It does
 not erase speed, rotate the ship, or modify its resources.

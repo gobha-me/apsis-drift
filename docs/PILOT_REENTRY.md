@@ -1,10 +1,12 @@
-# Pilot Thermal Reentry
+# Advanced Thermal Reentry
 
 The v0.4.17 thermal path makes atmospheric entry meaningfully different under
-the existing `ASSISTED` and `PILOT` rule profiles without adding damage, fuel,
-or generated-world mutation. Terrain generation, flight integration, and the
-consequence remain application-owned; terminal presentation consumes only a
-derived readout.
+the retained career's Assisted Piloting and Advanced Piloting rule profiles
+without adding damage, fuel, or generated-world mutation. Terrain generation,
+flight integration, and the consequence remain application-owned; terminal
+presentation consumes only a derived readout. The historical filename and
+`v0.4.17-pilot-thermal-reentry` scenario identifier remain unchanged; dated
+[acceptance reports](performance/2026-08-19/README.md) retain their original labels.
 
 ## Authoritative model
 
@@ -25,8 +27,8 @@ cannot add heat. Invalid load, non-finite state, malformed planet data, or an
 invalid step rejects the whole flight advancement without mutation.
 
 Both profiles accumulate and cool the same state. Assisted uses the 100% limit
-as information only. Pilot latches at the limit and overrides only the vertical
-descent intent with a bounded climb; horizontal controls remain available. On
+as information only. Advanced latches at the limit and overrides only the
+vertical descent intent with a bounded climb; horizontal controls remain available. On
 entering the orbital regime, the latch clears, held descent is released, and
 downward velocity is cancelled. The craft continues cooling and can make a
 deliberate second entry.
@@ -48,10 +50,10 @@ presentation and are not saved.
 ## Save compatibility
 
 Save format 16 requires a `thermal` object in every encoded planetary flight
-and preserves both fixed-point load and the Pilot abort latch exactly. Formats
+and preserves both fixed-point load and the Advanced abort latch exactly. Formats
 1 through 10 are rejected by the current alpha boundary rather than receiving
 invented thermal history. Assisted intersystem state and the bounded Signal
-Run state reject a latched abort, preventing a Pilot-only consequence from
+Run state reject a latched abort, preventing an Advanced-only consequence from
 crossing rule-profile boundaries.
 
 ## Deterministic acceptance
@@ -67,8 +69,8 @@ canonical values under GCC and Clang:
 | Shallow-entry peak load | 58,770 units |
 | Manual-correction peak load | 35,130 units |
 | Assisted peak load | 1,000,000 units, no latch |
-| Pilot forced-abort tick | 803 |
-| Pilot recovery-to-orbit tick | 11,764 |
+| Advanced forced-abort tick | 803 |
+| Advanced recovery-to-orbit tick | 11,764 |
 | Deliberate reentry tick | 13,108 |
 | Save/resumed recovery checksum | `12793732928174323102` |
 

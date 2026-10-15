@@ -1405,7 +1405,7 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
           check(preview.request.profile == IntersystemRuleProfile::pilot &&
                     preview.alignment.quality == *grade && preview.volume &&
                     preview.volume->clear() && frozen.point_assessment.clear(),
-                "Actual Pilot commitment lost the intended safe grade");
+                "Actual Advanced commitment lost the intended safe grade");
           const auto aligned = need(
               assess_freedom_jump_distance(preview.distance_metres,
                                            IntersystemArrivalQuality::aligned),

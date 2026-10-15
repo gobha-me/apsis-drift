@@ -1,11 +1,20 @@
 # Deterministic Rule Profiles
 
-Version 2 defines exactly two New Game penalty modes for an intersystem career:
-`ASSISTED PILOTING` and `ADVANCED PILOTING`. Neither mode is the cockpit's
-runtime `MANUAL`/`AUTOPILOT` flight control, claims high-fidelity simulation,
+Version 2 defines exactly two New Game penalty modes for the retained terminal
+intersystem career: `ASSISTED PILOTING` and `ADVANCED PILOTING`. Neither mode
+is the cockpit's runtime `MANUAL`/`AUTOPILOT` flight control, claims high-fidelity simulation,
 changes generated-world truth, or selects a different mission. Save format 16
 retains the historical internal `pilot` token for wire compatibility; menus and
 mission presentation call that value Advanced.
+
+Native Freedom uses a separate saved runtime **Flight assistance** setting.
+It remains toggleable through the supported flight controls and governs physical
+flight assistance and the qualified in-range jump compensation: assistance on
+uses the Assisted arrival grade; assistance off uses Advanced alignment grading.
+The remaining career and thermal rules on this page describe the retained
+terminal path. Native Flight assistance does not select that permanent career
+choice. See [Freedom jump targeting](FREEDOM_JUMP_TARGETING.md) for the native
+consumer.
 
 ## Selection and authority
 
@@ -71,7 +80,7 @@ mission, or objective and never requires fuel, repair, or permanent damage.
 
 The cockpit presents `HEAT`, `TEMP`, the 100% limit, signed flight-path angle,
 and an information-complete correction cue. See
-[Pilot Thermal Reentry](PILOT_REENTRY.md) for the formula, acceptance route,
+[Advanced Thermal Reentry](PILOT_REENTRY.md) for the formula, acceptance route,
 and save boundary.
 
 ## Deferred systems

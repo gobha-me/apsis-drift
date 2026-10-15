@@ -86,7 +86,7 @@ downward velocity; ordinary contact applies the same clamp after motion. A
 transition clamps carried velocity to the new regime's limits before the
 resulting state is committed.
 
-## Thermal load and Pilot skip-out
+## Thermal load and Advanced skip-out
 
 Thermal load is an integer fraction from `0` through `1,000,000`, where the
 upper bound is 100%. Each fixed step derives atmospheric density from the
@@ -96,14 +96,14 @@ scales with accumulated load and increases toward vacuum. Airless planets add
 no heating. The result is rounded back to the bounded fixed-point state after
 each step.
 
-Assisted and Pilot advance the same load. Assisted treats the limit as
-feedback only. Pilot latches an abort at the limit and commands a bounded
+Assisted and Advanced advance the same load. Assisted treats the limit as
+feedback only. Advanced latches an abort at the limit and commands a bounded
 climb while preserving horizontal control. Entering orbit clears the latch,
 clears held descent, and cancels downward velocity, allowing the player to
 cool and deliberately reenter. Load trend, flight-path angle, percentage, and
 the `SLOW+RISE`, `COOLING`, and `ABRT CLMB` strings are derived presentation;
 only load and latch enter the checksum and save document. The complete rule and
-acceptance evidence is in [Pilot Thermal Reentry](PILOT_REENTRY.md).
+acceptance evidence is in [Advanced Thermal Reentry](PILOT_REENTRY.md).
 
 ## Determinism and failure behavior
 
