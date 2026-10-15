@@ -211,10 +211,18 @@ auto PlanetSurfaceWalkTerrain::advance(const PlanetSurfaceWalkerState& s,
 
 auto PlanetSurfaceWalkTerrain::near_entry(const PlanetSurfaceWalkerState& s)
     -> std::expected<bool, std::string> {
+  const auto access = return_access(s);
+  if (!access) return std::unexpected{access.error()};
+  return access->within_reach;
+}
+auto PlanetSurfaceWalkTerrain::return_access(const PlanetSurfaceWalkerState& s)
+    -> std::expected<PlanetSurfaceReturnAccess, std::string> {
   if (auto valid = validate(s); !valid) return std::unexpected{valid.error()};
-  auto start = entry();
+  const auto start = entry();
   if (!start) return std::unexpected{start.error()};
-  return length(sub(start->foot_position_metres, s.foot_position_metres)) <=
-         3.5;
+  const double distance =
+      length(sub(start->foot_position_metres, s.foot_position_metres));
+  return PlanetSurfaceReturnAccess{start->foot_position_metres, distance,
+                                   distance <= 3.5};
 }
 } // namespace apsis_drift

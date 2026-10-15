@@ -8,10 +8,15 @@ again, after which the ordinary flight controls and thruster liftoff resume.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
 with a recorded pending loss, or without the supported native starter state.
 
-A cyan **SHIP** marker points toward the retained Wayfarer while outside, with
-an edge arrow when it is off screen or behind the camera. It marks the craft
-centre; reach the aft ground access to reboard. The marker does not identify
-terrain obstructions or a safe walking route, and hides after reboarding.
+A cyan **RETURN** marker points toward the actual terrain-supported aft ground
+access while outside, with an edge arrow when it is off screen or behind the
+camera. The compact HUD shows foot-to-access distance and **Within reach** at
+the same 3.5-metre threshold used by Return through hatch. This is the existing
+instant ground-transfer point, not the visible roof hatch itself. If the return
+access is unavailable, the same marker instead reads **SHIP** and points only
+to the retained craft centre; the HUD says Return access unavailable. One marker
+avoids overlapping labels. It does not identify terrain obstructions or a safe
+walking route, and hides after reboarding.
 
 The forward-facing **Suit lamp** lights nearby terrain and the craft while on
 foot, including at night. Esc/Start opens paused controls; select **Suit lamp:

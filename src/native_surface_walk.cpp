@@ -38,6 +38,14 @@ auto NativeFreedomFlightSession::begin_surface_walk()
   *this = std::move(candidate);
   return {};
 }
+auto NativeFreedomFlightSession::surface_return_access() const
+    -> std::expected<PlanetSurfaceReturnAccess, std::string> {
+  if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_ ||
+      !surface_ || !surface_->landed ||
+      surface_walk_terrain_->anchor() != *surface_->landed)
+    return std::unexpected{"Return access requires its active landed walker"};
+  return surface_walk_terrain_->return_access(*surface_walker_);
+}
 auto NativeFreedomFlightSession::return_from_surface_walk()
     -> std::expected<void, std::string> {
   if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_)

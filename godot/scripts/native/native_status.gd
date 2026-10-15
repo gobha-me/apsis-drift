@@ -38,6 +38,11 @@ static func summary(value: Dictionary) -> String:
 	if not outside.is_empty():
 		if not outside.get("eye_position") is Vector3 or not outside.eye_position.is_finite(): return "Ground observations unavailable"
 		lines.append("Wayfarer · %.1f m to craft" % outside.eye_position.length())
+		var access: Variant = outside.get("return_access", {})
+		if access is Dictionary and access.get("available") is bool and access.available and finite_number(access.get("distance_metres")) and access.distance_metres >= 0.0 and access.get("within_reach") is bool:
+			lines.append("RETURN · %.1f m · %s" % [access.distance_metres, "Within reach · Return through hatch" if access.within_reach else "Approach ground access"])
+		else:
+			lines.append("RETURN · Return access unavailable")
 		lines.append("WASD / left stick walk · Right-drag / right stick look")
 	else:
 		lines.append("Reference altitude %.2f km" % (value.altitude / 1000.0))

@@ -68,6 +68,18 @@ func run() -> void:
 	var expected := Navigation.project(camera, Vector3.ZERO, ship_marker.size, Navigation.INSET * ship_marker.render_scale)
 	check(not expected.is_empty() and ship_marker.cue == expected and ship_marker.cue.in_view and ship_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Ship marker lost actual origin projection or intercepted input")
 	check(marker.label_text == "HOME", "Ship marker relabelled the home marker")
+	for bounds in [Vector2(320, 180), Vector2(800, 450), Vector2(1280, 720)]:
+		ship_marker.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+		ship_marker.size = bounds
+		for scale in [0.5, 1.0, 2.0]:
+			ship_marker.render_scale = scale
+			for label in ["HOME", "SHIP", "RETURN"]:
+				ship_marker.label_text = label
+				for point in [Vector2(1, 1), Vector2(bounds.x - 1, 1), Vector2(1, bounds.y - 1), bounds - Vector2.ONE]:
+					var backing: Rect2 = ship_marker.label_bounds(point)
+					var measured := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, roundi(18 * scale))).x
+					check(Rect2(Vector2.ZERO, bounds).encloses(backing) and backing.size.x >= measured + 6 * scale, "Measured return/home/ship label clipped at viewport edge")
+	check(marker.label_text == "HOME", "Return label changed separate home marker")
 	ship_marker.free()
 	marker.free()
 	camera.free()

@@ -933,6 +933,8 @@ auto surface_walk_session(const Fixture& f,
       required(session.save_as(directory / (std::string{name} + ".json")));
   };
   checkpoint("source");
+  check(!session.surface_return_access(),
+        "Seated session has no outside return cue");
   required(session.begin_surface_walk());
   checkpoint("exited");
   check(session.surface_walker() && !session.walker() &&
@@ -944,6 +946,10 @@ auto surface_walk_session(const Fixture& f,
         required(session.surface_walk_document())));
   };
   const auto before = snapshot();
+  const auto return_access = required(session.surface_return_access());
+  check(return_access.within_reach && return_access.distance_metres == 0 &&
+            snapshot() == before,
+        "Return cue reads actual outside owner without changing complete save");
   const auto temporary =
       std::filesystem::temp_directory_path() /
       ("apsis-surface-walk-" +
@@ -968,6 +974,7 @@ auto surface_walk_session(const Fixture& f,
       required(loss.surface_walk_document())));
   if (!directory.empty())
     required(loss.save_as(directory / "pending-loss.json"));
+  check(!loss.surface_return_access(), "Pending loss hides return access");
   check(!loss.advance_surface_walk({}) && !loss.return_from_surface_walk() &&
             pending == required(encode_freedom_surface_walk_document_json(
                            required(loss.surface_walk_document()))),
@@ -1070,6 +1077,20 @@ auto surface_walking(const Fixture& f) -> void {
   auto terrain = required(PlanetSurfaceWalkTerrain::create(
       f.owner, f.rotation, anchor, source.tick));
   const auto start = required(terrain.entry());
+  const auto access = required(terrain.return_access(start));
+  check(
+      access.foot_position_metres == start.foot_position_metres &&
+          access.distance_metres == 0 && access.within_reach,
+      "Return cue identifies actual terrain-supported entry, not craft centre");
+  auto invalid_access = start;
+  invalid_access.foot_position_metres.x =
+      std::numeric_limits<double>::quiet_NaN();
+  check(!terrain.return_access(invalid_access),
+        "Nonfinite return actor refuses");
+  invalid_access = start;
+  invalid_access.frame.planet = PlanetId{0};
+  check(!terrain.return_access(invalid_access),
+        "Wrong-owner return actor refuses");
   check(terrain.validate(start).has_value() &&
             required(terrain.near_entry(start)),
         "Actual landed Wayfarer has supported nearby hatch ground access");
@@ -1090,16 +1111,43 @@ auto surface_walking(const Fixture& f) -> void {
         "Independent long-double ray agrees with the actual rendered top "
         "triangle at the foot");
   auto actor = start;
+  auto previous_access = access;
+  bool crossed_reach_edge{};
   for (int i = 0; i < 1200; ++i) {
     const auto step = required(terrain.advance(actor, {-1, 0, 0}));
     check(step.status == PlanetSurfaceWalkStatus::supported,
           "Walking away remains supported without an invented area wall");
     actor = step.actor;
+    if (!crossed_reach_edge) {
+      const auto current_access = required(terrain.return_access(actor));
+      check(current_access.within_reach == required(terrain.near_entry(actor)),
+            "Return projection and interaction agree at the reach edge");
+      if (!current_access.within_reach) {
+        check(previous_access.within_reach &&
+                  previous_access.distance_metres <= 3.5 &&
+                  current_access.distance_metres > 3.5 &&
+                  current_access.distance_metres -
+                          previous_access.distance_metres <=
+                      2.45 * kSimulationStep.count() + 1e-8,
+              "Real supported steps bracket the exact 3.5-m reach predicate");
+        crossed_reach_edge = true;
+      }
+      previous_access = current_access;
+    }
   }
+  check(crossed_reach_edge,
+        "Supported outward walk crosses return reach boundary");
   check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) >
                 19 &&
             !required(terrain.near_entry(actor)) && terrain.cache_size() <= 4,
         "Ground travel leaves interaction range with bounded terrain cache");
+  const auto distant_access = required(terrain.return_access(actor));
+  check(distant_access.foot_position_metres == start.foot_position_metres &&
+            std::abs(distant_access.distance_metres -
+                     norm(sub(actor.foot_position_metres,
+                              start.foot_position_metres))) < 1e-9 &&
+            !distant_access.within_reach,
+        "Distant cue retains exact entry and actual foot distance");
   for (int i = 0; i < 1200; ++i)
     actor = required(terrain.advance(actor, {1, 0, 0})).actor;
   check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) <

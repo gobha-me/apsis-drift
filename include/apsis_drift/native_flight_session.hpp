@@ -189,6 +189,8 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto surface_walk_selected() const -> bool {
     return surface_walk_selected_;
   }
+  [[nodiscard]] auto surface_return_access() const
+      -> std::expected<PlanetSurfaceReturnAccess, std::string>;
   [[nodiscard]] auto begin_surface_walk() -> std::expected<void, std::string>;
   [[nodiscard]] auto return_from_surface_walk()
       -> std::expected<void, std::string>;

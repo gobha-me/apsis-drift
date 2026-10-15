@@ -1301,6 +1301,18 @@ class FreedomBridge : public godot::RefCounted {
     basis.set_column(1, local(rotate(rotation, up)));
     basis.set_column(2, local(rotate(rotation, back)));
     result["basis"] = basis;
+    godot::Dictionary access;
+    const auto returned = session.surface_return_access();
+    access["available"] = returned.has_value();
+    if (returned) {
+      const auto point = rotate(rotation, returned->foot_position_metres);
+      access["position"] = local({point.x - body.position_metres.x,
+                                  point.y - body.position_metres.y,
+                                  point.z - body.position_metres.z});
+      access["distance_metres"] = returned->distance_metres;
+      access["within_reach"] = returned->within_reach;
+    }
+    result["return_access"] = access;
     result["heading"] = actor.heading_radians;
     result["version"] = static_cast<std::int64_t>(actor.version);
     return result;

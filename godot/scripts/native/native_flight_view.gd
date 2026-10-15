@@ -170,6 +170,12 @@ static func valid_state(value: Dictionary) -> bool:
 	if not walking is Dictionary: return false
 	if not walking.is_empty():
 		if walking.get("version") != 1 or not walking.get("eye_position") is Vector3 or not walking.eye_position.is_finite(): return false
+		var access: Variant = walking.get("return_access")
+		if not access is Dictionary or not access.get("available") is bool: return false
+		if access.available:
+			if not access.get("position") is Vector3 or not access.position.is_finite(): return false
+			if not access.get("distance_metres") is float or not is_finite(access.distance_metres) or access.distance_metres < 0: return false
+			if not access.get("within_reach") is bool: return false
 		if not walking.get("basis") is Basis or not walking.basis.is_finite() or absf(walking.basis.determinant() - 1.0) > 0.00001: return false
 		if not walking.get("heading") is float or not is_finite(walking.heading) or absf(walking.heading) > PI: return false
 	var impact: Variant = value.get("impact", {"selected": false})
@@ -1414,9 +1420,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_suit_lamp()
 	ship_marker.visible = outside
 	if outside:
-		# The retained craft is the authoritative view origin. This is a
-		# centre bearing, not hatch reach, visibility or a safe terrain route.
-		ship_marker.update_cue(camera, Vector3.ZERO, false)
+		var access: Dictionary = state.surface_walk.return_access
+		# One marker avoids overlapping labels. SHIP is only a centre fallback;
+		# RETURN identifies the existing ground transfer, not an art hatch.
+		ship_marker.label_text = "RETURN" if access.available else "SHIP"
+		ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
 	orbital_forecast.visible = not outside
 	resource_status.visible = not outside
 	assist_button.visible = not outside
@@ -1426,5 +1434,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nSHIP points to the craft centre, not the hatch or a safe walking route.\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
 	update_compact_hud()
