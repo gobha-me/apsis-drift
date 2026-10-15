@@ -62,6 +62,18 @@ session; rejected writes preserve existing destination bytes. See the
 
 ## Streaming and residency
 
+The planetary material uses the C++ mesh's height-blended vertex colors as its
+albedo base. Neutral mineral/strata detail modulates brightness without replacing
+the palette with a common brown surface. Its scalar factor stays between 0.2925
+and 0.495 and fades to 0.45 at orbital distance using the existing footprint and
+distance filters. The same coarse/fine color endpoints participate in LOD morphs.
+Normals, terrain shape, star lighting and optical cover retain their existing
+owners. Nonplanet study materials retain their previous shading.
+
+These are visual palettes. Pale terrain does not certify ice, green does not
+identify vegetation, and blue does not introduce a liquid surface or new contact
+rules. Palette presentation grants no survey or hazard knowledge.
+
 Ordinary bridge streams retain the session's complete physical owner, current
 planet BodyId and saved policy. The descriptor-only constructor remains for
 explicit studies. A completed batch carries its stream kind, generation and
