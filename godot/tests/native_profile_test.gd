@@ -103,6 +103,48 @@ func run() -> void:
 	await pad(JOY_BUTTON_DPAD_DOWN, 1)
 	await pad(JOY_BUTTON_A, 1)
 	check(root.gui_get_focus_owner() == browser_focus and shell.load_browser.visible and not shell.load_confirmation.visible and owner.get_freedom_walk_state() == progressed, "Unselected controller navigated or activated the catalog")
+	# A disabled station origin still owns connection state and Start adoption.
+	view.controller_connection_changed(0, false)
+	view.controller_connection_changed(1, true)
+	var modal_focus := root.gui_get_focus_owner()
+	await pad(JOY_BUTTON_DPAD_DOWN, 0)
+	await pad(JOY_BUTTON_A, 0)
+	check(shell.load_browser.visible and not shell.load_confirmation.visible and root.gui_get_focus_owner() == modal_focus, "Disconnected station controller operated the Load browser")
+	await pad(JOY_BUTTON_START, 1)
+	check(shell.load_browser.visible and view.selected_pad == 1 and root.gui_get_focus_owner() == modal_focus and view.paused and view.process_mode == Node.PROCESS_MODE_DISABLED, "Station modal adoption canceled Load, lost focus or enabled the origin")
+	await pad(JOY_BUTTON_DPAD_DOWN, 1)
+	check(shell.load_browser.buttons[1].has_focus(), "Replacement station controller could not navigate Load")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	shell.load_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await pad(JOY_BUTTON_START, 1)
+	check(shell.load_browser.visible and view.paused and snapshot(owner, raw) == dirty_baseline, "Unfocused modal controller changed the journey")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	shell.load_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await pad(JOY_BUTTON_B, 1)
+	check(shell.load_origin == null and view.paused and snapshot(owner, raw) == dirty_baseline, "Replacement controller could not leave Load safely")
+	# The same ownership-only action works inside a real nested Window.
+	if shell.load_origin != null: shell.finish_load("Regression cleanup")
+	view.save_button.pressed.emit()
+	check(shell.save_confirmation.visible, "Modal replacement Save As did not open")
+	view.controller_connection_changed(1, false)
+	view.controller_connection_changed(2, true)
+	await pad(JOY_BUTTON_START, 2)
+	check(shell.save_confirmation.visible and view.selected_pad == 2 and shell.save_confirmation.get_cancel_button().has_focus() and view.process_mode == Node.PROCESS_MODE_DISABLED, "Adopting Start canceled Save As, lost focus or enabled the station")
+	await pad(JOY_BUTTON_DPAD_RIGHT, 1)
+	await pad(JOY_BUTTON_A, 1)
+	check(shell.save_confirmation.visible and shell.save_confirmation.get_cancel_button().has_focus(), "Disconnected controller confirmed Save As")
+	await pad(JOY_BUTTON_DPAD_RIGHT, 2)
+	check(shell.save_confirmation.get_ok_button().has_focus(), "Replacement controller could not navigate Save As")
+	await pad(JOY_BUTTON_B, 2)
+	await settle()
+	check(shell.save_origin == null and view.paused and snapshot(owner, raw) == dirty_baseline and owner.get_freedom_profile_state().id == "2", "Replacement Save cancel changed the slot or world")
+	if shell.save_origin != null: shell.finish_catalog_save("Regression cleanup")
+	if failures:
+		shell.free()
+		await settle()
+		quit(1)
+		return
+	shell.request_load()
 	for size in [Vector2i(1280, 720), Vector2i(800, 450)]:
 		root.size = size
 		await settle()
@@ -135,6 +177,54 @@ func run() -> void:
 	await settle()
 	check(shell.title_view != null and shell.current_view == null and shell.title_view.catalog_continue_button.disabled == false, "Clean Title did not expose latest catalog Continue")
 	var title: Control = shell.title_view
+	# The real title catalog must keep the input provider's controller owner
+	# when a replacement connects while the browser is already open.
+	var catalog_bytes := FileAccess.get_file_as_bytes(second)
+	title.controls.available_pads = {0: true, 1: true}
+	title.controls.device = 0
+	title.controls.install()
+	title.open_catalog()
+	await settle()
+	var title_browser: Control = title.catalog_browser
+	check(title_browser.visible and title_browser.buttons.size() == 2 and title_browser.buttons[0].has_focus(), "Title did not open the actual saved-journey catalog")
+	await pad(JOY_BUTTON_DPAD_DOWN, 1)
+	await pad(JOY_BUTTON_START, 1)
+	check(title_browser.visible and title_browser.buttons[0].has_focus() and title.controls.device == 0, "Unselected controller took over the title catalog")
+	title.controls.connection_changed(0, false)
+	title.controls.connection_changed(2, true)
+	await pad(JOY_BUTTON_DPAD_DOWN, 0)
+	check(title_browser.visible and title_browser.buttons[0].has_focus(), "Disconnected controller navigated the title catalog")
+	title_browser.buttons[0].grab_focus()
+	await pad(JOY_BUTTON_DPAD_DOWN, 2)
+	check(title_browser.buttons[1].has_focus() and title.controls.device == 2, "Newly connected controller could not navigate the open title catalog")
+	var inactive_focus := root.gui_get_focus_owner()
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	title_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await pad(JOY_BUTTON_B, 2)
+	await pad(JOY_BUTTON_START, 2)
+	check(title_browser.visible and root.gui_get_focus_owner() == inactive_focus, "Unfocused controller closed or navigated the catalog")
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	title_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await pad(JOY_BUTTON_B, 2)
+	check(not title_browser.visible and title.catalog_load_button.has_focus(), "Replacement controller could not leave the title catalog")
+	if title_browser.visible: title.back_from_catalog()
+	title.open_catalog()
+	title.controls.connection_changed(2, false)
+	# Device1 was already present: no new connection edge will select it.
+	await pad(JOY_BUTTON_START, 1)
+	check(title_browser.visible and title.controls.device == 1, "First backup Start did not select without leaving the catalog")
+	await pad(JOY_BUTTON_DPAD_DOWN, 1)
+	check(title_browser.buttons[1].has_focus(), "Already-connected backup could not navigate the catalog")
+	await pad(JOY_BUTTON_START, 1)
+	check(not title_browser.visible and title.catalog_load_button.has_focus(), "Selected backup Start could not return to title")
+	check(shell.current_view == null and shell.bridge.get_freedom_start().is_empty() and shell.bridge.get_pending_freedom_start().is_empty(), "Controller-only catalog actions generated or selected a journey")
+	check(FileAccess.get_sha256(first) == first_hash and FileAccess.get_file_as_bytes(second) == catalog_bytes and snapshot(owner, raw) == baseline, "Controller-only catalog actions changed a source save or retained authority")
+	# Keep a failed ownership assertion from cascading into a null journey.
+	if failures:
+		shell.free()
+		await settle()
+		quit(1)
+		return
 	title.continue_catalog()
 	await settle()
 	var continued: Variant = shell.bridge
@@ -166,6 +256,23 @@ func run() -> void:
 		await settle()
 		check(view.controls_menu.panel.visible and view.controls_menu.message.is_visible_in_tree() and notice in view.controls_menu.message.text and view.player_input.status == notice, "Flight save result disappeared on the next menu frame")
 		check(view.paused and not view.journey_dialog_open and shell.save_origin == null and snapshot(flight_owner, raw) == flight_before, "Save feedback callback altered the flight or left its modal lock")
+	# Flight uses its existing PlayerInput policy even while the Title modal
+	# suspends ordinary processing. An already-connected backup has no new edge.
+	view.player_input.available_pads = {0: true, 1: true}
+	view.player_input.device = 0
+	view.player_input.install()
+	shell.request_title()
+	check(shell.title_confirmation.visible, "Flight controller Title confirmation did not open")
+	view.player_input.connection_changed(0, false)
+	await pad(JOY_BUTTON_DPAD_RIGHT, 0)
+	check(shell.title_confirmation.get_cancel_button().has_focus(), "Disconnected flight controller operated the Title modal")
+	await pad(JOY_BUTTON_START, 1)
+	check(shell.title_confirmation.visible and view.player_input.device == 1 and shell.title_confirmation.get_cancel_button().has_focus() and view.process_mode == Node.PROCESS_MODE_DISABLED, "Flight adoption canceled Title, lost focus or enabled the origin")
+	await pad(JOY_BUTTON_DPAD_RIGHT, 1)
+	check(shell.title_confirmation.get_ok_button().has_focus(), "Replacement flight controller could not navigate the Title modal")
+	await pad(JOY_BUTTON_B, 1)
+	await settle()
+	check(shell.title_origin == null and shell.current_view == view and view.paused and snapshot(flight_owner, raw) == flight_before, "Replacement flight controller discarded, resumed or changed the journey")
 	flight_owner = null
 	shell.free()
 	owner = null

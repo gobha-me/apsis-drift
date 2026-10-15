@@ -398,7 +398,7 @@ func pause_controls(reason: String) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
-		if focused and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open():
+		if focused and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open():
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
@@ -677,6 +677,15 @@ func _notification(what: int) -> void:
 		controls_armed = false
 
 
+func try_select_controller(event: InputEvent) -> bool:
+	# Ownership can change in a paused journey modal without enabling movement.
+	if focused and save_dialog != null and not save_dialog.visible and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START and available_pads.get(event.device, false) and not available_pads.get(selected_pad, false):
+		selected_pad = event.device
+		if preferences_provider != null: preferences_provider.device = selected_pad
+		pause_controls("Controller selected. Release controls, then Resume explicitly.")
+		return true
+	return false
+
 func _input(event: InputEvent) -> void:
 	if journey_dialog_open: return
 	if save_dialog == null:
@@ -688,10 +697,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if pad_event and event.device != selected_pad:
 		# Start selects only when the current device is absent; it never resumes.
-		if focused and not save_dialog.visible and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START and available_pads.get(event.device, false) and not available_pads.get(selected_pad, false):
-			selected_pad = event.device
-			if preferences_provider != null: preferences_provider.device = selected_pad
-			pause_controls("Controller selected. Release controls, then Resume explicitly.")
+		try_select_controller(event)
 		get_viewport().set_input_as_handled()
 		return
 	if not focused or save_dialog == null or save_dialog.visible:

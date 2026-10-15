@@ -120,6 +120,10 @@ func _ready() -> void:
 	catalog_browser = ProfileBrowser.new()
 	catalog_browser.provider = catalog_owner
 	add_child(catalog_browser)
+	# Controls owns controller adoption before this title delegates catalog input.
+	# Otherwise the browser consumes an absent owner's backup Start first.
+	catalog_browser.set_process_input(false)
+	controls.bindings_changed.connect(func(): catalog_browser.device = controls.device)
 	catalog_browser.selected.connect(choose_catalog)
 	catalog_browser.canceled.connect(back_from_catalog)
 	refresh_catalog()
@@ -213,11 +217,17 @@ func layout_title() -> void:
 func _process(_delta: float) -> void:
 	layout_title()
 
+func _input(event: InputEvent) -> void:
+	if focused and catalog_browser != null and catalog_browser.visible:
+		catalog_browser._input(event)
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
+		if controls != null: controls.focused = false
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
+		if controls != null: controls.focused = true
 
 func refresh_catalog() -> void:
 	if catalog_owner == null or not catalog_owner.has_method("list_freedom_profiles"):
@@ -242,7 +252,6 @@ func open_catalog() -> void:
 	if busy or not focused or not panel.visible or chooser.visible: return
 	catalog_invoker = catalog_load_button
 	panel.hide()
-	controls.set_process_input(false)
 	catalog_browser.device = controls.device
 	catalog_browser.open()
 
