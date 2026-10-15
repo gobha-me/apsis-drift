@@ -121,7 +121,7 @@ struct SavedFlightWorld {
   std::optional<NativeFlightStep> last_step;
   double dropped_seconds{};
   // Presentation memoization only: one actual selected body, no save/catalog.
-  mutable std::optional<PlanetOpticsField> optical_field;
+  mutable std::optional<PlanetOpticsField> optical_field{};
 
   auto advance(double elapsed, std::span<const double> fractions, bool paused)
       -> void {
