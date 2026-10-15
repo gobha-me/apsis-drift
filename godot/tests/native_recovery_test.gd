@@ -17,6 +17,15 @@ func checkpoint(owner: Variant, path: String, expected: String) -> void:
 	check(owner.save_freedom_as(path), "Recovery Save As failed")
 	check(FileAccess.get_file_as_string(path) == FileAccess.get_file_as_string(expected), "Recovery owner differs from independent C++ oracle: " + expected)
 
+func pad(code: JoyButton, device: int) -> void:
+	for down in [true, false]:
+		var event := InputEventJoypadButton.new()
+		event.device = device
+		event.button_index = code
+		event.pressed = down
+		Input.parse_input_event(event)
+		await process_frame
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 5: quit(1); return
@@ -48,9 +57,23 @@ func run() -> void:
 			check(not before.station_available and before.resources.jump_charges == 2 and before.resources.quantity_quanta != before.resources.capacity_quanta, "Loss fixture did not retain actual neighbor/charge/propulsion history")
 			check(not owner.advance_freedom_flight(1.0 / 120.0, neutral, false) and not owner.replenish_freedom_resources() and not owner.begin_freedom_jump() and owner.get_freedom_flight_state() == before, "Pending loss allowed flight, service or jump mutation")
 			checkpoint(owner, directory.path_join("recovery-native.json"), prefix + ".pending.json")
+			if cause == 0 and fallback == 0:
+				var continue_button := root.gui_get_focus_owner() as Button
+				check(continue_button != null and continue_button.text == "Continue at Origin Station" and shell.recovery_overlay.is_ancestor_of(continue_button), "Recovery did not initially own Continue focus")
+				shell.current_view.player_input.device = -1
+				shell.current_view.player_input.available_pads[41] = false
+				Input.joy_connection_changed.emit(41, true)
+				await process_frame
+				check(root.gui_get_focus_owner() == continue_button and not shell.current_view.controls_menu.panel.visible and shell.recovery_overlay.is_visible_in_tree(), "Controller connection stole focus behind the recovery screen")
+				check(shell.current_view.player_input.device == 41 and not shell.current_view.is_processing() and shell.current_view.paused and owner.get_freedom_flight_state() == before and owner.get_freedom_recovery_state() == pending, "Controller connection operated the pending-loss flight")
+				checkpoint(owner, directory.path_join("recovery-native.json"), prefix + ".pending.json")
 			# Model-readiness failure must retain the pending source and its scene.
 			check(not shell.select_start(owner, {"mode": "recovery", "assets": directory.path_join("missing-assets")}) and owner.get_freedom_recovery_state() == pending and owner.get_pending_freedom_start().is_empty() and is_instance_valid(old_model), "Failed replacement staging consumed the loss or retired view")
-			check(shell.select_start(owner, {"mode": "recovery", "assets": directory.path_join("native-assets")}), "Replacement could not stage and commit: " + shell.error)
+			if cause == 0 and fallback == 0:
+				await pad(JOY_BUTTON_A, 41)
+				await process_frame
+			else:
+				check(shell.select_start(owner, {"mode": "recovery", "assets": directory.path_join("native-assets")}), "Replacement could not stage and commit: " + shell.error)
 			if not shell.current_view is WalkView: shell.free(); quit(1); return
 			shell.current_view.set_process(false)
 			var complete: Dictionary = owner.get_freedom_recovery_state()

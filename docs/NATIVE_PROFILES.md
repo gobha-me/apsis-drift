@@ -28,6 +28,8 @@ can be selected with Start after the previous controller is unavailable; that
 first Start only selects it. Use the next Start or B to go back. Selecting a
 controller never resumes the journey, and disconnected controllers cannot
 activate a catalog row or confirm a dialog. Keyboard navigation remains available.
+Connecting a controller also preserves focus on the recovery screen instead of
+opening flight controls behind it.
 
 ## Storage and compatibility
 
