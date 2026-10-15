@@ -48,8 +48,8 @@ auto generated_fields() -> void {
   std::array<bool, 4> kinds{};
   for (std::uint64_t seed = 0; seed < 32; ++seed) {
     const auto world = required(generate_physical_origin_system(Seed{seed}, 2));
-    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot
-    // verifies generation leaves the world unchanged.
+    // Keep an independent snapshot to detect generation mutation.
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Purity.
     const auto original = world;
     for (const auto& planet : world.catalog.planets) {
       const auto recipe =
