@@ -56,12 +56,15 @@ func apply(state: Dictionary, materials: Array[ShaderMaterial]) -> bool:
 		atlas_texture = texture
 		atlas_owner = owner
 		atlas_bytes = data.density.duplicate()
+	# Every tile consumes the same field and transform. Prepare them once per
+	# update, including the inverse, rather than once per live terrain material.
+	var parameters := [["optical_atlas", atlas_texture], ["optical_fixed_from_tangent", data.fixed_to_tangent.inverse()],
+		["optical_planet_center", data.planet_center], ["optical_reference_radius", data.reference_radius],
+		["optical_lower_height", data.lower_height_metres], ["optical_upper_height", data.upper_height_metres],
+		["optical_opacity_cap", data.opacity_cap], ["optical_tint", data.tint],
+		["optical_sun_direction", state.lighting.direction], ["optical_sun_color", state.lighting.star_color]]
 	for material in materials:
-		for pair in [["optical_atlas", atlas_texture], ["optical_fixed_from_tangent", data.fixed_to_tangent.inverse()],
-			["optical_planet_center", data.planet_center], ["optical_reference_radius", data.reference_radius],
-			["optical_lower_height", data.lower_height_metres], ["optical_upper_height", data.upper_height_metres],
-			["optical_opacity_cap", data.opacity_cap], ["optical_tint", data.tint],
-			["optical_sun_direction", state.lighting.direction], ["optical_sun_color", state.lighting.star_color]]:
+		for pair in parameters:
 			material.set_shader_parameter(pair[0], pair[1])
 		material.set_shader_parameter("optical_enabled", data.opacity_cap > 0.0)
 	return true
