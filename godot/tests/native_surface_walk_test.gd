@@ -1,6 +1,7 @@
 extends "res://studies/captures/native_voyage_capture.gd"
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
+const PositionStatus = preload("res://scripts/native/native_status.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
 
@@ -16,6 +17,28 @@ func key(physical: int, pressed: bool) -> void:
 func checkpoint(owner: Variant, source: String, output: String, name: String) -> bool:
 	var path := output.path_join(name + ".json")
 	return check(owner.save_freedom_as(path) and FileAccess.get_sha256(path) == FileAccess.get_sha256(source.path_join(name + ".json")), "Complete surface voyage differs at " + name)
+
+
+func check_surface_position(view: Control, owner: Variant, path: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var actor: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not check(actor is Dictionary and actor.get("actor") is Dictionary and actor.actor.get("foot_position_metres") is Array and actor.actor.foot_position_metres.size() == 3, "Saved ground position unavailable for independent direction check"): return
+	var walking: Dictionary = before.surface_walk
+	if not check(walking.get("latitude") is float and walking.get("longitude") is float and is_finite(walking.latitude) and is_finite(walking.longitude) and absf(walking.latitude) <= PI / 2.0 and absf(walking.longitude) <= PI, "Actual surface coordinates are unavailable or outside radians bounds"): return
+	# Scalar doubles retain the saved direction; a Godot Vector3 would round it
+	# to presentation float precision before this independent convention check.
+	var foot: Array = actor.actor.foot_position_metres
+	var radius := sqrt(float(foot[0]) * float(foot[0]) + float(foot[1]) * float(foot[1]) + float(foot[2]) * float(foot[2]))
+	var x := cos(walking.latitude) * cos(walking.longitude)
+	var y := cos(walking.latitude) * sin(walking.longitude)
+	var z := sin(walking.latitude)
+	check(absf(x - float(foot[0]) / radius) < 0.000000000001 and absf(y - float(foot[1]) / radius) < 0.000000000001 and absf(z - float(foot[2]) / radius) < 0.000000000001, "Surface coordinates describe a different direction than the actual saved actor")
+	var label := PositionStatus.surface_position_text(walking)
+	check(label in view.telemetry.text and not "Lat " in view.primary_status.text and not "Lon " in view.primary_status.text, "Actual expanded instruments lost own position or added coordinates to the compact HUD")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	for repeat in 3:
+		check(owner.get_freedom_flight_state() == before, "Reading surface position changed its actor, clock or observations")
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Surface position inspection changed complete saved voyage bytes")
 
 
 func walk(view: Control, physical: int, ticks: int) -> void:
@@ -379,6 +402,8 @@ func run() -> void:
 	for button in view.controls_menu.saved_port_buttons.values():
 		check(button.disabled, "Outside controls menu retained a flight action")
 	checkpoint(owner, args[0], args[2], "exited")
+	check_surface_position(view, owner, args[2].path_join("exited.json"))
+	var exited_position := [view.state.surface_walk.latitude, view.state.surface_walk.longitude]
 	var title_save := args[2].path_join("title-paused.json")
 	check(owner.save_freedom_as(title_save), "Outside pre-Title Save refused")
 	var title_hash := FileAccess.get_sha256(title_save)
@@ -414,6 +439,9 @@ func run() -> void:
 	if rendered: await capture_phase(view, owner, args[2], {"label": "exited"}, captures)
 	walk(view, KEY_S, 600)
 	checkpoint(owner, args[0], args[2], "halfway")
+	check_surface_position(view, owner, args[2].path_join("halfway.json"))
+	var halfway_position := [view.state.surface_walk.latitude, view.state.surface_walk.longitude]
+	check(absf(halfway_position[0] - exited_position[0]) + absf(halfway_position[1] - exited_position[1]) > 0.0000000001, "Actual walking left the surface position fixed at the ship")
 	check(not view.state.surface_walk.return_access.within_reach and view.state.surface_walk.return_access.distance_metres > 3.5, "Distant RETURN cue incorrectly claims reach")
 	check_return_bearing(view)
 	if failed: shell.free(); quit(1); return
@@ -435,10 +463,14 @@ func run() -> void:
 	check(shell.load_origin == null and shell.current_view != view and shell.error.is_empty(), "Outside in-game Load did not stage")
 	view = shell.current_view
 	check(view.paused and view.surface_walking() and shell.audio_session.get_instance_id() == audio_id, "Outside Continue lost paused actor or duplicated audio owner")
+	check(view.state.surface_walk.latitude == halfway_position[0] and view.state.surface_walk.longitude == halfway_position[1], "Outside Continue changed the committed own-position readout")
+	check_surface_position(view, owner, args[2].path_join("halfway.json"))
 	check(view.suit_lamp_enabled and view.suit_lamp.visible and view.suit_lamp_button.text == "Suit lamp: On", "Outside Continue persisted the presentation-only lamp choice or lost default illumination")
 	check_return_bearing(view)
 	walk(view, KEY_S, 600)
 	checkpoint(owner, args[0], args[2], "far")
+	check_surface_position(view, owner, args[2].path_join("far.json"))
+	check(absf(view.state.surface_walk.latitude - view.state.latitude) + absf(view.state.surface_walk.longitude - view.state.longitude) > 0.0000000001, "Far ground position substituted the retained craft position")
 	check(view.camera.position.is_equal_approx(view.state.surface_walk.eye_position) and view.camera.position.length() > 20.0, "Walking did not move the rendered eye away from the craft")
 	check_return_bearing(view)
 	if rendered: await capture_phase(view, owner, args[2], {"label": "far"}, captures)
@@ -452,11 +484,13 @@ func run() -> void:
 	check(not shell.select_start(owner, {"mode": "continue", "value": bad_path, "assets": args[1]}) and owner.get_freedom_flight_state() == frozen and shell.current_view == view, "Corrupt outside Continue replaced the live owner")
 	walk(view, KEY_W, 1200)
 	checkpoint(owner, args[0], args[2], "returned")
+	check_surface_position(view, owner, args[2].path_join("returned.json"))
 	if rendered: await capture_phase(view, owner, args[2], {"label": "returned"}, captures)
 	var retained_model: int = view.staged_model.get_instance_id()
 	view.context_action.pressed.emit()
 	check(view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == retained_model and retained_model != model_id, "Nearby return failed or replaced the continued ship")
 	check(not view.ship_marker.visible, "Ground ship bearing remained visible after reboarding")
+	check(view.state.surface_walk.is_empty(), "Reboarding retained an outside position projection")
 	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Suit lamp remained active after reboarding")
 	checkpoint(owner, args[0], args[2], "seated")
 	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("seated.json"), "assets": args[1]}), "Returned seated Continue did not stage")

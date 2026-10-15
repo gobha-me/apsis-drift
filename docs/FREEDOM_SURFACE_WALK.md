@@ -38,6 +38,11 @@ that clock; focus restoration requires an explicit neutral resume.
 Pausing, focus loss, opening controls and exporting a save retain the actor's
 committed heading. The first neutral resumed tick continues facing that direction.
 
+While on foot, **Flight instruments & navigation** shows your latitude and
+longitude on the current planet. They follow the committed ground position
+through walking and Continue. Reading them preserves the voyage clock and
+saved state.
+
 Tangent walking speed is 2 metres/second with normalized diagonal demand. Dry
 support, a maximum 35-degree slope and a 0.30-metre step bound restrict individual
 steps. A conservative standing capsule sweep against the registered craft box

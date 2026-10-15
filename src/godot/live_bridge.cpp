@@ -1280,6 +1280,10 @@ class FreedomBridge : public godot::RefCounted {
                                         body.tick))
             .geometry.fixed_to_system;
     const auto view = project_saved_flight(session);
+    const auto position = require(geodetic_from_planet_fixed(
+        view.planet, PlanetFixedPositionMetres{foot.x, foot.y, foot.z}));
+    result["latitude"] = position.latitude_radians;
+    result["longitude"] = position.longitude_radians;
     const auto local = [&](RigidVector3 v) {
       const auto& a = view.system_axes;
       return godot::Vector3{
