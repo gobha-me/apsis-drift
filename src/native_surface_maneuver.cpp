@@ -192,7 +192,7 @@ auto NativeFreedomFlightSession::try_surface_contact() -> void {
   const auto checksum = rigid_body_state_checksum({system_}, document_.flight);
   std::optional<TerrainPadGapSample> sampled_gap;
   if (checksum) (void)commit_touchdown_observed(*checksum, &sampled_gap);
-  if (!surface_->landed) gear_clearance_ = std::move(sampled_gap);
+  if (!surface_->landed) gear_clearance_ = sampled_gap;
   gear_clearance_craft_ = document_.origin.state.craft;
 }
 auto NativeFreedomFlightSession::last_gear_clearance() const
