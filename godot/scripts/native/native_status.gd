@@ -10,6 +10,18 @@ static func layout_bounds(logical: Vector2, pixels: Vector2) -> Rect2:
 	var margin := minf(16.0 * scale, minf(logical.x, logical.y) * 0.1)
 	return Rect2(Vector2.ONE * margin, Vector2(minf(380.0 * scale, logical.x - 2.0 * margin), minf(220.0 * scale, logical.y - 2.0 * margin)))
 
+# Last committed ground movement only; not a prediction or hazard assessment.
+static func movement_feedback(blockage: Variant) -> String:
+	if blockage == null: return ""
+	if not blockage is String: return "Ground movement feedback unavailable"
+	match blockage:
+		"terrain_unresolved": return "Last step blocked · Ground support unavailable"
+		"water": return "Last step blocked · Water or shoreline"
+		"slope": return "Last step blocked · Ground too steep"
+		"step": return "Last step blocked · Step or drop too large"
+		"craft_obstruction": return "Last step blocked · Wayfarer hull"
+	return "Ground movement feedback unavailable"
+
 static func summary(value: Dictionary) -> String:
 	for field in ["altitude", "surface_speed", "radial_rate", "air_density"]:
 		if not finite_number(value.get(field)): return "Flight observations unavailable"
@@ -37,6 +49,8 @@ static func summary(value: Dictionary) -> String:
 	var lines := PackedStringArray([mode + " · " + location])
 	if not outside.is_empty():
 		if not outside.get("eye_position") is Vector3 or not outside.eye_position.is_finite(): return "Ground observations unavailable"
+		var blocked := movement_feedback(outside.get("movement_blockage"))
+		if not blocked.is_empty(): lines.append(blocked)
 		lines.append("Wayfarer · %.1f m to craft" % outside.eye_position.length())
 		var access: Variant = outside.get("return_access", {})
 		if access is Dictionary and access.get("available") is bool and access.available and finite_number(access.get("distance_metres")) and access.distance_metres >= 0.0 and access.get("within_reach") is bool:

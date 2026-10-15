@@ -1313,6 +1313,29 @@ class FreedomBridge : public godot::RefCounted {
       access["within_reach"] = returned->within_reach;
     }
     result["return_access"] = access;
+    result["movement_blockage"] = godot::Variant{};
+    if (const auto blocked = session.surface_walk_blockage()) {
+      switch (*blocked) {
+        case PlanetSurfaceWalkStatus::terrain_unresolved:
+          result["movement_blockage"] = "terrain_unresolved";
+          break;
+        case PlanetSurfaceWalkStatus::water:
+          result["movement_blockage"] = "water";
+          break;
+        case PlanetSurfaceWalkStatus::slope:
+          result["movement_blockage"] = "slope";
+          break;
+        case PlanetSurfaceWalkStatus::step:
+          result["movement_blockage"] = "step";
+          break;
+        case PlanetSurfaceWalkStatus::craft_obstruction:
+          result["movement_blockage"] = "craft_obstruction";
+          break;
+        case PlanetSurfaceWalkStatus::supported:
+          throw std::invalid_argument("Supported step cannot be a blockage");
+        default: throw std::invalid_argument("Unknown surface movement result");
+      }
+    }
     result["heading"] = actor.heading_radians;
     result["version"] = static_cast<std::int64_t>(actor.version);
     return result;

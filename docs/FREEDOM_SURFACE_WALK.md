@@ -47,6 +47,11 @@ there is no circular mission boundary around the ship. This is point ground
 support and conservative box obstruction, not articulated human collision,
 jumping, swimming or arbitrary terrain obstacle simulation.
 
+The compact HUD explains the last committed blocked step: missing ground
+support, water, slope, an excessive step or drop, or the craft hull. A supported
+or neutral step clears the warning. Pause retains it; Continue and reboarding
+clear this transient feedback without adding it to saved world state.
+
 ## Save and recovery
 
 Explicit exit selects format **30**, surface actor version **1** and suited

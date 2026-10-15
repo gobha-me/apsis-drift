@@ -292,6 +292,31 @@ func check_ground_pause_heading(shell: Control, owner: Variant, source: String, 
 	check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("source.json"), "assets": assets}), "Heading check did not reset the canonical route")
 
 
+func check_walk_feedback(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
+	var view: Control = shell.current_view
+	view.surface_walk_button.pressed.emit()
+	check(view.paused and view.surface_walking() and view.state.surface_walk.get("movement_blockage") == null, "Exit invented an uncommitted blockage")
+	walk(view, KEY_W, 120)
+	check(view.error.is_empty() and not view.paused and view.state.surface_walk.movement_blockage == "craft_obstruction" and "Last step blocked" in view.primary_status.text and "Wayfarer hull" in view.primary_status.text, "Actual physical walking into the craft lost compact feedback or paused")
+	view.pause_controls("Inspecting last committed movement")
+	var frozen: Dictionary = owner.get_freedom_flight_state()
+	var saved := output.path_join("walk-blocked.json")
+	check(owner.save_freedom_as(saved), "Blocked actual walk Save As refused")
+	var bytes := FileAccess.get_file_as_bytes(saved)
+	view._process(0.125)
+	check(not owner.advance_freedom_surface_walk(0.125, PackedFloat64Array([0, 0]), false) and owner.get_freedom_flight_state() == frozen and owner.save_freedom_as(saved) and FileAccess.get_file_as_bytes(saved) == bytes and "Wayfarer hull" in view.primary_status.text, "Pause/refused advance/getters changed committed blockage or complete voyage")
+	var continued: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(continued.stage_freedom_continue(saved), "Blocked-walk reference Continue refused: " + str(continued.get_last_error())): return
+	var pending: Dictionary = continued.get_pending_freedom_start()
+	if not check(not pending.is_empty() and continued.commit_pending_freedom_start(pending.candidate_id), "Blocked-walk reference commit refused: " + str(continued.get_last_error())): return
+	if not check(continued.get_freedom_flight_state().surface_walk.movement_blockage == null and continued.save_freedom_as(output.path_join("walk-blocked-continued.json")) and FileAccess.get_file_as_bytes(output.path_join("walk-blocked-continued.json")) == bytes, "Continue invented prior feedback or changed complete save"): return
+	walk(view, KEY_S, 15)
+	check(view.error.is_empty() and not view.paused and view.state.surface_walk.movement_blockage == null and not "Last step blocked" in view.primary_status.text, "Supported movement retained a misleading obstacle warning")
+	check(continued.advance_freedom_surface_walk(0.125, PackedFloat64Array([-1, 0, 0]), false) and continued.save_freedom_as(output.path_join("walk-feedback-reference.json")) and owner.save_freedom_as(output.path_join("walk-feedback-after.json")) and FileAccess.get_file_as_bytes(output.path_join("walk-feedback-reference.json")) == FileAccess.get_file_as_bytes(output.path_join("walk-feedback-after.json")), "Feedback changed actual walk/clock/resources compared with independent Continue")
+	# Reset this short real-input probe before the inherited canonical trace.
+	check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("source.json"), "assets": assets}), "Feedback check did not restore the canonical source")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -313,6 +338,8 @@ func run() -> void:
 	shell.configure_audio({"audio_hum": wave, "audio_propulsion": wave, "audio_persist": false})
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK and shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
 	check_ground_pause_heading(shell, owner, args[0], args[1], args[2])
+	if failed: shell.free(); quit(1); return
+	check_walk_feedback(shell, owner, args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	var model_id: int = view.staged_model.get_instance_id()

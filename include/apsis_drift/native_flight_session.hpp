@@ -186,6 +186,13 @@ class NativeFreedomFlightSession {
       -> const std::optional<PlanetSurfaceWalkerState>& {
     return surface_walker_;
   }
+  // Transient feedback from the last committed ground step, never save data.
+  // Supported movement/neutral steps clear it; getters perform no terrain work.
+  [[nodiscard]] auto surface_walk_blockage() const
+      -> std::optional<PlanetSurfaceWalkStatus> {
+    return surface_walker_ && !recovery_pending() ? surface_walk_blockage_
+                                                  : std::nullopt;
+  }
   [[nodiscard]] auto surface_walk_selected() const -> bool {
     return surface_walk_selected_;
   }
@@ -257,6 +264,7 @@ class NativeFreedomFlightSession {
   NativeSurfaceManeuver surface_maneuver_;
   bool surface_walk_selected_{};
   std::optional<PlanetSurfaceWalkerState> surface_walker_;
+  std::optional<PlanetSurfaceWalkStatus> surface_walk_blockage_;
   std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
 };
 } // namespace apsis_drift

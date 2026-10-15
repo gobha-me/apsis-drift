@@ -946,6 +946,61 @@ auto surface_walk_session(const Fixture& f,
         required(session.surface_walk_document())));
   };
   const auto before = snapshot();
+  check(!session.surface_walk_blockage(),
+        "Fresh ground ownership has no invented movement result");
+  // Separate actual-session probe leaves the canonical voyage/export untouched.
+  // Reuse the ordinary craft obstruction already exercised by the terrain test.
+  auto feedback = session;
+  for (unsigned tick = 0; tick < 120; ++tick)
+    required(feedback.advance_surface_walk({1, 0, 0}));
+  check(feedback.surface_walk_blockage() ==
+            PlanetSurfaceWalkStatus::craft_obstruction,
+        "Committed blocked steps expose the existing craft obstruction reason");
+  const auto feedback_save = required(encode_freedom_surface_walk_document_json(
+      required(feedback.surface_walk_document())));
+  const auto feedback_actor = feedback.surface_walker();
+  check(
+      !feedback.advance_surface_walk(
+          {std::numeric_limits<double>::quiet_NaN(), 0, 0}) &&
+          feedback.surface_walk_blockage() ==
+              PlanetSurfaceWalkStatus::craft_obstruction &&
+          feedback.surface_walker() == feedback_actor &&
+          required(encode_freedom_surface_walk_document_json(
+              required(feedback.surface_walk_document()))) == feedback_save,
+      "Rejected advance preserves committed feedback, actor and complete save");
+  auto feedback_resume = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       required(decode_freedom_surface_walk_document_json(feedback_save)),
+       f.planet,
+       {}}));
+  check(!feedback_resume.surface_walk_blockage() &&
+            required(encode_freedom_surface_walk_document_json(required(
+                feedback_resume.surface_walk_document()))) == feedback_save,
+        "Continue clears transient blockage without changing saved bytes");
+  auto feedback_loss = feedback;
+  required(feedback_loss.record_loss(
+      FreedomLossCause::recoverable_destruction,
+      feedback_loss.document().origin.state.craft,
+      feedback_loss.document().flight.tick,
+      required(rigid_body_state_checksum(f.context,
+                                         feedback_loss.document().flight))));
+  check(!feedback_loss.surface_walk_blockage(),
+        "Pending loss cannot expose a prior ground obstruction");
+  required(feedback_loss.complete_recovery());
+  check(!feedback_loss.surface_walk_blockage(),
+        "Replacement station actor cannot inherit ground obstruction");
+  required(feedback.advance_surface_walk({-1, 0, 0}));
+  required(feedback_resume.advance_surface_walk({-1, 0, 0}));
+  check(!feedback.surface_walk_blockage() &&
+            feedback.surface_walker() != feedback_actor &&
+            required(encode_freedom_surface_walk_document_json(
+                required(feedback.surface_walk_document()))) ==
+                required(encode_freedom_surface_walk_document_json(
+                    required(feedback_resume.surface_walk_document()))),
+        "Supported movement clears blockage and matches independent Continue");
+  required(feedback.return_from_surface_walk());
+  check(!feedback.surface_walk_blockage(),
+        "Reboarding retires the ground movement result");
   const auto return_access = required(session.surface_return_access());
   check(return_access.within_reach && return_access.distance_metres == 0 &&
             snapshot() == before,

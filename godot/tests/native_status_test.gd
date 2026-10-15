@@ -40,6 +40,14 @@ func _initialize() -> void:
 	check("Landed" in Status.summary(variant), "Actual anchor lost")
 	variant.surface_walk = {"eye_position": Vector3(0, 2, 30)}
 	check("On foot" in Status.summary(variant) and not "Reference altitude" in Status.summary(variant) and not "Jump target" in Status.summary(variant), "Ground view retained ship motion or navigation")
+	for row in [["terrain_unresolved", "Ground support unavailable"], ["water", "Water or shoreline"], ["slope", "Ground too steep"], ["step", "Step or drop too large"], ["craft_obstruction", "Wayfarer hull"]]:
+		variant.surface_walk.movement_blockage = row[0]
+		check("Last step blocked" in Status.summary(variant) and row[1] in Status.summary(variant), "Existing movement reason lost: " + row[0])
+	for invalid in [false, 1, {}, [], "supported", "unknown"]:
+		variant.surface_walk.movement_blockage = invalid
+		check("feedback unavailable" in Status.summary(variant), "Malformed movement result became a reason")
+	variant.surface_walk.movement_blockage = null
+	check(not "blocked" in Status.summary(variant) and not "feedback unavailable" in Status.summary(variant), "No committed blockage invented a warning")
 	variant.surface_walk.eye_position = Vector3(INF, 0, 0)
 	check("unavailable" in Status.summary(variant), "Invalid ground eye accepted")
 	variant = snapshot.duplicate(true)
