@@ -56,6 +56,7 @@ func run() -> void:
 		check(not state.jump.has("point") and not state.jump.has("nominal_arrival") and not state.jump.has("reference_planet"), "Native preview leaked unresolved target/hidden sample")
 		checkpoint(owner, directory.path_join("phase.json"), trace + ".leg%d.0.json" % leg)
 		var old_node := MeshInstance3D.new()
+		old_node.mesh = BoxMesh.new()
 		view.terrain.add_child(old_node)
 		view.terrain.nodes["old-cover"] = old_node
 		view.terrain.anchors["old-cover"] = PackedFloat64Array([0, 0, 0])
