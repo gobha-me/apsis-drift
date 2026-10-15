@@ -80,7 +80,8 @@ auto encode_freedom_docking_document_json(
   if (!encoded) return std::unexpected{encoded.error()};
   Json root = Json::parse(*encoded);
   root["format_version"] =
-      document.flight.model.frame_policy == kFreedomReleaseSystemFramePolicy
+      document.flight.model.optics ? kFreedomOpticalDockingSaveFormatVersion
+      : document.flight.model.frame_policy == kFreedomReleaseSystemFramePolicy
           ? kFreedomReleaseDockingSaveFormatVersion
       : document.flight.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
           ? kFreedomTerrainDockingSaveFormatVersion
@@ -136,12 +137,14 @@ auto decode_freedom_docking_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool optical =
+      root["format_version"] == kFreedomOpticalDockingSaveFormatVersion;
   const bool release =
       root["format_version"] == kFreedomReleaseDockingSaveFormatVersion;
   const bool selected =
       root["format_version"] == kFreedomTerrainDockingSaveFormatVersion;
   if (root["format_version"] != kFreedomDockingSaveFormatVersion && !selected &&
-      !release)
+      !release && !optical)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
@@ -170,7 +173,7 @@ auto decode_freedom_docking_document_json(std::string_view text)
                                   {OriginStationId{*station_id},
                                    d["target"]["ordinal"].get<std::uint32_t>()},
                                   d["attached"].get<bool>()};
-  const bool system = release && root["flight"].is_object() &&
+  const bool system = (release || optical) && root["flight"].is_object() &&
                       root["flight"].contains("frame") &&
                       root["flight"]["frame"].is_object() &&
                       root["flight"]["frame"].contains("kind") &&
@@ -182,7 +185,8 @@ auto decode_freedom_docking_document_json(std::string_view text)
     return std::unexpected{
         failure("$.state.location", "attachment/location mismatch")};
   root.erase("docking");
-  root["format_version"] = release    ? kFreedomReleaseFlightSaveFormatVersion
+  root["format_version"] = optical    ? kFreedomOpticalFlightSaveFormatVersion
+                           : release  ? kFreedomReleaseFlightSaveFormatVersion
                            : selected ? kFreedomTerrainFlightSaveFormatVersion
                            : root.contains("world_owner")
                                ? kFreedomActiveFlightSaveFormatVersion

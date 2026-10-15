@@ -15,6 +15,8 @@ const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
+var planet_optics := PlanetOptics.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
@@ -145,7 +147,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_state(value: Dictionary) -> bool:
-	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value): return false
+	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -389,8 +391,13 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		set_ship_layer(station)
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
+	terrain.terrain_material_created.connect(func(material: ShaderMaterial):
+		if not planet_optics.apply(state, [material]): pause_on_error("Canonical terrain optics are unavailable"))
 	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		error = "Canonical native environment is unavailable"
+		return false
+	if not planet_optics.apply(state, [sky_material]):
+		error = "Canonical planetary optics are unavailable"
 		return false
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
@@ -1340,6 +1347,12 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	local_light.basis = light.basis
 	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		pause_on_error("Canonical native environment changed unexpectedly")
+		return
+	var optical_materials: Array[ShaderMaterial] = [sky_material]
+	for node: MeshInstance3D in terrain.nodes.values():
+		if node.material_override is ShaderMaterial: optical_materials.append(node.material_override)
+	if not planet_optics.apply(state, optical_materials):
+		pause_on_error("Canonical planetary optics changed unexpectedly")
 		return
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy

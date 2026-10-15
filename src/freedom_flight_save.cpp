@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_flight_save.hpp"
+#include "apsis_drift/planet_optics.hpp"
 
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/universe_navigation.hpp"
@@ -143,6 +144,11 @@ auto validate_flight_origin(const FreedomFlightSaveDocument& document)
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.flight.tick",
                 "history/flight clocks differ or flight cannot advance")};
+  if (document.model.optics != 0 &&
+      document.model.optics != kPlanetOpticsVersion)
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "$.flight_model.optics", "unsupported planetary optics selection")};
   if (document.model.terrain_policy != kFreedomLegacyTerrainPolicy &&
       document.model.terrain_policy != kFreedomLocalDetailTerrainPolicy)
     return std::unexpected{
@@ -299,7 +305,8 @@ auto encode_freedom_flight_document_json(
                                    "rigid state cannot be encoded")};
   Json root = Json::parse(*origin);
   root["format_version"] =
-      document.model.frame_policy == kFreedomReleaseSystemFramePolicy
+      document.model.optics ? kFreedomOpticalFlightSaveFormatVersion
+      : document.model.frame_policy == kFreedomReleaseSystemFramePolicy
           ? kFreedomReleaseFlightSaveFormatVersion
       : document.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
           ? kFreedomTerrainFlightSaveFormatVersion
@@ -334,10 +341,11 @@ auto encode_freedom_flight_document_json(
       {"orbit_hold", {{"version", model.hold.version}, {"target", target}}},
       {"assistance", model.assistance}};
   if (model.terrain_policy == kFreedomLocalDetailTerrainPolicy ||
-      model.frame_policy == kFreedomReleaseSystemFramePolicy)
+      model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
     root["flight_model"]["terrain_policy"] = model.terrain_policy;
-  if (model.frame_policy == kFreedomReleaseSystemFramePolicy)
+  if (model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
     root["flight_model"]["frame_policy"] = model.frame_policy;
+  if (model.optics) root["flight_model"]["optics"] = model.optics;
   auto encoded = root.dump(2) + '\n';
   if (encoded.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
@@ -390,11 +398,18 @@ auto decode_flight(std::string_view text, bool system_import)
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported system-flight import version")};
+  const bool optical =
+      !system_import &&
+      root["format_version"] == kFreedomOpticalFlightSaveFormatVersion;
   const bool release =
       !system_import &&
-      root["format_version"] == kFreedomReleaseFlightSaveFormatVersion;
+      (root["format_version"] == kFreedomReleaseFlightSaveFormatVersion ||
+       (optical && root.contains("flight_model") &&
+        root["flight_model"].is_object() &&
+        root["flight_model"].value("frame_policy", Json{}) ==
+            kFreedomReleaseSystemFramePolicy));
   const bool selected =
-      release || importing ||
+      optical || release || importing ||
       root["format_version"] == kFreedomTerrainFlightSaveFormatVersion;
   const bool active =
       release || importing ||
@@ -466,7 +481,20 @@ auto decode_flight(std::string_view text, bool system_import)
   const auto& m = root["flight_model"];
   auto model_shape = m;
   if (selected && model_shape.is_object()) model_shape.erase("terrain_policy");
-  if (release && model_shape.is_object()) model_shape.erase("frame_policy");
+  if ((release || optical) && model_shape.is_object())
+    model_shape.erase("frame_policy");
+  if (optical && model_shape.is_object()) {
+    model_shape.erase("optics");
+    if (!m.contains("optics") || !m["optics"].is_number_unsigned() ||
+        m["optics"] != kPlanetOpticsVersion || !m.contains("frame_policy") ||
+        !m["frame_policy"].is_number_unsigned() ||
+        (m["frame_policy"] != kFreedomRelativeFramePolicy &&
+         m["frame_policy"] != kFreedomReleaseSystemFramePolicy))
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::incompatible_generator_version,
+          "$.flight_model.optics",
+          "optical save requires optics1 and an explicit frame policy")};
+  }
   if (release &&
       (!m.contains("frame_policy") || !m["frame_policy"].is_number_unsigned() ||
        m["frame_policy"] != kFreedomReleaseSystemFramePolicy))
@@ -485,7 +513,7 @@ auto decode_flight(std::string_view text, bool system_import)
   if (selected && (!m.contains("terrain_policy") ||
                    !m["terrain_policy"].is_number_unsigned() ||
                    (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
-                    ((!importing && !release) ||
+                    ((!importing && !release && !optical) ||
                      m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version,
@@ -522,8 +550,10 @@ auto decode_flight(std::string_view text, bool system_import)
                            m["assistance"].get<bool>()};
   model.terrain_policy = selected ? m["terrain_policy"].get<std::uint32_t>()
                                   : kFreedomLegacyTerrainPolicy;
-  model.frame_policy =
-      release ? kFreedomReleaseSystemFramePolicy : kFreedomRelativeFramePolicy;
+  model.frame_policy = optical   ? m["frame_policy"].get<std::uint32_t>()
+                       : release ? kFreedomReleaseSystemFramePolicy
+                                 : kFreedomRelativeFramePolicy;
+  model.optics = optical ? kPlanetOpticsVersion : 0;
   const auto& target = hold["target"];
   if (!target.is_null()) {
     if (auto valid =

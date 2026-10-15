@@ -9,6 +9,8 @@ const StationPresentation = preload("res://scripts/native/native_station_view.gd
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
+var planet_optics := PlanetOptics.new()
 const Controls = preload("res://scripts/ui/player_input.gd")
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 var stick_settings_path := Controls.SETTINGS_PATH
@@ -113,7 +115,7 @@ func valid_environment(flight: Dictionary, actor: Dictionary) -> bool:
 	return true
 
 func refresh_environment(flight: Dictionary, actor: Dictionary) -> bool:
-	if not valid_environment(flight, actor) or not NativeEnvironment.apply_sky(flight, sky_material): return false
+	if not valid_environment(flight, actor) or not NativeEnvironment.apply_sky(flight, sky_material) or not planet_optics.apply(flight, [sky_material]): return false
 	light.basis = FlightView.star_light_basis(flight.star_direction)
 	light.light_color = flight.lighting.star_color
 	light.light_energy = 1.5 * NativeEnvironment.sun_visibility(flight)

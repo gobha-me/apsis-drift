@@ -1,4 +1,5 @@
 shader_type spatial;
+#include "res://shaders/native_planet_optics.gdshaderinc"
 render_mode diffuse_burley, specular_schlick_ggx;
 
 // Presentation-only shading and optional interpolation of C++ mesh endpoints.
@@ -88,4 +89,14 @@ void fragment() {
 	// mineral coordinates amplify float quantization into near-ground speckles.
 	// Mineral detail remains in colour/roughness, without a synthetic slope.
 	NORMAL = normalize((VIEW_MATRIX * vec4(terrain_normal, 0.0)).xyz);
+	if (optical_enabled) {
+		vec3 eye = INV_VIEW_MATRIX[3].xyz;
+		vec3 path = surface_position - eye;
+		float distance_to_surface = length(path);
+		if (distance_to_surface > 0.0001) {
+			vec4 cover = optical_ray(eye, path / distance_to_surface, distance_to_surface);
+			ALBEDO *= 1.0 - cover.a;
+			EMISSION = cover.rgb * cover.a;
+		}
+	}
 }

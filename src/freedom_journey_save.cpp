@@ -109,7 +109,9 @@ auto encode_freedom_journey_document_json(
   const auto encoded = encode_freedom_docking_document_json(document.voyage);
   if (!encoded) return std::unexpected{encoded.error()};
   auto root = Json::parse(*encoded);
-  root["format_version"] = document.voyage.flight.model.frame_policy ==
+  root["format_version"] = document.voyage.flight.model.optics
+                               ? kFreedomOpticalJourneySaveFormatVersion
+                           : document.voyage.flight.model.frame_policy ==
                                    kFreedomReleaseSystemFramePolicy
                                ? kFreedomReleaseJourneySaveFormatVersion
                            : document.voyage.flight.model.terrain_policy ==
@@ -174,12 +176,14 @@ auto decode_freedom_journey_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool optical =
+      root["format_version"] == kFreedomOpticalJourneySaveFormatVersion;
   const bool release =
       root["format_version"] == kFreedomReleaseJourneySaveFormatVersion;
   const bool selected =
       root["format_version"] == kFreedomTerrainJourneySaveFormatVersion;
   if (root["format_version"] != kFreedomJourneySaveFormatVersion && !selected &&
-      !release)
+      !release && !optical)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom journey save version"}};
@@ -222,7 +226,8 @@ auto decode_freedom_journey_document_json(std::string_view text)
   const OriginWalkerState actor{1, *actor_id, *foot, *velocity,
                                 a["heading_radians"].get<double>()};
   root.erase("actor");
-  root["format_version"] = release    ? kFreedomReleaseDockingSaveFormatVersion
+  root["format_version"] = optical    ? kFreedomOpticalDockingSaveFormatVersion
+                           : release  ? kFreedomReleaseDockingSaveFormatVersion
                            : selected ? kFreedomTerrainDockingSaveFormatVersion
                                       : kFreedomDockingSaveFormatVersion;
   root["state"]["location"] = "docked_at_origin_port";

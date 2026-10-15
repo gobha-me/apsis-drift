@@ -13,6 +13,7 @@ inline constexpr std::uint32_t kFreedomTerrainFlightSaveFormatVersion{31};
 // Top-level input only; never emitted as a canonical or nested save.
 inline constexpr std::uint32_t kFreedomSystemFlightImportFormatVersion{35};
 inline constexpr std::uint32_t kFreedomReleaseFlightSaveFormatVersion{36};
+inline constexpr std::uint32_t kFreedomOpticalFlightSaveFormatVersion{39};
 inline constexpr std::uint32_t kFreedomRelativeFramePolicy{1};
 inline constexpr std::uint32_t kFreedomReleaseSystemFramePolicy{2};
 inline constexpr std::uint32_t kFreedomLegacyTerrainPolicy{1};
@@ -42,6 +43,8 @@ struct FreedomFlightModel {
   // Policy2 retains a system-inertial body after the explicit release event;
   // its named world owner still selects the existing force/view body.
   std::uint32_t frame_policy{kFreedomRelativeFramePolicy};
+  // Zero retains historical clear appearance; optics1 is explicitly selected.
+  std::uint32_t optics{};
   friend auto operator==(const FreedomFlightModel&, const FreedomFlightModel&)
       -> bool = default;
 };

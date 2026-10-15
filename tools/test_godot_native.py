@@ -338,7 +338,7 @@ def main(argv=None):
         relative = path.relative_to(source)
         if any(part.startswith(".") or part == "bin" for part in relative.parts):
             continue
-        if path.is_file() and path.suffix in (".gd", ".gdshader", ".godot", ".tscn", ".json"):
+        if path.is_file() and path.suffix in (".gd", ".gdshader", ".gdshaderinc", ".godot", ".tscn", ".json"):
             destination = project / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, destination)

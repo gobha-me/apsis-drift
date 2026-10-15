@@ -73,21 +73,24 @@ auto decode_base(const Json& j)
   if (version == kFreedomFlightSaveFormatVersion ||
       version == kFreedomActiveFlightSaveFormatVersion ||
       version == kFreedomTerrainFlightSaveFormatVersion ||
-      version == kFreedomReleaseFlightSaveFormatVersion) {
+      version == kFreedomReleaseFlightSaveFormatVersion ||
+      version == kFreedomOpticalFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
   if (version == kFreedomDockingSaveFormatVersion ||
       version == kFreedomTerrainDockingSaveFormatVersion ||
-      version == kFreedomReleaseDockingSaveFormatVersion) {
+      version == kFreedomReleaseDockingSaveFormatVersion ||
+      version == kFreedomOpticalDockingSaveFormatVersion) {
     auto d = decode_freedom_docking_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
   if (version == kFreedomJourneySaveFormatVersion ||
       version == kFreedomTerrainJourneySaveFormatVersion ||
-      version == kFreedomReleaseJourneySaveFormatVersion) {
+      version == kFreedomReleaseJourneySaveFormatVersion ||
+      version == kFreedomOpticalJourneySaveFormatVersion) {
     auto d = decode_freedom_journey_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};

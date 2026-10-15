@@ -1,4 +1,5 @@
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/planet_optics.hpp"
 
 #include <type_traits>
 #include <utility>
@@ -270,6 +271,7 @@ auto native_new_game(Seed universe_seed)
     return std::unexpected{"New Game rejected: " + document.error().detail};
   auto& flight = document->journey.voyage.flight;
   flight.model.terrain_policy = kFreedomLocalDetailTerrainPolicy;
+  flight.model.optics = kPlanetOpticsVersion;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};
   auto knowledge = make_freedom_starting_knowledge(

@@ -1981,6 +1981,48 @@ class FreedomBridge : public godot::RefCounted {
       lighting["sea_density"] = profile.sea_level_density_kg_per_cubic_metre;
       lighting["atmosphere_edge"] = profile.space_boundary_altitude_metres;
       result["lighting"] = lighting;
+      if (document.model.optics) {
+        const auto recipe = require(generate_planet_optics_recipe(
+            session.system(), view.planet.id, document.model.optics));
+        if (!selected.optical_field || selected.optical_field->recipe != recipe)
+          selected.optical_field =
+              require(resolve_planet_optics(session.system(), recipe));
+        const auto& field = *selected.optical_field;
+        godot::PackedByteArray density;
+        density.resize(static_cast<std::int64_t>(field.density.size()));
+        std::copy(field.density.begin(), field.density.end(), density.ptrw());
+        godot::Basis fixed_to_tangent;
+        fixed_to_tangent.set_column(0, godot::Vector3(view.tangent.east.x,
+                                                      view.tangent.up.x,
+                                                      -view.tangent.north.x));
+        fixed_to_tangent.set_column(1, godot::Vector3(view.tangent.east.y,
+                                                      view.tangent.up.y,
+                                                      -view.tangent.north.y));
+        fixed_to_tangent.set_column(2, godot::Vector3(view.tangent.east.z,
+                                                      view.tangent.up.z,
+                                                      -view.tangent.north.z));
+        godot::Dictionary optics;
+        optics["version"] = static_cast<std::int64_t>(kPlanetOpticsVersion);
+        optics["disclosure"] = static_cast<std::int64_t>(1);
+        optics["system_id"] = result["system_id"];
+        optics["planet_id"] = result["planet_id"];
+        optics["width"] = static_cast<std::int64_t>(kPlanetOpticsWidth);
+        optics["height"] = static_cast<std::int64_t>(kPlanetOpticsHeight);
+        optics["density"] = density;
+        optics["reference_radius"] = view.planet.radius.value * 1000.0;
+        optics["planet_center"] = godot::Vector3(
+            0, -(view.planet.radius.value * 1000.0 + view.pose.altitude_metres),
+            0);
+        optics["fixed_to_tangent"] = fixed_to_tangent;
+        optics["lower_height_metres"] = field.lower_height_metres;
+        optics["upper_height_metres"] = field.upper_height_metres;
+        optics["opacity_cap"] = field.opacity_cap_basis_points / 10000.0;
+        optics["tint"] =
+            godot::Color(field.tint.red / 255.0f, field.tint.green / 255.0f,
+                         field.tint.blue / 255.0f, 1);
+        result["optics"] = optics;
+      }
+
     } catch (const std::exception&) {
       result.clear();
     }

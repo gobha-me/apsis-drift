@@ -9,6 +9,7 @@ inline constexpr std::uint32_t kFreedomTerrainJourneySaveFormatVersion{33};
 inline constexpr std::uint32_t kFreedomReleaseJourneySaveFormatVersion{38};
 // Actor coordinates belong to the Origin station. Only the nested voyage owns
 // the simulation tick, station identity and generated universe.
+inline constexpr std::uint32_t kFreedomOpticalJourneySaveFormatVersion{41};
 struct FreedomJourneySaveDocument {
   FreedomDockingSaveDocument voyage;
   OriginWalkerState actor;
