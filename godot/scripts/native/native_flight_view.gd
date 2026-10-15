@@ -21,6 +21,7 @@ const ImpactView = preload("res://scripts/native/native_impact_view.gd")
 var impact_overlay: Control
 var impact_status: RichTextLabel
 var impact_menu_button: Button
+var surface_conditions_button: Button
 var primary_status: RichTextLabel
 var context_action: Button
 var instruments_button: Button
@@ -751,7 +752,7 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
-	controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
+	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
@@ -786,6 +787,37 @@ func setup_controls() -> void:
 	refresh_control_hint()
 
 
+const REFERENCE_MARGIN_LABELS := {
+	"minimum_temperature": "Minimum temperature",
+	"maximum_temperature": "Maximum temperature",
+	"radiation": "Radiation",
+	"electrical": "Electrical field",
+	"pressure": "Pressure",
+	"gust": "Wind loading",
+	"ground_motion": "Ground motion",
+	"gravity": "Gravity rating",
+	"vertical_thrust": "Vertical thrust",
+	"support_load": "Landing support",
+}
+
+static func reference_limits_text(assessment: Dictionary) -> String:
+	var margins: Variant = assessment.get("margins")
+	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size():
+		return "Reference margin details are unavailable."
+	var limits := PackedStringArray()
+	var seen := {}
+	for margin in margins:
+		if not margin is Dictionary or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or margin.get("rating") not in ["SAFE", "MARGINAL", "INSUFFICIENT"]:
+			return "Reference margin details are unavailable."
+		seen[margin.kind] = true
+		if margin.rating != "SAFE":
+			limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], margin.rating])
+	var detail := "Known reference limits: " + "; ".join(limits) if not limits.is_empty() else ""
+	if not assessment.get("operation_supported", true):
+		detail = "This frame does not support this operation." + ("\n" + detail if not detail.is_empty() else "")
+	return detail
+
+
 func surface_conditions_text() -> String:
 	var lines := PackedStringArray(["Surface reference envelope"])
 	for operation in [{"name": "Touchdown", "id": 3}, {"name": "Return ascent", "id": 4}]:
@@ -794,14 +826,18 @@ func surface_conditions_text() -> String:
 			return str(assessment.error)
 		lines.append("%s: %s" % [operation.name, assessment.rating])
 		lines.append("Shielding/thermal %s · Structure %s · Thrust %s" % [assessment.shielding_thermal, assessment.structural, assessment.propulsion])
-	lines.append("A close pass can resolve UNKNOWN conditions. Check terrain and flight conditions before landing.")
+		var limits := reference_limits_text(assessment)
+		if not limits.is_empty(): lines.append(limits)
+	lines.append("These are recorded potential envelopes, not current weather or landing clearance. A close pass can resolve UNKNOWN conditions. Check terrain and flight conditions before landing.")
 	return "\n".join(lines)
 
 
 func show_surface_conditions() -> void:
 	# This action is only in the paused controls menu; querying cannot advance
 	# the C++ clock, cancel an aid, or implicitly resume the flight.
-	controls_menu.show_menu(surface_conditions_text())
+	if not paused or not focused: return
+	controls_menu.show_menu()
+	controls_menu.show_surface_reference(surface_conditions_text(), surface_conditions_button)
 
 
 func toggle_suit_lamp() -> void:

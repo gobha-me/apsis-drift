@@ -183,8 +183,20 @@ func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 		for operation in [3, 4]:
 			var survey: Dictionary = owner.get_freedom_environment_assessment(operation)
 			if not check(not survey.has("error") and survey.get("rating") in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"], "Current world lost its validated environmental survey: " + row.label): return false
+			if not check(survey.get("margins") is Array and survey.margins.size() <= 10, "Reference detail exceeded its typed bound: " + row.label): return false
+			var seen := {}
+			for margin: Dictionary in survey.margins:
+				if not check(margin.size() == 2 and margin.get("kind") in FlightView.REFERENCE_MARGIN_LABELS and margin.kind not in seen and margin.get("rating") in ["SAFE", "MARGINAL", "INSUFFICIENT"], "Reference detail leaked unresolved/raw facts or invalid categories: " + row.label): return false
+				seen[margin.kind] = true
+				if margin.rating != "SAFE" and not check("%s %s" % [FlightView.REFERENCE_MARGIN_LABELS[margin.kind], margin.rating] in survey_text, "Known limiting reference omitted from the paused warning: " + row.label): return false
 			for axis in ["shielding_thermal", "structural", "propulsion"]:
 				if not check(survey.get(axis) in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"] and str(survey[axis]) in survey_text, "Survey text differs from the C++ knowledge projection: " + row.label): return false
+		if row.label == "neighbor-observed":
+			view.pause_controls("Read the actual surface reference.")
+			view.show_surface_conditions()
+			if not check(view.controls_menu.surface_reference_view.visible and view.controls_menu.surface_reference_view.reference_text == survey_text, "Actual neighboring reference omitted its retained limits"): return false
+			if not check(view.controls_menu.back_from_nested() and view.paused, "Actual reference Back failed to remain paused"): return false
+			if not paused_before and not resume(view): return false
 		if not check(owner.get_freedom_flight_state() == state and view.paused == paused_before, "Survey changed flight or pause at " + row.label): return false
 	if not check(state.system_id == row.system_id and state.station_available == row.station_available and state.jump.phase == row.jump_phase and state.resources.jump_charges == row.jump_charges and state.resources.quantity_quanta == row.flight_quanta and boarding.get("seated", false) == row.seated, "Current world, crew or bill differs: " + row.label): return false
 	if not targeting_grade().is_empty() and row.label in ["outbound-commit", "return-commit"]:
