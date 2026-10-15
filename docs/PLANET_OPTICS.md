@@ -9,7 +9,7 @@ resources, hazard exposure or recovery rules.
 ## Field and ownership
 
 `planet_optics.hpp` binds a versioned recipe to the validated physical/ambient
-owner. Append-only planet stream `optical_cover = 15` leaves streams1–14 intact.
+owner. Append-only planet stream `optical_cover = 15` leaves streams 1–14 intact.
 The C++ provider generates a 64×32 byte density atlas using an 8×5 periodic
 integer lattice, Q16 cubic interpolation and coherent pole rows. Longitude
 repeats; latitude includes both poles. Generation uses no host floating-point
@@ -21,7 +21,7 @@ opacity cap between one quarter and three quarters of its potential obscuration
 bound, rounded down in integer basis points. That cap bounds every rendered
 ray; it is not a promise that the current column reaches it. Clear and airless
 profiles have zero density and opacity. Cloud layers occupy reference heights
-2–6km; dust occupies0–3km. Bands are clipped to the existing atmosphere edge.
+2–6 km; dust occupies 0–3 km. Bands are clipped to the existing atmosphere edge.
 Mountains can extend through or above a band.
 
 Cloud tint is RGB8 `(214,220,225)`. Dust blends the body's existing lowland
@@ -34,7 +34,7 @@ the repository's BSD 3-Clause license.
 Atlas node `(x,y)` corresponds to longitude `-pi + 2*pi*x/64` and latitude
 `-pi/2 + pi*y/31`. Bilinear density is multiplied by `4*t*(1-t)` across the
 height band. The shared shader clips a ray against both spherical band surfaces
-before integrating at eight midpoints per occupied segment, at most16 samples.
+before integrating at eight midpoints per occupied segment, at most 16 samples.
 Ray opacity is `cap * (1-exp(-integral/band_width))`, with finite bounded inputs.
 Scattering uses the actual C++ star direction and color. This is a bounded
 rendering approximation, not photometric or meteorological accuracy.
@@ -51,8 +51,8 @@ wind forces, lightning, nearby craft/cabin fog or a new compositor. The close
 craft/station layer remains readable. Broader terrain and weather acceptance
 remains under #212.
 
-The initial software comparison on actual streamed terrain shows that Home42's
-generated cloud cap of3.69% produces a subtle change. A stronger authored dust
+The initial software comparison on actual streamed terrain shows that Home seed 42's
+generated cloud cap of 3.69% produces a subtle change. A stronger authored dust
 reference demonstrates sky/terrain attenuation, but exposes a fine grid/facet
 pattern at orbital distance. That reference is not generated Home weather.
 Improving this appearance remains #212 work; the comparison establishes shared
@@ -60,7 +60,7 @@ field integration and save preservation, not final art or hardware acceptance.
 
 ## Disclosure and persistence
 
-Visible-optics disclosure1 permits current optical scenery while recorded hazard
+Visible-optics disclosure version 1 permits current optical scenery while recorded hazard
 knowledge is UNKNOWN. The packet contains only current-body optical appearance
 and authenticated transforms. It contains no ambient maximum, radiation,
 electrical/gust/thermal envelope, world seed or hidden body roster. Looking at
@@ -68,7 +68,7 @@ clouds does not grant ledger evidence, a visit or a survey result. Existing
 sensor acquisition and knowledge redaction are unchanged.
 
 Native New Game explicitly selects optics1. Flight, docking and station-journey
-formats39/40/41 carry the selection and explicit frame policy. Existing enclosing
+formats 39/40/41 carry the selection and explicit frame policy. Existing enclosing
 save owners retain it through boarding, surface walking, jumps and replacement
 recovery. Persist recipes/selections, not atlas pixels. Historical unselected
 saves retain their clear optical appearance and original encode/decode semantics;
