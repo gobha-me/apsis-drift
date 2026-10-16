@@ -1131,8 +1131,7 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 		var curve: float = player_input.settings.curve
 		forward -= player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_LEFT_Y), deadzone, curve)
 		right += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_LEFT_X), deadzone, curve)
-		look_offset.x += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_RIGHT_X), deadzone, curve) * delta * 1.8
-		look_offset.y += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_RIGHT_Y), deadzone, curve) * delta * 1.8
+		look_offset += player_input.foot_controller_look(player_input.device) * delta
 	look_offset.x = wrapf(look_offset.x, -PI, PI)
 	look_offset.y = clampf(look_offset.y, -1.3, 1.3)
 	var heading := wrapf(-look_offset.x, -PI, PI)

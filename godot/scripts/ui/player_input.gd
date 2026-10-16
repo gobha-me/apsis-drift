@@ -363,6 +363,16 @@ func foot_keyboard_look() -> Vector2:
 	return look
 
 
+func foot_controller_look(selected_device: int) -> Vector2:
+	if selected_device < 0: return Vector2.ZERO
+	# Preserve the established walking rate at default sensitivity. Callers
+	# retain selected-device availability, pause/focus and neutral ownership.
+	var rate: float = 1.8 * settings.look_speed / DEFAULT_SETTINGS.look_speed
+	var look := Vector2(shape(Input.get_joy_axis(selected_device, JOY_AXIS_RIGHT_X), settings.deadzone, settings.curve), shape(Input.get_joy_axis(selected_device, JOY_AXIS_RIGHT_Y), settings.deadzone, settings.curve)) * rate
+	if settings.invert_look: look.y *= -1
+	return look
+
+
 func foot_keyboard_look_neutral() -> bool:
 	for action in ["look_left", "look_right", "look_up", "look_down"]:
 		var key: int = int(bindings[action].key.code)

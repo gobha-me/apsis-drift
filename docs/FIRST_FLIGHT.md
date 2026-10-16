@@ -18,7 +18,9 @@ The current native path is Linux x86_64. Connect the controller before launch.
 New Game starts a first-person actor on Origin Station's hub floor. WASD or the
 left stick walks; arrow keys, right-drag or the right stick look. **Esc / Start · Controls**
 opens paused controls. The start screen also offers control Settings and
-[Flight basics](NATIVE_TITLE.md).
+[Flight basics](NATIVE_TITLE.md). Look speed and vertical inversion apply to
+on-foot keys and the right stick as well as flight look. Walking keeps its
+default stick rate; the speed setting scales it. Right-drag retains its fixed rate.
 
 Resizing the window while movement, flight or look controls are held pauses
 input. Release those controls, then resume explicitly; the craft retains its

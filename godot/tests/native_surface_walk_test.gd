@@ -255,12 +255,52 @@ func check_far_visibility(source: String, assets: String, output: String, render
 	shell.free()
 
 
+func check_ground_controller_look(view: Control, owner: Variant, output: String) -> void:
+	var settings: Dictionary = view.player_input.settings.duplicate(true)
+	var device: int = view.player_input.device
+	var look: Vector2 = view.look_offset
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var saved := output.path_join("controller-look-before.json")
+	check(owner.save_freedom_as(saved), "Ground controller baseline Save refused")
+	var bytes := FileAccess.get_file_as_bytes(saved)
+	view.player_input.device = 0
+	for axis in [JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+		var event := InputEventJoypadMotion.new()
+		event.device = 0
+		event.axis = axis
+		event.axis_value = 1.0 if axis == JOY_AXIS_RIGHT_X else -1.0
+		Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	view.surface_controls(0.1)
+	check(view.look_offset.is_equal_approx(Vector2(look.x + 0.18, look.y - 0.18)), "Ground right-stick default rate/sign changed")
+	view.look_offset = look
+	check(view.player_input.apply_preferences({"deadzone": 0.18, "curve": 1.4, "look_speed": 2.4, "invert_look": true, "prompts": 0}), "Ground stick look preferences refused")
+	view.surface_controls(0.1)
+	check(view.look_offset.is_equal_approx(Vector2(look.x + 0.27, look.y + 0.27)), "Ground right stick ignored speed/inversion preferences")
+	view.paused = true
+	var paused_look: Vector2 = view.look_offset
+	view.surface_controls(0.1)
+	check(view.look_offset == paused_look and owner.get_freedom_flight_state() == before and owner.save_freedom_as(saved) and FileAccess.get_file_as_bytes(saved) == bytes, "Configured ground look bypassed pause or changed complete C++ save")
+	for axis in [JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+		var event := InputEventJoypadMotion.new()
+		event.device = 0
+		event.axis = axis
+		event.axis_value = 0.0
+		Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	view.player_input.settings = settings
+	view.player_input.device = device
+	view.look_offset = look
+	check(resume(view), "Ground controller probe did not restore neutral Resume")
+
+
 func check_ground_pause_heading(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
 	for trigger in ["pause", "focus", "menu", "save"]:
 		if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Heading source Continue refused"): return
 		var view: Control = shell.current_view
 		if not check(view.surface_walking() and resume(view), "Heading source did not resume on foot"): return
 		if trigger == "pause":
+			check_ground_controller_look(view, owner, output)
 			var original := source.path_join("exited.json")
 			var original_bytes := FileAccess.get_file_as_bytes(original)
 			var keyboard_reference: Variant = ClassDB.instantiate("FreedomBridge")
