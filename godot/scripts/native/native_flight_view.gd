@@ -884,6 +884,10 @@ func setup_controls() -> void:
 	refresh_control_hint()
 
 
+# Preserve the shared reference vocabulary for existing scene/test consumers.
+const REFERENCE_MARGIN_LABELS := Status.REFERENCE_MARGIN_LABELS
+
+
 static func reference_limits_text(assessment: Dictionary) -> String:
 	return Status.reference_limits_text(assessment)
 
