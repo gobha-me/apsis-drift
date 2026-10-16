@@ -20,6 +20,54 @@ func checkpoint(owner: Variant, source: String, output: String, name: String) ->
 	return check(owner.save_freedom_as(path) and FileAccess.get_sha256(path) == FileAccess.get_sha256(source.path_join(name + ".json")), "Complete surface voyage differs at " + name)
 
 
+func check_surface_action_reference(view: Control, owner: Variant, output: String, command: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var was_paused: bool = view.paused
+	var prefix := output.path_join("reference-liftoff" if command == "liftoff_freedom_surface" else "reference-landing")
+	if not check(owner.save_freedom_as(prefix + "-before.json"), "Surface action reference baseline Save refused"): return
+	var bytes := FileAccess.get_file_as_bytes(prefix + "-before.json")
+	var operations: Array = [3, 4] if command == "request_freedom_landing" else [4]
+	var assessments: Array = []
+	for operation in operations:
+		var assessment: Dictionary = owner.get_freedom_environment_assessment(operation)
+		check(PositionStatus.valid_surface_reference_packet(assessment) and not assessment.get("margins", []).is_empty(), "Actual observed seed42 surface route lacks known redacted reference margins")
+		assessments.append(assessment)
+	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(prefix + "-read.json") and FileAccess.get_file_as_bytes(prefix + "-read.json") == bytes, "Reading actual reference margins changed the complete saved voyage")
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(peer.stage_freedom_continue(prefix + "-before.json"), "Direct surface action peer Continue staging refused"): return
+	var pending: Dictionary = peer.get_pending_freedom_start()
+	if not check(peer.commit_pending_freedom_start(pending.candidate_id) and peer.call(command), "Direct actual surface command refused"): return
+	var expected: Array = []
+	for operation in operations: expected.append(peer.get_freedom_environment_assessment(operation))
+	check(expected == assessments, "A zero-time surface command changed its recorded reference margins")
+	var warning := PositionStatus.surface_reference_warning(command, expected)
+	if command == "liftoff_freedom_surface": view.liftoff_button.pressed.emit()
+	else: view.landing_button.pressed.emit()
+	var actual: Dictionary = owner.get_freedom_flight_state()
+	var direct: Dictionary = peer.get_freedom_flight_state()
+	check(view.error.is_empty() and view.paused == was_paused and actual.tick == before.tick and actual.tick == direct.tick and actual.checksum == direct.checksum and actual.resources.quantity_quanta == before.resources.quantity_quanta and actual.resources.jump_charges == before.resources.jump_charges, "Surface warning changed pause, authoritative time, fuel or direct-command physics")
+	var base := "Landing aid requested." if command == "request_freedom_landing" else "Liftoff aid requested."
+	if was_paused: base += " Resume flight explicitly."
+	var message := base + ("\n" + warning if not warning.is_empty() else "")
+	check(view.save_status.text == message and message in view.primary_status.tooltip_text, "Accepted surface action did not append exactly its actual known reference warning")
+	if was_paused:
+		check(view.controls_menu.message.text == message and view.player_input.status == message, "Paused reference warning did not reach the existing command feedback")
+	check(owner.save_freedom_as(prefix + "-ui.json") and peer.save_freedom_as(prefix + "-direct.json") and FileAccess.get_file_as_bytes(prefix + "-ui.json") == FileAccess.get_file_as_bytes(prefix + "-direct.json"), "Surface warning integration changed complete canonical state relative to the direct C++ command")
+	print("Actual surface reference %s: %s" % [command, warning if not warning.is_empty() else "quiet known margins"])
+	peer = null
+
+
+func check_airborne_liftoff_refusal(view: Control, owner: Variant, output: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var paused_before: bool = view.paused
+	var path := output.path_join("reference-airborne-refusal.json")
+	if not check(owner.save_freedom_as(path), "Airborne reference refusal baseline Save refused"): return
+	var bytes := FileAccess.get_file_as_bytes(path)
+	view.port_command("liftoff_freedom_surface")
+	var diagnostic: String = owner.get_last_error()
+	check(not diagnostic.is_empty() and view.save_status.text == diagnostic and view.paused == paused_before and owner.get_freedom_flight_state() == before and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Refused airborne liftoff appended reference feedback or changed the voyage")
+
+
 func check_rated_rise_actor(view: Control, owner: Variant, output: String, available: bool) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	check(before.has("rated_rise_margin") == available, "Rated RISE availability disagrees with seated/ground actor ownership")
@@ -837,13 +885,16 @@ func run() -> void:
 	checkpoint(owner, args[0], args[2], "seated")
 	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("seated.json"), "assets": args[1]}), "Returned seated Continue did not stage")
 	view = shell.current_view
+	check_surface_action_reference(view, owner, args[2], "liftoff_freedom_surface")
 	if resume(view):
-		view.liftoff_button.pressed.emit()
 		for batch in 8: view._process(0.125)
 	checkpoint(owner, args[0], args[2], "lifted")
 	check(not view.state.surface.landed and view.error.is_empty(), "Returned pilot cannot lift off with real thrust")
 	check(not view.ship_marker.visible, "Ground ship bearing remained visible in flight")
 	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Suit lamp remained active during flight")
+	check_airborne_liftoff_refusal(view, owner, args[2])
+	view.pause_controls("Inspecting an accepted landing request without advancing")
+	check_surface_action_reference(view, owner, args[2], "request_freedom_landing")
 	# Declared destruction is an explicit fixture, not an invented exposure event.
 	check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("pending-loss.json"), "assets": args[1]}), "Pending outside loss failed to stage")
 	check(shell.recovery_overlay != null and shell.current_view.surface_walking() and shell.current_view.paused, "Pending loss lost outside actor or explicit recovery choice")

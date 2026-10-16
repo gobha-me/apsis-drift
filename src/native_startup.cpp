@@ -272,6 +272,7 @@ auto native_new_game(Seed universe_seed)
   auto& flight = document->journey.voyage.flight;
   flight.model.terrain_policy = kFreedomSeaDatumTerrainPolicy;
   flight.model.optics = kPlanetOpticsVersion;
+  flight.model.companions = 1;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};
   auto knowledge = make_freedom_starting_knowledge(

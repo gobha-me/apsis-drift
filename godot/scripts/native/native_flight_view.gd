@@ -15,6 +15,7 @@ const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
 const SurfaceAppearance = preload("res://scripts/native/native_surface_appearance.gd")
@@ -24,6 +25,7 @@ var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 var observation_cue := Status.ObservationCue.new()
+var surface_aid_cue := Status.SurfaceAidCue.new()
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
 var impact_overlay: Control
 var impact_status: RichTextLabel
@@ -60,6 +62,10 @@ var telemetry: RichTextLabel
 var home_cue: RichTextLabel
 var home_marker: Control
 var ship_marker: Control
+var contact_marker: Control
+var contact_buttons: Array[Button] = []
+var contact_clear_button: Button
+var selected_contact_id := ""
 var port_row: HBoxContainer
 var pause_button: Button
 var assist_button: CheckButton
@@ -445,6 +451,7 @@ func activate() -> void:
 	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
 	activated = true
 	observation_cue.reset(state)
+	surface_aid_cue.reset(state)
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	near_viewport.world_3d = far_viewport.find_world_3d()
 	# Activation establishes the baseline; initial Control layout is not a resize.
@@ -494,6 +501,10 @@ func build_ui() -> void:
 	ship_marker.label_text = "SHIP"
 	ship_marker.visible = false
 	navigation_layer.add_child(ship_marker)
+	contact_marker = HomeNavigation.new()
+	contact_marker.label_text = "CONTACT"
+	contact_marker.visible = false
+	navigation_layer.add_child(contact_marker)
 	var column := VBoxContainer.new()
 	hud_column = column
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -750,11 +761,18 @@ func update_compact_hud() -> void:
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
 	# Quiet refreshes absorb command/load changes without inventing a finding.
 	observation_cue.observe(state, false, 0.0)
+	surface_aid_cue.observe(state, false, 0.0)
 	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
 		if not outcome.is_empty(): primary_status.text += "\n" + outcome
 	primary_status.tooltip_text = primary_status.text
+	if error.is_empty() and not surface_aid_cue.text().is_empty():
+		var aid_text := surface_aid_cue.text()
+		var aid_lines := primary_status.text.split("\n")
+		aid_lines.insert(1, aid_text.left(180) + ("…" if aid_text.length() > 180 else ""))
+		primary_status.text = "\n".join(aid_lines)
+		primary_status.tooltip_text += "\n" + aid_text
 	if save_status != null and not save_status.text.is_empty() and error.is_empty():
 		primary_status.tooltip_text += "\n" + save_status.text
 		var lines := primary_status.text.split("\n")
@@ -778,6 +796,11 @@ func update_compact_hud() -> void:
 		var exposure_text := "Nearby exposure · %s · %.1f m\n%s" % [exposure.label, exposure.distance_metres, "Controls → Inspect exposure" if exposure.can_inspect else "Move within 8 m to inspect"]
 		primary_status.text += "\n" + exposure_text
 		primary_status.tooltip_text += "\n" + exposure_text
+	var contact := DistantContacts.selected_contact(state, selected_contact_id)
+	if error.is_empty() and not contact.is_empty():
+		var contact_text := "CONTACT · %s\n%s" % [contact.status.replace("_", " "), contact.reason]
+		primary_status.text += "\n" + contact_text
+		primary_status.tooltip_text += "\n" + contact_text + "\nDistant optical observation only; no supported approach or landing."
 	context_source = null
 	if surface_walking(): context_source = surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
@@ -825,6 +848,9 @@ func setup_controls() -> void:
 	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
 	landmark_enable_button = controls_menu.add_button(survey_column, "Enable local landmarks", enable_surface_landmarks)
 	landmark_inspect_button = controls_menu.add_button(survey_column, "Inspect exposure", inspect_surface_landmark)
+	for index in DistantContacts.MAX_CONTACTS:
+		contact_buttons.append(controls_menu.add_button(survey_column, "Track optical contact %d" % (index + 1), select_distant_contact.bind(index)))
+	contact_clear_button = controls_menu.add_button(survey_column, "Stop tracking optical contact", clear_distant_contact)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		refresh_impact_action()
@@ -858,35 +884,20 @@ func setup_controls() -> void:
 	refresh_control_hint()
 
 
-const REFERENCE_MARGIN_LABELS := {
-	"minimum_temperature": "Minimum temperature",
-	"maximum_temperature": "Maximum temperature",
-	"radiation": "Radiation",
-	"electrical": "Electrical field",
-	"pressure": "Pressure",
-	"gust": "Wind loading",
-	"ground_motion": "Ground motion",
-	"gravity": "Gravity rating",
-	"vertical_thrust": "Vertical thrust",
-	"support_load": "Landing support",
-}
+# Preserve the shared reference vocabulary for existing scene/test consumers.
+const REFERENCE_MARGIN_LABELS := Status.REFERENCE_MARGIN_LABELS
+
 
 static func reference_limits_text(assessment: Dictionary) -> String:
-	var margins: Variant = assessment.get("margins")
-	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size():
-		return "Reference margin details are unavailable."
-	var limits := PackedStringArray()
-	var seen := {}
-	for margin in margins:
-		if not margin is Dictionary or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or margin.get("rating") not in ["SAFE", "MARGINAL", "INSUFFICIENT"]:
-			return "Reference margin details are unavailable."
-		seen[margin.kind] = true
-		if margin.rating != "SAFE":
-			limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], margin.rating])
-	var detail := "Known reference limits: " + "; ".join(limits) if not limits.is_empty() else ""
-	if not assessment.get("operation_supported", true):
-		detail = "This frame does not support this operation." + ("\n" + detail if not detail.is_empty() else "")
-	return detail
+	return Status.reference_limits_text(assessment)
+
+
+func surface_action_reference_warning(command: String) -> String:
+	var operations: Array = [3, 4] if command == "request_freedom_landing" else [4] if command == "liftoff_freedom_surface" else []
+	var assessments: Array = []
+	for operation in operations:
+		assessments.append(bridge.get_freedom_environment_assessment(operation))
+	return Status.surface_reference_warning(command, assessments)
 
 
 func surface_conditions_text() -> String:
@@ -955,6 +966,50 @@ func refresh_surface_landmarks() -> void:
 
 func marker_controls_available() -> bool:
 	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible)
+
+
+func select_distant_contact(index: int) -> void:
+	if not marker_controls_available() or not DistantContacts.valid(state): return
+	var contacts: Array = state.get("distant_contacts", {}).get("contacts", [])
+	if index < 0 or index >= contacts.size(): return
+	selected_contact_id = contacts[index].id
+	update_view(0.0)
+	# Selection is presentation-only, including under held movement controls.
+	controls_menu.show_surface_reference("DISTANT OPTICAL CONTACT\n%s\n\n%s\n\nCONTACT is a direction annotation, not an arrival target. Moon and minor-body close flight, gravity, collision and landing are not supported by this observation slice." % [contacts[index].label, contacts[index].reason], contact_buttons[index])
+
+
+func clear_distant_contact() -> void:
+	if not marker_controls_available(): return
+	selected_contact_id = ""
+	update_view(0.0)
+	controls_menu.resume_button.grab_focus()
+
+
+func refresh_distant_contacts() -> void:
+	var contacts: Array = state.get("distant_contacts", {}).get("contacts", [])
+	var selected := DistantContacts.selected_contact(state, selected_contact_id)
+	if selected.is_empty(): selected_contact_id = ""
+	for index in contact_buttons.size():
+		var button := contact_buttons[index]
+		button.visible = index < contacts.size()
+		if index < contacts.size():
+			button.text = "%s optical contact %d" % ["Tracking" if contacts[index].id == selected_contact_id else "Track", index + 1]
+			button.tooltip_text = "Distant observation only · " + (contacts[index].reason if contacts[index].id == selected_contact_id else "Select to inspect current optical availability; no supported approach or landing.")
+	if contact_clear_button != null: contact_clear_button.visible = not selected.is_empty()
+	if contact_marker == null: return
+	contact_marker.visible = not selected.is_empty() and selected.status in ["visible", "unresolved"]
+	if not contact_marker.visible: return
+	contact_marker.label_text = "CONTACT · unresolved" if selected.status == "unresolved" else "CONTACT"
+	# A direction annotation at an arbitrary display distance, never a world
+	# position, range estimate or target handed to the simulation.
+	contact_marker.update_cue(camera, camera.global_position + selected.direction * 1000.0, false)
+	if contact_marker.cue.is_empty(): return
+	var contact_bounds: Rect2 = contact_marker.label_bounds(contact_marker.cue.position).grow(18.0 * contact_marker.render_scale)
+	for preferred in [home_marker, ship_marker]:
+		if preferred.visible and not preferred.cue.is_empty() and contact_bounds.intersects(preferred.label_bounds(preferred.cue.position).grow(18.0 * preferred.render_scale)):
+			# Preserve HOME/RETURN/MARK; the selected contact's text remains.
+			contact_marker.visible = false
+			break
 
 
 func surface_marker_command(command: String) -> void:
@@ -1160,11 +1215,15 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		if not controls_armed:
 			report_action_status("Release movement controls before changing modes or starting a maneuver.")
 			return
+	var before := state
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	var reference_warning := surface_action_reference_warning(command)
+	if not reference_warning.is_empty(): reference_warning = "\n" + reference_warning
+	var canceled_aid := command == "cancel_freedom_surface_maneuver" and surface_aid_cue.accept_cancel(before, state)
 	if command in ["begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		look_offset = Vector2.ZERO
 		pause_controls("On the surface. Release controls, then resume to walk." if surface_walking() else "Back in the seat. Release controls, then resume to fly.")
@@ -1180,8 +1239,12 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		report_action_status("Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)])
 	elif command.ends_with("port_approach"):
 		report_action_status(state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else ""))
+	elif canceled_aid:
+		report_action_status(surface_aid_cue.text())
+	elif command in ["request_freedom_landing", "liftoff_freedom_surface"] and state.surface.maneuver != "off":
+		report_action_status(("Landing aid requested." if command == "request_freedom_landing" else "Liftoff aid requested.") + (" Resume flight explicitly." if paused else "") + reference_warning)
 	elif command in ["request_freedom_landing", "stow_freedom_landing_gear", "liftoff_freedom_surface", "cancel_freedom_surface_maneuver"]:
-		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else ""))
+		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else "") + reference_warning)
 	else:
 		report_action_status("Port selected. Capture requires physical alignment and low closure.")
 
@@ -1355,6 +1418,7 @@ func _process(delta: float) -> void:
 		recovery_requested.emit()
 		return
 	observation_cue.observe(state, not paused and not save_dialog.visible and not surface_walking() and delta > 0.0, delta)
+	surface_aid_cue.observe(state, not paused and not save_dialog.visible and not surface_walking() and delta > 0.0, delta)
 	if not paused and not save_dialog.visible and not surface_walking():
 		if resolved.recenter:
 			look_offset = Vector2.ZERO
@@ -1416,6 +1480,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		# C++ has already installed the actual world/stream. Retire old GPU
 		# tiles before any of their same-shaped keys can alias the new planet.
 		terrain.reset_world()
+		selected_contact_id = ""
 		if station != null:
 			station.visible = false
 			station.queue_free()
@@ -1623,4 +1688,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
 	refresh_surface_marker()
 	refresh_surface_landmarks()
+	refresh_distant_contacts()
 	update_compact_hud()

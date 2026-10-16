@@ -1,6 +1,7 @@
 extends RefCounted
 ## Read-only current-body lighting; C++ owns the body, atmosphere and time.
 const SkyShader = preload("res://shaders/native_navigation_sky.gdshader")
+const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
 
 static func decimal(value: Variant) -> bool:
 	if not value is String or value.is_empty() or value.length() > 20: return false
@@ -13,6 +14,7 @@ static func color(value: Variant) -> bool:
 	return value is Color and is_finite(value.r) and is_finite(value.g) and is_finite(value.b) and value.r >= 0 and value.r <= 1 and value.g >= 0 and value.g <= 1 and value.b >= 0 and value.b <= 1 and value.a == 1
 
 static func valid(state: Dictionary) -> bool:
+	if not DistantContacts.valid(state): return false
 	var data: Variant = state.get("lighting")
 	if not data is Dictionary or not data.get("version") is int or data.version != 1 or data.get("probe_frame") != "native_tangent_metres" or data.get("body_kind") != "planet" or not data.get("body_version") is int or data.body_version != 1: return false
 	if not data.get("catalog_generator") is int or data.catalog_generator not in [1, 2]: return false
@@ -52,6 +54,7 @@ static func sun_visibility(state: Dictionary) -> float:
 static func apply_sky(state: Dictionary, material: ShaderMaterial) -> bool:
 	var visibility := sun_visibility(state)
 	if visibility < 0.0 or material == null or material.shader != SkyShader: return false
+	if not DistantContacts.apply(state, [material]): return false
 	var data: Dictionary = state.lighting
 	for pair in [["radius", state.planet_radius], ["altitude", state.altitude], ["scale_height", data.scale_height], ["sea_density", data.sea_density], ["atmosphere_edge", data.atmosphere_edge], ["atmosphere_tint", data.atmosphere_tint], ["sun_direction", data.direction], ["sun_color", data.star_color], ["sun_angular_radius", data.star_angular_radius]]:
 		material.set_shader_parameter(pair[0], pair[1])

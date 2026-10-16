@@ -177,9 +177,11 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
     auto expected = old;
     expected.voyage.flight.model.terrain_policy = kFreedomSeaDatumTerrainPolicy;
     expected.voyage.flight.model.optics = 1;
+    expected.voyage.flight.model.companions = 1;
     check(
         old.voyage.flight.model.terrain_policy == kFreedomLegacyTerrainPolicy &&
             old.voyage.flight.model.optics == 0 &&
+            old.voyage.flight.model.companions == 0 &&
             document.journey == expected &&
             require(encode_freedom_journey_document_json(document.journey)) ==
                 require(encode_freedom_journey_document_json(expected)) &&

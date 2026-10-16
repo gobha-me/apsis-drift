@@ -281,6 +281,7 @@ auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
   auto& initial =
       std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
   initial.journey.voyage.flight.model.optics = optics;
+  initial.journey.voyage.flight.model.companions = optics ? 1U : 0U;
   initial.journey.voyage.flight.model.terrain_policy = terrain_policy;
   initial.journey.voyage.flight.origin.state.discoveries.push_back({{77}, 0});
   initial.journey.voyage.flight.origin.state.world_deltas.push_back(
@@ -320,7 +321,11 @@ auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
                 complete,
         "Pending save and duplicate completion/event converge exactly once");
   const auto& fresh = recovery_flight(complete.voyage);
-  check(source.model.optics == optics && fresh.model.optics == optics &&
+  check(source.model.companions == (optics ? 1U : 0U) &&
+            fresh.model.companions == source.model.companions &&
+            recovery_flight(resumed.voyage).model.companions ==
+                source.model.companions &&
+            source.model.optics == optics && fresh.model.optics == optics &&
             recovery_flight(resumed.voyage).model.optics == optics &&
             source.model.terrain_policy == terrain_policy &&
             fresh.model.terrain_policy == terrain_policy &&

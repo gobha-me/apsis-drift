@@ -1,6 +1,77 @@
 extends RefCounted
 ## Presentation of C++ observations; never advances or edits the voyage.
 const NativeIds = preload("res://scripts/native/native_environment.gd")
+const REFERENCE_MARGIN_LABELS := {
+	"minimum_temperature": "Minimum temperature",
+	"maximum_temperature": "Maximum temperature",
+	"radiation": "Radiation",
+	"electrical": "Electrical field",
+	"pressure": "Pressure",
+	"gust": "Wind loading",
+	"ground_motion": "Ground motion",
+	"gravity": "Gravity rating",
+	"vertical_thrust": "Vertical thrust",
+	"support_load": "Landing support",
+}
+
+static func reference_limits_text(assessment: Dictionary) -> String:
+	var margins: Variant = assessment.get("margins")
+	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size():
+		return "Reference margin details are unavailable."
+	var limits := PackedStringArray()
+	var seen := {}
+	for margin in margins:
+		if not margin is Dictionary or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or margin.get("rating") not in ["SAFE", "MARGINAL", "INSUFFICIENT"]:
+			return "Reference margin details are unavailable."
+		seen[margin.kind] = true
+		if margin.rating != "SAFE":
+			limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], margin.rating])
+	var detail := "Known reference limits: " + "; ".join(limits) if not limits.is_empty() else ""
+	if not assessment.get("operation_supported", true):
+		detail = "This frame does not support this operation." + ("\n" + detail if not detail.is_empty() else "")
+	return detail
+
+
+static func valid_surface_reference_packet(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 6: return false
+	for field in ["rating", "shielding_thermal", "structural", "propulsion"]:
+		if not value.get(field) is String or value[field] not in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"]: return false
+	if typeof(value.get("operation_supported")) != TYPE_BOOL: return false
+	var margins: Variant = value.get("margins")
+	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size(): return false
+	var seen := {}
+	for margin in margins:
+		if not margin is Dictionary or margin.size() != 2 or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or not margin.get("rating") is String or margin.rating not in ["SAFE", "MARGINAL", "INSUFFICIENT"]: return false
+		seen[margin.kind] = true
+	return true
+
+
+static func surface_reference_warning(command: String, assessments: Array) -> String:
+	var operations := PackedStringArray()
+	if command == "request_freedom_landing": operations = PackedStringArray(["Touchdown", "Return ascent"])
+	elif command == "liftoff_freedom_surface": operations = PackedStringArray(["Return ascent"])
+	else: return ""
+	if assessments.size() != operations.size(): return ""
+	# Validate all required projections before using any of their contents.
+	for assessment in assessments:
+		if not valid_surface_reference_packet(assessment): return ""
+	var warnings := PackedStringArray()
+	for index in operations.size():
+		var assessment: Dictionary = assessments[index]
+		var limits := PackedStringArray()
+		for rating in ["INSUFFICIENT", "MARGINAL"]:
+			for margin: Dictionary in assessment.margins:
+				if margin.rating == rating:
+					limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], rating])
+		var details := PackedStringArray()
+		if not assessment.operation_supported: details.append("frame operation unsupported")
+		for limit in mini(2, limits.size()): details.append(limits[limit])
+		if limits.size() > 2: details.append("more in Surface conditions")
+		if not details.is_empty(): warnings.append(operations[index] + ": " + "; ".join(details))
+	if warnings.is_empty(): return ""
+	warnings.insert(0, "Recorded reference only; not weather or site clearance.")
+	var message := "\n".join(warnings)
+	return message if message.length() <= 400 else ""
 
 class ObservationCue extends RefCounted:
 	## A transient presentation latch over the bounded C++ knowledge counter.
@@ -46,6 +117,76 @@ class ObservationCue extends RefCounted:
 
 	func text() -> String:
 		return MESSAGE if _remaining > 0.0 else ""
+
+class SurfaceAidCue extends RefCounted:
+	## Exact current aid detail, plus a short latch for an actual active handoff.
+	## Quiet reads update the baseline without replaying or aging a result.
+	## Invalid packets/time clear it; the first later valid read stays quiet.
+	const DURATION := 6.0
+	var _mode := ""
+	var _active_note := ""
+	var _result := ""
+	var _remaining := 0.0
+
+	static func _surface(state: Dictionary) -> Dictionary:
+		var surface: Variant = state.get("surface")
+		var outside: Variant = state.get("surface_walk", {})
+		if not surface is Dictionary or not outside is Dictionary or not outside.is_empty(): return {}
+		var mode: Variant = surface.get("maneuver")
+		var note: Variant = surface.get("note")
+		if not mode is String or mode not in ["off", "landing", "liftoff"] or not note is String or note.length() > 512: return {}
+		return surface
+
+	func clear() -> void:
+		_mode = ""
+		_active_note = ""
+		_result = ""
+		_remaining = 0.0
+
+	func reset(state: Dictionary) -> void:
+		clear()
+		var surface := _surface(state)
+		if surface.is_empty(): return
+		_mode = surface.maneuver
+		if _mode != "off": _active_note = surface.note
+
+	func observe(state: Dictionary, active_advance: bool, delta: float) -> void:
+		if not is_finite(delta) or delta < 0.0:
+			clear()
+			return
+		var surface := _surface(state)
+		if surface.is_empty():
+			clear()
+			return
+		if _mode.is_empty():
+			reset(state)
+			return
+		if active_advance: _remaining = maxf(0.0, _remaining - delta)
+		if surface.maneuver != "off":
+			_active_note = surface.note
+			_result = ""
+			_remaining = 0.0
+		else:
+			_active_note = ""
+			if active_advance and _mode != "off":
+				_result = surface.note
+				_remaining = DURATION if not _result.is_empty() else 0.0
+		_mode = surface.maneuver
+
+	func accept_cancel(before: Dictionary, after: Dictionary) -> bool:
+		var previous := _surface(before)
+		var current := _surface(after)
+		if previous.is_empty() or current.is_empty():
+			clear()
+			return false
+		if previous.maneuver == "off" or current.maneuver != "off": return false
+		reset(after)
+		_result = current.note if not current.note.is_empty() else "Surface aid canceled."
+		_remaining = DURATION
+		return true
+
+	func text() -> String:
+		return _active_note if _mode in ["landing", "liftoff"] else _result if _remaining > 0.0 else ""
 
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))

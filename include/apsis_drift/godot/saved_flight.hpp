@@ -3,6 +3,7 @@
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/planet_optics.hpp"
+#include "apsis_drift/secondary_bodies.hpp"
 
 #include <algorithm>
 
@@ -122,6 +123,7 @@ struct SavedFlightWorld {
   double dropped_seconds{};
   // Presentation memoization only: one actual selected body, no save/catalog.
   mutable std::optional<PlanetOpticsField> optical_field{};
+  mutable std::optional<SecondaryBodyCatalog> secondary_catalog{};
 
   auto advance(double elapsed, std::span<const double> fractions, bool paused)
       -> void {

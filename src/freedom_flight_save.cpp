@@ -149,6 +149,13 @@ auto validate_flight_origin(const FreedomFlightSaveDocument& document)
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version,
         "$.flight_model.optics", "unsupported planetary optics selection")};
+  if (document.model.companions > 1 ||
+      (document.model.companions &&
+       document.model.optics != kPlanetOpticsVersion))
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "$.flight_model.companions",
+        "distant companions require an explicit supported optical selection")};
   if (document.model.terrain_policy != kFreedomLegacyTerrainPolicy &&
       document.model.terrain_policy != kFreedomLocalDetailTerrainPolicy &&
       document.model.terrain_policy != kFreedomSeaDatumTerrainPolicy)
@@ -353,6 +360,7 @@ auto encode_freedom_flight_document_json(
   if (model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
     root["flight_model"]["frame_policy"] = model.frame_policy;
   if (model.optics) root["flight_model"]["optics"] = model.optics;
+  if (model.companions) root["flight_model"]["companions"] = model.companions;
   auto encoded = root.dump(2) + '\n';
   if (encoded.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
@@ -492,6 +500,13 @@ auto decode_flight(std::string_view text, bool system_import)
     model_shape.erase("frame_policy");
   if (optical && model_shape.is_object()) {
     model_shape.erase("optics");
+    model_shape.erase("companions");
+    if (m.contains("companions") &&
+        (!m["companions"].is_number_unsigned() || m["companions"] != 1U))
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::incompatible_generator_version,
+                  "$.flight_model.companions",
+                  "unsupported distant companion selection")};
     if (!m.contains("optics") || !m["optics"].is_number_unsigned() ||
         m["optics"] != kPlanetOpticsVersion || !m.contains("frame_policy") ||
         !m["frame_policy"].is_number_unsigned() ||
@@ -563,6 +578,7 @@ auto decode_flight(std::string_view text, bool system_import)
                        : release ? kFreedomReleaseSystemFramePolicy
                                  : kFreedomRelativeFramePolicy;
   model.optics = optical ? kPlanetOpticsVersion : 0;
+  model.companions = optical && m.contains("companions") ? 1U : 0U;
   const auto& target = hold["target"];
   if (!target.is_null()) {
     if (auto valid =

@@ -12,6 +12,8 @@
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
 #include "apsis_drift/planet_surface_appearance.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
+#include "apsis_drift/secondary_observations.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
 #include <charconv>
@@ -1727,6 +1729,104 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  static auto project_distant_contacts(const SavedFlightWorld& selected,
+                                       const SavedFlightProjection& view)
+      -> godot::Dictionary {
+    const auto& session = selected.session;
+    const auto& document = session.document();
+    const auto& system = session.system();
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    godot::Dictionary result;
+    result["version"] = 1;
+    result["selected"] = document.model.companions == 1;
+    result["system_id"] = decimal(system.catalog.id.value);
+    result["tick"] = decimal(document.flight.tick);
+    godot::Array contacts;
+    if (document.model.companions == 1) {
+      if (!selected.secondary_catalog ||
+          selected.secondary_catalog->owner != system)
+        selected.secondary_catalog =
+            require(generate_secondary_body_catalog(system));
+      auto observer = require(reframe_rigid_body(
+          RigidBodyWorldContext{system}, require(session.relative_state()),
+          {{RigidFrameKind::system_inertial, system.catalog.id, {}, {}},
+           document.flight.tick}));
+      if (session.surface_walker()) {
+        const auto& foot = session.surface_walker()->foot_position_metres;
+        const auto position = rotate_saved(
+            view.rotation.geometry.fixed_to_system, {foot.x, foot.y, foot.z});
+        const auto planet = require(resolve_planet_ephemeris(
+            system, view.planet.id, {document.flight.tick, 0}));
+        observer.position_metres = {planet.position.x + position.x,
+                                    planet.position.y + position.y,
+                                    planet.position.z + position.z};
+      }
+      if (session.walker()) {
+        const auto station = require(resolve_origin_station_ephemeris(
+            system, view.station, {document.flight.tick, 0}));
+        const auto& foot = session.walker()->foot_position_metres;
+        observer.position_metres = {station.position.x + foot.x,
+                                    station.position.y + foot.y +
+                                        kOriginWalkerEyeHeightMetres,
+                                    station.position.z + foot.z};
+      }
+      const auto observations = require(observe_secondary_bodies(
+          *selected.secondary_catalog,
+          {observer.position_metres.x, observer.position_metres.y,
+           observer.position_metres.z},
+          {document.flight.tick, 0}));
+      const auto native_direction = [&](RigidVector3 v) {
+        const auto& a = view.system_axes;
+        return godot::Vector3{
+            static_cast<godot::real_t>(a[0].east * v.x + a[1].east * v.y +
+                                       a[2].east * v.z),
+            static_cast<godot::real_t>(a[0].up * v.x + a[1].up * v.y +
+                                       a[2].up * v.z),
+            static_cast<godot::real_t>(
+                -(a[0].north * v.x + a[1].north * v.y + a[2].north * v.z))};
+      };
+      for (const auto& item : observations) {
+        const char* status = "unresolved";
+        const char* reason =
+            "Below the optical resolution limit; direction annotation only.";
+        switch (item.status) {
+          case SecondaryObservationStatus::visible:
+            status = "visible";
+            reason = "Distant optical contact. Close flight and landing are "
+                     "unavailable.";
+            break;
+          case SecondaryObservationStatus::unresolved: break;
+          case SecondaryObservationStatus::occluded:
+            status = "occluded";
+            reason = "The line of sight is blocked by another body.";
+            break;
+          case SecondaryObservationStatus::close_unavailable:
+            status = "close_unavailable";
+            reason = "Outside the supported distant-observation range. No "
+                     "surface, collision or landing is available.";
+            break;
+        }
+        godot::Dictionary contact;
+        contact["id"] = decimal(item.id.value);
+        contact["label"] = "Unidentified contact";
+        contact["status"] = status;
+        contact["direction"] = native_direction(item.direction);
+        contact["angular_radius"] = item.angular_radius;
+        contact["light_direction"] = native_direction(item.light_direction);
+        contact["tint"] =
+            godot::Color{item.tint.red / 255.0F, item.tint.green / 255.0F,
+                         item.tint.blue / 255.0F, 1.0F};
+        contact["spin_radians"] = item.spin_radians;
+        contact["reason"] = reason;
+        contacts.append(contact);
+      }
+    }
+    result["contacts"] = contacts;
+    return result;
+  }
+
   static auto project_flight_state(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
@@ -1769,6 +1869,7 @@ class FreedomBridge : public godot::RefCounted {
       result["surface_walk"] = project_surface_walk_actor(selected);
       result["surface_marker"] = project_surface_marker(selected, view);
       result["surface_landmarks"] = project_surface_landmarks(selected, view);
+      result["distant_contacts"] = project_distant_contacts(selected, view);
       result["station_available"] = view.station_available;
       result["station_id"] = view.station_available
                                  ? decimal(view.station.id.value)

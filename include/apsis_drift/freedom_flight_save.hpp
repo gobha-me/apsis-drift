@@ -47,6 +47,8 @@ struct FreedomFlightModel {
   std::uint32_t frame_policy{kFreedomRelativeFramePolicy};
   // Zero retains historical clear appearance; optics1 is explicitly selected.
   std::uint32_t optics{};
+  // Zero preserves historical absence; one admits the separate distant catalog.
+  std::uint32_t companions{};
   friend auto operator==(const FreedomFlightModel&, const FreedomFlightModel&)
       -> bool = default;
 };

@@ -11,6 +11,14 @@ uniform vec3 sun_direction;
 uniform vec3 sun_color : source_color;
 uniform float sun_angular_radius;
 uniform float sun_visibility;
+// C++ same-tick native-tangent projections, in far-to-near order. These are
+// optical silhouettes, never world meshes or supported approach surfaces.
+uniform int distant_contact_count = 0;
+uniform vec3 distant_contact_directions[2];
+uniform float distant_contact_angular_radii[2];
+uniform vec3 distant_contact_light_directions[2];
+uniform vec4 distant_contact_tints[2];
+uniform float distant_contact_spins[2];
 void sky() {
 	vec3 d = normalize(EYEDIR);
 	// World origin is the craft's C++ tangent projection; POSITION is the
@@ -54,6 +62,31 @@ void sky() {
 	float antialias = max(0.00001, fwidth(sun_angle));
 	float sun_disc = 1.0 - smoothstep(max(0.0, sun_angular_radius - antialias), sun_angular_radius + antialias, sun_angle);
 	if (!ground) COLOR += sun_color * sun_disc * sun_visibility * 6.0 * exp(-optical * 0.15);
+	if (!ground) {
+		for (int i = 0; i < 2; i++) {
+			if (i >= distant_contact_count) break;
+			vec3 centre = distant_contact_directions[i];
+			float angular_radius = distant_contact_angular_radii[i];
+			float angle = atan(length(cross(d, centre)), clamp(dot(d, centre), -1.0, 1.0));
+			float edge = max(0.000001, fwidth(angle));
+			float coverage = 1.0 - smoothstep(max(0.0, angular_radius - edge), angular_radius + edge, angle);
+			if (coverage <= 0.0 || angular_radius <= 0.0) continue;
+			vec3 reference = abs(centre.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+			vec3 right = normalize(cross(reference, centre));
+			vec3 up = cross(centre, right);
+			vec2 disc_point = vec2(dot(d, right), dot(d, up)) / sin(angular_radius);
+			float facing = sqrt(max(0.0, 1.0 - dot(disc_point, disc_point)));
+			vec3 normal = normalize(right * disc_point.x + up * disc_point.y - centre * facing);
+			float phase_light = max(0.0, dot(normal, distant_contact_light_directions[i]));
+			float spin = distant_contact_spins[i];
+			vec2 rotated = mat2(vec2(cos(spin), sin(spin)), vec2(-sin(spin), cos(spin))) * vec2(disc_point.x, facing);
+			// Coarse analytic albedo variation; rotation comes only from C++.
+			float mottling = 0.82 + 0.12 * sin(rotated.x * 11.0 + disc_point.y * 5.0) * sin(disc_point.y * 13.0 - rotated.y * 4.0);
+			vec3 contact_color = distant_contact_tints[i].rgb * mottling * (0.025 + 0.975 * phase_light) * sun_color;
+			contact_color = contact_color * exp(-optical * 0.15) + scatter * sun_color * haze;
+			COLOR = mix(COLOR, contact_color, coverage);
+		}
+	}
 	if (optical_enabled && disc > 0.0) {
 		float ray_end = max(0.0, -b + sqrt(disc));
 		if (ground) ray_end = min(ray_end, max(0.0, -b - sqrt(ground_disc)));

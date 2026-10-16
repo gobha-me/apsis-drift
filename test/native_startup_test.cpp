@@ -56,6 +56,7 @@ auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
     check(
         parsed["format_version"] == 39 + i &&
             parsed["flight_model"]["optics"] == 1 &&
+            parsed["flight_model"]["companions"] == 1 &&
             parsed["flight_model"]["frame_policy"] == 1 &&
             decode_native_save_document_json(*encoded) ==
                 std::expected<NativeSaveDocument, SaveSchemaError>{selected[i]},
@@ -79,6 +80,25 @@ auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
       check(restored && encode_native_save_document_json(*restored) == text,
             "historical optical terrain bytes migrated on read/write");
     }
+    auto absent = parsed;
+    absent["flight_model"].erase("companions");
+    const auto absent_text = absent.dump(2) + '\n';
+    const auto absent_loaded = decode_native_save_document_json(absent_text);
+    check(absent_loaded &&
+              encode_native_save_document_json(*absent_loaded) == absent_text,
+          "historical optical save silently acquired companions");
+    for (const auto& value :
+         {Json(0U), Json(2U), Json(true), Json("1"), Json(-1), Json(1.0),
+          Json(0xffffffffffffffffULL)}) {
+      auto malformed = parsed;
+      malformed["flight_model"]["companions"] = value;
+      check(!decode_native_save_document_json(malformed.dump()),
+            "invalid companion component was admitted");
+    }
+    auto old_companions = old_parsed;
+    old_companions["flight_model"]["companions"] = 1U;
+    check(!decode_native_save_document_json(old_companions.dump()),
+          "historical envelope silently admitted companions");
     auto bad = parsed;
     bad["flight_model"]["terrain_policy"] = 4U;
     check(!decode_native_save_document_json(bad.dump()),
@@ -106,6 +126,10 @@ auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
   invalid.voyage.flight.model.optics = 0;
   check(!encode_freedom_flight_document_json(invalid.voyage.flight),
         "sea-datum selection leaked into a historical clear envelope");
+  invalid.voyage.flight.model.companions = 2;
+  check(!encode_freedom_flight_document_json(invalid.voyage.flight),
+        "unsupported typed companion selection serialized");
+  invalid.voyage.flight.model.companions = 1;
   invalid.voyage.flight.model.optics = 2;
   check(!encode_freedom_flight_document_json(invalid.voyage.flight) &&
             !encode_freedom_docking_document_json(invalid.voyage) &&

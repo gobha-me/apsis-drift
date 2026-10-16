@@ -2,6 +2,7 @@ extends SceneTree
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 class LateDamagedShell extends Shell:
 	var damage := ""
@@ -178,7 +179,7 @@ func run() -> void:
 		check(shell.current_view == view and bridge.get_freedom_walk_state() == current and bridge.get_pending_freedom_start().is_empty(), "Late refusal changed current view/session or retained pending")
 		check(shell.staged_reference.get_ref() == null, "Refused detached candidate leaked")
 	shell.damage = ""
-	check_boarding(shell, bridge)
+	await check_boarding(shell, bridge)
 	await check_load(shell, bridge, args)
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
@@ -192,6 +193,60 @@ func joy_axis(axis: int, value: float, device: int) -> void:
 	event.axis_value = value
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+
+
+func check_distant_tracking(flight: Control, bridge: Variant, path: String) -> void:
+	var before: Dictionary = bridge.get_freedom_flight_state()
+	var contacts: Array = before.get("distant_contacts", {}).get("contacts", [])
+	check(flight.paused and flight.controls_menu.panel.visible and contacts.size() == 2 and flight.contact_buttons.size() == 2, "Actual seated Controls lacks two selected optical contact actions")
+	if contacts.size() != 2 or flight.contact_buttons.size() != 2: return
+	check(bridge.save_freedom_as(path), "Optical tracking baseline Save refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var home_before: Dictionary = flight.home_marker.cue.duplicate(true)
+	var home_label: String = flight.home_marker.label_text
+	var home_visible: bool = flight.home_marker.visible
+	var ship_before: Dictionary = flight.ship_marker.cue.duplicate(true)
+	var ship_label: String = flight.ship_marker.label_text
+	var ship_visible: bool = flight.ship_marker.visible
+	var personal_before: bool = flight.show_personal_marker
+	for frame in 4: await process_frame
+	for index in 2:
+		var button: Button = flight.contact_buttons[index]
+		button.grab_focus()
+		flight.controls_menu.left_scroll.ensure_control_visible(button)
+		check(button.is_visible_in_tree() and not button.disabled and button.focus_mode == Control.FOCUS_ALL and button.has_focus(), "Actual optical action cannot receive keyboard/controller focus")
+		for pressed in [true, false]:
+			var event: InputEvent
+			if index == 0:
+				var key := InputEventKey.new()
+				key.keycode = KEY_ENTER
+				key.physical_keycode = KEY_ENTER
+				key.pressed = pressed
+				event = key
+			else:
+				var pad := InputEventJoypadButton.new()
+				pad.device = flight.player_input.device
+				pad.button_index = JOY_BUTTON_A
+				pad.pressed = pressed
+				event = pad
+			Input.parse_input_event(event)
+			Input.flush_buffered_events()
+			await process_frame
+		check(flight.paused and flight.selected_contact_id == contacts[index].id and flight.controls_menu.surface_reference_view.visible and contacts[index].reason in flight.controls_menu.surface_reference_view.body.text, "Actual keyboard/controller optical action lost selection, explanation or pause")
+		flight.controls_menu.surface_reference_view.back_button.pressed.emit()
+		flight.update_view(0.0)
+		check(not flight.controls_menu.surface_reference_view.visible and button.has_focus() and flight.selected_contact_id == contacts[index].id and contacts[index].status.replace("_", " ") in flight.primary_status.text and contacts[index].reason in flight.primary_status.text, "Optical Back/refresh lost focused selection or actual compact availability")
+		if contacts[index].status in ["visible", "unresolved"]:
+			var expected := HomeNavigation.project(flight.camera, flight.camera.global_position + contacts[index].direction * 1000.0, flight.contact_marker.size, HomeNavigation.INSET * flight.contact_marker.render_scale)
+			check(flight.contact_marker.cue == expected, "CONTACT bearing diverged from the actual C++ optical direction")
+		else:
+			check(not flight.contact_marker.visible, "Occluded or close-unavailable actual contact retained a bearing annotation")
+		check(flight.home_marker.cue == home_before and flight.home_marker.label_text == home_label and flight.home_marker.visible == home_visible and flight.ship_marker.cue == ship_before and flight.ship_marker.label_text == ship_label and flight.ship_marker.visible == ship_visible and flight.show_personal_marker == personal_before, "Optical selection replaced HOME/RETURN/MARK ownership")
+		check(bridge.get_freedom_flight_state() == before, "Optical GUI action changed the actual C++ clock/checksum or observations")
+	flight.contact_clear_button.grab_focus()
+	flight.contact_clear_button.pressed.emit()
+	check(flight.selected_contact_id.is_empty() and not flight.contact_marker.visible and not "CONTACT ·" in flight.primary_status.text and flight.paused, "Paused clear tracking left an optical annotation or resumed flight")
+	check(bridge.get_freedom_flight_state() == before and bridge.save_freedom_as(path + ".after.json") and FileAccess.get_file_as_bytes(path + ".after.json") == bytes, "Actual keyboard/controller tracking changed complete C++ save bytes")
 
 
 func check_boarding(shell: Control, bridge: Variant) -> void:
@@ -261,6 +316,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(not flight.unboard_button.disabled and flight.unboard_button.visible and flight.unboard_menu_button.visible and flight.unboard_menu_button.focus_mode == Control.FOCUS_ALL and not flight.release_button.disabled and flight.exhaust.valid_bound_skin(), "Seated UI lost unboard/release/exhaust")
 	var save_path: String = OS.get_cmdline_user_args()[1].get_base_dir().path_join("playable-seated.json")
 	check(bridge.save_freedom_as(save_path), "Seated Save As refused")
+	await check_distant_tracking(flight, bridge, save_path + ".contacts.json")
 	var continued_owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var continued_shell := Shell.new()
 	continued_shell.presentation_only = true
