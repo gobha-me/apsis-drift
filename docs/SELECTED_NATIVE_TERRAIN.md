@@ -49,8 +49,8 @@ terrain, relocating a craft or changing its landed anchor.
 
 Outer starting-assembly 21, boarding 22, surface 23, resources 24, knowledge 25,
 travel 27, recovery 29 and suited-walking 30 wrappers retain their existing format
-numbers. Their complete nested flight/docking/journey stores the selected
-31/32/33 envelope. A landed anchor's terrain policy must agree with its validated
+numbers. Their complete nested flight/docking/journey stores its matching
+selected envelope: 31/32/33 for local detail, or 39/40/41 with optics1. A landed anchor's terrain policy must agree with its validated
 base flight; its selected contact recipe is revalidated before continuation.
 
 Unknown policy, missing or malformed selected field, disagreement between
@@ -94,6 +94,14 @@ water albedo/roughness/specular response. Coarse wetness interpolates through th
 same morph correspondence as geometry. Invalid base attributes and morph weights
 refuse before upload. Material blending across a mixed facet grants no support
 or survey knowledge, and pale terrain remains styling rather than physical ice.
+
+The bounded software comparison holds one existing wet patch at an initialized
+external viewpoint, with the same pose, clock and actual daylight. The sea top
+rises about 301 m above the prior basin there, and both full saves round-trip
+exactly. The volcanic palette makes the sea almost uniformly brown: it does not
+yet read convincingly as an ocean. This verifies geometry/material integration,
+not coastline, specular quality, final art, flown arrival or hardware acceptance.
+The retained HOME marker overlaps the diagnostic caption.
 
 ## Streaming and residency
 
