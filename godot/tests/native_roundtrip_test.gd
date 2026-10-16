@@ -43,7 +43,7 @@ static func bounded_decimal(value: Variant) -> bool:
 	return Checkpoints.decimal(value) and (value.length() == 1 or not value.begins_with("0")) and (value.length() < 20 or value <= "18446744073709551615")
 
 func valid_continuation(value: Dictionary) -> bool:
-	if value.get("route") != "native-neighbor-from-ascent" or value.get("start_mode") != "continue" or value.get("source_file") != "surface-ascent.json" or not Checkpoints.finite_number(value.get("frame_policy")) or (value.frame_policy != 1 and value.frame_policy != 2) or (value.get("terrain_policy") != 2 and value.get("terrain_policy") != 3) or value.get("uninterrupted_scope") != "suffix_from_declared_continue_only": return false
+	if value.get("route") != "native-neighbor-from-ascent" or value.get("start_mode") != "continue" or value.get("source_file") != "surface-ascent.json" or not Checkpoints.finite_number(value.get("frame_policy")) or (value.frame_policy != 1 and value.frame_policy != 2) or not Checkpoints.finite_number(value.get("terrain_policy")) or (value.terrain_policy != 2 and value.terrain_policy != 3) or value.get("uninterrupted_scope") != "suffix_from_declared_continue_only": return false
 	if stream_start_tick(value) < 0 or not targeting_grade().is_empty(): return false
 	if value.get("flight_profile") != ("advanced" if value.get("profile") == "pilot" else "assisted"): return false
 	for field in ["initial_flight_quanta", "inherited_spent_quanta"]:
