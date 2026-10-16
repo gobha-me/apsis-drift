@@ -147,6 +147,8 @@ static auto sea_surface_stream_contract() -> void {
   bad[{0, 0, 0, 0}] = broken;
   rejects([&] { stream_morph_detail::validate_cover(bad); });
   broken->wetness = coarse.wetness;
+  broken->wetness[0] = .5;
+  rejects([&] { stream_morph_detail::validate_cover(bad); });
   broken->wetness[0] = std::numeric_limits<double>::quiet_NaN();
   rejects([&] { stream_morph_detail::validate_cover(bad); });
   PlanetStream stream(owner, body, 3);

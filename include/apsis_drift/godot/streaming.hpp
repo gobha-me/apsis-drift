@@ -441,8 +441,7 @@ inline auto validate_cover(const TileMap& tiles) -> void {
           !std::isfinite(magnitude) || std::abs(magnitude - 1) > 1e-6 ||
           !std::isfinite(tile->elevations[i]) ||
           (!tile->wetness.empty() &&
-           (!std::isfinite(tile->wetness[i]) || tile->wetness[i] < 0 ||
-            tile->wetness[i] > 1)))
+           (tile->wetness[i] != 0.0 && tile->wetness[i] != 1.0)))
         throw std::invalid_argument("invalid morph vertex attributes");
     }
     for (const auto index : tile->indices)
