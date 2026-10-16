@@ -38,6 +38,13 @@ invoking station action and stays paused; focus loss, resize and another
 controller cannot resume the journey or grant observations. Reading records
 needs no seated pilot. This is not a complete survey or a body renderer.
 
+During active flight, new records or improved confidence produce one quiet
+“Ship observations updated” cue for six seconds. It points to **Controls →
+Recorded observations** and coalesces simultaneous updates. Pause and focus loss
+freeze its duration; Continue and view handoffs establish a silent baseline.
+Repeated readings do not trigger it. The cue does not query the record book,
+change saved knowledge, or replace command/refusal messages.
+
 For new ship observations the pilot must be aboard. Committed simulation ticks divisible by 120 sample
 at one-second intervals; tick zero does not sample. Time compression executes
 the same integer ticks and cannot skip or duplicate these samples. Walking or

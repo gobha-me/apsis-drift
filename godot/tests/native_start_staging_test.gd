@@ -49,7 +49,7 @@ func saved_knowledge_entries(path: String) -> Array:
 	check(false, "Recorded-observation oracle could not find the actual saved ledger")
 	return []
 
-func check_recorded_observations(bridge: Variant, path: String, fresh: bool) -> void:
+func check_recorded_observations(bridge: Variant, path: String, fresh: bool, require_system_arrival := true) -> void:
 	var before: Dictionary = bridge.get_freedom_flight_state()
 	var actor: Dictionary = bridge.get_freedom_walk_state()
 	if not bridge.save_freedom_as(path):
@@ -77,13 +77,17 @@ func check_recorded_observations(bridge: Variant, path: String, fresh: bool) -> 
 				check(subject.system_id == row.system_id, "Recorded system ownership differs from its granted chart")
 				systems[subject.subject_id] = row.system_id
 	var expected := {}
+	var observation_transitions := 0
 	var expected_subjects := {}
 	for entry in entries:
+		for transition in entry.transitions:
+			if int(transition.source) != 0: observation_transitions += 1
 		var system: String = systems.get(entry.system, "")
 		check(not system.is_empty(), "Saved fact lost its known system owner")
 		var key: String = kinds[int(entry.kind)] + "|" + system + "|" + entry.identity
 		expected_subjects[key] = true
 		expected[key + "|" + facts[int(entry.fact)]] = entry.transitions[-1]
+	check(typeof(before.chart.get("observation_transitions")) == TYPE_INT and before.chart.observation_transitions == observation_transitions, "HUD counter differs from the complete saved non-starting transition history")
 	var seen := {}
 	var subject_keys := {}
 	var local_facts := 0
@@ -122,7 +126,9 @@ func check_recorded_observations(bridge: Variant, path: String, fresh: bool) -> 
 				check(fact.source == "local_ship" and fact.source_id == before.craft_id and fact.craft_id == before.craft_id and fact.value.radius_kilometres * 1000.0 == before.planet_radius and fact.value.gravity_milli_g > 0, "Resolved current-planet physical reading differs from its owner")
 				current_physical = true
 	check(seen.size() == expected.size() and subject_keys.size() == expected_subjects.size(), "Recorded getter omitted saved subjects or facts")
-	if not fresh: check(local_facts > 0 and arrival_facts > 0 and redacted > 0 and current_physical and current_presence, "Actual departure did not exercise resolved, redacted and visited recorded facts")
+	if not fresh:
+		check(local_facts > 0 and arrival_facts > 0 and redacted > 0 and current_physical, "Active ship sensors did not exercise resolved, redacted and visited recorded facts")
+		if require_system_arrival: check(current_presence, "Actual departure did not record the current system visit")
 	check(bridge.get_freedom_flight_state() == before and bridge.get_freedom_walk_state() == actor, "Reading recorded observations changed the actual actor/world")
 	check(bridge.save_freedom_as(path + ".after.json") and FileAccess.get_file_as_bytes(path + ".after.json") == source and FileAccess.get_file_as_bytes(path) == source, "Lazy observations changed complete saved knowledge or its source")
 
@@ -158,7 +164,7 @@ func run() -> void:
 	var initial_resources: Dictionary = bridge.get_freedom_flight_state().resources
 	check(initial_resources.selected and initial_resources.quantity_quanta == "3032640000000000" and initial_resources.jump_charges == 3, "Staged New Game lost finite C++ resources")
 	var initial_chart: Dictionary = bridge.get_freedom_flight_state().chart
-	check(initial_chart.local_sensors and initial_chart.observed_facts == 0, "New Game silently invented ship observations")
+	check(initial_chart.local_sensors and initial_chart.observed_facts == 0 and initial_chart.observation_transitions == 0, "New Game silently invented ship observations")
 	check(initial_chart.selected and initial_chart.rows.size() == 2 and initial_chart.rows[0].current and initial_chart.rows[0].confidence == "resolved" and initial_chart.rows[1].confidence == "resolved" and initial_chart.rows[1].affordable, "Starting chart leaked extra rows, invented visits or lost granted route")
 	check_recorded_observations(bridge, args[1].get_base_dir().path_join("recorded-starting-grants.json"), true)
 	var current: Dictionary = bridge.get_freedom_walk_state()
@@ -265,6 +271,32 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(continued_owner.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources, "Staged Continue changed exact resource readings")
 	check(continued_owner.get_freedom_flight_state().chart == bridge.get_freedom_flight_state().chart, "Continue changed granted chart knowledge or invented visits")
 	check(continued_owner.get_freedom_observations() == bridge.get_freedom_observations(), "Seated Continue changed recorded facts or provenance")
+	# Exercise the real active-frame hook on an independent seated continuation.
+	# The main departure/return trace below retains its existing clock and inputs.
+	var cue_view: Control = continued_shell.current_view
+	if cue_view is FlightView:
+		cue_view.set_process(false)
+		check(cue_view.observation_cue.text().is_empty(), "Continue replayed existing findings")
+		cue_view.toggle_pause()
+		check(not cue_view.paused, "Neutral observation-cue fixture could not resume")
+		# Stay within the existing per-frame catch-up cap to reach a sensor tick.
+		for frame in 10: cue_view._process(0.1)
+		check(cue_view.error.is_empty() and cue_view.state.chart.observation_transitions > 0 and cue_view.observation_cue.text() == "Ship observations updated\nControls → Recorded observations" and cue_view.observation_cue.text() in cue_view.primary_status.text, "Successful active sensor ticks did not reach the actual compact HUD")
+		var cue_text: String = cue_view.observation_cue.text()
+		var cue_save := save_path + ".cue.json"
+		check(continued_owner.save_freedom_as(cue_save), "Observation cue snapshot refused")
+		var cue_bytes := FileAccess.get_file_as_bytes(cue_save)
+		check_recorded_observations(continued_owner, cue_save + ".records.json", false, false)
+		cue_view.pause_controls("Command result has priority", false)
+		cue_view._process(30.0)
+		check(cue_view.observation_cue.text() == cue_text and cue_view.primary_status.text.split("\n")[1] == "Command result has priority", "Pause aged the cue or hid a command notice")
+		cue_view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		cue_view._process(30.0)
+		check(cue_view.observation_cue.text() == cue_text, "Focus loss aged the observation cue")
+		cue_view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+		check(continued_owner.save_freedom_as(cue_save + ".after.json") and FileAccess.get_file_as_bytes(cue_save + ".after.json") == cue_bytes, "Cue review/pause/focus changed complete saved state")
+		check(continued_shell.select_start(continued_owner, {"mode": "continue", "value": cue_save, "assets": shell.assets_root}), "Observation-cue Continue refused")
+		check(continued_shell.current_view.observation_cue.text().is_empty(), "Continue announced saved findings again")
 	continued_shell.free()
 	flight.port_command("release_freedom_port")
 	check(not bridge.get_freedom_flight_state().attached and "12 m" in flight.save_status.text, "Release lost mapped withdrawal guidance")

@@ -21,6 +21,7 @@ const SurfaceAppearance = preload("res://scripts/native/native_surface_appearanc
 var surface_appearance := SurfaceAppearance.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
+var observation_cue := Status.ObservationCue.new()
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
 var impact_overlay: Control
 var impact_status: RichTextLabel
@@ -417,6 +418,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 func activate() -> void:
 	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
 	activated = true
+	observation_cue.reset(state)
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	near_viewport.world_3d = far_viewport.find_world_3d()
 	# Activation establishes the baseline; initial Control layout is not a resize.
@@ -720,6 +722,8 @@ func update_compact_hud() -> void:
 	instruments_button.focus_mode = Control.FOCUS_ALL if detailed else Control.FOCUS_NONE
 	var margin := Status.layout_bounds(size, Vector2(get_window().size)).position.x
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
+	# Quiet refreshes absorb command/load changes without inventing a finding.
+	observation_cue.observe(state, false, 0.0)
 	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
@@ -730,6 +734,9 @@ func update_compact_hud() -> void:
 		var lines := primary_status.text.split("\n")
 		lines.insert(1, save_status.text.left(180) + ("…" if save_status.text.length() > 180 else ""))
 		primary_status.text = "\n".join(lines)
+	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
+		primary_status.text += "\n" + observation_cue.text()
+		primary_status.tooltip_text += "\n" + observation_cue.text()
 	context_source = null
 	if surface_walking(): context_source = surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
@@ -1216,6 +1223,7 @@ func _process(delta: float) -> void:
 		set_process(false)
 		recovery_requested.emit()
 		return
+	observation_cue.observe(state, not paused and not save_dialog.visible and not surface_walking() and delta > 0.0, delta)
 	if not paused and not save_dialog.visible and not surface_walking():
 		if resolved.recenter:
 			look_offset = Vector2.ZERO
