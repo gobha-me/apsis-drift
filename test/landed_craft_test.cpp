@@ -975,6 +975,170 @@ auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
   output << manifest.dump(2) << '\n';
   if (!output) throw std::runtime_error("native manifest write failed");
 }
+auto surface_marker_capacity(const NativeFreedomFlightSession& source,
+                             const Fixture& f) -> void {
+  auto document = required(source.surface_walk_document());
+  auto& knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(document.voyage.voyage);
+  auto& boarding =
+      std::get<FreedomBoardingSaveDocument>(knowledge.voyage.voyage.base);
+  auto& history = boarding.voyage.flight.origin.state.world_deltas;
+  const SaveWorldDelta padding{std::string(kMaximumSaveObjectKeyBytes, 'm'),
+                               SaveWorldDeltaKind::discovered, 0};
+  // Synthetic bounded-history control, separate from the actual walk voyage.
+  // Find the last encodable complete save, including all existing wrappers.
+  std::size_t low{}, high = kMaximumSaveWorldDeltas;
+  while (low < high) {
+    const auto middle = low + (high - low + 1) / 2;
+    history.assign(middle, padding);
+    if (encode_freedom_surface_walk_document_json(document))
+      low = middle;
+    else
+      high = middle - 1;
+  }
+  history.assign(low, padding);
+  history.push_back({"m", SaveWorldDeltaKind::discovered, 0});
+  auto text = encode_freedom_surface_walk_document_json(document);
+  if (text) {
+    const auto room = kMaximumSaveDocumentBytes - text->size();
+    history.back().object_key.append(
+        std::min(room, kMaximumSaveObjectKeyBytes - 1), 'm');
+  } else
+    history.pop_back();
+  const auto prior =
+      required(encode_freedom_surface_walk_document_json(document));
+  auto bounded = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, document, f.planet, {}}));
+  check(!bounded.mark_surface_marker() &&
+            !bounded.knowledge()->surface_marker &&
+            required(encode_freedom_surface_walk_document_json(
+                required(bounded.surface_walk_document()))) == prior,
+        "A marker that exceeds the complete save byte bound refuses without "
+        "selecting metadata or changing prior history");
+}
+
+auto surface_marker_session(NativeFreedomFlightSession session,
+                            const Fixture& f) -> void {
+  const auto saved = [&](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  const auto entries = session.knowledge()->entries;
+  const auto resources = session.resources();
+  const auto tick = session.document().flight.tick;
+  const auto actor = *session.surface_walker();
+  check(!required(session.surface_marker_view()).selected &&
+            !session.replace_surface_marker() &&
+            !session.clear_surface_marker(),
+        "Historical outside journey starts marker-unselected; replace and "
+        "clear require an existing point");
+  required(session.mark_surface_marker());
+  const auto marked = session.knowledge()->surface_marker;
+  const auto point = *marked->point;
+  const auto view = required(session.surface_marker_view());
+  check(point.system == actor.frame.system &&
+            point.planet == actor.frame.planet &&
+            point.position ==
+                PlanetFixedPositionMetres{actor.foot_position_metres.x,
+                                          actor.foot_position_metres.y,
+                                          actor.foot_position_metres.z} &&
+            point.tick == tick && view.selected &&
+            view.point == marked->point && view.current_body &&
+            view.target_craft_relative_metres &&
+            view.straight_line_distance_metres == 0 && view.known_system_name &&
+            view.known_body_name && session.knowledge()->entries == entries &&
+            session.resources() == resources &&
+            session.document().flight.tick == tick,
+        "Mark copies the actual supported foot and authoritative owner/tick "
+        "without a fact, time or resource grant");
+  const auto marked_text = saved(session);
+  check(!session.mark_surface_marker() && saved(session) == marked_text,
+        "Mark cannot silently replace the selected point");
+  const auto path =
+      std::filesystem::temp_directory_path() /
+      ("apsis-surface-marker-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()) +
+       ".json");
+  required(session.save_as(path));
+  auto continued = required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+  check(saved(continued) == marked_text &&
+            continued.knowledge()->surface_marker == marked,
+        "Actual Save/Continue preserves the marker point and recorded tick "
+        "exactly");
+  std::filesystem::remove(path);
+  for (unsigned step = 0; step < 30; ++step)
+    required(session.advance_surface_walk({-1, 0, 0}));
+  const auto moved = required(session.surface_marker_view());
+  const auto& foot = session.surface_walker()->foot_position_metres;
+  const auto expected_range =
+      std::hypot(point.position.x - foot.x, point.position.y - foot.y,
+                 point.position.z - foot.z);
+  const auto body = required(session.relative_state());
+  const auto rotation = required(
+      resolve_planet_rotation(session.system(), session.rotation(), body.tick));
+  const auto target =
+      rotate(rotation.geometry.fixed_to_system,
+             {point.position.x, point.position.y, point.position.z});
+  check(moved.current_body &&
+            moved.straight_line_distance_metres == expected_range &&
+            expected_range > .1 &&
+            norm(sub(*moved.target_craft_relative_metres,
+                     sub(target, body.position_metres))) < 1e-7 &&
+            session.knowledge()->surface_marker == marked,
+        "Movement retains the fixed point; C++ bearing and foot range use the "
+        "current authoritative rotation");
+  const auto before_read = saved(session);
+  static_cast<void>(required(session.surface_marker_view()));
+  check(saved(session) == before_read,
+        "Reviewing marker direction preserves every saved owner and clock");
+  required(session.replace_surface_marker());
+  const auto replacement = session.knowledge()->surface_marker;
+  check(replacement != marked && replacement->point->tick == body.tick &&
+            required(session.surface_marker_view())
+                    .straight_line_distance_metres == 0,
+        "Explicit Replace records the new actual supported point and tick");
+  required(session.return_from_surface_walk());
+  const auto inside = required(session.surface_marker_view());
+  check(inside.current_body && inside.target_craft_relative_metres &&
+            inside.straight_line_distance_metres ==
+                norm(*inside.target_craft_relative_metres) &&
+            !session.mark_surface_marker() && !session.replace_surface_marker(),
+        "Inside range is measured from the ship; seated commands cannot "
+        "invent a visited point");
+  required(session.begin_surface_walk());
+  required(session.replace_surface_marker());
+  const auto retained = session.knowledge()->surface_marker;
+  required(session.record_loss(FreedomLossCause::recoverable_destruction,
+                               session.document().origin.state.craft,
+                               session.document().flight.tick,
+                               required(rigid_body_state_checksum(
+                                   f.context, session.document().flight))));
+  const auto pending = saved(session);
+  check(!session.mark_surface_marker() && !session.replace_surface_marker() &&
+            !session.clear_surface_marker() && saved(session) == pending,
+        "Pending loss freezes marker commands transactionally");
+  required(session.complete_recovery());
+  check(session.knowledge()->surface_marker == retained && session.walker() &&
+            session.document().origin.lineage,
+        "Standard replacement preserves personal point/tick independently "
+        "of retired craft identity");
+  const auto recovered_tick = session.document().flight.tick;
+  const auto recovered_entries = session.knowledge()->entries;
+  required(session.clear_surface_marker());
+  const auto clear = required(session.surface_marker_view());
+  check(clear.selected && !clear.point && !clear.current_body &&
+            !clear.target_craft_relative_metres &&
+            !clear.straight_line_distance_metres &&
+            session.knowledge()->surface_marker->version == 1 &&
+            session.document().flight.tick == recovered_tick &&
+            session.knowledge()->entries == recovered_entries &&
+            saved(session).find("surface_marker") != std::string::npos,
+        "Clear after recovery remains editable and preserves selected version, "
+        "fact history and clock");
+}
+
 auto surface_walk_session(const Fixture& f,
                           const std::filesystem::path& directory = {}) -> void {
   auto station = required(
@@ -1011,7 +1175,12 @@ auto surface_walk_session(const Fixture& f,
   checkpoint("source");
   check(!session.surface_return_access(),
         "Seated session has no outside return cue");
+  check(!session.mark_surface_marker() && !session.replace_surface_marker() &&
+            !required(session.surface_marker_view()).selected,
+        "Seated historical session cannot record a surface marker");
   required(session.begin_surface_walk());
+  surface_marker_capacity(session, f);
+  surface_marker_session(session, f);
   checkpoint("exited");
   check(session.surface_walker() && !session.walker() &&
             session.document().flight.tick == initial_tick,

@@ -43,6 +43,17 @@ struct NativeSurfaceManeuver {
                          const NativeSurfaceManeuver&) -> bool = default;
 };
 
+struct FreedomSurfaceMarkerView {
+  bool selected{};
+  std::optional<FreedomSurfaceMarkerPoint> point;
+  bool current_body{};
+  // Craft-centred, current planet-inertial axes, for the existing native view.
+  std::optional<RigidVector3> target_craft_relative_metres;
+  // Straight chord from the outside foot, or from the craft while inside.
+  std::optional<double> straight_line_distance_metres;
+  std::optional<std::string> known_system_name, known_body_name;
+};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -206,6 +217,12 @@ class NativeFreedomFlightSession {
       -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto surface_walk_document() const
       -> std::expected<FreedomSurfaceWalkSaveDocument, std::string>;
+  [[nodiscard]] auto mark_surface_marker() -> std::expected<void, std::string>;
+  [[nodiscard]] auto replace_surface_marker()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto clear_surface_marker() -> std::expected<void, std::string>;
+  [[nodiscard]] auto surface_marker_view() const
+      -> std::expected<FreedomSurfaceMarkerView, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto last_gear_clearance() const
       -> std::optional<TerrainPadGapSample>;
@@ -221,6 +238,8 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto store_surface_marker(bool replace)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_jump(const NativeFlightControls&,
                                   SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;

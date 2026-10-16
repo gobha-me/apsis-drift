@@ -110,6 +110,10 @@ var audio_preferences: RefCounted
 var quit_handler: Callable
 var surface_walk_button: Button
 var surface_walk_menu_button: Button
+var surface_marker_button: Button
+var clear_surface_marker_button: Button
+var show_surface_marker_button: Button
+var show_personal_marker := false
 
 
 func surface_walking() -> bool:
@@ -150,7 +154,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_state(value: Dictionary) -> bool:
-	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value): return false
+	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value) or not valid_surface_marker(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -192,6 +196,24 @@ static func valid_state(value: Dictionary) -> bool:
 	if not opt_in is Dictionary or not opt_in.get("available") is bool or not opt_in.get("reason") is String:
 		return false
 	return value.planet_radius > 0.0 and valid_orbit(value) and valid_hold(value)
+
+
+static func valid_surface_marker(value: Dictionary) -> bool:
+	if not value.has("surface_marker"): return true
+	var marker: Variant = value.surface_marker
+	if not marker is Dictionary or typeof(marker.get("version")) != TYPE_INT or marker.version != 1: return false
+	for field in ["selected", "present", "current_body", "can_mark", "can_clear"]:
+		if typeof(marker.get(field)) != TYPE_BOOL: return false
+	for field in ["system_name", "planet_name"]:
+		if not marker.get(field) is String or marker[field].length() > 256: return false
+	if (marker.current_body and not marker.present) or (marker.present and not marker.selected) or (marker.can_clear and not marker.present): return false
+	if not marker.present:
+		return not marker.has("position") and not marker.has("distance_metres")
+	for field in ["system_id", "planet_id", "tick"]:
+		if not NativeEnvironment.decimal(marker.get(field)): return false
+	if not NativeEnvironment.decimal(value.get("tick")) or marker.tick.length() > value.tick.length() or (marker.tick.length() == value.tick.length() and marker.tick > value.tick): return false
+	if not marker.current_body: return not marker.has("position") and not marker.has("distance_metres")
+	return marker.system_id == value.get("system_id") and marker.planet_id == value.get("planet_id") and marker.get("position") is Vector3 and marker.position.is_finite() and marker.get("distance_metres") is float and is_finite(marker.distance_metres) and marker.distance_metres >= 0.0
 
 
 static func valid_hold(value: Dictionary) -> bool:
@@ -737,6 +759,16 @@ func update_compact_hud() -> void:
 	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
 		primary_status.text += "\n" + observation_cue.text()
 		primary_status.tooltip_text += "\n" + observation_cue.text()
+	var personal: Dictionary = state.get("surface_marker", {})
+	if error.is_empty() and personal.get("present", false):
+		var marker_text := ""
+		if show_personal_marker and personal.current_body:
+			marker_text = "MARK · %.1f m · straight-line distance" % personal.distance_metres
+		elif not personal.current_body:
+			marker_text = "MARK retained · %s / %s · another body" % [personal.system_name, personal.planet_name]
+		if not marker_text.is_empty():
+			primary_status.text += "\n" + marker_text
+			primary_status.tooltip_text += "\n" + marker_text
 	context_source = null
 	if surface_walking(): context_source = surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
@@ -779,6 +811,9 @@ func setup_controls() -> void:
 	var survey_column: Node = controls_menu.save_button.get_parent()
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
+	surface_marker_button = controls_menu.add_button(survey_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
+	clear_surface_marker_button = controls_menu.add_button(survey_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
+	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		refresh_impact_action()
@@ -869,6 +904,55 @@ func toggle_suit_lamp() -> void:
 	if not paused or not focused or not surface_walking() or journey_dialog_open or save_dialog.visible or recovery_notified or not error.is_empty(): return
 	suit_lamp_enabled = not suit_lamp_enabled
 	refresh_suit_lamp()
+
+
+func marker_controls_available() -> bool:
+	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible)
+
+
+func surface_marker_command(command: String) -> void:
+	if not marker_controls_available(): return
+	if command not in ["mark_freedom_surface_marker", "replace_freedom_surface_marker", "clear_freedom_surface_marker"]: return
+	if command != "clear_freedom_surface_marker" and not surface_walking(): return
+	if not bridge.call(command):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	if command == "clear_freedom_surface_marker": show_personal_marker = false
+	update_view(0.0)
+	report_action_status("Personal marker cleared." if command == "clear_freedom_surface_marker" else "Personal marker replaced at your feet." if command == "replace_freedom_surface_marker" else "Personal marker recorded at your feet.")
+
+
+func toggle_surface_marker() -> void:
+	if not marker_controls_available() or not state.get("surface_marker", {}).get("current_body", false): return
+	show_personal_marker = not show_personal_marker
+	update_view(0.0)
+
+
+func refresh_surface_marker() -> void:
+	var marker: Dictionary = state.get("surface_marker", {})
+	var present: bool = marker.get("present", false)
+	var current: bool = marker.get("current_body", false)
+	if not present or not current: show_personal_marker = false
+	if surface_marker_button != null:
+		surface_marker_button.visible = surface_walking()
+		surface_marker_button.disabled = not marker.get("can_mark", false)
+		surface_marker_button.text = "Replace marker" if present else "Mark this spot"
+		clear_surface_marker_button.visible = present
+		clear_surface_marker_button.disabled = not marker.get("can_clear", false)
+		show_surface_marker_button.visible = present
+		show_surface_marker_button.disabled = not current
+		show_surface_marker_button.text = "Show personal marker: " + ("On" if show_personal_marker else "Off") if current else "Marker retained on another body"
+		show_surface_marker_button.tooltip_text = "%s / %s · recorded ship time %.1f s\nDirection and straight-line distance only; no route or landing clearance." % [marker.system_name, marker.planet_name, marker.tick.to_float() / 120.0] if present else ""
+	if not show_personal_marker: return
+	if surface_walking():
+		ship_marker.label_text = "MARK"
+		ship_marker.update_cue(camera, marker.position, false)
+	else:
+		home_marker.visible = true
+		home_marker.label_text = "MARK"
+		home_marker.update_cue(camera, marker.position, false)
+		home_cue.visible = false
 
 
 func refresh_suit_lamp() -> void:
@@ -1430,6 +1514,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
+	home_marker.label_text = "HOME"
 	home_marker.visible = state.get("station_available", true)
 	home_cue.visible = home_marker.visible
 	if home_marker.visible: home_marker.update_cue(camera, target, state.attached)
@@ -1486,4 +1571,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
 			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
+	refresh_surface_marker()
 	update_compact_hud()

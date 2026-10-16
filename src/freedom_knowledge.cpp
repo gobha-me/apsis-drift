@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <tuple>
 
@@ -194,6 +195,25 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     return std::unexpected{Error::invalid_tick};
   if (k.entries.size() > kMaximumFreedomKnowledgeFacts)
     return std::unexpected{Error::oversized_ledger};
+  if (k.surface_marker) {
+    if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
+         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+        k.surface_marker->version != kFreedomSurfaceMarkerVersion)
+      return std::unexpected{Error::invalid_surface_marker};
+    if (k.surface_marker->point) {
+      const auto& m = *k.surface_marker->point;
+      const auto* body =
+          planet(w, {KnowledgeSubjectKind::planet, m.system, m.planet.value});
+      const auto& p = m.position;
+      const auto radius = std::hypot(p.x, p.y, p.z);
+      // Match the supported walker's finite spatial envelope. This is a saved
+      // point, not a renewed support, route or landing certificate.
+      if (!body || m.tick > now || !std::isfinite(p.x) || !std::isfinite(p.y) ||
+          !std::isfinite(p.z) || !std::isfinite(radius) || radius > 1e8 ||
+          radius <= static_cast<double>(body->descriptor.radius.value) * 1000)
+        return std::unexpected{Error::invalid_surface_marker};
+    }
+  }
   for (std::size_t i = 0; i < k.entries.size(); ++i) {
     const auto& e = k.entries[i];
     if ((i && !less(k.entries[i - 1], e)) || e.transitions.empty() ||

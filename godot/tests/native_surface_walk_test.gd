@@ -115,6 +115,118 @@ func check_return_fallback(view: Control) -> void:
 	view.update_view(0.0)
 	check_return_bearing(view)
 
+
+func marker_state_without_metadata(state: Dictionary) -> Dictionary:
+	var result := state.duplicate(true)
+	result.erase("surface_marker")
+	return result
+
+
+func activate_marker_button(view: Control, button: Button, controller := false) -> void:
+	var mode := button.process_mode
+	button.process_mode = Node.PROCESS_MODE_ALWAYS
+	await process_frame
+	button.grab_focus()
+	view.controls_menu.left_scroll.ensure_control_visible(button)
+	check(button.visible and not button.disabled and button.has_focus() and button.can_process(), "Marker action lacks keyboard/controller focus")
+	if controller:
+		for pressed in [true, false]:
+			var event := InputEventJoypadButton.new()
+			event.device = view.player_input.device
+			event.button_index = JOY_BUTTON_A
+			event.pressed = pressed
+			Input.parse_input_event(event)
+			Input.flush_buffered_events()
+			await process_frame
+	else:
+		key(KEY_ENTER, true)
+		await process_frame
+		key(KEY_ENTER, false)
+	button.process_mode = mode
+	button.release_focus()
+
+
+func check_personal_surface_marker(source: String, assets: String, output: String) -> void:
+	# Independent actual continuation leaves the existing full-save route intact.
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Marker outside fixture did not Continue"):
+		shell.free()
+		return
+	var view: Control = shell.current_view
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	check(view.paused and view.surface_walking() and initial.surface_marker.can_mark and not initial.surface_marker.present and not view.show_personal_marker, "Fresh outside marker selection is unavailable or invented")
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.surface_marker_button.pressed.emit()
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(owner.get_freedom_flight_state() == initial, "Unfocused marker callback changed the journey")
+	key(KEY_W, true)
+	view.toggle_pause()
+	check(view.paused and owner.get_freedom_flight_state() == initial, "Held walking input bypassed Resume while reviewing a marker")
+	await activate_marker_button(view, view.surface_marker_button)
+	key(KEY_W, false)
+	var marked: Dictionary = owner.get_freedom_flight_state()
+	var point: Dictionary = marked.surface_marker.duplicate(true)
+	check(view.paused and point.present and point.current_body and point.tick == initial.tick and point.distance_metres < 0.000001 and view.surface_marker_button.text == "Replace marker", "Actual paused mark did not record the current foot/tick with explicit replace")
+	check(marker_state_without_metadata(marked) == marker_state_without_metadata(initial) and owner.get_freedom_observations() == records, "Mark changed clock, craft, actor, resources or knowledge provenance")
+	check(not owner.mark_freedom_surface_marker() and owner.get_freedom_flight_state() == marked, "Repeated mark silently overwrote the selected point")
+	for field in ["version", "selected", "present", "current_body", "can_mark", "can_clear", "position", "distance_metres", "system_id", "planet_id", "tick", "system_name", "planet_name"]:
+		var malformed := marked.duplicate(true)
+		malformed.surface_marker[field] = null
+		check(not FlightView.valid_surface_marker(malformed), "Malformed personal marker field accepted: " + field)
+	var malformed := marked.duplicate(true)
+	malformed.surface_marker.position = Vector3(NAN, 0, 0)
+	check(not FlightView.valid_surface_marker(malformed), "Nonfinite personal marker position accepted")
+	malformed = marked.duplicate(true)
+	malformed.surface_marker.distance_metres = -1.0
+	check(not FlightView.valid_surface_marker(malformed), "Negative personal marker range accepted")
+	malformed = marked.duplicate(true)
+	malformed.surface_marker.tick = "18446744073709551615"
+	check(not FlightView.valid_surface_marker(malformed), "Future personal marker tick accepted")
+	await activate_marker_button(view, view.show_surface_marker_button)
+	check(view.show_personal_marker and view.ship_marker.label_text == "MARK" and not view.home_marker.visible and "RETURN" in view.primary_status.text, "MARK overlapped return/home cues or removed hatch range")
+	walk(view, KEY_S, 120)
+	view.pause_controls("Inspect the personal marker", true)
+	var moved: Dictionary = owner.get_freedom_flight_state()
+	check(moved.surface_marker.tick == point.tick and moved.surface_marker.distance_metres > 0.1, "Walking moved the saved marker instead of changing its range")
+	var expected := Navigation.project(view.camera, moved.surface_marker.position, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
+	check(view.ship_marker.cue == expected and "straight-line distance" in view.primary_status.text and "RETURN" in view.primary_status.text, "Current-body MARK bearing or compact return information diverged")
+	view.player_input.device = 0
+	view.player_input.available_pads[0] = true
+	view.player_input.install()
+	var before_replace: Dictionary = owner.get_freedom_flight_state()
+	var replace_records: Dictionary = owner.get_freedom_observations()
+	await activate_marker_button(view, view.surface_marker_button, true)
+	var replaced: Dictionary = owner.get_freedom_flight_state()
+	check(view.paused and replaced.surface_marker.tick == replaced.tick and replaced.surface_marker.tick != point.tick and replaced.surface_marker.distance_metres < 0.000001, "Selected-controller Replace did not record the new foot/tick")
+	check(marker_state_without_metadata(replaced) == marker_state_without_metadata(before_replace) and owner.get_freedom_observations() == replace_records, "Replace changed the clock or actual knowledge/provenance")
+	var saved := output.path_join("personal-marker.json")
+	check(owner.save_freedom_as(saved), "Personal marker Save As refused")
+	var bytes := FileAccess.get_file_as_bytes(saved)
+	for repeat in 3: view.update_view(0.0)
+	check(owner.save_freedom_as(saved + ".after.json") and FileAccess.get_file_as_bytes(saved + ".after.json") == bytes, "Marker projection/review changed the complete saved journey")
+	check(shell.select_start(owner, {"mode": "continue", "value": saved, "assets": assets}), "Personal marker Continue refused")
+	view = shell.current_view
+	check(view.paused and not view.show_personal_marker and view.state.surface_marker == replaced.surface_marker, "Continue changed the saved point or retained the presentation target choice")
+	check_return_bearing(view)
+	walk(view, KEY_W, 120)
+	view.surface_walk_button.pressed.emit()
+	check(view.paused and not view.surface_walking() and view.state.surface_marker.present and view.state.surface_marker.tick == replaced.surface_marker.tick, "Reboarding lost the personal surface marker")
+	await activate_marker_button(view, view.show_surface_marker_button)
+	var aboard: Dictionary = owner.get_freedom_flight_state()
+	expected = Navigation.project(view.camera, aboard.surface_marker.position, view.home_marker.size, Navigation.INSET * view.home_marker.render_scale)
+	check(view.home_marker.visible and view.home_marker.label_text == "MARK" and not view.ship_marker.visible and view.home_marker.cue == expected, "Seated MARK did not use the shared C++ craft-relative projection")
+	var clear_records: Dictionary = owner.get_freedom_observations()
+	await activate_marker_button(view, view.clear_surface_marker_button)
+	var cleared: Dictionary = owner.get_freedom_flight_state()
+	check(view.paused and cleared.surface_marker.selected and not cleared.surface_marker.present and not view.show_personal_marker and view.home_marker.label_text == "HOME", "Clear failed to retain explicit metadata selection or restore HOME")
+	check(marker_state_without_metadata(cleared) == marker_state_without_metadata(aboard) and owner.get_freedom_observations() == clear_records, "Clear changed actor, craft, time or sensor provenance")
+	shell.free()
+
 func check_suit_lamp(view: Control, owner: Variant, output: String) -> void:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var path := output.path_join("lamp-before.json")
@@ -422,7 +534,10 @@ func run() -> void:
 	recording.store_buffer(load("res://tests/recorded_ship_audio_test.gd").fixture(2))
 	recording.close()
 	shell.configure_audio({"audio_hum": wave, "audio_propulsion": wave, "audio_persist": false})
-	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK and shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
+	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Surface test output unavailable"): shell.free(); quit(1); return
+	await check_personal_surface_marker(args[0], args[1], args[2])
+	if failed: shell.free(); quit(1); return
+	if not check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
 	check_ground_pause_heading(shell, owner, args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	check_walk_feedback(shell, owner, args[0], args[1], args[2])

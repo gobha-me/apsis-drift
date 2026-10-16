@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -292,6 +293,82 @@ auto station_selection(const std::filesystem::path& path) -> void {
   check(live.walker() && live.docking()->attached && !live.begin_jump(),
         "Travel Save/Continue preserves the real walking/attachment owner");
 }
+auto marker_travel(const std::filesystem::path& path) -> void {
+  auto source = fixture({42});
+  auto document = need(source.travel_document());
+  const auto& home = source.system().catalog.planets.front().descriptor;
+  // A valid saved metadata fixture; actual actor-only recording is exercised
+  // by the landed surface-session contract, not synthesized by this fixture.
+  const FreedomSurfaceMarkerPoint point{
+      source.system().catalog.id,
+      home.id,
+      {static_cast<double>(home.radius.value) * 1000 + 123.5, 0, 0},
+      source.document().flight.tick};
+  document.voyage.knowledge.surface_marker =
+      FreedomSurfaceMarkerState{1, point};
+  auto live = need(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, document, home, {}}));
+  const auto marker = live.knowledge()->surface_marker;
+  check(need(live.surface_marker_view()).current_body,
+        "Current-body saved marker has a planet-relative projection before "
+        "travel");
+  auto system_document = document;
+  auto& system_flight = std::get<FreedomFlightSaveDocument>(
+      system_document.voyage.voyage.voyage.base);
+  system_flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  system_flight.flight = need(reframe_rigid_body(
+      RigidBodyWorldContext{source.system()}, system_flight.flight,
+      {{RigidFrameKind::system_inertial, source.system().catalog.id, {}, {}},
+       system_flight.flight.tick}));
+  auto system_session = need(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, system_document, home, {}}));
+  const auto system_view = need(system_session.surface_marker_view());
+  check(system_session.document().flight.frame.kind ==
+                RigidFrameKind::system_inertial &&
+            system_view.current_body && system_view.point == marker->point &&
+            system_view.target_craft_relative_metres &&
+            system_view.straight_line_distance_metres,
+        "Release-policy system flight projects the marker through the same "
+        "qualified current planet-relative reference");
+  need(live.select_jump(
+      generate_first_intersystem_identities({42}).target_system));
+  leg(live, path);
+  const auto offbody = need(live.surface_marker_view());
+  check(live.knowledge()->surface_marker == marker &&
+            offbody.point == marker->point && !offbody.current_body &&
+            !offbody.target_craft_relative_metres &&
+            !offbody.straight_line_distance_metres &&
+            offbody.known_system_name && offbody.known_body_name,
+        "Real system arrival preserves the exact marked point/tick with known "
+        "identity and no fake current-body projection");
+  live = resume(live, path);
+  const auto tick = live.document().flight.tick;
+  const auto facts = live.knowledge()->entries;
+  need(live.clear_surface_marker());
+  check(live.knowledge()->surface_marker &&
+            !live.knowledge()->surface_marker->point &&
+            live.knowledge()->entries == facts &&
+            live.document().flight.tick == tick,
+        "Off-body Clear retains selected metadata and changes no travel clock "
+        "or facts");
+
+  auto hidden = need(source.travel_document());
+  const auto& unseen = source.system().catalog.planets[1].descriptor;
+  hidden.voyage.knowledge.surface_marker = FreedomSurfaceMarkerState{
+      1, FreedomSurfaceMarkerPoint{
+             source.system().catalog.id,
+             unseen.id,
+             {static_cast<double>(unseen.radius.value) * 1000 + 123.5, 0, 0},
+             0}};
+  auto hidden_session = need(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, hidden, home, {}}));
+  const auto hidden_view = need(hidden_session.surface_marker_view());
+  check(
+      hidden_view.point && !hidden_view.current_body &&
+          hidden_view.known_system_name && !hidden_view.known_body_name &&
+          hidden_session.knowledge()->entries == source.knowledge()->entries,
+      "Another-body metadata neither invents a body name nor grants knowledge");
+}
 } // namespace
 auto main() -> int {
   const auto directory =
@@ -304,6 +381,7 @@ auto main() -> int {
     invalid(directory / "phase.json");
     station_selection(directory / "phase.json");
     seated_continuity(directory / "phase.json");
+    marker_travel(directory / "marker.json");
     for (auto seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}})
       for (bool assisted : {true, false})

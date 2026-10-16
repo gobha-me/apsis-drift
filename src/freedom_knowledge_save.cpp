@@ -126,6 +126,19 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
     root["recipe"]["craft_lineage"] = {
         {"version", r.craft_lineage->version},
         {"generation", std::to_string(r.craft_lineage->generation)}};
+  if (k.surface_marker) {
+    Json point = nullptr;
+    if (k.surface_marker->point) {
+      const auto& m = *k.surface_marker->point;
+      point = {{"system", m.system.value},
+               {"planet", m.planet.value},
+               {"body_fixed_metres",
+                Json::array({m.position.x, m.position.y, m.position.z})},
+               {"tick", m.tick}};
+    }
+    root["surface_marker"] = {{"version", k.surface_marker->version},
+                              {"point", std::move(point)}};
+  }
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -135,7 +148,11 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     -> std::expected<FreedomKnowledge, SaveSchemaError> {
   auto root = parse(text, kMaximumFreedomKnowledgeBytes);
   if (!root) return std::unexpected{root.error()};
-  if (!fields(*root, {"recipe", "entries"}) || !(*root)["recipe"].is_object())
+  const bool marker_selected =
+      root->is_object() && root->contains("surface_marker");
+  if (!(marker_selected ? fields(*root, {"recipe", "entries", "surface_marker"})
+                        : fields(*root, {"recipe", "entries"})) ||
+      !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
   const auto& r = (*root)["recipe"];
   const bool travel = r.contains("version") &&
@@ -194,6 +211,32 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
         parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size())
       return std::unexpected{failure("invalid selected craft generation")};
     k.recipe.craft_lineage = FreedomCraftLineage{1, generation};
+  }
+  if (marker_selected) {
+    const auto& marker = (*root)["surface_marker"];
+    if (!observed || !fields(marker, {"version", "point"}) ||
+        !unsigned_fields(marker, {"version"}) ||
+        marker["version"] != kFreedomSurfaceMarkerVersion)
+      return std::unexpected{failure("unsupported surface marker selection")};
+    k.surface_marker = FreedomSurfaceMarkerState{};
+    const auto& m = marker["point"];
+    if (!m.is_null()) {
+      if (!fields(m, {"system", "planet", "body_fixed_metres", "tick"}) ||
+          !unsigned_fields(m, {"system", "planet", "tick"}) ||
+          !m["body_fixed_metres"].is_array() ||
+          m["body_fixed_metres"].size() != 3)
+        return std::unexpected{failure("invalid closed surface marker point")};
+      const auto& p = m["body_fixed_metres"];
+      for (const auto& component : p)
+        if (!component.is_number())
+          return std::unexpected{
+              failure("numeric surface marker point required")};
+      k.surface_marker->point = FreedomSurfaceMarkerPoint{
+          {m["system"].get<std::uint64_t>()},
+          {m["planet"].get<std::uint64_t>()},
+          {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
+          m["tick"].get<SimulationTick>()};
+    }
   }
   const auto& entries = (*root)["entries"];
   if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
