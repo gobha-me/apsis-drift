@@ -2,6 +2,7 @@ extends "res://studies/captures/native_voyage_capture.gd"
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const PositionStatus = preload("res://scripts/native/native_status.gd")
+const Landmarks = preload("res://scripts/native/native_surface_landmarks.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
 
@@ -225,6 +226,165 @@ func check_personal_surface_marker(source: String, assets: String, output: Strin
 	var cleared: Dictionary = owner.get_freedom_flight_state()
 	check(view.paused and cleared.surface_marker.selected and not cleared.surface_marker.present and not view.show_personal_marker and view.home_marker.label_text == "HOME", "Clear failed to retain explicit metadata selection or restore HOME")
 	check(marker_state_without_metadata(cleared) == marker_state_without_metadata(aboard) and owner.get_freedom_observations() == clear_records, "Clear changed actor, craft, time or sensor provenance")
+	shell.free()
+
+
+func landmark_state_without_metadata(state: Dictionary) -> Dictionary:
+	var result := state.duplicate(true)
+	result.erase("surface_landmarks")
+	return result
+
+
+func saved_landmark_metadata(path: String) -> Dictionary:
+	var value: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	for level in 12:
+		if not value is Dictionary: break
+		if value.get("knowledge") is Dictionary:
+			return value.knowledge.get("surface_landmarks", {})
+		value = value.get("voyage", value.get("base"))
+	check(false, "Landmark oracle could not locate the saved knowledge owner")
+	return {}
+
+
+func landmark_material_bytes(material: ShaderMaterial) -> PackedByteArray:
+	return var_to_bytes([material.get_shader_parameter("surface_landmarks_enabled"), material.get_shader_parameter("surface_landmark_count"), material.get_shader_parameter("surface_landmark_centres"), material.get_shader_parameter("surface_landmark_radii"), material.get_shader_parameter("surface_landmark_tints")])
+
+
+func check_landmark_packet(state: Dictionary) -> void:
+	var presenter := Landmarks.new()
+	var material := ShaderMaterial.new()
+	material.shader = load("res://shaders/terrain.gdshader")
+	var invalid_material := ShaderMaterial.new()
+	check(Landmarks.valid(state) and presenter.apply(state, [material]), "Actual C++ landmark packet did not reach the terrain shader")
+	var first: Dictionary = state.surface_landmarks.sites[0]
+	check(material.get_shader_parameter("surface_landmarks_enabled") == true and material.get_shader_parameter("surface_landmark_count") == state.surface_landmarks.sites.size() and material.get_shader_parameter("surface_landmark_centres")[0] == first.position and is_equal_approx(material.get_shader_parameter("surface_landmark_radii")[0], first.radius_metres), "Exposure shader lost its C++ native-tangent centre/radius")
+	var accepted := landmark_material_bytes(material)
+	var moved := state.duplicate(true)
+	moved.surface_landmarks.sites[0].position += Vector3(1, 0, 0)
+	check(not presenter.apply(moved, [material, invalid_material]) and landmark_material_bytes(material) == accepted, "Invalid second terrain destination partially changed a valid material")
+	var invalid_states: Array[Dictionary] = []
+	for field in state.surface_landmarks:
+		var bad := state.duplicate(true)
+		bad.surface_landmarks[field] = null
+		invalid_states.append(bad)
+	for field in first:
+		var bad := state.duplicate(true)
+		bad.surface_landmarks.sites[0][field] = null
+		invalid_states.append(bad)
+	for pair in [["position", Vector3(NAN, 0, 0)], ["radius_metres", 27.999], ["radius_metres", 52.001], ["radius_metres", INF], ["distance_metres", -0.1], ["distance_metres", NAN], ["tint", Color(NAN, 0, 0, 1)], ["tint", Color(1, 1, 1, 0.5)], ["kind", 3], ["label", "x".repeat(65)], ["description", "x".repeat(257)], ["inspected", true]]:
+		var bad := state.duplicate(true)
+		bad.surface_landmarks.sites[0][pair[0]] = pair[1]
+		invalid_states.append(bad)
+	for pair in [["version", 2], ["system_id", "1" if state.system_id != "1" else "2"], ["planet_id", "1" if state.planet_id != "1" else "2"], ["tick", "0"], ["inspection_count", -1], ["inspection_count", 65], ["inspection_count", 1.0], ["selected", false], ["can_enable", true], ["unexpected", true]]:
+		var bad := state.duplicate(true)
+		bad.surface_landmarks[pair[0]] = pair[1]
+		invalid_states.append(bad)
+	for id in ["", "00", "+1", "-1", " 1", "1x", "18446744073709551616"]:
+		var bad := state.duplicate(true)
+		bad.surface_landmarks.sites[0].id = id
+		invalid_states.append(bad)
+	var oversized := state.duplicate(true)
+	oversized.surface_landmarks.sites = []
+	for index in 9: oversized.surface_landmarks.sites.append(first.duplicate(true))
+	invalid_states.append(oversized)
+	var duplicate := state.duplicate(true)
+	duplicate.surface_landmarks.sites.append(first.duplicate(true))
+	invalid_states.append(duplicate)
+	var inconsistent := state.duplicate(true)
+	inconsistent.surface_landmarks.sites[0].nearby = false
+	inconsistent.surface_landmarks.sites[0].can_inspect = true
+	invalid_states.append(inconsistent)
+	for bad in invalid_states:
+		var bytes := var_to_bytes(bad)
+		check(not Landmarks.valid(bad) and not presenter.apply(bad, [material]) and Landmarks.nearest_nearby(bad).is_empty() and landmark_material_bytes(material) == accepted and var_to_bytes(bad) == bytes, "Malformed exposure packet changed accepted shader/input state or produced a prompt")
+	var missing := state.duplicate(true)
+	missing.erase("surface_landmarks")
+	check(Landmarks.valid(missing) and presenter.apply(missing, [material]) and material.get_shader_parameter("surface_landmarks_enabled") == false and material.get_shader_parameter("surface_landmark_count") == 0, "Historical missing selection did not keep landmark shading disabled")
+
+
+func check_surface_landmarks(source: String, assets: String, output: String) -> void:
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("surface_landmark_historical.json"), "assets": assets}), "Explicit historical landmark fixture did not Continue"):
+		shell.free()
+		return
+	var view: Control = shell.current_view
+	var historical: Dictionary = owner.get_freedom_flight_state()
+	var historical_records: Dictionary = owner.get_freedom_observations()
+	var historical_save := output.path_join("landmark-historical-before.json")
+	check(view.paused and historical.surface_landmarks.can_enable and not historical.surface_landmarks.selected and view.landmark_enable_button.visible and owner.save_freedom_as(historical_save), "Historical journey silently selected landmarks or lost explicit enable")
+	var historical_bytes := FileAccess.get_file_as_bytes(historical_save)
+	for repeat in 3: view.update_view(0.0)
+	check(owner.save_freedom_as(historical_save + ".read.json") and FileAccess.get_file_as_bytes(historical_save + ".read.json") == historical_bytes and saved_landmark_metadata(historical_save).is_empty(), "Historical reads adopted landmark metadata")
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.landmark_enable_button.pressed.emit()
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(owner.get_freedom_flight_state() == historical, "Unfocused Enable changed historical selection")
+	await activate_marker_button(view, view.landmark_enable_button)
+	var enabled: Dictionary = owner.get_freedom_flight_state()
+	check(view.paused and enabled.surface_landmarks.selected and enabled.surface_landmarks.inspection_count == 0 and not view.landmark_enable_button.visible and landmark_state_without_metadata(enabled) == landmark_state_without_metadata(historical) and owner.get_freedom_observations() == historical_records, "Explicit Enable changed clock, resources, facts or actor instead of selecting metadata")
+	if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("surface_landmark_outside.json"), "assets": assets}), "Actual nearby exposure fixture did not Continue"):
+		shell.free()
+		return
+	view = shell.current_view
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	var site: Dictionary = Landmarks.nearest_nearby(initial)
+	if not check(view.paused and view.surface_walking() and initial.surface_landmarks.selected and initial.surface_landmarks.inspection_count == 0 and not site.is_empty() and site.can_inspect and not site.inspected, "Actual supported outside foot is not near an uninspected exposure"):
+		shell.free()
+		return
+	check_landmark_packet(initial)
+	check(view.landmark_inspect_button.visible and not view.landmark_inspect_button.disabled and site.label in view.primary_status.text and "RETURN" in view.primary_status.text, "Nearby exposure lost its actual prompt or displaced RETURN")
+	var invalid_before: Dictionary = owner.get_freedom_flight_state()
+	var invalid_path := output.path_join("landmark-invalid-id-before.json")
+	check(owner.save_freedom_as(invalid_path), "Invalid exposure ID baseline Save refused")
+	var invalid_bytes := FileAccess.get_file_as_bytes(invalid_path)
+	for id in ["", "00", "+1", "-1", " 1", "1x", "18446744073709551616"]:
+		check(not owner.inspect_freedom_surface_landmark(id) and owner.get_freedom_flight_state() == invalid_before, "Malformed decimal exposure ID changed a saved voyage")
+	check(owner.save_freedom_as(invalid_path + ".after.json") and FileAccess.get_file_as_bytes(invalid_path + ".after.json") == invalid_bytes, "Malformed decimal exposure IDs changed complete saved bytes")
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.landmark_inspect_button.pressed.emit()
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(owner.get_freedom_flight_state() == invalid_before and not view.controls_menu.surface_reference_view.visible, "Unfocused Inspect changed history or opened a reference")
+	await activate_marker_button(view, view.surface_marker_button)
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	var marker: Dictionary = before.surface_marker.duplicate(true)
+	key(KEY_W, true)
+	view.toggle_pause()
+	check(view.paused and owner.get_freedom_flight_state() == before, "Held movement bypassed Resume before exposure inspection")
+	await activate_marker_button(view, view.landmark_inspect_button)
+	key(KEY_W, false)
+	var inspected: Dictionary = owner.get_freedom_flight_state()
+	var reference: Control = view.controls_menu.surface_reference_view
+	check(view.paused and inspected.surface_landmarks.inspection_count == 1 and Landmarks.nearest_nearby(inspected).inspected and reference.visible and site.description in reference.body.text and "Exposure inspected and recorded." in reference.body.text, "Keyboard Inspect did not show the first-inspection description while paused")
+	check(landmark_state_without_metadata(inspected) == landmark_state_without_metadata(before) and inspected.surface_marker == marker and owner.get_freedom_observations() == records, "Inspection changed clock, resources, knowledge provenance or the manual marker")
+	var first_path := output.path_join("landmark-first-inspection.json")
+	check(owner.save_freedom_as(first_path), "First exposure inspection Save refused")
+	var metadata := saved_landmark_metadata(first_path)
+	check(metadata.get("version") == 1 and metadata.get("inspections") is Array and metadata.inspections.size() == 1 and int(metadata.inspections[0].tick) == int(before.tick), "Saved inspection lost its first authoritative tick")
+	view.controls_menu.close_surface_reference()
+	check(view.paused and view.landmark_inspect_button.has_focus(), "Exposure Back resumed or lost its invoking action")
+	if resume(view): view._process(0.125)
+	view.pause_controls("Review the exposure again")
+	view.player_input.device = 0
+	view.player_input.available_pads[0] = true
+	view.player_input.install()
+	var repeat_before: Dictionary = owner.get_freedom_flight_state()
+	var repeat_records: Dictionary = owner.get_freedom_observations()
+	var repeat_path := output.path_join("landmark-repeat-before.json")
+	check(owner.save_freedom_as(repeat_path), "Repeated inspection baseline Save refused")
+	var repeat_bytes := FileAccess.get_file_as_bytes(repeat_path)
+	await activate_marker_button(view, view.landmark_inspect_button, true)
+	check(view.paused and reference.visible and "Exposure inspection already recorded." in reference.body.text and owner.get_freedom_flight_state() == repeat_before and owner.get_freedom_observations() == repeat_records, "Controller repeated Inspect changed existing history or lost its description")
+	check(owner.save_freedom_as(repeat_path + ".after.json") and FileAccess.get_file_as_bytes(repeat_path + ".after.json") == repeat_bytes and saved_landmark_metadata(repeat_path + ".after.json") == metadata, "Repeated inspection changed full save bytes or its first tick")
+	view.controls_menu.close_surface_reference()
+	check(shell.select_start(owner, {"mode": "continue", "value": repeat_path, "assets": assets}), "Inspected exposure Save/Continue refused")
+	view = shell.current_view
+	check(view.paused and view.state.surface_landmarks == repeat_before.surface_landmarks and view.state.surface_marker == repeat_before.surface_marker and owner.get_freedom_observations() == repeat_records, "Continue lost exposure inspection or independent marker/fact provenance")
+	check(owner.save_freedom_as(repeat_path + ".continued.json") and FileAccess.get_file_as_bytes(repeat_path + ".continued.json") == repeat_bytes, "Inspected exposure Continue rewrote its complete save")
 	shell.free()
 
 func check_suit_lamp(view: Control, owner: Variant, output: String) -> void:
@@ -536,6 +696,8 @@ func run() -> void:
 	shell.configure_audio({"audio_hum": wave, "audio_propulsion": wave, "audio_persist": false})
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Surface test output unavailable"): shell.free(); quit(1); return
 	await check_personal_surface_marker(args[0], args[1], args[2])
+	if failed: shell.free(); quit(1); return
+	await check_surface_landmarks(args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	if not check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
 	check_ground_pause_heading(shell, owner, args[0], args[1], args[2])

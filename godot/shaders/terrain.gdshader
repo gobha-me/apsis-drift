@@ -11,6 +11,11 @@ uniform float surface_albedo_scale = 0.45;
 uniform float surface_detail_contrast = 1.0;
 uniform float surface_roughness = 0.92;
 uniform float surface_specular = 0.5;
+uniform bool surface_landmarks_enabled = false;
+uniform int surface_landmark_count = 0;
+uniform vec3 surface_landmark_centres[8];
+uniform float surface_landmark_radii[8];
+uniform vec4 surface_landmark_tints[8];
 uniform vec3 tile_origin = vec3(0.0);
 uniform bool morph_active = false;
 uniform float morph_fine_weight = 1.0;
@@ -110,6 +115,29 @@ void fragment() {
 		ALBEDO = mix(ALBEDO, clamp(COLOR.rgb * 0.50, vec3(0.0), vec3(1.0)), datum_wetness);
 		ROUGHNESS = mix(ROUGHNESS, 0.16, datum_wetness);
 		SPECULAR = mix(SPECULAR, 0.75, datum_wetness);
+	}
+	// Flat geological exposures tint the existing mesh. Both the footprint and
+	// C++ proximity use Euclidean distance; no raised rock or collision is added.
+	// Coordinates are already native-tangent metres, never float planet radii.
+	if (planet_tile && surface_landmarks_enabled) {
+		vec3 eye = INV_VIEW_MATRIX[3].xyz;
+		for (int i = 0; i < 8; i++) {
+			if (i >= surface_landmark_count) break;
+			float radius = max(surface_landmark_radii[i], 0.001);
+			float visible = 1.0 - smoothstep(300.0, 360.0, length(surface_landmark_centres[i] - eye));
+			// Saturating outside the sphere also bounds finite extreme inputs.
+			vec3 relative = clamp(surface_position - surface_landmark_centres[i], vec3(-radius * 2.0), vec3(radius * 2.0));
+			float coverage = 1.0 - smoothstep(radius * 0.82, radius, length(relative));
+			// Broad, readable bands belong to the local exposure, not a second
+			// terrain generator or a claim about extractable material content.
+			float phase = dot(relative, vec3(0.21, 0.12, 0.16));
+			float bands = smoothstep(-0.25, 0.25, sin(phase + sin(phase * 0.37) * 0.7));
+			vec3 tint = surface_landmark_tints[i].rgb;
+			vec3 exposure = mix(tint * 0.48, min(vec3(1.0), tint * 0.88 + vec3(0.10)), bands);
+			float dry = datum_wetness > 0.0 ? 0.0 : 1.0;
+			float weight = coverage * visible * dry * 0.96;
+			ALBEDO = mix(ALBEDO, exposure, weight);
+		}
 	}
 	// Use actual terrain slopes. Derivative bump normals from planet-scale
 	// mineral coordinates amplify float quantization into near-ground speckles.

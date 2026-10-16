@@ -214,6 +214,34 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
         return std::unexpected{Error::invalid_surface_marker};
     }
   }
+  if (k.surface_landmarks) {
+    const auto& landmarks = *k.surface_landmarks;
+    if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
+         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+        landmarks.version != kFreedomSurfaceLandmarkVersion ||
+        landmarks.inspections.size() >
+            kMaximumFreedomSurfaceLandmarkInspections)
+      return std::unexpected{Error::invalid_surface_landmarks};
+    const auto inspection_key = [](const auto& inspection) {
+      return std::tuple{inspection.system.value, inspection.planet.value,
+                        inspection.site.value};
+    };
+    for (std::size_t i = 0; i < landmarks.inspections.size(); ++i) {
+      const auto& inspection = landmarks.inspections[i];
+      const auto* body =
+          planet(w, {KnowledgeSubjectKind::planet, inspection.system,
+                     inspection.planet.value});
+      if (!body || inspection.tick > now || inspection.terrain_policy < 1 ||
+          inspection.terrain_policy > 3 ||
+          (i && !(inspection_key(landmarks.inspections[i - 1]) <
+                  inspection_key(inspection))))
+        return std::unexpected{Error::invalid_surface_landmarks};
+      const auto identity = identify_surface_landmark(
+          body->descriptor, inspection.cell, landmarks.version);
+      if (!identity || !*identity || (*identity)->id != inspection.site)
+        return std::unexpected{Error::invalid_surface_landmarks};
+    }
+  }
   for (std::size_t i = 0; i < k.entries.size(); ++i) {
     const auto& e = k.entries[i];
     if ((i && !less(k.entries[i - 1], e)) || e.transitions.empty() ||

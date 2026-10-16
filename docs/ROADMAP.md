@@ -41,6 +41,14 @@ before choosing the missions, economy or story that give those actions purpose.
 
 ## Next milestone: Freedom
 
+Owner-approved feature order, 2026-10-16: **surface landmarks**, then
+**flight and landing usability**, then **moons and asteroids**. Deliver bounded
+playable increments in that order without reopening the priority question.
+The first landmark increment is [seeded geological exposures](FREEDOM_SURFACE_LANDMARKS.md)
+([#611](https://github.com/gobha-me/apsis-drift/issues/611)): visible ground
+bands, on-foot inspection and retained first visits using the existing terrain.
+Later increments still require their own concrete implementation scope.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

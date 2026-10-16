@@ -2,6 +2,7 @@
 
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/planet_ambient.hpp"
+#include "apsis_drift/surface_landmarks.hpp"
 
 #include <variant>
 
@@ -11,6 +12,8 @@ inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
+inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
+inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
 
@@ -92,12 +95,32 @@ struct FreedomSurfaceMarkerState {
   friend auto operator==(const FreedomSurfaceMarkerState&,
                          const FreedomSurfaceMarkerState&) -> bool = default;
 };
+// Personal inspection history, independent of craft lineage and sensor facts.
+// The seeded identity is authenticated without replaying contact geometry.
+struct FreedomSurfaceLandmarkInspection {
+  SystemId system;
+  PlanetId planet;
+  SurfaceLandmarkCell cell;
+  SurfaceLandmarkId site;
+  std::uint32_t terrain_policy{};
+  SimulationTick tick{};
+  friend auto operator==(const FreedomSurfaceLandmarkInspection&,
+                         const FreedomSurfaceLandmarkInspection&)
+      -> bool = default;
+};
+struct FreedomSurfaceLandmarkState {
+  std::uint32_t version{kFreedomSurfaceLandmarkVersion};
+  std::vector<FreedomSurfaceLandmarkInspection> inspections;
+  friend auto operator==(const FreedomSurfaceLandmarkState&,
+                         const FreedomSurfaceLandmarkState&) -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
   // Absence preserves historical knowledge JSON. A selected empty marker
   // retains its explicit version after the pilot clears the point.
   std::optional<FreedomSurfaceMarkerState> surface_marker{};
+  std::optional<FreedomSurfaceLandmarkState> surface_landmarks{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -115,7 +138,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_tick,
   invalid_ledger,
   oversized_ledger,
-  invalid_surface_marker
+  invalid_surface_marker,
+  invalid_surface_landmarks
 };
 
 struct KnownIdentity {

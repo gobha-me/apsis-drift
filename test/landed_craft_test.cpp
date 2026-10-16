@@ -975,8 +975,10 @@ auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
   output << manifest.dump(2) << '\n';
   if (!output) throw std::runtime_error("native manifest write failed");
 }
-auto surface_marker_capacity(const NativeFreedomFlightSession& source,
-                             const Fixture& f) -> void {
+auto surface_metadata_capacity(const NativeFreedomFlightSession& source,
+                               const Fixture& f,
+                               std::optional<SurfaceLandmarkId> landmark = {})
+    -> void {
   auto document = required(source.surface_walk_document());
   auto& knowledge =
       std::get<FreedomKnowledgeSaveDocument>(document.voyage.voyage);
@@ -1009,12 +1011,14 @@ auto surface_marker_capacity(const NativeFreedomFlightSession& source,
       required(encode_freedom_surface_walk_document_json(document));
   auto bounded = required(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, document, f.planet, {}}));
-  check(!bounded.mark_surface_marker() &&
-            !bounded.knowledge()->surface_marker &&
+  const auto prior_knowledge = bounded.knowledge();
+  const auto changed = landmark ? bounded.inspect_surface_landmark(*landmark)
+                                : bounded.mark_surface_marker();
+  check(!changed && bounded.knowledge() == prior_knowledge &&
             required(encode_freedom_surface_walk_document_json(
                 required(bounded.surface_walk_document()))) == prior,
-        "A marker that exceeds the complete save byte bound refuses without "
-        "selecting metadata or changing prior history");
+        "Surface metadata exceeding the complete save byte bound refuses "
+        "without changing selection, records or prior history");
 }
 
 auto surface_marker_session(NativeFreedomFlightSession session,
@@ -1139,6 +1143,212 @@ auto surface_marker_session(NativeFreedomFlightSession session,
         "fact history and clock");
 }
 
+auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
+                              const Fixture& f,
+                              const std::filesystem::path& directory) -> void {
+  auto field = required(SurfaceLandmarkField::create(
+      f.owner, body_id(f.planet.id), f.terrain_policy));
+  // Bounded, deterministic fixture placement around the existing fixed test
+  // region. These seeded sites already exist; the player never creates one.
+  // This is near-ground test setup, not uninterrupted station-to-site flight.
+  std::vector<SurfaceLandmarkSite> candidates;
+  for (int offset = 0; offset < 8 && candidates.empty(); ++offset) {
+    const auto query = add(f.fixed.position_metres, {0, offset * 256.0, 0});
+    candidates = required(field.nearby({query.x, query.y, query.z}));
+  }
+  auto cache = required(TerrainTileCache::create(4));
+  std::optional<NativeFreedomFlightSession> prepared;
+  SurfaceLandmarkId requested;
+  PlanetFixedPositionMetres requested_position;
+  for (const auto& site : candidates) {
+    const auto point = site.position_metres;
+    const auto surface =
+        required(godot_spike::detail::query_selected_contact_surface(
+            f.owner, f.planet,
+            *godot_spike::saved_contact_recipe(f.terrain_policy),
+            {point.x, point.y, point.z}, cache));
+    const auto orientation = [](const auto& triangle) {
+      const auto n = triangle.outward_normal;
+      const auto w = 1 + n.y, magnitude = std::hypot(w, n.z, n.x);
+      return RigidOrientation{w / magnitude, n.z / magnitude, 0,
+                              -n.x / magnitude};
+    };
+    const auto approximate = orientation(surface.triangle);
+    for (const double offset : {18.0, 20.0, 16.0, 24.0}) {
+      const auto target = sub({point.x, point.y, point.z},
+                              mul(rotate(approximate, {0, 0, 1}), offset));
+      const auto ground =
+          required(godot_spike::detail::query_selected_contact_surface(
+              f.owner, f.planet,
+              *godot_spike::saved_contact_recipe(f.terrain_policy),
+              {target.x, target.y, target.z}, cache));
+      auto selected = source;
+      auto& boarding =
+          std::get<FreedomBoardingSaveDocument>(selected.voyage.voyage.base);
+      auto fixed = f.fixed;
+      fixed.tick = boarding.voyage.flight.flight.tick;
+      fixed.orientation = orientation(ground.triangle);
+      const auto n = ground.triangle.outward_normal;
+      fixed.position_metres =
+          sub(add({ground.position.x, ground.position.y, ground.position.z},
+                  mul({n.x, n.y, n.z}, -.05)),
+              rotate(fixed.orientation, {0, -2.08, -.7}));
+      boarding.voyage.flight.flight = f.source(fixed);
+      selected.voyage.voyage.surface.landed.reset();
+      auto opened = NativeFreedomFlightSession::open(
+          {NativeStartup::Mode::freedom, selected, f.planet, {}});
+      if (!opened) continue;
+      auto trial = std::move(*opened);
+      if (!trial.commit_touchdown(required(
+              rigid_body_state_checksum(f.context, trial.document().flight))) ||
+          !trial.begin_surface_walk())
+        continue;
+      const auto view = required(trial.surface_landmarks_view());
+      const auto found = std::ranges::find_if(view.sites, [&](const auto& row) {
+        return row.site.identity.id == site.identity.id;
+      });
+      if (found == view.sites.end() || found->distance_metres <= 8 ||
+          found->distance_metres > 20)
+        continue;
+      prepared = std::move(trial);
+      requested = site.identity.id;
+      requested_position = site.position_metres;
+      break;
+    }
+    if (prepared) break;
+  }
+  if (!prepared)
+    throw std::runtime_error("No supported geological exposure fixture");
+  auto session = std::move(*prepared);
+  const auto saved = [](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  const auto initial = saved(session);
+  check(required(session.surface_landmarks_view()).selected &&
+            required(session.surface_landmarks_view()).inspection_count == 0 &&
+            !session.inspect_surface_landmark(requested) &&
+            !session.inspect_surface_landmark({}) && saved(session) == initial,
+        "New Game-selected sites are quiet; distant and wrong requested "
+        "identities refuse without changing the complete voyage");
+  if (!directory.empty())
+    required(session.save_as(directory / "surface_landmark_approach.json"));
+  bool approached{};
+  for (unsigned tick = 0; tick < 1200; ++tick) {
+    const auto foot = session.surface_walker()->foot_position_metres;
+    const auto delta =
+        sub({requested_position.x, requested_position.y, requested_position.z},
+            foot);
+    const auto distance = norm(delta);
+    if (distance <= 7.5) {
+      const auto view = required(session.surface_landmarks_view());
+      const auto found = std::ranges::find_if(view.sites, [&](const auto& row) {
+        return row.site.identity.id == requested;
+      });
+      approached =
+          found != view.sites.end() && found->can_inspect && !found->inspected;
+      break;
+    }
+    const auto up = mul(foot, 1 / norm(foot));
+    const auto craft_right =
+        rotate(session.surface()->landed->fixed.orientation, {1, 0, 0});
+    const auto projected =
+        sub(craft_right, mul(up, craft_right.x * up.x + craft_right.y * up.y +
+                                     craft_right.z * up.z));
+    const auto right = mul(projected, 1 / norm(projected));
+    const V back{right.y * up.z - right.z * up.y,
+                 right.z * up.x - right.x * up.z,
+                 right.x * up.y - right.y * up.x};
+    const auto dot = [](V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+    required(session.advance_surface_walk(
+        {std::clamp(-dot(delta, back) / distance, -1.0, 1.0),
+         std::clamp(dot(delta, right) / distance, -1.0, 1.0), 0}));
+    if (session.surface_walk_blockage()) break;
+  }
+  check(approached &&
+            session.document().flight.tick >
+                std::get<FreedomBoardingSaveDocument>(source.voyage.voyage.base)
+                    .voyage.flight.flight.tick,
+        "Actual supported walking approaches an existing exposure into the "
+        "eight-metre inspection range");
+  if (!approached) throw std::runtime_error("Exposure approach blocked");
+  if (!directory.empty())
+    required(session.save_as(directory / "surface_landmark_outside.json"));
+  auto historical = required(session.surface_walk_document());
+  auto& historical_knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(historical.voyage.voyage);
+  historical_knowledge.knowledge.surface_landmarks.reset();
+  auto adopted = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, historical, f.planet, {}}));
+  // Explicit historical-component control, separate from current New Game.
+  if (!directory.empty())
+    required(adopted.save_as(directory / "surface_landmark_historical.json"));
+  const auto historical_save = saved(adopted);
+  check(!required(adopted.surface_landmarks_view()).selected &&
+            required(adopted.surface_landmarks_view()).can_enable &&
+            !adopted.inspect_surface_landmark(requested) &&
+            saved(adopted) == historical_save,
+        "Historical journeys remain unselected until explicit adoption");
+  required(adopted.enable_surface_landmarks());
+  check(adopted.document() == session.document() &&
+            adopted.surface_walker() == session.surface_walker() &&
+            adopted.resources() == session.resources() &&
+            adopted.knowledge() == session.knowledge(),
+        "Explicit landmark adoption preserves every prior owner and fact");
+  surface_metadata_capacity(session, f, requested);
+  const auto entries = session.knowledge()->entries;
+  const auto resources = session.resources();
+  const auto actor = session.surface_walker();
+  const auto tick = session.document().flight.tick;
+  required(session.inspect_surface_landmark(requested));
+  const auto recorded = session.knowledge()->surface_landmarks;
+  check(recorded && recorded->inspections.size() == 1 &&
+            recorded->inspections.front().site == requested &&
+            recorded->inspections.front().system == actor->frame.system &&
+            recorded->inspections.front().planet == *actor->frame.planet &&
+            recorded->inspections.front().terrain_policy == f.terrain_policy &&
+            recorded->inspections.front().tick == tick &&
+            session.knowledge()->entries == entries &&
+            session.resources() == resources &&
+            session.surface_walker() == actor &&
+            session.document().flight.tick == tick,
+        "Inspection records the actual owner's site and first tick without "
+        "awarding sensor facts, fuel, motion or time");
+  required(session.advance_surface_walk({}));
+  const auto inspected = saved(session);
+  required(session.inspect_surface_landmark(requested));
+  check(saved(session) == inspected &&
+            session.knowledge()->surface_landmarks == recorded &&
+            required(session.surface_landmarks_view()).inspection_count == 1,
+        "Repeated inspection is idempotent and retains the first tick");
+  const auto path =
+      std::filesystem::temp_directory_path() /
+      ("apsis-exposure-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()) +
+       ".json");
+  required(session.save_as(path));
+  auto continued = required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+  std::filesystem::remove(path);
+  check(saved(continued) == inspected &&
+            continued.knowledge()->surface_landmarks == recorded,
+        "Actual Save/Continue preserves complete inspection provenance");
+  required(session.record_loss(FreedomLossCause::recoverable_destruction,
+                               session.document().origin.state.craft,
+                               session.document().flight.tick,
+                               required(rigid_body_state_checksum(
+                                   f.context, session.document().flight))));
+  const auto pending = saved(session);
+  check(!session.inspect_surface_landmark(requested) &&
+            !session.enable_surface_landmarks() && saved(session) == pending,
+        "Pending loss freezes inspection metadata transactionally");
+  required(session.complete_recovery());
+  check(session.knowledge()->surface_landmarks == recorded && session.walker(),
+        "Standard replacement retains personal inspection history without "
+        "coupling it to retired craft identity");
+}
+
 auto surface_walk_session(const Fixture& f,
                           const std::filesystem::path& directory = {}) -> void {
   auto station = required(
@@ -1165,6 +1375,7 @@ auto surface_walk_session(const Fixture& f,
       {NativeStartup::Mode::freedom, selected, f.planet, {}}));
   required(session.commit_touchdown(required(
       rigid_body_state_checksum(f.context, session.document().flight))));
+  surface_landmark_session(selected, f, directory);
   const auto anchor = session.surface()->landed;
   const auto resources = session.resources();
   const auto initial_tick = session.document().flight.tick;
@@ -1179,7 +1390,7 @@ auto surface_walk_session(const Fixture& f,
             !required(session.surface_marker_view()).selected,
         "Seated historical session cannot record a surface marker");
   required(session.begin_surface_walk());
-  surface_marker_capacity(session, f);
+  surface_metadata_capacity(session, f);
   surface_marker_session(session, f);
   checkpoint("exited");
   check(session.surface_walker() && !session.walker() &&

@@ -105,6 +105,33 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  // Inspections are append-only personal history. Unlike the editable marker,
+  // replacement cannot clear a selection or rewrite an already recorded site.
+  const auto same_site = [](const auto& a, const auto& b) {
+    return a.system == b.system && a.planet == b.planet && a.site == b.site;
+  };
+  if (old.surface_landmarks) {
+    if (!now.surface_landmarks ||
+        now.surface_landmarks->version != old.surface_landmarks->version)
+      return false;
+    for (const auto& inspection : old.surface_landmarks->inspections) {
+      const auto& records = now.surface_landmarks->inspections;
+      const auto found = std::ranges::find_if(records, [&](const auto& record) {
+        return same_site(record, inspection);
+      });
+      if (found == records.end() || *found != inspection) return false;
+    }
+  }
+  if (now.surface_landmarks)
+    for (const auto& inspection : now.surface_landmarks->inspections) {
+      const bool retained =
+          old.surface_landmarks &&
+          std::ranges::any_of(old.surface_landmarks->inspections,
+                              [&](const auto& record) {
+                                return same_site(record, inspection);
+                              });
+      if (!retained && inspection.tick < loss_tick) return false;
+    }
   for (const auto& e : old.entries) {
     auto found = std::find_if(
         now.entries.begin(), now.entries.end(), [&](const auto& n) {

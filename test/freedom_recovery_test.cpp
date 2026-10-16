@@ -1,7 +1,9 @@
 #include "apsis_drift/freedom_recovery_save.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -182,6 +184,93 @@ auto session_contract(const std::filesystem::path& path) -> void {
         "Retired craft cannot claim new physical evidence after replacement");
   hash(need(
       encode_freedom_recovery_document_json(need(live.recovery_document()))));
+}
+auto landmark_retention() -> void {
+  const Seed seed{42};
+  const auto owner = need(generate_physical_origin_system(seed, 2));
+  const auto& planet = owner.catalog.planets.front().descriptor;
+  std::vector<FreedomSurfaceLandmarkInspection> records;
+  const auto shell_x = static_cast<std::int32_t>(
+      std::floor(static_cast<double>(planet.radius.value) * 1000 /
+                 kSurfaceLandmarkCellMetres));
+  // Identity-only compatibility fixtures; actual in-range player inspection
+  // is separately exercised by the landed-craft session test.
+  for (std::int32_t x = -1; x <= 1; ++x)
+    for (std::int32_t y = -2; y <= 2; ++y)
+      for (std::int32_t z = -2; z <= 2; ++z) {
+        const SurfaceLandmarkCell cell{shell_x + x, y, z};
+        const auto identity = need(identify_surface_landmark(planet, cell));
+        if (identity && records.size() < 3)
+          records.push_back(
+              {owner.catalog.id, planet.id, cell, identity->id, 3, 7});
+      }
+  if (records.size() != 3)
+    throw std::runtime_error("Recovery landmark fixtures unavailable");
+  std::ranges::sort(records, {},
+                    [](const auto& record) { return record.site.value; });
+  auto session =
+      need(NativeFreedomFlightSession::open(need(native_new_game(seed))));
+  for (unsigned tick = 0; tick < 120; ++tick)
+    need(session.advance_walk({}));
+  const auto source = need(session.recovery_document());
+  const auto complete_with =
+      [&](std::optional<FreedomSurfaceLandmarkState> state) {
+        auto before = source;
+        std::get<FreedomKnowledgeSaveDocument>(before.voyage)
+            .knowledge.surface_landmarks = std::move(state);
+        const auto flight = recovery_flight(before.voyage);
+        return need(complete_freedom_recovery(need(record_freedom_loss(
+            before, FreedomLossCause::recoverable_destruction,
+            flight.origin.state.craft, flight.flight.tick,
+            need(freedom_recovery_source_checksum(before.voyage))))));
+      };
+  const auto complete =
+      complete_with(FreedomSurfaceLandmarkState{1, {records[0], records[1]}});
+  const auto text = need(encode_freedom_recovery_document_json(complete));
+  check(need(decode_freedom_recovery_document_json(text)) == complete,
+        "Completed replacement retains all inspection records exactly");
+  for (unsigned fault = 0; fault < 4; ++fault) {
+    auto bad = Json::parse(text);
+    auto& knowledge = bad["voyage"]["knowledge"];
+    auto& landmarks = knowledge["surface_landmarks"];
+    switch (fault) {
+      case 0: knowledge.erase("surface_landmarks"); break;
+      case 1: landmarks["inspections"][0]["tick"] = 8U; break;
+      case 2: landmarks["inspections"].erase(0); break;
+      case 3: landmarks["inspections"][0]["terrain_policy"] = 2U; break;
+      default: break;
+    }
+    check(!decode_freedom_recovery_document_json(bad.dump()),
+          "Completed recovery cannot drop selection or old inspections, "
+          "rewrite first ticks or change their contact policy");
+  }
+  const auto loss_tick = recovery_flight(source.voyage).flight.tick;
+  auto onward = complete;
+  auto& inspections = std::get<FreedomKnowledgeSaveDocument>(onward.voyage)
+                          .knowledge.surface_landmarks->inspections;
+  auto addition = records[2];
+  addition.tick = loss_tick;
+  inspections.push_back(addition);
+  check(need(decode_freedom_recovery_document_json(
+            need(encode_freedom_recovery_document_json(onward)))) == onward,
+        "Replacement may append valid inspections at or after the loss tick");
+  inspections.back().tick = loss_tick - 1;
+  check(!encode_freedom_recovery_document_json(onward),
+        "Replacement cannot backdate newly appended inspection history");
+  auto adopted = complete_with(std::nullopt);
+  auto& selection = std::get<FreedomKnowledgeSaveDocument>(adopted.voyage)
+                        .knowledge.surface_landmarks;
+  selection = FreedomSurfaceLandmarkState{};
+  check(need(decode_freedom_recovery_document_json(
+            need(encode_freedom_recovery_document_json(adopted)))) == adopted,
+        "Historical replacement may explicitly adopt an empty selection");
+  selection->inspections = {addition};
+  check(need(decode_freedom_recovery_document_json(
+            need(encode_freedom_recovery_document_json(adopted)))) == adopted,
+        "Adoption permits new valid inspection history after loss");
+  selection->inspections.front().tick = loss_tick - 1;
+  check(!encode_freedom_recovery_document_json(adopted),
+        "Historical adoption cannot invent inspections before its loss");
 }
 auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
               std::uint32_t optics = 1,
@@ -521,6 +610,7 @@ auto main() -> int {
       provider(Seed{42}, FreedomLossCause::recoverable_destruction, false, 0,
                policy);
     session_contract(path / "recovery.json");
+    landmark_retention();
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     std::filesystem::remove_all(path);
