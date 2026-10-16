@@ -33,6 +33,8 @@ var theme_owner: Theme
 var busy := false
 var focused := true
 var readable_scale := -1.0
+# -2 discovers a launch-time owner; a journey return supplies its live selection.
+var initial_controller_device := -2
 
 static func valid_seed(value: String) -> bool:
 	if value.is_empty() or value.length() > 20: return false
@@ -50,6 +52,8 @@ func _ready() -> void:
 	controls = Controls.new()
 	controls.persist = persist_controls
 	controls.thrust_mode = true
+	controls.initial_device = initial_controller_device
+	if initial_controller_device >= 0: controls.available_pads[initial_controller_device] = true
 	add_child(controls)
 	controls.set_enabled(false)
 	controls.pause_requested.connect(back_to_title)

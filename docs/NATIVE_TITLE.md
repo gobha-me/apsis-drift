@@ -41,3 +41,9 @@ frozen docked shell keep their existing workflows.
 The [native save catalog](NATIVE_PROFILES.md) supplies slot browsing, active-slot
 Save/Save As and dirty-progress transitions under #136. The title makes no
 automatic save and Quit never autosaves.
+
+New Game and Continue retain the title's selected controller. Returning to the
+title retains the journey's live selection, including keyboard-only ownership;
+another connected pad does not silently take over. Fresh journey views keep
+their existing focus, held-control neutralization and explicit Resume gates.
+These presentation transfers do not change saved world state.

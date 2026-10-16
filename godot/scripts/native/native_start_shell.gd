@@ -330,7 +330,7 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 		return false
 	# No yield or asset operation between the C++ commit and ready-view swap.
 	var previous := current_view
-	inherit_controller(previous, candidate)
+	inherit_controller(previous if previous != null else title_view, candidate)
 	if previous != null:
 		remove_child(previous)
 	add_child(candidate)
@@ -641,19 +641,21 @@ func confirm_title() -> void:
 		audio_session.view = null
 		audio_session.refresh()
 	remove_child(previous)
-	previous.free()
 	# Acceptance releases the old view/bridge; an empty owner has no new universe.
 	error = ""
-	open_title(ClassDB.instantiate("FreedomBridge"), {"mode": "title", "assets": assets_root})
+	open_title(ClassDB.instantiate("FreedomBridge"), {"mode": "title", "assets": assets_root}, previous)
+	previous.free()
 
 
 static func inherit_controller(previous: Control, candidate: Control) -> void:
 	# Transfer only live device ownership; the fresh view owns its neutral gates.
-	if not (candidate is WalkView or candidate is FlightView): return
+	if not (candidate is WalkView or candidate is FlightView or candidate is NativeTitle): return
 	if previous is WalkView:
 		candidate.initial_controller_device = previous.selected_pad if previous.available_pads.get(previous.selected_pad, false) else -1
 	elif previous is FlightView:
 		candidate.initial_controller_device = previous.player_input.device
+	elif previous is NativeTitle:
+		candidate.initial_controller_device = previous.controls.device if previous.controls.available_pads.get(previous.controls.device, false) else -1
 
 
 func switch_journey_view() -> void:
@@ -713,12 +715,13 @@ func _ready() -> void:
 	if options.get("validate_only", false): get_tree().quit(0)
 
 
-func open_title(owner: Variant, options: Dictionary) -> void:
+func open_title(owner: Variant, options: Dictionary, previous: Control = null) -> void:
 	bridge = owner
 	title_options = options.duplicate(true)
 	title_view = NativeTitle.new()
 	title_view.catalog_owner = owner
 	title_view.persist_controls = options.get("persist_controls", true)
+	inherit_controller(previous, title_view)
 	add_child(title_view)
 	title_view.start_requested.connect(start_from_title, CONNECT_DEFERRED)
 	title_view.quit_requested.connect(request_native_quit)
