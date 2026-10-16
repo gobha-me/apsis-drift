@@ -7,6 +7,7 @@ func check(value: bool, reason: String) -> void:
 
 func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
+	check_observation_cue()
 	for dimensions in [Vector2.ZERO, Vector2(-1, 720), Vector2(INF, 720), Vector2(1280, NAN)]:
 		check(Status.layout_bounds(dimensions, Vector2(1280, 720)) == Rect2() and Status.layout_bounds(Vector2(1280, 720), dimensions) == Rect2(), "Invalid HUD dimensions accepted")
 	check(Status.rated_rise_text({}).is_empty(), "Unavailable mode invented rated thrust")
@@ -132,3 +133,86 @@ func _initialize() -> void:
 	check(clearance == clearance_before, "Clearance formatter mutated observations")
 	print("Native status: %d failures" % failed)
 	quit(1 if failed else 0)
+
+
+func observation_state(count: Variant) -> Dictionary:
+	return {"chart": {"selected": true, "local_sensors": true, "observation_transitions": count}}
+
+
+func check_observation_cue() -> void:
+	var cue := Status.ObservationCue.new()
+	const MESSAGE := "Ship observations updated\nControls → Recorded observations"
+	var state := observation_state(12)
+	state.chart["observed_facts"] = 6
+	state.chart["unread_metadata"] = {"name": "Hidden body", "seed": "private"}
+	var original := var_to_bytes(state)
+	check(cue.text().is_empty(), "Fresh observation cue invented a finding")
+	cue.reset(state)
+	cue.observe(state, true, 0.1)
+	check(cue.text().is_empty(), "Load baseline or repeated count announced old knowledge")
+	var improved := state.duplicate(true)
+	improved.chart.observation_transitions = 13
+	cue.observe(improved, true, 0.1)
+	check(cue.text() == MESSAGE and improved.chart.observed_facts == state.chart.observed_facts, "Confidence improvement without a new fact lost the generic cue")
+	var improved_before := var_to_bytes(improved)
+	cue.observe(improved, true, 5.5)
+	cue.observe(improved, false, 1000.0)
+	check(cue.text() == MESSAGE, "Paused/menu read aged the observation cue")
+	cue.observe(improved, true, 0.5)
+	check(cue.text().is_empty(), "Unchanged count retriggered or exceeded six active seconds")
+	cue.observe(improved, true, 0.0)
+	check(cue.text().is_empty(), "Repeated expired observation count replayed a finding")
+	var latest := observation_state(20)
+	cue.observe(latest, true, 0.0)
+	cue.observe(latest, true, 5.0)
+	latest.chart.observation_transitions = 25
+	cue.observe(latest, true, 1.0)
+	check(cue.text() == MESSAGE, "Coalesced batch did not refresh the single observation cue")
+	cue.observe(latest, true, 6.0)
+	check(cue.text().is_empty(), "Coalesced cue did not expire at its bounded duration")
+	latest.chart.observation_transitions = 26
+	cue.observe(latest, false, 0.0)
+	cue.observe(latest, true, 0.1)
+	check(cue.text().is_empty(), "Quiet read deferred a synthetic finding until Resume")
+	latest.chart.observation_transitions = 27
+	cue.observe(latest, true, 0.0)
+	cue.observe(observation_state(1), false, 0.0)
+	check(cue.text().is_empty(), "Lower count retained a cue from another selection")
+	cue.observe(observation_state(1), true, 0.0)
+	check(cue.text().is_empty(), "Lower counter reset announced historical knowledge")
+	cue.observe(observation_state(2), true, 0.0)
+	cue.reset(observation_state(100))
+	check(cue.text().is_empty(), "Explicit Load/reset retained another selection's cue")
+	cue.clear()
+	cue.observe(observation_state(101), true, 0.0)
+	check(cue.text().is_empty(), "First valid count after clear replayed retained findings")
+	for bad in [null, true, false, -1, 513, 1.0, NAN, INF, -INF, "1", [], {}]:
+		cue.reset(state)
+		cue.observe(improved, true, 0.0)
+		var malformed := observation_state(bad)
+		var before := var_to_bytes(malformed)
+		cue.observe(malformed, true, 0.0)
+		check(cue.text().is_empty() and var_to_bytes(malformed) == before, "Malformed counter retained a cue or mutated its input")
+		cue.observe(improved, true, 0.0)
+		check(cue.text().is_empty(), "Malformed counter did not clear its baseline")
+	for malformed in [{}, {"chart": null}, {"chart": []}, {"chart": {}}, {"chart": {"selected": false, "local_sensors": true, "observation_transitions": 20}}, {"chart": {"selected": true, "local_sensors": false, "observation_transitions": 20}}, {"chart": {"selected": 1, "local_sensors": true, "observation_transitions": 20}}, {"chart": {"selected": true, "local_sensors": 1, "observation_transitions": 20}}]:
+		cue.reset(state)
+		cue.observe(improved, true, 0.0)
+		cue.observe(malformed, false, 0.0)
+		check(cue.text().is_empty(), "Missing/unselected sensor projection retained a cue")
+		cue.observe(improved, true, 0.0)
+		check(cue.text().is_empty(), "Missing/unselected projection retained its baseline")
+	for bad_delta in [-0.1, NAN, INF, -INF]:
+		for active in [true, false]:
+			cue.reset(state)
+			cue.observe(improved, true, 0.0)
+			cue.observe(improved, active, bad_delta)
+			check(cue.text().is_empty(), "Invalid elapsed time retained or advanced a cue")
+			cue.observe(improved, true, 0.0)
+			check(cue.text().is_empty(), "Invalid elapsed time did not clear its baseline")
+	cue.reset(observation_state(0))
+	cue.observe(observation_state(512), true, 0.0)
+	check(cue.text() == MESSAGE, "Inclusive counter bounds refused a valid coalesced update")
+	cue.observe(observation_state(512), true, 1.0e30)
+	check(cue.text().is_empty(), "Large finite elapsed time escaped bounded expiry")
+	check(var_to_bytes(state) == original and var_to_bytes(improved) == improved_before, "Observation cue mutated authoritative input dictionaries")

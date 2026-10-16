@@ -2,6 +2,51 @@ extends RefCounted
 ## Presentation of C++ observations; never advances or edits the voyage.
 const NativeIds = preload("res://scripts/native/native_environment.gd")
 
+class ObservationCue extends RefCounted:
+	## A transient presentation latch over the bounded C++ knowledge counter.
+	## Quiet reads absorb changes without aging an existing cue. Invalid elapsed
+	## time clears both baseline and cue, so later reads cannot replay that change.
+	const DURATION := 6.0
+	const MESSAGE := "Ship observations updated\nControls → Recorded observations"
+	var _baseline := -1
+	var _remaining := 0.0
+
+	static func _count(state: Dictionary) -> int:
+		var chart: Variant = state.get("chart")
+		if not chart is Dictionary: return -1
+		for field in ["selected", "local_sensors"]:
+			if typeof(chart.get(field)) != TYPE_BOOL or not chart[field]: return -1
+		var count: Variant = chart.get("observation_transitions")
+		if typeof(count) != TYPE_INT or count < 0 or count > 512: return -1
+		return count
+
+	func clear() -> void:
+		_baseline = -1
+		_remaining = 0.0
+
+	func reset(state: Dictionary) -> void:
+		_baseline = _count(state)
+		_remaining = 0.0
+
+	func observe(state: Dictionary, active_advance: bool, delta: float) -> void:
+		if not is_finite(delta) or delta < 0.0:
+			clear()
+			return
+		var count := _count(state)
+		if count < 0:
+			clear()
+			return
+		if _baseline < 0 or count < _baseline:
+			reset(state)
+			return
+		if active_advance:
+			_remaining = maxf(0.0, _remaining - delta)
+			if count > _baseline: _remaining = DURATION
+		_baseline = count
+
+	func text() -> String:
+		return MESSAGE if _remaining > 0.0 else ""
+
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
 

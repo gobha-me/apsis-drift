@@ -29,14 +29,22 @@ func key(code: Key) -> void:
 		Input.parse_input_event(event)
 		await process_frame
 
-func pad(code: JoyButton) -> void:
+func pad(code: JoyButton, device: int = 0) -> void:
 	for down in [true, false]:
 		var event := InputEventJoypadButton.new()
-		event.device = 0
+		event.device = device
 		event.button_index = code
 		event.pressed = down
 		Input.parse_input_event(event)
 		await process_frame
+
+func held_stick(value: float, device: int = 41) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = JOY_AXIS_LEFT_X
+	event.axis_value = value
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -139,11 +147,38 @@ func run() -> void:
 	await settle()
 	check(shell.title_view == title and not title.busy and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Late asset refusal committed a title candidate")
 	shell.title_options.assets = assets
+	# Two available software pads; explicitly adopt the non-first device through
+	# the real Start path. This is input ownership, not hardware qualification.
+	title.controls.available_pads = {40: true, 41: true}
+	title.controls.device = -1
+	title.controls.install()
+	await pad(JOY_BUTTON_START, 41)
+	check(title.controls.device == 41, "Title did not adopt the selected non-first controller")
+	held_stick(0.8)
 	title.new_button.grab_focus()
 	await key(KEY_ENTER)
 	await settle()
 	check(shell.title_view == null and shell.current_view is Walk and owner.get_freedom_walk_state().universe_seed == "0", "Actual seed-zero New Game did not start on station")
 	check(shell.current_view.state.actor_id == "1", "New Game did not create the player actor")
+	var started: Control = shell.current_view
+	started.set_process(false)
+	check(started.selected_pad == 41 and started.paused and not started.controls_armed, "New Game lost title controller ownership or resumed its held stick")
+	var ownership_save := args[1].get_base_dir().path_join("title-controller-newgame.json")
+	check(owner.save_freedom_as(ownership_save), "Could not save title controller baseline")
+	var ownership_bytes := FileAccess.get_file_as_bytes(ownership_save)
+	started.available_pads[40] = true
+	var started_focus := root.gui_get_focus_owner()
+	await pad(JOY_BUTTON_START, 40)
+	await pad(JOY_BUTTON_A, 40)
+	check(started.selected_pad == 41 and started.paused and root.gui_get_focus_owner() == started_focus, "Nonowner controller took New Game walking/menu authority")
+	started.resume_requested()
+	check(started.paused and not started.controls_armed, "Selected held stick bypassed fresh New Game neutral gate")
+	held_stick(0.0)
+	check(started.paused, "Releasing the selected stick automatically resumed New Game")
+	await pad(JOY_BUTTON_START, 41)
+	check(not started.paused and started.controls_armed, "Selected controller could not explicitly resume after neutral")
+	started.pause_controls("Controller handoff inspection complete")
+	check(owner.save_freedom_as(ownership_save) and FileAccess.get_file_as_bytes(ownership_save) == ownership_bytes, "Controller handoff checks changed complete New Game save bytes")
 	check(is_equal_approx(shell.current_view.stick_preferences.deadzone, 0.35) and shell.current_view.stick_preferences.curve == 2.0, "New Game walker did not consume saved title preferences")
 	check(FileAccess.get_file_as_bytes(preferences_path) == preferences_bytes, "Starting the journey rewrote preferences")
 	check(DirAccess.remove_absolute(preferences_path) == OK, "Could not remove title-owned preferences")
@@ -156,15 +191,25 @@ func run() -> void:
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	shell.open_title(owner, {"mode": "title", "assets": args[0], "persist_controls": false})
 	title = shell.title_view
+	title.controls.available_pads = {40: true, 41: true}
+	title.controls.device = -1
+	title.controls.install()
+	await pad(JOY_BUTTON_START, 41)
 	var source := FileAccess.get_file_as_bytes(args[1])
 	title.continue_button.pressed.emit()
 	title.chooser.file_selected.emit(args[1])
 	await settle()
 	check(shell.title_view == null and shell.current_view is Walk and shell.current_view.paused, "Continue did not retire title into paused actor")
+	check(shell.current_view.selected_pad == 41, "Continue lost the selected title controller")
 	var output := args[1].get_base_dir().path_join("title-continued.json")
 	check(owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == source, "Title Continue changed complete source save")
 	check(FileAccess.get_file_as_bytes(args[1]) == source, "Successful title Continue rewrote input")
 	var view: Control = shell.current_view
+	view.available_pads[40] = true
+	var continued_focus := root.gui_get_focus_owner()
+	await pad(JOY_BUTTON_START, 40)
+	await pad(JOY_BUTTON_A, 40)
+	check(view.paused and view.selected_pad == 41 and root.gui_get_focus_owner() == continued_focus and owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == source, "Foreign controller escaped paused Continue or changed its complete save")
 	view.title_button.pressed.emit()
 	check(shell.title_origin == view and view.journey_dialog_open and view.process_mode == Node.PROCESS_MODE_DISABLED and shell.title_confirmation.visible, "Title did not suspend the journey beneath confirmation")
 	check(shell.title_confirmation.get_cancel_button().has_focus(), "Title did not default to Cancel")
@@ -191,14 +236,23 @@ func run() -> void:
 	await settle()
 	check(shell.title_view != null and shell.current_view == null and shell.title_origin == null and not is_instance_valid(view) and shell.bridge != owner, "Confirmed Title retained old active owner/view")
 	check(shell.bridge.get_freedom_start().is_empty() and shell.bridge.get_pending_freedom_start().is_empty(), "Return to Title generated a new universe")
+	check(shell.title_view.controls.device == 41, "Returning from station walking lost its selected controller")
 	check(FileAccess.get_file_as_bytes(args[1]) == source and FileAccess.get_file_as_bytes(output) == source, "Title discard autosaved or rewrote a file")
 	shell.title_view.choose_continue(args[1])
 	await settle()
 	check(shell.current_view is Walk and shell.current_view.paused and shell.title_view == null and shell.bridge.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == source, "Continue after Title changed complete save")
+	check(shell.current_view.selected_pad == 41, "Title roundtrip lost station controller ownership")
 	for filename in ["flight-18.json", "wayfarer-flight.json"]:
 		var target := args[1].get_base_dir().path_join(filename)
 		check(shell.select_start(shell.bridge, {"mode": "continue", "value": target, "assets": args[0]}), "Title flight fixture refused")
 		view = shell.current_view
+		var expected_device := 41
+		if filename == "wayfarer-flight.json":
+			# Explicit keyboard ownership must survive even with known backup pads.
+			expected_device = -1
+			view.player_input.device = -1
+			view.player_input.available_pads = {40: true, 41: true}
+			view.player_input.install()
 		var source_bytes := FileAccess.get_file_as_bytes(target)
 		var hold_source := ProjectSettings.globalize_path("user://title-hold-" + filename)
 		view.controls_menu.saved_hold_button.pressed.emit()
@@ -214,9 +268,11 @@ func run() -> void:
 		view.controls_menu.title_button.pressed.emit()
 		shell.confirm_title()
 		check(shell.current_view == null and shell.title_view != null and shell.bridge.get_freedom_start().is_empty(), "Flight Title did not release the active journey")
+		check(shell.title_view.controls.device == expected_device and shell.title_view.controls.initial_device == expected_device, "Returning from flight lost selected controller or keyboard ownership")
 		shell.title_view.choose_continue(hold_source)
 		await settle()
 		check(shell.current_view.paused and shell.title_view == null and shell.bridge.save_freedom_as(output) and FileAccess.get_sha256(output) == frozen, "Flight Continue after Title changed complete save")
+		check(shell.current_view.player_input.device == expected_device, "Flight Continue implicitly changed controller or keyboard ownership")
 		check(shell.bridge.get_freedom_flight_state().hold_enabled and FileAccess.get_file_as_bytes(target) == source_bytes, "Title/Continue lost hold or rewrote the original flight")
 	shell.free()
 	await settle()
