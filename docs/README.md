@@ -48,6 +48,7 @@ player's station-to-flight journey.
 - [Body identity and circular hierarchy](BODY_EPHEMERIS.md): compatible catalog projections, parent transforms and full-width target serialization.
 - [Planetary scale and surface-fidelity contract](PLANETARY_SCALE_CONTRACT.md): physical units, handoffs and capture/fixture targets.
 - [Immutable planetary ambient environment](PLANET_AMBIENT.md)
+- [Static cloud and dust optics](PLANET_OPTICS.md): versioned C++ field, visible-appearance disclosure and historical save compatibility.
 - [Live Freedom resources](FREEDOM_RESOURCES.md)
 - [Freedom starting chart and nearby topology](FREEDOM_TOPOLOGY.md)
 - [Persistent Freedom knowledge and provenance](FREEDOM_KNOWLEDGE.md)

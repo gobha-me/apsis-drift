@@ -37,7 +37,8 @@ def main():
     if not os.environ.get("DISPLAY"):
         parser.error("DISPLAY is required; supply an isolated X11 display")
     repo = Path(__file__).resolve().parent.parent
-    resources = {"tests/native_sky_camera_test.gd": repo / "godot/tests/native_sky_camera_test.gd",
+    resources = {"shaders/native_planet_optics.gdshaderinc": repo / "godot/shaders/native_planet_optics.gdshaderinc",
+                 "tests/native_sky_camera_test.gd": repo / "godot/tests/native_sky_camera_test.gd",
                  "shaders/native_navigation_sky.gdshader": repo / "godot/shaders/native_navigation_sky.gdshader"}
     if not all(path.is_file() for path in resources.values()):
         parser.error("missing sky calibration source")

@@ -15,6 +15,8 @@ const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
+var planet_optics := PlanetOptics.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
@@ -145,7 +147,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_state(value: Dictionary) -> bool:
-	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value): return false
+	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -389,8 +391,13 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		set_ship_layer(station)
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
+	terrain.terrain_material_created.connect(func(material: ShaderMaterial):
+		if not planet_optics.apply(state, [material]): pause_on_error("Canonical terrain optics are unavailable"))
 	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		error = "Canonical native environment is unavailable"
+		return false
+	if not planet_optics.apply(state, [sky_material]):
+		error = "Canonical planetary optics are unavailable"
 		return false
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
@@ -1341,11 +1348,19 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		pause_on_error("Canonical native environment changed unexpectedly")
 		return
+	var optical_materials: Array[ShaderMaterial] = [sky_material]
+	for node: MeshInstance3D in terrain.nodes.values():
+		if node.material_override is ShaderMaterial: optical_materials.append(node.material_override)
+	if not planet_optics.apply(state, optical_materials):
+		pause_on_error("Canonical planetary optics changed unexpectedly")
+		return
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nReference altitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	var rated_rise := Status.rated_rise_text(state)
+	if not rated_rise.is_empty(): telemetry.text += "\n" + rated_rise
 	if surface_walking(): telemetry.text = "On foot · suit equipped\n%s\nWayfarer remains landed · %.1f m to craft centre\nTick %s%s" % [Status.surface_position_text(state.surface_walk), state.surface_walk.eye_position.length(), state.tick, " · PAUSED" if paused else ""]
 	var resources: Dictionary = state.get("resources", {})
 	if resources.get("selected", false):

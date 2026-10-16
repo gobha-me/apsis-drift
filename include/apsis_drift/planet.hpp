@@ -29,6 +29,7 @@ enum class PlanetDescriptorStream : std::uint64_t {
   ambient_turbulence = 12,
   ambient_ground_motion = 13,
   ambient_visibility = 14,
+  optical_cover = 15,
 };
 
 struct PlanetId {

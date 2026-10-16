@@ -1,5 +1,6 @@
 extends SceneTree
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
@@ -32,6 +33,7 @@ func run() -> void:
 	check(owner.save_freedom_as(args[1]), "Before world bytes unavailable")
 	if failures > 0: owner = null; quit(1); return
 	var before := FileAccess.get_sha256(args[1])
+	check_planet_optics(state, args[1] + ".optics.json")
 	for key in ["scale_height", "sea_density", "atmosphere_edge", "star_angular_radius"]:
 		for value in [NAN, INF, -INF, -1.0, "7", true, null, Vector3.ONE]:
 			var malformed := state.duplicate(true)
@@ -151,6 +153,67 @@ func run() -> void:
 	await process_frame
 	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, actual catalog2 anchored phases when supplied, no raster/hardware claim" % failures)
 	quit(0 if failures == 0 else 1)
+
+func check_planet_optics(historical: Dictionary, output: String) -> void:
+	check(not historical.has("optics") and PlanetOptics.valid(historical), "Historical save gained an optical selection")
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	# Pure bridge packet check: use the explicit pending transaction. The
+	# ordinary shell separately owns model staging before displaying a journey.
+	if not owner.stage_freedom_new_game("42"):
+		check(false, "Actual optical New Game could not stage: " + str(owner.get_last_error()))
+		return
+	var candidate: Dictionary = owner.get_pending_freedom_start()
+	if not owner.commit_pending_freedom_start(candidate.candidate_id):
+		check(false, "Actual optical New Game could not commit")
+		return
+	var state: Dictionary = owner.get_freedom_flight_state()
+	if not PlanetOptics.valid(state) or not state.has("optics"):
+		check(false, "Actual C++ optical packet failed validation")
+		return
+	check(owner.save_freedom_as(output), "Optical baseline Save As refused")
+	var bytes := FileAccess.get_file_as_bytes(output)
+	var environment := Environment.new()
+	var sky := NativeEnvironment.install(environment)
+	var terrain := ShaderMaterial.new()
+	terrain.shader = preload("res://shaders/terrain.gdshader")
+	var materials: Array[ShaderMaterial] = [sky, terrain]
+	var optics := PlanetOptics.new()
+	if not optics.apply(state, materials):
+		check(false, "Actual optical atlas could not bind sky and terrain")
+		return
+	var texture: ImageTexture = optics.atlas_texture
+	check(texture != null and texture.get_width() == 64 and texture.get_height() == 32 and texture.get_image().get_data() == state.optics.density, "Renderer atlas differs from the actual C++ density bytes")
+	for repeat in 3:
+		check(optics.apply(state, materials) and optics.atlas_texture == texture and owner.get_freedom_flight_state() == state, "Repeated optical reads rebuilt the atlas or changed world state")
+	for material in materials:
+		check(material.get_shader_parameter("optical_atlas") == texture and material.get_shader_parameter("optical_enabled") == (state.optics.opacity_cap > 0.0) and material.get_shader_parameter("optical_planet_center") == state.optics.planet_center and material.get_shader_parameter("optical_fixed_from_tangent").is_equal_approx(state.optics.fixed_to_tangent.inverse()), "Sky and terrain did not share the actual atlas and C++ owner transform")
+	var short := PackedByteArray()
+	short.resize(2047)
+	var oversized := PackedByteArray()
+	oversized.resize(2049)
+	var broken_pole: PackedByteArray = state.optics.density.duplicate()
+	broken_pole[1] = (int(broken_pole[0]) + 1) % 256
+	# Presentation corruption controls only; no forged packet reaches C++.
+	for change in [{"system_id": "1" if state.system_id == "0" else "0"},
+		{"planet_id": "1" if state.planet_id == "0" else "0"},
+		{"version": 2}, {"disclosure": 0}, {"width": 63}, {"height": 33},
+		{"density": short}, {"density": oversized}, {"density": broken_pole},
+		{"opacity_cap": NAN}, {"opacity_cap": INF}, {"opacity_cap": 0.76},
+		{"lower_height_metres": NAN}, {"upper_height_metres": INF},
+		{"reference_radius": state.planet_radius + 1.0},
+		{"planet_center": Vector3.ZERO}, {"planet_center": Vector3(NAN, 0, 0)},
+		{"fixed_to_tangent": Basis(Vector3(-1, 0, 0), Vector3.UP, Vector3.BACK)},
+		{"fixed_to_tangent": Basis(Vector3(2, 0, 0), Vector3.UP, Vector3.BACK)},
+		{"fixed_to_tangent": Basis(Vector3(NAN, 0, 0), Vector3.UP, Vector3.BACK)}]:
+		var malformed := state.duplicate(true)
+		malformed.optics.merge(change, true)
+		check(not PlanetOptics.valid(malformed) and not optics.apply(malformed, materials) and optics.atlas_texture == texture, "Malformed optics packet changed accepted graphics: " + str(change.keys()))
+		for material in materials:
+			check(material.get_shader_parameter("optical_atlas") == texture and material.get_shader_parameter("optical_enabled") == (state.optics.opacity_cap > 0.0), "Rejected optics packet changed a bound material")
+	check(optics.apply(historical, materials) and optics.atlas_texture == null and optics.atlas_bytes.is_empty() and optics.atlas_owner.is_empty(), "Historical clear state retained a selected atlas cache")
+	for material in materials:
+		check(not material.get_shader_parameter("optical_enabled") and material.get_shader_parameter("optical_atlas") == null, "Historical clear state left optical rendering enabled")
+	check(owner.get_freedom_flight_state() == state and owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == bytes, "Optical presentation changed complete New Game save bytes or clock")
 
 func daynight_visibility(elevation: float, horizon: float, width: float) -> float:
 	var fraction := clampf((elevation - horizon + width) / (2.0 * width), 0.0, 1.0)

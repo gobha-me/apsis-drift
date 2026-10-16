@@ -1,4 +1,5 @@
 shader_type spatial;
+#include "res://shaders/native_planet_optics.gdshaderinc"
 render_mode diffuse_burley, specular_schlick_ggx;
 
 // Presentation-only shading and optional interpolation of C++ mesh endpoints.
@@ -66,26 +67,39 @@ void fragment() {
 	strata *= 1.0 - smoothstep(6.0, 55.0, footprint);
 	float slope = 1.0 - clamp(dot(terrain_normal, normalize(radial_normal)), 0.0, 1.0);
 	float exposed = smoothstep(0.018, 0.15, slope + (seams - 0.5) * 0.075);
-	// Low-frequency mineral staining is cosmetic only, continuous across tiles
-	// and shared by ground/orbit views; it is not a second elevation generator.
-	float regional = mineral_noise(p * 0.000006);
-	vec3 bedrock = mix(vec3(0.12, 0.135, 0.145), vec3(0.34, 0.235, 0.14), regional);
-	vec3 dust = mix(vec3(0.19, 0.145, 0.095), vec3(0.38, 0.30, 0.20), broad);
-	vec3 rock = mix(vec3(0.095, 0.11, 0.12), vec3(0.26, 0.25, 0.22), seams);
-	rock *= 0.90 + strata * 0.12 + chips * 0.22;
-	vec3 color = mix(dust, rock, exposed);
-	color *= mix(vec3(0.9), bedrock * 4.0, 0.35);
-	// Retain a contribution from the C++ terrain's authored surface palette.
-	color *= mix(vec3(0.85), COLOR.rgb * 1.7, 0.20);
-	ALBEDO = color * (0.40 + chips * 0.10 + grit * 0.04);
-	// At orbital distances retain broad mineral staining and a muted contribution
-	// from the C++ palette, not undersampled metre-scale noise or noisy RGB flecks.
-	float orbital = planet_tile ? smoothstep(80000.0, 700000.0, length(VERTEX)) : 0.0;
-	vec3 muted_palette = mix(vec3(dot(COLOR.rgb, vec3(0.2126, 0.7152, 0.0722))), COLOR.rgb, 0.2);
-	ALBEDO = mix(ALBEDO, mix(bedrock, muted_palette, 0.10) * 0.45, orbital);
+	if (planet_tile) {
+		// C++ supplies the actual height-blended palette, including morph endpoints.
+		// Neutral mineral detail preserves its hue instead of imposing brown rock
+		// on every world. These are colors, not inferred surface materials.
+		float detail = clamp(0.90 + strata * 0.08 + (chips - 0.5) * 0.18
+			+ (seams - 0.5) * 0.08 + (grit - 0.5) * 0.04 - exposed * 0.06, 0.65, 1.10);
+		float orbital = smoothstep(80000.0, 700000.0, length(VERTEX));
+		ALBEDO = clamp(COLOR.rgb, vec3(0.0), vec3(1.0)) * mix(detail * 0.45, 0.45, orbital);
+	} else {
+		// Preserve the separate nonplanet study material.
+		float regional = mineral_noise(p * 0.000006);
+		vec3 bedrock = mix(vec3(0.12, 0.135, 0.145), vec3(0.34, 0.235, 0.14), regional);
+		vec3 dust = mix(vec3(0.19, 0.145, 0.095), vec3(0.38, 0.30, 0.20), broad);
+		vec3 rock = mix(vec3(0.095, 0.11, 0.12), vec3(0.26, 0.25, 0.22), seams);
+		rock *= 0.90 + strata * 0.12 + chips * 0.22;
+		vec3 color = mix(dust, rock, exposed);
+		color *= mix(vec3(0.9), bedrock * 4.0, 0.35);
+		color *= mix(vec3(0.85), COLOR.rgb * 1.7, 0.20);
+		ALBEDO = color * (0.40 + chips * 0.10 + grit * 0.04);
+	}
 	ROUGHNESS = clamp(0.92 - exposed * 0.20 + grit * 0.05, 0.6, 1.0);
 	// Use actual terrain slopes. Derivative bump normals from planet-scale
 	// mineral coordinates amplify float quantization into near-ground speckles.
 	// Mineral detail remains in colour/roughness, without a synthetic slope.
 	NORMAL = normalize((VIEW_MATRIX * vec4(terrain_normal, 0.0)).xyz);
+	if (optical_enabled) {
+		vec3 eye = INV_VIEW_MATRIX[3].xyz;
+		vec3 path = surface_position - eye;
+		float distance_to_surface = length(path);
+		if (distance_to_surface > 0.0001) {
+			vec4 cover = optical_ray(eye, path / distance_to_surface, distance_to_surface);
+			ALBEDO *= 1.0 - cover.a;
+			EMISSION = cover.rgb * cover.a;
+		}
+	}
 }

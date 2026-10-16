@@ -1,4 +1,5 @@
 shader_type sky;
+#include "res://shaders/native_planet_optics.gdshaderinc"
 // Current C++ native tangent frame, body profile and system star. No TIME/RNG.
 uniform float radius;
 uniform float altitude;
@@ -53,4 +54,10 @@ void sky() {
 	float antialias = max(0.00001, fwidth(sun_angle));
 	float sun_disc = 1.0 - smoothstep(max(0.0, sun_angular_radius - antialias), sun_angular_radius + antialias, sun_angle);
 	if (!ground) COLOR += sun_color * sun_disc * sun_visibility * 6.0 * exp(-optical * 0.15);
+	if (optical_enabled && disc > 0.0) {
+		float ray_end = max(0.0, -b + sqrt(disc));
+		if (ground) ray_end = min(ray_end, max(0.0, -b - sqrt(ground_disc)));
+		vec4 cover = optical_ray(POSITION, d, ray_end);
+		COLOR = mix(COLOR, cover.rgb, cover.a);
+	}
 }

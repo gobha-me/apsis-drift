@@ -177,13 +177,15 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
     auto expected = old;
     expected.voyage.flight.model.terrain_policy =
         kFreedomLocalDetailTerrainPolicy;
+    expected.voyage.flight.model.optics = 1;
     check(
         old.voyage.flight.model.terrain_policy == kFreedomLegacyTerrainPolicy &&
+            old.voyage.flight.model.optics == 0 &&
             document.journey == expected &&
             require(encode_freedom_journey_document_json(document.journey)) ==
                 require(encode_freedom_journey_document_json(expected)) &&
             document.journey.voyage.flight.origin.recipe.universe_seed == seed,
-        "Selected assembly changes only terrain policy, preserving seed, "
+        "Selected assembly selects terrain and optics, preserving seed, "
         "generation, body, actor, other model fields and history");
     fixed_selection(document);
     auto session = require(NativeFreedomFlightSession::open(selection));

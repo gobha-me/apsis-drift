@@ -2,6 +2,9 @@
 
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/planet_optics.hpp"
+
+#include <algorithm>
 
 namespace apsis_drift::godot_spike {
 // Presentation projection only. The saved nonrotating state stays untouched.
@@ -83,11 +86,42 @@ inline auto project_saved_flight(const NativeFreedomFlightSession& session)
           station_available};
 }
 
+// Rated free-flight radial acceleration from full +Y thrust and central
+// gravity only. Assumes fuel; excludes contact, drag and every other channel.
+// This is an instrument, never a hover, departure or escape permission.
+inline auto rated_rise_margin(const NativeFreedomFlightSession& session,
+                              const SavedFlightProjection& view)
+    -> std::optional<double> {
+  const auto& document = session.document();
+  const auto& body = document.flight;
+  if (body.frame.kind != RigidFrameKind::planet_relative_inertial ||
+      session.recovery_pending() || session.walker() ||
+      session.surface_walker() ||
+      (session.docking() && session.docking()->attached) ||
+      (session.travel() && session.travel()->phase != FreedomJumpPhase::idle))
+    return std::nullopt;
+  const auto frame = resolve_craft_frame(body.craft);
+  const auto gravity = evaluate_central_body_gravity(
+      RigidBodyWorldContext{session.system()}, body, document.model.central);
+  const double up = view.body_axes[1].up;
+  if (!frame || !gravity || !std::isfinite(up) || std::abs(up) > 1.000000000001)
+    return std::nullopt;
+  const auto& properties = frame->properties;
+  const auto& g = gravity->acceleration_metres_per_second_squared;
+  const double margin =
+      static_cast<double>(properties.positive_force_newtons[1]) /
+          properties.dry_mass_kg * std::clamp(up, -1.0, 1.0) -
+      std::hypot(g.x, g.y, g.z);
+  return std::isfinite(margin) ? std::optional{margin} : std::nullopt;
+}
+
 struct SavedFlightWorld {
   NativeFreedomFlightSession session;
   FixedStepClock clock;
   std::optional<NativeFlightStep> last_step;
   double dropped_seconds{};
+  // Presentation memoization only: one actual selected body, no save/catalog.
+  mutable std::optional<PlanetOpticsField> optical_field{};
 
   auto advance(double elapsed, std::span<const double> fractions, bool paused)
       -> void {

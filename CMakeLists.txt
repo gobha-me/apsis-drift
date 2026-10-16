@@ -207,6 +207,7 @@ add_library(apsis_drift_core STATIC
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
   src/planet_ambient.cpp
+  src/planet_optics.cpp
   src/craft_environment_assessment.cpp
   src/physical_local_system.cpp
   src/body_ephemeris.cpp

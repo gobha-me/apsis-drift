@@ -19,6 +19,25 @@ func checkpoint(owner: Variant, source: String, output: String, name: String) ->
 	return check(owner.save_freedom_as(path) and FileAccess.get_sha256(path) == FileAccess.get_sha256(source.path_join(name + ".json")), "Complete surface voyage differs at " + name)
 
 
+func check_rated_rise_actor(view: Control, owner: Variant, output: String, available: bool) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	check(before.has("rated_rise_margin") == available, "Rated RISE availability disagrees with seated/ground actor ownership")
+	if available:
+		var margin: Variant = before.get("rated_rise_margin")
+		if not check(margin is float and is_finite(margin), "Actual landed craft omitted a finite prospective RISE estimate"): return
+	var path := output.path_join("rated-rise-seated.json" if available else "rated-rise-outside.json")
+	check(owner.save_freedom_as(path), "Rated RISE actor inspection baseline failed")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	view.show_instruments()
+	for repeat in 3:
+		check(owner.get_freedom_flight_state() == before, "Rated RISE actor read changed the voyage or clock")
+		view.update_view(0.0)
+	check(view.paused and view.hud_scroll.visible and ("Full RISE" in view.telemetry.text) == available and not "Full RISE" in view.primary_status.text, "Expanded rated RISE instrument leaked on foot or disappeared while seated")
+	if available: check("Prospective free flight" in view.telemetry.text, "Landed estimate lost its prospective label")
+	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Rated RISE actor inspection changed full save bytes")
+	view.pause_controls("Rated RISE actor inspection complete")
+
+
 func check_surface_position(view: Control, owner: Variant, path: String) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var actor: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -370,11 +389,13 @@ func run() -> void:
 	var captures: Array = []
 	var rendered := DisplayServer.get_name() != "headless"
 	check(view.paused and not view.surface_walking() and view.state.surface.landed, "Continue lost landed seated readiness")
+	check_rated_rise_actor(view, owner, args[2], true)
 	check(not view.ship_marker.visible and view.home_marker.label_text == "HOME", "Seated landing showed a ground ship bearing or changed HOME")
 	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Seated view exposed the on-foot lamp")
 	check(not view.hud_scroll.visible and "Landed" in view.primary_status.text and view.context_action.disabled, "Landed compact HUD lost actual mode or allowed a paused maneuver")
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
+	check_rated_rise_actor(view, owner, args[2], false)
 	check_return_bearing(view)
 	check(view.state.surface_walk.return_access.within_reach and view.state.surface_walk.return_access.distance_metres == 0.0, "Exit failed to identify its exact reachable ground access")
 	check_return_fallback(view)

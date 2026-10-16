@@ -1,11 +1,13 @@
 #include "apsis_drift/native_startup.hpp"
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -30,6 +32,70 @@ auto check(bool condition, const char* message) -> void {
   return text;
 }
 
+auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
+                   const apsis_drift::NativeSaveDocument& complete) -> void {
+  using namespace apsis_drift;
+  using Json = nlohmann::ordered_json;
+  const auto full = encode_native_save_document_json(complete);
+  check(
+      full && decode_native_save_document_json(*full) ==
+                  std::expected<NativeSaveDocument, SaveSchemaError>{complete},
+      "new optical selection failed complete nested knowledge save roundtrip");
+  const auto original = make_freedom_journey_new_game_document(
+      journey.voyage.flight.origin.recipe.universe_seed);
+  check(original && original->voyage.flight.model.optics == 0,
+        "historical factory silently selected optics");
+  const std::array<NativeSaveDocument, 3> selected{journey.voyage.flight,
+                                                   journey.voyage, journey};
+  const std::array<NativeSaveDocument, 3> historical{
+      original->voyage.flight, original->voyage, *original};
+  for (std::size_t i = 0; i < selected.size(); ++i) {
+    const auto encoded = encode_native_save_document_json(selected[i]);
+    check(encoded.has_value(), "valid optical base save failed encoding");
+    const auto parsed = Json::parse(*encoded);
+    check(
+        parsed["format_version"] == 39 + i &&
+            parsed["flight_model"]["optics"] == 1 &&
+            parsed["flight_model"]["frame_policy"] == 1 &&
+            decode_native_save_document_json(*encoded) ==
+                std::expected<NativeSaveDocument, SaveSchemaError>{selected[i]},
+        "flight docking or journey lost explicit optical model/version");
+    const auto old = encode_native_save_document_json(historical[i]);
+    check(old.has_value(), "historical factory no longer encodes");
+    const auto old_parsed = Json::parse(*old);
+    const auto loaded = decode_native_save_document_json(*old);
+    check(old_parsed["format_version"] == 18 + i &&
+              !old_parsed["flight_model"].contains("optics") && loaded &&
+              *loaded == historical[i] &&
+              encode_native_save_document_json(*loaded) == old,
+          "old flight docking or journey bytes migrated on read/write");
+    auto bad = parsed;
+    bad["flight_model"].erase("optics");
+    check(!decode_native_save_document_json(bad.dump()),
+          "optical save accepted a missing selection");
+    for (const auto& value : {Json(0U), Json(2U), Json(true), Json("1")}) {
+      bad = parsed;
+      bad["flight_model"]["optics"] = value;
+      check(!decode_native_save_document_json(bad.dump()),
+            "optical save accepted unsupported or malformed selection");
+    }
+    bad = old_parsed;
+    bad["flight_model"]["optics"] = 1U;
+    check(!decode_native_save_document_json(bad.dump()),
+          "historical format silently adopted an optical field");
+    bad = parsed;
+    bad["format_version"] = 99U;
+    check(!decode_native_save_document_json(bad.dump()),
+          "unknown optical enclosing version was accepted");
+  }
+  auto invalid = journey;
+  invalid.voyage.flight.model.optics = 2;
+  check(!encode_freedom_flight_document_json(invalid.voyage.flight) &&
+            !encode_freedom_docking_document_json(invalid.voyage) &&
+            !encode_freedom_journey_document_json(invalid),
+        "unsupported in-memory optical model was serialized");
+}
+
 } // namespace
 
 auto main() -> int {
@@ -52,6 +118,9 @@ auto main() -> int {
     check(journey.voyage.flight.model.terrain_policy ==
               kFreedomLocalDetailTerrainPolicy,
           "Native New Game did not explicitly select physical local detail");
+    check(journey.voyage.flight.model.optics == 1,
+          "Native New Game did not explicitly select optical recipe1");
+    optical_saves(journey, created->document);
     check(freedom == make_freedom_new_game_document(seed),
           "New Game changed authoritative saved state");
     check(freedom.state.craft !=

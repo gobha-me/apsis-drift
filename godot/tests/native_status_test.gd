@@ -9,6 +9,10 @@ func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
 	for dimensions in [Vector2.ZERO, Vector2(-1, 720), Vector2(INF, 720), Vector2(1280, NAN)]:
 		check(Status.layout_bounds(dimensions, Vector2(1280, 720)) == Rect2() and Status.layout_bounds(Vector2(1280, 720), dimensions) == Rect2(), "Invalid HUD dimensions accepted")
+	check(Status.rated_rise_text({}).is_empty(), "Unavailable mode invented rated thrust")
+	for invalid in [null, true, false, NAN, INF, -INF, "unknown", [], {}]:
+		check(Status.rated_rise_text({"rated_rise_margin": invalid}) == "Rated RISE unavailable", "Malformed rated thrust became a reading")
+	check("+12.5 m/s²" in Status.rated_rise_text({"rated_rise_margin": 12.5}) and "-12.5 m/s²" in Status.rated_rise_text({"rated_rise_margin": -12.5}), "Rated thrust lost sign or units")
 	var position := {"latitude": PI / 6.0, "longitude": -PI / 4.0}
 	var position_before := position.duplicate(true)
 	check(Status.surface_position_text(position) == "Lat +30.00000° · Lon -45.00000°", "Surface position lost axis, sign or radian-to-degree units")

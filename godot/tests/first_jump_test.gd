@@ -52,6 +52,7 @@ func run() -> void:
 		view.jump_requested()
 		var state: Dictionary = owner.get_freedom_flight_state()
 		check(state.jump.phase == "spool" and state.jump.remaining_seconds == 3.0, "Production UI did not start real spool")
+		check(not state.has("rated_rise_margin"), "Active spool displayed a free-flight RISE estimate")
 		check("Spooling" in view.primary_status.text and not view.hud_scroll.visible, "Compact HUD lost the actual spool phase")
 		check(not state.jump.has("point") and not state.jump.has("nominal_arrival") and not state.jump.has("reference_planet"), "Native preview leaked unresolved target/hidden sample")
 		checkpoint(owner, directory.path_join("phase.json"), trace + ".leg%d.0.json" % leg)
@@ -66,6 +67,7 @@ func run() -> void:
 			if t in [1, 360, 361, 600]:
 				state = owner.get_freedom_flight_state()
 				check(FlightView.valid_state(state), "Current-world native projection invalid")
+				if state.jump.phase == "transit": check(not state.has("rated_rise_margin"), "Committed transit displayed local RISE/gravity")
 				check(owner.get_freedom_boarding_state().state == "seated" and owner.get_freedom_boarding_state().seated, "Jump lost actual seated pilot presentation")
 				view.state = state
 				view.update_view(0.0)

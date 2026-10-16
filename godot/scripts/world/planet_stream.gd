@@ -1,4 +1,5 @@
 extends Node3D
+signal terrain_material_created(material: ShaderMaterial)
 ## Main-thread GPU upload/scene ownership only. C++ supplies all mesh buffers.
 ## At most two complete covers resident during an atomic replacement.
 
@@ -330,6 +331,7 @@ func tick(delta: float, observer: Vector3, animate := true) -> void:
 				material.set_shader_parameter("planet_tile", true)
 				material.set_shader_parameter("tile_origin", Vector3(entry.anchor[0], entry.anchor[1], entry.anchor[2]))
 				instance.material_override = material
+				terrain_material_created.emit(material)
 				instance.visible = false
 				add_child(instance)
 				nodes[entry.id] = instance

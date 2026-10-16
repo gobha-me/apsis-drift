@@ -183,12 +183,13 @@ auto session_contract(const std::filesystem::path& path) -> void {
   hash(need(
       encode_freedom_recovery_document_json(need(live.recovery_document()))));
 }
-auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint)
-    -> void {
+auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
+              std::uint32_t optics = 1) -> void {
   auto selected = need(native_new_game(seed));
   auto voyage = std::get<FreedomKnowledgeSaveDocument>(selected.document);
   auto& initial =
       std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  initial.journey.voyage.flight.model.optics = optics;
   initial.journey.voyage.flight.origin.state.discoveries.push_back({{77}, 0});
   initial.journey.voyage.flight.origin.state.world_deltas.push_back(
       {"signal:77", SaveWorldDeltaKind::collected, 0});
@@ -227,6 +228,9 @@ auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint)
                 complete,
         "Pending save and duplicate completion/event converge exactly once");
   const auto& fresh = recovery_flight(complete.voyage);
+  check(source.model.optics == optics && fresh.model.optics == optics &&
+            recovery_flight(resumed.voyage).model.optics == optics,
+        "loss Continue and replacement preserve selected or historical optics");
   const auto& resources = recovery_knowledge(complete.voyage).voyage.resources;
   const auto& knowledge = recovery_knowledge(complete.voyage).knowledge;
   check(
@@ -504,6 +508,7 @@ auto main() -> int {
         for (bool stale : {false, true})
           provider(seed, cause, stale);
     }
+    provider(Seed{42}, FreedomLossCause::recoverable_destruction, false, 0);
     session_contract(path / "recovery.json");
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
