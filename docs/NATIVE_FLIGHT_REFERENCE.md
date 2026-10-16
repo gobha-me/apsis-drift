@@ -84,3 +84,11 @@ flight saves, which gain no actor or craft from reading it. Title and saved paus
 entry now cover the shipped Freedom commands under #180. Future equipment,
 environment hazards and rescue teaching belong with those providers when they
 ship; profile catalog and broader Settings remain #136/#135 work.
+
+2026-10-16, #613 exposes the actual C++ landing/liftoff aid note in compact
+flight. A genuine completion, stop or manual cancellation remains visible for
+six seconds of active presentation, below the latest command/refusal. Quiet
+pause, focus and menu reads freeze that brief result; Continue starts quietly
+without replaying an old outcome. Explicit cancellation also confirms the
+accepted action when C++ clears its note. This feedback adds no terrain queries,
+flight rules, save fields or input bindings.

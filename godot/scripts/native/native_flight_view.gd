@@ -24,6 +24,7 @@ var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 var observation_cue := Status.ObservationCue.new()
+var surface_aid_cue := Status.SurfaceAidCue.new()
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
 var impact_overlay: Control
 var impact_status: RichTextLabel
@@ -445,6 +446,7 @@ func activate() -> void:
 	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
 	activated = true
 	observation_cue.reset(state)
+	surface_aid_cue.reset(state)
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	near_viewport.world_3d = far_viewport.find_world_3d()
 	# Activation establishes the baseline; initial Control layout is not a resize.
@@ -750,11 +752,18 @@ func update_compact_hud() -> void:
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
 	# Quiet refreshes absorb command/load changes without inventing a finding.
 	observation_cue.observe(state, false, 0.0)
+	surface_aid_cue.observe(state, false, 0.0)
 	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
 		if not outcome.is_empty(): primary_status.text += "\n" + outcome
 	primary_status.tooltip_text = primary_status.text
+	if error.is_empty() and not surface_aid_cue.text().is_empty():
+		var aid_text := surface_aid_cue.text()
+		var aid_lines := primary_status.text.split("\n")
+		aid_lines.insert(1, aid_text.left(180) + ("…" if aid_text.length() > 180 else ""))
+		primary_status.text = "\n".join(aid_lines)
+		primary_status.tooltip_text += "\n" + aid_text
 	if save_status != null and not save_status.text.is_empty() and error.is_empty():
 		primary_status.tooltip_text += "\n" + save_status.text
 		var lines := primary_status.text.split("\n")
@@ -1160,11 +1169,13 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		if not controls_armed:
 			report_action_status("Release movement controls before changing modes or starting a maneuver.")
 			return
+	var before := state
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	var canceled_aid := command == "cancel_freedom_surface_maneuver" and surface_aid_cue.accept_cancel(before, state)
 	if command in ["begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		look_offset = Vector2.ZERO
 		pause_controls("On the surface. Release controls, then resume to walk." if surface_walking() else "Back in the seat. Release controls, then resume to fly.")
@@ -1180,6 +1191,10 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		report_action_status("Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)])
 	elif command.ends_with("port_approach"):
 		report_action_status(state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else ""))
+	elif canceled_aid:
+		report_action_status(surface_aid_cue.text())
+	elif command in ["request_freedom_landing", "liftoff_freedom_surface"] and state.surface.maneuver != "off":
+		report_action_status(("Landing aid requested." if command == "request_freedom_landing" else "Liftoff aid requested.") + (" Resume flight explicitly." if paused else ""))
 	elif command in ["request_freedom_landing", "stow_freedom_landing_gear", "liftoff_freedom_surface", "cancel_freedom_surface_maneuver"]:
 		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else ""))
 	else:
@@ -1355,6 +1370,7 @@ func _process(delta: float) -> void:
 		recovery_requested.emit()
 		return
 	observation_cue.observe(state, not paused and not save_dialog.visible and not surface_walking() and delta > 0.0, delta)
+	surface_aid_cue.observe(state, not paused and not save_dialog.visible and not surface_walking() and delta > 0.0, delta)
 	if not paused and not save_dialog.visible and not surface_walking():
 		if resolved.recenter:
 			look_offset = Vector2.ZERO

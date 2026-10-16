@@ -8,6 +8,7 @@ func check(value: bool, reason: String) -> void:
 func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
 	check_observation_cue()
+	check_surface_aid_cue()
 	for dimensions in [Vector2.ZERO, Vector2(-1, 720), Vector2(INF, 720), Vector2(1280, NAN)]:
 		check(Status.layout_bounds(dimensions, Vector2(1280, 720)) == Rect2() and Status.layout_bounds(Vector2(1280, 720), dimensions) == Rect2(), "Invalid HUD dimensions accepted")
 	check(Status.rated_rise_text({}).is_empty(), "Unavailable mode invented rated thrust")
@@ -216,3 +217,85 @@ func check_observation_cue() -> void:
 	cue.observe(observation_state(512), true, 1.0e30)
 	check(cue.text().is_empty(), "Large finite elapsed time escaped bounded expiry")
 	check(var_to_bytes(state) == original and var_to_bytes(improved) == improved_before, "Observation cue mutated authoritative input dictionaries")
+
+
+func aid_state(mode: Variant, note: Variant) -> Dictionary:
+	return {"surface": {"maneuver": mode, "note": note}, "surface_walk": {}}
+
+
+func check_surface_aid_cue() -> void:
+	var cue := Status.SurfaceAidCue.new()
+	var active := aid_state("landing", "Reducing descent with current thrust")
+	var finished := aid_state("off", "Landed on deployed gear")
+	var original := var_to_bytes(active)
+	var original_finished := var_to_bytes(finished)
+	check(cue.text().is_empty(), "Fresh aid cue invented an outcome")
+	cue.reset(finished)
+	cue.observe(finished, true, 0.1)
+	check(cue.text().is_empty(), "Load replayed an old aid result")
+	cue.reset(active)
+	check(cue.text() == active.surface.note, "Current landing aid lost its actual C++ note")
+	cue.observe(finished, true, 0.1)
+	check(cue.text() == finished.surface.note, "Active advance lost its actual terminal aid note")
+	cue.observe(finished, true, 5.5)
+	cue.observe(finished, false, 1000.0)
+	check(cue.text() == finished.surface.note, "Paused/menu read aged the aid result")
+	cue.observe(finished, true, 0.5)
+	check(cue.text().is_empty(), "Aid outcome exceeded six active seconds")
+	cue.observe(finished, true, 0.0)
+	check(cue.text().is_empty(), "Repeated terminal state replayed an expired outcome")
+	cue.reset(active)
+	cue.observe(finished, false, 0.0)
+	cue.observe(finished, true, 0.1)
+	check(cue.text().is_empty(), "Quiet pause/focus change deferred an outcome until Resume")
+	cue.reset(active)
+	cue.observe(finished, true, 0.0)
+	var lift := aid_state("liftoff", "Rising until deployed pads clear")
+	cue.observe(lift, false, 0.0)
+	check(cue.text() == lift.surface.note, "New liftoff retained another aid's terminal result")
+	cue.observe(aid_state("off", ""), true, 0.0)
+	check(cue.text().is_empty(), "An empty automatic stop invented a reason")
+	cue.reset(active)
+	check(cue.accept_cancel(active, aid_state("off", "")) and cue.text() == "Surface aid canceled.", "Accepted explicit cancellation lost its truthful fallback")
+	var cancellation := aid_state("off", "Surface aid canceled by manual control; gear remains deployed")
+	cue.reset(active)
+	check(cue.accept_cancel(active, cancellation) and cue.text() == cancellation.surface.note, "Explicit cancellation replaced actual C++ feedback")
+	cue.clear()
+	check(not cue.accept_cancel(finished, finished) and cue.text().is_empty(), "Inactive cancellation invented an aid outcome")
+	for bad in [null, true, false, 1, NAN, INF, -INF, [], {}, "unknown"]:
+		for field in ["maneuver", "note"]:
+			var malformed := active.duplicate(true)
+			malformed.surface[field] = bad
+			# A free-form string is valid note data, unlike an unknown mode.
+			if field == "note" and bad is String: continue
+			var before := var_to_bytes(malformed)
+			cue.reset(active)
+			cue.observe(finished, true, 0.0)
+			cue.observe(malformed, true, 0.0)
+			check(cue.text().is_empty() and var_to_bytes(malformed) == before, "Malformed aid field retained a cue or mutated input: " + field)
+			cue.observe(finished, true, 0.0)
+			check(cue.text().is_empty(), "Malformed aid input retained a transition baseline")
+	for malformed in [{}, {"surface": null}, {"surface": []}, {"surface": {}}, aid_state("off", "x".repeat(513)), {"surface": active.surface, "surface_walk": {"eye_position": Vector3.ZERO}}, {"surface": active.surface, "surface_walk": null}]:
+		cue.reset(active)
+		cue.observe(finished, true, 0.0)
+		cue.observe(malformed, false, 0.0)
+		check(cue.text().is_empty(), "Missing, oversized or outside-actor aid packet retained feedback")
+	for bad_delta in [-0.1, NAN, INF, -INF]:
+		for advance in [true, false]:
+			cue.reset(active)
+			cue.observe(finished, true, 0.0)
+			cue.observe(finished, advance, bad_delta)
+			check(cue.text().is_empty(), "Invalid aid elapsed time retained a result")
+			cue.observe(finished, true, 0.0)
+			check(cue.text().is_empty(), "Invalid aid elapsed time retained its transition baseline")
+	var longest := aid_state("liftoff", "x".repeat(512))
+	cue.reset(longest)
+	check(cue.text() == longest.surface.note, "Inclusive aid note bound refused valid text")
+	cue.observe(finished, true, 0.0)
+	cue.observe(finished, true, 1.0e30)
+	check(cue.text().is_empty(), "Large finite aid time escaped bounded expiry")
+	cue.reset(active)
+	cue.observe(finished, true, 0.0)
+	cue.reset(finished)
+	check(cue.text().is_empty(), "Explicit selection reset retained another view's outcome")
+	check(var_to_bytes(active) == original and var_to_bytes(finished) == original_finished, "Aid cue mutated authoritative dictionaries")

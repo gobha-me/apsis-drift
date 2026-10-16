@@ -53,6 +53,38 @@ func check_last_gear_gap(shell: Control, owner: Variant, source: String, assets:
 	check(not view.state.surface.gear_clearance.available, "Same-tick stow/redeploy revived an old gear sample")
 	check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Gear-gap probe did not restore canonical surface source")
 
+
+func check_surface_aid_feedback(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
+	var view: Control = shell.current_view
+	install_recorded_input(view)
+	if not resume(view): return
+	view.port_command("request_freedom_landing")
+	check(view.state.surface.maneuver == "landing" and view.state.surface.note in view.primary_status.text and not view.hud_scroll.visible, "Actual landing aid note requires opening the paused instruments")
+	# Actual manual input, rather than a synthetic outcome packet, cancels aid.
+	view.player_input.axes[6] = 1.0
+	view._process(1.0 / 120.0)
+	view.player_input.axes[6] = 0.0
+	var canceled: Dictionary = owner.get_freedom_flight_state()
+	var note: String = canceled.surface.note
+	check(view.error.is_empty() and canceled.surface.maneuver == "off" and "canceled by manual control" in note and note in view.primary_status.text, "Actual manual-input aid handoff disappeared from compact flight")
+	var path := output.path_join("surface-aid-feedback.json")
+	check(owner.save_freedom_as(path), "Aid feedback control save refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	# Liftoff while airborne is a genuine refusal, with no physical mutation.
+	view.port_command("liftoff_freedom_surface")
+	var refusal: String = view.save_status.text.left(180)
+	check(not refusal.is_empty() and refusal in view.primary_status.text and view.primary_status.text.find(refusal) < view.primary_status.text.find(note) and owner.get_freedom_flight_state() == canceled and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Aid result hid command refusal or changed the authoritative voyage")
+	for repeat in 3: view.update_view(0.0)
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Quiet aid feedback reads changed a complete save")
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view._process(0.125)
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(view.paused and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Focus handling advanced flight while reviewing aid feedback")
+	check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Aid feedback probe did not restore canonical surface source")
+	view = shell.current_view
+	for repeat in 3: view.update_view(0.0)
+	check(view.paused and not note in view.primary_status.text, "Quiet Continue replayed another view's aid result")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -77,6 +109,8 @@ func run() -> void:
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK and shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Near-ground source did not stage: " + shell.error): shell.free(); quit(1); return
 	check_last_gear_gap(shell, owner, args[0].path_join("source.json"), args[1], args[2])
 	if failed: shell.free(); quit(1); return
+	check_surface_aid_feedback(shell, owner, args[0].path_join("source.json"), args[1], args[2])
+	if failed: shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	install_recorded_input(view)
 	var model_id: int = view.staged_model.get_instance_id()
@@ -98,8 +132,12 @@ func run() -> void:
 			var count := mini(remaining, 15)
 			view._process(float(count) / 120.0)
 			check(view.error.is_empty(), "Native surface step refused: " + view.error)
+			if view.state.surface.maneuver in ["landing", "liftoff"]:
+				check(view.state.surface.note in view.primary_status.text and not view.hud_scroll.visible, "Active C++ aid detail disappeared from compact flight")
 			remaining -= count
 		var state: Dictionary = owner.get_freedom_flight_state()
+		if row.name in ["landed", "airborne"]:
+			check(state.surface.maneuver == "off" and view.surface_aid_cue.text() == state.surface.note and state.surface.note in view.primary_status.text, "Actual aid completion did not briefly retain its compact result: " + row.name)
 		var path: String = args[2].path_join(row.file)
 		check(state.checksum == row.checksum and owner.save_freedom_as(path) and FileAccess.get_sha256(path) == FileAccess.get_sha256(args[0].path_join(row.file)), "Full surface Save differs at " + row.name)
 		check(view.staged_model.get_instance_id() == model_id and view.staged_model.replacement_nodes == roots and view.staged_model.valid_current_pose(), "Surface lifecycle replaced or damaged the craft model")
@@ -118,6 +156,7 @@ func run() -> void:
 			check(second.select_start(second_owner, {"mode": "continue", "value": path, "assets": args[1]}), "Landed Continue did not stage: " + second.error)
 			if second.current_view != null:
 				check(second.current_view.paused and second.current_view.state.surface.landed and second.current_view.state.surface.gear_deployed and second.current_view.staged_model.valid_current_pose(), "Landed Continue lost constraint, gear or paused readiness")
+				check(second.current_view.surface_aid_cue.text().is_empty(), "Quiet landed Continue invented an aid completion notification")
 			second.free()
 		if rendered and not failed:
 			await capture_phase(view, owner, args[2], {"label": row.name}, captures)
