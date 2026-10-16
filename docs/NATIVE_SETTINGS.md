@@ -7,11 +7,13 @@ opens this pending screen from its Settings action. All routes use the existing
 version-4 controls provider and
 user://freedom-controls-v4.json; preferences stay outside C++ world/save state.
 
-The screen offers stick/trigger dead zone, response curve, flight head-look
-speed, vertical flight head-look inversion and automatic/Xbox/PlayStation text
-prompts. Station walking consumes dead zone and curve; saved flight consumes
-all five. Ground keys and station look speed/inversion retain their documented
-fixed behavior. Flight remapping remains in the paused flight controls.
+The screen offers stick/trigger dead zone, response curve, look speed, vertical
+look inversion and automatic/Xbox/PlayStation text prompts. Look speed and
+inversion apply to flight look and to on-foot look keys/right stick, both on the
+station and outside the craft. Walking retains its default stick rate; speed
+scales it. Walking stick movement and look keep per-axis dead zone/curve shaping.
+Mouse look keeps its fixed rate. Ground movement keys remain fixed; flight
+remapping remains in the paused flight controls.
 
 Edits and **Restore Defaults (pending)** change the pending choices only.
 **Apply** validates and writes before adopting them, preserves supported unknown

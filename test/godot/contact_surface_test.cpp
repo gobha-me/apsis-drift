@@ -1,6 +1,7 @@
 #include "../../src/godot/contact_geometry_internal.hpp"
 #include "apsis_drift/godot/contact_surface.hpp"
 #include "apsis_drift/godot/streaming.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 
 #include <bit>
 #include <iostream>
@@ -604,10 +605,11 @@ auto owned_contract() -> void {
         "experimental owned procedural golden changed");
 }
 auto selected_physical_contract() -> void {
-  check(!saved_contact_recipe(0) && !saved_contact_recipe(3) &&
+  check(!saved_contact_recipe(0) && !saved_contact_recipe(4) &&
             !saved_contact_recipe(std::numeric_limits<std::uint32_t>::max()) &&
             saved_contact_recipe(1) == kExperimentalSavedContactSurface &&
-            saved_contact_recipe(2) == kLocalDetailSavedContactSurface,
+            saved_contact_recipe(2) == kLocalDetailSavedContactSurface &&
+            saved_contact_recipe(3) == kSeaDatumSavedContactSurface,
         "terrain policy mapping admitted an unsupported selection");
   const auto owner = require(generate_physical_origin_system(Seed{42}, 2));
   const auto& planet =
@@ -692,11 +694,139 @@ auto selected_physical_contract() -> void {
     }
   }
 }
+auto sea_datum_helper_contract() -> void {
+  for (const auto policy : {1U, 2U, 3U}) {
+    check(valid_terrain_surface_policy(policy) &&
+              require(terrain_surface_raw_recipe(policy)) ==
+                  (policy == 3 ? 2U : policy),
+          "sea-top policy did not retain its selected raw terrain recipe");
+    for (const auto height : {-123.0, -0.0, 0.0, 123.0}) {
+      const auto selected =
+          require(select_terrain_sea_surface(policy, height, true));
+      if (policy < 3)
+        check(std::bit_cast<std::uint64_t>(selected.elevation_metres) ==
+                      std::bit_cast<std::uint64_t>(height) &&
+                  !selected.wet_datum,
+              "legacy height or signed-zero arithmetic changed");
+      else
+        check(selected.elevation_metres == (height > 0 ? height : 0.0) &&
+                  !std::signbit(selected.elevation_metres) &&
+                  selected.wet_datum == (height <= 0),
+              "sea-top height clamp or raw datum flag is incorrect");
+    }
+    for (const auto height : {-123.0, -0.0, 0.0, 123.0}) {
+      const auto dry =
+          require(select_terrain_sea_surface(policy, height, false));
+      check(std::bit_cast<std::uint64_t>(dry.elevation_metres) ==
+                    std::bit_cast<std::uint64_t>(height) &&
+                !dry.wet_datum,
+            "zero-water descriptor acquired sea geometry or material from "
+            "relief");
+    }
+    for (const auto height : {std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::infinity(),
+                              -std::numeric_limits<double>::infinity()}) {
+      const auto result = select_terrain_sea_surface(policy, height, true);
+      check(!result &&
+                result.error() == TerrainSeaSurfaceError::non_finite_height,
+            "nonfinite raw height entered selected geometry");
+    }
+  }
+  for (const auto policy :
+       {0U, 4U, std::numeric_limits<std::uint32_t>::max()}) {
+    const auto raw = terrain_surface_raw_recipe(policy);
+    const auto selected = select_terrain_sea_surface(policy, 12, true);
+    check(!valid_terrain_surface_policy(policy) && !raw && !selected &&
+              raw.error() == TerrainSeaSurfaceError::unsupported_policy &&
+              selected.error() == TerrainSeaSurfaceError::unsupported_policy,
+          "invalid policy entered raw or selected geometry");
+  }
+  for (unsigned mask = 0; mask < 8; ++mask) {
+    const auto kind =
+        require(classify_terrain_datum_mask(static_cast<std::uint8_t>(mask)));
+    check(kind == (mask == 0   ? TerrainDatumClass::dry
+                   : mask == 7 ? TerrainDatumClass::water
+                               : TerrainDatumClass::shoreline),
+          "all-wet or mixed raw datum mask was misclassified");
+  }
+  for (const auto mask : {8U, 128U, 255U}) {
+    const auto kind =
+        classify_terrain_datum_mask(static_cast<std::uint8_t>(mask));
+    check(!kind && kind.error() == TerrainSeaSurfaceError::invalid_datum_mask,
+          "malformed raw datum mask accepted");
+  }
+}
+auto sea_datum_geometry_contract() -> void {
+  using apsis_drift::godot_spike::detail::build_selected_contact_triangle;
+  using apsis_drift::godot_spike::detail::query_selected_contact_surface;
+  const auto dry_owner = require(generate_physical_origin_system(Seed{42}, 2));
+  const auto& dry_planet =
+      dry_owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  auto dry_cache = require(TerrainTileCache::create(4));
+  // Existing landed-craft fixture: no site or seed search for this increment.
+  const ContactTriangleId dry_id{
+      dry_planet.id, CubeFace::positive_x, 4000, 4000, 12, 13, 0};
+  const auto before = require(build_selected_contact_triangle(
+      dry_owner, dry_planet, kLocalDetailSavedContactSurface, dry_id,
+      dry_cache));
+  const auto after = require(build_selected_contact_triangle(
+      dry_owner, dry_planet, kSeaDatumSavedContactSurface, dry_id, dry_cache));
+  check(before.datum_mask == 0 && after.datum_mask == 0 &&
+            before.vertices == after.vertices &&
+            before.outward_normal == after.outward_normal,
+        "fully dry finest top changed when sea-datum policy was selected");
+  error(build_selected_contact_triangle(
+            dry_planet, kSeaDatumSavedContactSurface, dry_id, dry_cache),
+        ContactSurfaceError::unsupported_recipe,
+        "descriptor-only path admitted owned sea-datum geometry");
+
+  const auto wet_owner = require(generate_physical_origin_system(Seed{4}));
+  const auto& wet_planet =
+      wet_owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  auto wet_cache = require(TerrainTileCache::create(4));
+  // Exact existing terrain-touchdown water fixture (trial10), not a new search.
+  const ContactTriangleId wet_id{
+      wet_planet.id, CubeFace::positive_x, 4000, 2000, 12, 13, 0};
+  const auto basin = require(build_selected_contact_triangle(
+      wet_owner, wet_planet, kLocalDetailSavedContactSurface, wet_id,
+      wet_cache));
+  const auto sea = require(build_selected_contact_triangle(
+      wet_owner, wet_planet, kSeaDatumSavedContactSurface, wet_id, wet_cache));
+  const double radius = wet_planet.radius.value * 1000.0;
+  check(sea.datum_mask == 7 && require(classify_terrain_datum_mask(
+                                   sea.datum_mask)) == TerrainDatumClass::water,
+        "known submerged basin did not retain all three raw wet flags");
+  for (unsigned i = 0; i < 3; ++i)
+    check(length(basin.vertices[i]) < radius &&
+              std::abs(length(sea.vertices[i]) - radius) < 1e-8,
+          "wet selected vertex was not raised from the basin to sea datum");
+  const auto ray = cell_direction(wet_id, .3, .3);
+  const auto hit = require(query_selected_contact_surface(
+      wet_owner, wet_planet, kSeaDatumSavedContactSurface, ray, wet_cache));
+  check(hit.triangle == sea && hit.radial_distance_metres < radius &&
+            radius - hit.radial_distance_metres < .01,
+        "radial first surface ignored the actual sea facet's chord sag");
+  geometric_contract(hit, ray);
+  check(require(query_selected_contact_surface(wet_owner, wet_planet,
+                                               kSeaDatumSavedContactSurface,
+                                               ray, wet_cache)) == hit,
+        "owned sea-top query changed on repeat");
+  auto untouched = require(TerrainTileCache::create(1));
+  error(query_selected_contact_surface(
+            wet_owner, wet_planet, kSeaDatumSavedContactSurface,
+            {std::numeric_limits<double>::quiet_NaN(), 0, 0}, untouched),
+        ContactSurfaceError::invalid_direction,
+        "owned sea-top radial query accepted a nonfinite direction");
+  check(untouched.size() == 0,
+        "invalid sea-top radial query touched the terrain cache");
+}
 } // namespace
 
 auto main() -> int {
   try {
     const auto planet = generate_planet_descriptor(Seed{42});
+    sea_datum_helper_contract();
+    sea_datum_geometry_contract();
     selected_physical_contract();
     invalid_contract(planet);
     ownership_contract(planet);

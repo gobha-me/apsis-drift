@@ -264,7 +264,7 @@ func check_morph_lifecycle(accepted: Node3D, owner: Variant) -> void:
 		terrain.free()
 
 func check_morph_refusals(accepted: Node3D, owner: Variant) -> void:
-	for damage in ["length", "nonfinite", "ancestry", "owner", "draw-roster"]:
+	for damage in ["length", "nonfinite", "wetness", "ancestry", "owner", "draw-roster"]:
 		var fixture := morph_fixture(accepted, owner, true)
 		var terrain: Node3D = fixture.terrain
 		var fake: MorphBridge = fixture.bridge
@@ -277,6 +277,10 @@ func check_morph_refusals(accepted: Node3D, owner: Variant) -> void:
 				var broken: PackedFloat32Array = fake.batch.morph.entries[0].position_elevation.duplicate()
 				broken[0] = NAN
 				fake.batch.morph.entries[0].position_elevation = broken
+			"wetness":
+				var broken: PackedFloat32Array = fake.batch.morph.entries[0].normals.duplicate()
+				broken[3] = 1.01
+				fake.batch.morph.entries[0].normals = broken
 			"ancestry": fake.batch.morph.entries[0].coarse_id = "1:10:513:511"
 			"owner": fake.batch.identity.generation = "999999"
 			"draw-roster": fake.batch.morph.draw_ids.pop_back()
@@ -380,19 +384,19 @@ func run() -> void:
 		quit(1)
 		return
 	var pending: Dictionary = owner.get_pending_freedom_start()
-	check(pending.flight_state.get("terrain_policy") == 2 and owner.get_stream_identity().is_empty(), "Pending New Game did not keep selected terrain off the active world")
+	check(pending.flight_state.get("terrain_policy") == 3 and owner.get_stream_identity().is_empty(), "Pending New Game did not keep selected terrain off the active world")
 	if not check(owner.commit_pending_freedom_start(pending.candidate_id), "New Game commit refused"):
 		quit(1)
 		return
 	var first_identity: Dictionary = owner.get_stream_identity()
 	var first_state: Dictionary = owner.get_freedom_flight_state()
-	check(StreamView.valid_identity(first_identity) and first_identity.terrain_policy == 2 and first_identity.system_id == first_state.system_id and first_identity.body_id == first_state.planet_id, "Selected stream is not owned by the saved world")
+	check(StreamView.valid_identity(first_identity) and first_identity.terrain_policy == 3 and first_identity.system_id == first_state.system_id and first_identity.body_id == first_state.planet_id, "Selected stream is not owned by the saved world")
 	for damage in ["version", "generation", "policy", "body", "extra"]:
 		var invalid: Dictionary = first_identity.duplicate(true)
 		match damage:
 			"version": invalid.schema_version = 2
 			"generation": invalid.generation = "18446744073709551616"
-			"policy": invalid.terrain_policy = 3
+			"policy": invalid.terrain_policy = 4
 			"body": invalid.body_version = 999
 			"extra": invalid["unowned"] = true
 		check(not StreamView.valid_identity(invalid), "Malformed stream identity accepted: " + damage)
@@ -400,7 +404,7 @@ func run() -> void:
 	check(owner.save_freedom_as(source), "Selected terrain Save As refused")
 	var source_hash := FileAccess.get_sha256(source)
 	var source_text := FileAccess.get_file_as_string(source)
-	check(source_text.contains('"terrain_policy": 2'), "Selected terrain was not explicit in saved bytes")
+	check(source_text.contains('"terrain_policy": 3'), "Selected terrain was not explicit in saved bytes")
 	# Bad recipe metadata must refuse before replacing the active C++ world,
 	# stream generation or its presentation cover.
 	var damaged := args[1].path_join("unsupported-policy.json")
@@ -408,7 +412,7 @@ func run() -> void:
 	if not check(file != null, "Invalid selection fixture cannot be written"):
 		quit(1)
 		return
-	file.store_string(source_text.replace('"terrain_policy": 2', '"terrain_policy": 3'))
+	file.store_string(source_text.replace('"terrain_policy": 3', '"terrain_policy": 4'))
 	file.close()
 	check(not owner.stage_freedom_continue(damaged) and owner.get_pending_freedom_start().is_empty(), "Unknown saved terrain policy staged")
 	check(owner.get_stream_identity() == first_identity and owner.get_freedom_flight_state() == first_state and FileAccess.get_sha256(source) == source_hash, "Refused selection changed active terrain/state/source bytes")
@@ -458,7 +462,7 @@ func run() -> void:
 		quit(1)
 		return
 	var restored: Dictionary = owner.get_stream_identity()
-	check(restored.terrain_policy == 2 and restored.generation != legacy_identity.generation and owner.get_freedom_flight_state().terrain_policy == 2 and FileAccess.get_sha256(source) == source_hash, "Selected Continue lost its saved terrain choice")
+	check(restored.terrain_policy == 3 and restored.generation != legacy_identity.generation and owner.get_freedom_flight_state().terrain_policy == 3 and FileAccess.get_sha256(source) == source_hash, "Selected Continue lost its saved terrain choice")
 	if not await wait_ready(terrain, restored):
 		terrain.free()
 		quit(1)

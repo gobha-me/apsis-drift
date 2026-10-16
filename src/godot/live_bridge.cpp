@@ -11,6 +11,7 @@
 #include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
+#include "apsis_drift/planet_surface_appearance.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
 #include <charconv>
@@ -1981,6 +1982,25 @@ class FreedomBridge : public godot::RefCounted {
       lighting["sea_density"] = profile.sea_level_density_kg_per_cubic_metre;
       lighting["atmosphere_edge"] = profile.space_boundary_altitude_metres;
       result["lighting"] = lighting;
+      // Visible material response only: no palette identity, climate envelope,
+      // seed or physical ice/water classification is disclosed by this packet.
+      const auto appearance =
+          require(resolve_planet_surface_appearance(view.planet));
+      godot::Dictionary surface_appearance;
+      surface_appearance["version"] =
+          static_cast<std::int64_t>(appearance.version);
+      surface_appearance["disclosure"] = std::int64_t{1};
+      surface_appearance["system_id"] = result["system_id"];
+      surface_appearance["planet_id"] = result["planet_id"];
+      surface_appearance["albedo_scale_basis_points"] =
+          static_cast<std::int64_t>(appearance.albedo_scale_basis_points);
+      surface_appearance["detail_contrast_basis_points"] =
+          static_cast<std::int64_t>(appearance.detail_contrast_basis_points);
+      surface_appearance["roughness_basis_points"] =
+          static_cast<std::int64_t>(appearance.roughness_basis_points);
+      surface_appearance["specular_basis_points"] =
+          static_cast<std::int64_t>(appearance.specular_basis_points);
+      result["surface_appearance"] = surface_appearance;
       if (document.model.optics) {
         const auto recipe = require(generate_planet_optics_recipe(
             session.system(), view.planet.id, document.model.optics));
@@ -2906,7 +2926,10 @@ class FreedomBridge : public godot::RefCounted {
                                static_cast<float>(n.z)});
             colors.push_back(
                 {c.red / 255.0f, c.green / 255.0f, c.blue / 255.0f, 1});
-            uv.push_back({static_cast<float>(tile->elevations[i]), 0});
+            uv.push_back({static_cast<float>(tile->elevations[i]),
+                          tile->wetness.empty()
+                              ? 0.0f
+                              : static_cast<float>(tile->wetness[i])});
           }
           for (auto i : tile->indices)
             indices.push_back(i);
@@ -2937,7 +2960,9 @@ class FreedomBridge : public godot::RefCounted {
           if (endpoint.coarse_vertices.size() != count ||
               endpoint.coarse_normals.size() != count ||
               endpoint.coarse_colors.size() != count ||
-              endpoint.coarse_elevations.size() != count)
+              endpoint.coarse_elevations.size() != count ||
+              (!endpoint.coarse_wetness.empty() &&
+               endpoint.coarse_wetness.size() != count))
             throw std::invalid_argument("incomplete terrain morph attributes");
           godot::PackedFloat32Array positions, normals, colors;
           for (std::size_t i = 0; i < count; ++i) {
@@ -2947,7 +2972,10 @@ class FreedomBridge : public godot::RefCounted {
             for (const auto value : {position.x, position.y, position.z,
                                      endpoint.coarse_elevations[i]})
               positions.push_back(as_float(value));
-            for (const auto value : {normal.x, normal.y, normal.z, 0.0})
+            for (const auto value :
+                 {normal.x, normal.y, normal.z,
+                  endpoint.coarse_wetness.empty() ? 0.0
+                                                  : endpoint.coarse_wetness[i]})
               normals.push_back(as_float(value));
             for (const auto value : {color[0], color[1], color[2], 1.0})
               colors.push_back(as_float(value));

@@ -270,7 +270,7 @@ auto native_new_game(Seed universe_seed)
   if (!document)
     return std::unexpected{"New Game rejected: " + document.error().detail};
   auto& flight = document->journey.voyage.flight;
-  flight.model.terrain_policy = kFreedomLocalDetailTerrainPolicy;
+  flight.model.terrain_policy = kFreedomSeaDatumTerrainPolicy;
   flight.model.optics = kPlanetOpticsVersion;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};

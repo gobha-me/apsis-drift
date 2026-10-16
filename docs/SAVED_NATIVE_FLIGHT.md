@@ -1,7 +1,8 @@
 # Ordinary saved physical flight
 
 The later [selected terrain integration](SELECTED_NATIVE_TERRAIN.md) persists
-new-game policy2 in formats 31/32/33. Historical flight 18/26 and its nested
+policy2 in formats 31/32/33. New Game now selects the triangulated sea-datum
+policy3 in explicit optics1 envelopes39/40/41; see the selected-terrain contract. Historical flight 18/26 and its nested
 journeys retain their original policy1; terrain/contact selection follows the
 validated C++ save owner.
 

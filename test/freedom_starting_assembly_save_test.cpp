@@ -175,8 +175,7 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
             .voyage.voyage.base);
     const auto old = require(make_freedom_journey_new_game_document(seed));
     auto expected = old;
-    expected.voyage.flight.model.terrain_policy =
-        kFreedomLocalDetailTerrainPolicy;
+    expected.voyage.flight.model.terrain_policy = kFreedomSeaDatumTerrainPolicy;
     expected.voyage.flight.model.optics = 1;
     check(
         old.voyage.flight.model.terrain_policy == kFreedomLegacyTerrainPolicy &&

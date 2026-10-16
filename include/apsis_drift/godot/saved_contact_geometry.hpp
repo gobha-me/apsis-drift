@@ -11,6 +11,9 @@ inline constexpr ContactSurfaceRecipe kExperimentalSavedContactSurface{
 // Explicit physical local-detail height on the same finest top topology.
 inline constexpr ContactSurfaceRecipe kLocalDetailSavedContactSurface{
     3, 1, 8, 0, 13, 32, 1};
+// Recipe2 field clamped at sea datum on the unchanged finest top topology.
+inline constexpr ContactSurfaceRecipe kSeaDatumSavedContactSurface{4,  1,  8, 0,
+                                                                   13, 32, 1};
 [[nodiscard]] auto saved_contact_recipe(std::uint32_t terrain_policy)
     -> std::optional<ContactSurfaceRecipe>;
 

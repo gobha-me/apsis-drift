@@ -1,4 +1,5 @@
 #include "apsis_drift/terrain_touchdown.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 #include "terrain_touchdown_internal.hpp"
 
 #include <algorithm>
@@ -48,7 +49,11 @@ auto terrain_pad_observation(const PlanetDescriptor& planet,
   const auto& id = triangle.id;
   if (patch.version != kExperimentalContactPatchVersion ||
       (triangle.recipe != kExperimentalSavedContactSurface &&
-       triangle.recipe != kLocalDetailSavedContactSurface) ||
+       triangle.recipe != kLocalDetailSavedContactSurface &&
+       triangle.recipe != kSeaDatumSavedContactSurface) ||
+      (triangle.recipe == kSeaDatumSavedContactSurface
+           ? !classify_terrain_datum_mask(triangle.datum_mask).has_value()
+           : triangle.datum_mask != 0) ||
       id.planet != planet.id || static_cast<unsigned>(id.face) > 5 ||
       id.tile_x >= 8192 || id.tile_y >= 8192 || id.cell_x >= 32 ||
       id.cell_y >= 32 || id.half >= 2 || patch.support_index >= 4 ||
@@ -109,11 +114,17 @@ auto terrain_pad_observation(const PlanetDescriptor& planet,
   const auto radius = static_cast<double>(planet.radius.value) * 1000;
   TouchdownSurface surface = TouchdownSurface::unsupported;
   const auto radial = scale(anchor, 1 / length(anchor));
-  if (std::all_of(triangle.vertices.begin(), triangle.vertices.end(),
-                  [&](auto p) {
-                    return dot(radial, vector(p)) >
-                           radius + kContactPatchAllowanceMetres;
-                  })) {
+  if (triangle.recipe == kSeaDatumSavedContactSurface &&
+      triangle.datum_mask != 0) {
+    // Datum vertices form a chord, so their radial distances cannot infer
+    // wetness. Mixed raw shoreline facets never certify dry support.
+    surface = triangle.datum_mask == 7 ? TouchdownSurface::water
+                                       : TouchdownSurface::unsupported;
+  } else if (std::all_of(triangle.vertices.begin(), triangle.vertices.end(),
+                         [&](auto p) {
+                           return dot(radial, vector(p)) >
+                                  radius + kContactPatchAllowanceMetres;
+                         })) {
     surface = TouchdownSurface::solid;
   } else if (std::all_of(triangle.vertices.begin(), triangle.vertices.end(),
                          [&](auto p) {

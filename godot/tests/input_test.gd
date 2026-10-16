@@ -28,6 +28,7 @@ func check_initial_controller() -> void:
 func run() -> void:
 	check_initial_controller()
 	check_foot_keyboard_look()
+	check_foot_controller_look()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -346,4 +347,32 @@ func check_foot_keyboard_look() -> void:
 		physical_key(item[0], true)
 		check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral(), "Fixed walking/boarding key also looked or blocked look-neutral: " + str(item[0]))
 		physical_key(item[0], false)
+	controls.free()
+
+
+func check_foot_controller_look() -> void:
+	var controls := Controls.new()
+	controls.persist = false
+	controls.initial_device = 0
+	root.add_child(controls)
+	controls.set_enabled(false)
+	controls.set_process_input(false)
+	var bindings: Dictionary = controls.bindings.duplicate(true)
+	joy_axis(JOY_AXIS_RIGHT_X, 1.0)
+	joy_axis(JOY_AXIS_RIGHT_Y, -1.0)
+	check(controls.foot_controller_look(controls.device).is_equal_approx(Vector2(1.8, -1.8)), "Default on-foot stick rate or per-axis diagonal shaping changed")
+	check(controls.apply_preferences({"deadzone": 0.35, "curve": 2.0, "look_speed": 2.4, "invert_look": true, "prompts": 0}), "On-foot stick preferences refused")
+	check(controls.foot_controller_look(controls.device).is_equal_approx(Vector2(2.7, 2.7)), "On-foot stick ignored sensitivity or vertical-only inversion")
+	joy_axis(JOY_AXIS_RIGHT_X, 0.675)
+	joy_axis(JOY_AXIS_RIGHT_Y, -0.35)
+	check(controls.foot_controller_look(controls.device).is_equal_approx(Vector2(0.675, 0)), "On-foot stick lost configured per-axis deadzone/curve")
+	joy_axis(JOY_AXIS_RIGHT_X, 0.0)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.0)
+	joy_axis(JOY_AXIS_RIGHT_X, 1.0, 7)
+	joy_axis(JOY_AXIS_RIGHT_Y, -1.0, 7)
+	check(controls.foot_controller_look(controls.device) == Vector2.ZERO, "Foreign pad entered on-foot stick look")
+	controls.device = -1
+	check(controls.foot_controller_look(controls.device) == Vector2.ZERO and controls.needs_neutral and not controls.enabled and controls.bindings == bindings, "Read-only stick look armed input or changed mappings")
+	joy_axis(JOY_AXIS_RIGHT_X, 0.0, 7)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.0, 7)
 	controls.free()

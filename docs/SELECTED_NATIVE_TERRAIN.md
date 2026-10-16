@@ -7,14 +7,15 @@ policy; Godot presents the selected geometry rather than adding shader-only
 displacement. See [local-detail sampling](TERRAIN_LOCAL_DETAIL.md) and the
 [planetary scale contract](PLANETARY_SCALE_CONTRACT.md).
 
-## Two explicit policies
+## Explicit terrain policies
 
 | Saved flight policy | Physical height and top geometry |
 | --- | --- |
 | `1`, historical | Existing terrain-v1 sampling and saved contact recipe2; unchanged legacy arithmetic |
-| `2`, new native game | Physical local-detail recipe2 over unchanged terrain-v1 source-LOD8 vertices, with saved contact recipe3 |
+| `2`, selected local detail | Physical local-detail recipe2 over unchanged terrain-v1 source-LOD8 vertices, with saved contact recipe3 |
+| `3`, new native game | Recipe2 heights raised to the sea datum when submerged, raw wetness retained, saved contact recipe4 |
 
-Both keep terrain tile generator1 and its original source cache/checksums.
+All keep terrain tile generator1 and its original source cache/checksums.
 Policy2 adds continuous macro interpolation and independently seeded local
 relief; it does not reinterpret the legacy integer tiles or generator-version
 tuple. The complete physical catalog/body owner distinguishes authored Origin
@@ -43,13 +44,13 @@ a mandatory ninth model field, `terrain_policy: 2`, in these explicit formats:
 Docking/journey flatten the flight envelope, so their decoders restore the
 matching selected lower layer. Formats 31/32/33 can retain the explicit active
 world owner; they do not invent another universe or clock. New Game selects
-policy2. Continue preserves the saved selection without silently upgrading old
+policy3 in the explicit optics1 envelopes below. Continue preserves the saved selection without silently upgrading old
 terrain, relocating a craft or changing its landed anchor.
 
 Outer starting-assembly 21, boarding 22, surface 23, resources 24, knowledge 25,
 travel 27, recovery 29 and suited-walking 30 wrappers retain their existing format
-numbers. Their complete nested flight/docking/journey stores the selected
-31/32/33 envelope. A landed anchor's terrain policy must agree with its validated
+numbers. Their complete nested flight/docking/journey stores its matching
+selected envelope: 31/32/33 for local detail, or 39/40/41 with optics1. A landed anchor's terrain policy must agree with its validated
 base flight; its selected contact recipe is revalidated before continuation.
 
 Unknown policy, missing or malformed selected field, disagreement between
@@ -60,19 +61,99 @@ session; rejected writes preserve existing destination bytes. See the
 [save layers](FREEDOM_SAVE_FORMAT.md), [saved flight](SAVED_NATIVE_FLIGHT.md) and
 [landed lifecycle](LANDED_CRAFT.md).
 
+## Triangulated ocean top
+
+Policy3 is available only in explicit optics1 flight/docking/journey envelopes
+39/40/41. New Game selects it; historical optical policies1/2 and all earlier
+formats retain their exact arithmetic and accepted policies. Recovery, travel,
+walking and nested wrappers preserve the selected owner and policy.
+
+The underlying terrain remains recipe2. A shared C++ operation raises raw
+sub-datum TOP vertices to zero and retains their raw wetness when the C++
+descriptor has nonzero water coverage. Zero-water bodies retain negative relief
+as dry geometry/material; the existing conservative support checks still apply. Streamed meshes,
+contact recipe4 and hull clearance use those vertices and the existing finest
+topology. Fully dry triangles keep their original vertices and normals. Mixed
+shoreline triangles change when submerged vertices rise; preserving their dry
+portions exactly would require additional clipping topology.
+
+These are actual triangulated chords, with interiors slightly below the datum,
+not an exact spherical shell. Radial first-surface queries intersect the actual
+facet. Reported reference altitude remains radius-relative; it is not a terrain
+clearance. No radius inflation or tolerance relaxation conceals chord sag.
+
+Raw triangle wetness classifies all-dry, all-wet and mixed facets. Wet facets
+refuse landing, and mixed facets remain unsupported for landing/walking. Existing
+dry support/slope checks remain required. Ordinary flight still has no terrain
+floor guard; the optional impact prototype retains its explicit refusal of
+unsupported wet/shore intersections. There is no supported water-entry response,
+swimming, buoyancy, waves or phase simulation.
+
+C++ supplies wetness with the terrain buffers; native shading blends bounded
+water albedo/roughness/specular response. Coarse wetness interpolates through the
+same morph correspondence as geometry. Invalid base attributes and morph weights
+refuse before upload. Material blending across a mixed facet grants no support
+or survey knowledge, and pale terrain remains styling rather than physical ice.
+
+The bounded software comparison holds one existing wet patch at an initialized
+external viewpoint, with the same pose, clock and actual daylight. The sea top
+rises about 301 m above the prior basin there, and both full saves round-trip
+exactly. The volcanic palette makes the sea almost uniformly brown: it does not
+yet read convincingly as an ocean. This verifies geometry/material integration,
+not coastline, specular quality, final art, flown arrival or hardware acceptance.
+The retained HOME marker overlaps the diagnostic caption.
+
 ## Streaming and residency
 
 The planetary material uses the C++ mesh's height-blended vertex colors as its
 albedo base. Neutral mineral/strata detail modulates brightness without replacing
-the palette with a common brown surface. Its scalar factor stays between 0.2925
-and 0.495 and fades to 0.45 at orbital distance using the existing footprint and
-distance filters. The same coarse/fine color endpoints participate in LOD morphs.
+the palette with a common brown surface. Without a material-profile packet its
+scalar factor stays between 0.2925 and 0.495 and fades to 0.45 at orbital distance.
+The same coarse/fine color endpoints participate in LOD morphs.
 Normals, terrain shape, star lighting and optical cover retain their existing
 owners. Nonplanet study materials retain their previous shading.
 
 These are visual palettes. Pale terrain does not certify ice, green does not
 identify vegetation, and blue does not introduce a liquid surface or new contact
 rules. Palette presentation grants no survey or hazard knowledge.
+
+### Surface finishes
+
+C++ material profile1 derives four bounded artist coefficients from the existing
+descriptor's palette family. It changes albedo scale, detail contrast, roughness
+and specular response on the actual terrain, with existing footprint/distance
+filters. Glacial styling is brighter, smoother and less granular; arid styling
+is dusty, while volcanic rock retains stronger mineral contrast. These are
+cosmetic finishes, independent of the generated temperature/pressure envelopes.
+
+| Palette art | Albedo scale | Detail contrast | Roughness | Specular |
+| --- | ---: | ---: | ---: | ---: |
+| Verdant | 0.45 | 0.85 | 0.88 | 0.35 |
+| Arid | 0.55 | 0.65 | 0.98 | 0.18 |
+| Glacial | 0.72 | 0.30 | 0.38 | 0.65 |
+| Volcanic | 0.43 | 1.25 | 0.85 | 0.40 |
+| Alien | 0.50 | 0.90 | 0.82 | 0.45 |
+
+The current-body packet supplies only version/disclosure1, authenticated body
+IDs and integer coefficients. It grants no knowledge, material composition or
+phase measurement. Unknown versions, wrong owners, missing fields and values
+outside the declared coefficient bounds refuse before material mutation.
+Unchanged profiles do not request a full material update. New tiles receive the
+accepted parameters before display, including during LOD replacement. Missing
+historical packets use the neutral shader fallback. Current presentation applies
+the cosmetic profile without changing saved recipes or full save bytes.
+
+Terrain heights, physical normals and contact remain unchanged. This does not
+certify load-bearing ice or add slippery surfaces. Historical policies1/2 retain basin geometry and sub-datum landing/walking
+refusal. Policy3 selects the triangulated sea top described above; material
+finishes themselves do not alter that physical selection.
+
+The bounded software comparison uses authored, fixed material planes and one
+retained actual ground view. It shows brighter glacial art and warmer arid art;
+the cockpit ground pair has limited visible terrain. Flat planes mainly check
+albedo differences and do not establish convincing ice, grazing-angle specular
+response, new relief, oceans or hardware quality. Those limits do not change the
+physical surface or block continued work.
 
 Ordinary bridge streams retain the session's complete physical owner, current
 planet BodyId and saved policy. The descriptor-only constructor remains for

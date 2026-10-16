@@ -105,8 +105,9 @@ yet remap those ground keys. On foot, the existing keyboard look bindings
 speed and vertical inversion. These bindings also apply on the station. Fixed
 WASD/E keep their walking/boarding meaning if a flight look binding conflicts.
 Menus retain arrow navigation while paused; release look keys before Resume,
-including opposing keys held together. Mouse and stick look retain their
-existing rates.
+including opposing keys held together. Right-stick look uses the same saved
+speed and vertical inversion, retaining its default1.8 rad/s rate and per-axis
+shaping. Mouse look retains its fixed rate.
 
 The suited convention has **no oxygen timer**. Pack attachment, exposure damage,
 instantaneous weather and a saved outside-operation hazard policy remain open

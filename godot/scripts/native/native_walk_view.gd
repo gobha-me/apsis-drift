@@ -558,8 +558,9 @@ func input_controls(delta: float) -> PackedFloat64Array:
 	if available_pads.get(selected_pad, false):
 		forward -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_Y))
 		right += stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_X))
-		requested_heading -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_RIGHT_X)) * delta * 1.8
-		pitch = clampf(pitch - stick(Input.get_joy_axis(selected_pad, JOY_AXIS_RIGHT_Y)) * delta * 1.8, -1.3, 1.3)
+		var controller_look: Vector2 = preferences_provider.foot_controller_look(selected_pad)
+		requested_heading -= controller_look.x * delta
+		pitch = clampf(pitch - controller_look.y * delta, -1.3, 1.3)
 	requested_heading = wrapf(requested_heading, -PI, PI)
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), requested_heading])
 

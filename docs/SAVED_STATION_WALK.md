@@ -45,8 +45,11 @@ WASD and E/A remain fixed station actions. Reading these preferences installs
 no additional input mapping and writes neither preferences nor world state.
 Missing files use defaults; malformed, oversized or unsupported files retain
 their bytes and use defaults with the provider's diagnostic.
-Station look rates and inversion still use the prototype's fixed behavior;
-broader remapping/sensitivity integration remains with #50/#135.
+Station look keys and right-stick look use saved speed and vertical inversion.
+The right stick keeps its default1.8 rad/s rate and scales with sensitivity;
+mouse look retains its fixed rate. The station-selected controller owns stick
+look even if the disabled preferences provider observes another pad. Broader
+remapping/hardware qualification remains with #50/#135.
 
 This normal supported-interior slice is kinematic: requested speed is 2 m/s,
 diagonal intent is normalized, neutral input stops, and blocked travel stops

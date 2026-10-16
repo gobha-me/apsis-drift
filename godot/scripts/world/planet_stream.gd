@@ -51,7 +51,7 @@ static func valid_identity(value: Dictionary) -> bool:
 	if typeof(value.get("terrain_policy")) != TYPE_INT:
 		return false
 	if value.get("kind") == "owned":
-		return value.size() == 9 and value.terrain_policy in [1, 2] and valid_decimal(value.get("system_id")) and valid_decimal(value.get("body_id")) and typeof(value.get("body_version")) == TYPE_INT and value.body_version == 1 and value.get("body_kind") == "planet" and typeof(value.get("physical_catalog")) == TYPE_INT and value.physical_catalog in [1, 2]
+		return value.size() == 9 and value.terrain_policy in [1, 2, 3] and valid_decimal(value.get("system_id")) and valid_decimal(value.get("body_id")) and typeof(value.get("body_version")) == TYPE_INT and value.body_version == 1 and value.get("body_kind") == "planet" and typeof(value.get("physical_catalog")) == TYPE_INT and value.physical_catalog in [1, 2]
 	if value.get("kind") == "study":
 		return value.size() == 6 and value.terrain_policy == 0 and valid_decimal(value.get("planet_id")) and typeof(value.get("experimental_relief_version")) == TYPE_INT and value.experimental_relief_version in [0, 1]
 	return false
@@ -215,6 +215,8 @@ func _upload_morph(entry: Dictionary) -> bool:
 	for i in count:
 		var offset := 4 * i
 		var normal := Vector3(entry.normals[offset], entry.normals[offset + 1], entry.normals[offset + 2])
+		var wetness: float = entry.normals[offset + 3]
+		if wetness < 0.0 or wetness > 1.0 or (identity.get("terrain_policy") != 3 and wetness != 0.0): return false
 		var magnitude := normal.length_squared()
 		if not is_finite(magnitude) or magnitude <= 0.000000000001 or magnitude > 1.00001: return false
 		for channel in 4:
@@ -312,6 +314,14 @@ func tick(delta: float, observer: Vector3, animate := true) -> void:
 				if not entry.has("vertices"):
 					_refuse_cover("C++ stream omitted an uncached tile payload")
 					return
+				var uv: Variant = entry.get("uv")
+				if not entry.get("vertices") is PackedVector3Array or not uv is PackedVector2Array or uv.size() != entry.vertices.size() or uv.size() <= 0 or uv.size() > MAX_TILE_VERTICES:
+					_refuse_cover("Invalid terrain surface attributes")
+					return
+				for coordinate: Vector2 in uv:
+					if not coordinate.is_finite() or coordinate.y not in [0.0, 1.0] or (identity.get("terrain_policy") != 3 and coordinate.y != 0.0):
+						_refuse_cover("Invalid terrain datum attributes")
+						return
 				var arrays: Array = []
 				arrays.resize(Mesh.ARRAY_MAX)
 				arrays[Mesh.ARRAY_VERTEX] = entry.vertices

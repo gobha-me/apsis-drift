@@ -2,6 +2,7 @@
 #include "../flight_endurance_meter.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/terrain_local_detail.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
 
 #include <algorithm>
@@ -258,10 +259,17 @@ struct Trace {
     const auto sampler =
         need(TerrainLocalDetailSampler::create(
                  system, body_id(view.planet.id),
-                 {session.document().model.terrain_policy}, cache),
+                 {need(terrain_surface_raw_recipe(
+                           session.document().model.terrain_policy),
+                       "Selected terrain raw recipe refused")},
+                 cache),
              "Selected terrain provider refused");
-    return need(sampler.sample_height({p.x, p.y, p.z}, 8),
-                "Terrain height refused")
+    const auto raw = need(sampler.sample_height({p.x, p.y, p.z}, 8),
+                          "Terrain height refused");
+    return need(select_terrain_sea_surface(
+                    session.document().model.terrain_policy,
+                    raw.elevation_metres, view.planet.water_coverage.value > 0),
+                "Selected terrain top refused")
         .elevation_metres;
   }
   auto checkpoint(std::string_view label) -> void {
@@ -1208,7 +1216,9 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
               session.document().origin.recipe.universe_seed == Seed{42} &&
               session.system().catalog.id == ids.origin_system &&
               (relative_home_ascent || system_ascent) &&
-              initial_model.terrain_policy == 2 &&
+              (initial_model.terrain_policy == 2 ||
+               (initial_model.terrain_policy == kFreedomSeaDatumTerrainPolicy &&
+                initial_model.optics == 1)) &&
               initial_model.physical_catalog == 2 &&
               initial_model.physical_ephemeris == 2 &&
               initial_model.assistance == !pilot &&

@@ -59,7 +59,9 @@ auto valid_witness(const TerrainImpactWitness& w) -> bool {
   const auto v = w.pre_response_velocity_planet_fixed;
   const double norm = n.x * n.x + n.y * n.y + n.z * n.z;
   const double closing = std::max(0.0, -(v.x * n.x + v.y * n.y + v.z * n.z));
-  return w.version == 1 && (w.terrain_policy == 1 || w.terrain_policy == 2) &&
+  return w.version == 1 &&
+         (w.terrain_policy == 1 || w.terrain_policy == 2 ||
+          w.terrain_policy == 3) &&
          w.collider_policy == 1 && w.craft_frame == wayfarer_frame().recipe &&
          w.tick > 0 &&
          w.tick < std::numeric_limits<SimulationTick>::max() - 1 &&

@@ -468,10 +468,27 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	check(view.input_controls(0.0) == PackedFloat64Array([1.0, 1.0, heading]), "Selected left stick changed station movement channels")
 	joy_axis(JOY_AXIS_LEFT_X, 0.0)
 	joy_axis(JOY_AXIS_LEFT_Y, 0.0)
+	var preferences: Dictionary = view.preferences_provider.settings.duplicate(true)
+	var persist: bool = view.preferences_provider.persist
+	view.preferences_provider.persist = false
+	check(view.preferences_provider.apply_preferences({"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}), "Station default look preferences refused")
 	joy_axis(JOY_AXIS_RIGHT_X, 1.0)
 	joy_axis(JOY_AXIS_RIGHT_Y, -1.0)
+	# The disabled preferences provider may independently select a foreign pad.
+	view.preferences_provider.device = 7
 	view.input_controls(0.1)
 	check(is_equal_approx(view.requested_heading, heading - 0.18) and is_equal_approx(view.pitch, pitch + 0.18), "Selected right stick changed station look signs/rate")
+	var default_heading: float = view.requested_heading
+	var default_pitch: float = view.pitch
+	check(view.preferences_provider.apply_preferences({"deadzone": 0.18, "curve": 1.4, "look_speed": 2.4, "invert_look": true, "prompts": 0}), "Station stick look preferences refused")
+	view.input_controls(0.1)
+	check(is_equal_approx(view.requested_heading, default_heading - 0.27) and is_equal_approx(view.pitch, default_pitch - 0.27), "Station right stick ignored speed/inversion preferences")
+	check(owner.get_freedom_walk_state() == start and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Reading configured station look changed complete C++ save")
+	view.preferences_provider.device = view.selected_pad
+	view.preferences_provider.settings = preferences
+	view.preferences_provider.persist = persist
+	view.requested_heading = default_heading
+	view.pitch = default_pitch
 	joy_axis(JOY_AXIS_RIGHT_X, 0.0)
 	joy_axis(JOY_AXIS_RIGHT_Y, 0.0)
 	right_mouse(true)

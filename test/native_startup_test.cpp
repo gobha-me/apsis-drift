@@ -69,7 +69,21 @@ auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
               *loaded == historical[i] &&
               encode_native_save_document_json(*loaded) == old,
           "old flight docking or journey bytes migrated on read/write");
+    check(parsed["flight_model"]["terrain_policy"] == 3,
+          "new optical envelope lost its explicit sea-datum top");
+    for (const auto policy : {1U, 2U}) {
+      auto previous = parsed;
+      previous["flight_model"]["terrain_policy"] = policy;
+      const auto text = previous.dump(2) + '\n';
+      const auto restored = decode_native_save_document_json(text);
+      check(restored && encode_native_save_document_json(*restored) == text,
+            "historical optical terrain bytes migrated on read/write");
+    }
     auto bad = parsed;
+    bad["flight_model"]["terrain_policy"] = 4U;
+    check(!decode_native_save_document_json(bad.dump()),
+          "optical envelope accepted an unknown terrain policy");
+    bad = parsed;
     bad["flight_model"].erase("optics");
     check(!decode_native_save_document_json(bad.dump()),
           "optical save accepted a missing selection");
@@ -89,6 +103,9 @@ auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
           "unknown optical enclosing version was accepted");
   }
   auto invalid = journey;
+  invalid.voyage.flight.model.optics = 0;
+  check(!encode_freedom_flight_document_json(invalid.voyage.flight),
+        "sea-datum selection leaked into a historical clear envelope");
   invalid.voyage.flight.model.optics = 2;
   check(!encode_freedom_flight_document_json(invalid.voyage.flight) &&
             !encode_freedom_docking_document_json(invalid.voyage) &&
@@ -116,8 +133,8 @@ auto main() -> int {
             .journey;
     const auto freedom = journey.voyage.flight.origin;
     check(journey.voyage.flight.model.terrain_policy ==
-              kFreedomLocalDetailTerrainPolicy,
-          "Native New Game did not explicitly select physical local detail");
+              kFreedomSeaDatumTerrainPolicy,
+          "Native New Game did not explicitly select the sea-datum top");
     check(journey.voyage.flight.model.optics == 1,
           "Native New Game did not explicitly select optical recipe1");
     optical_saves(journey, created->document);
