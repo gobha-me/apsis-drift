@@ -45,7 +45,13 @@ if ((${#files[@]} == 0)); then
 fi
 
 if [[ "$mode" == "--fix" ]]; then
-  "$formatter" -i "${files[@]}"
+  for file in "${files[@]}"; do
+    # Avoid invalidating compiler inputs whose bytes already match. If checking
+    # fails, the normal fix invocation still reports any formatter error.
+    if ! "$formatter" --dry-run --Werror "$file" >/dev/null 2>&1; then
+      "$formatter" -i "$file"
+    fi
+  done
 else
   "$formatter" --dry-run --Werror "${files[@]}"
 fi
