@@ -120,8 +120,8 @@ auto build_validated(const PlanetDescriptor& planet,
         return std::unexpected{ContactSurfaceError::sampling_failure};
       elevation = sample->elevation_metres;
       if (recipe == kSeaDatumSavedContactSurface) {
-        const auto surface =
-            select_terrain_sea_surface(kSeaDatumTerrainPolicy, elevation);
+        const auto surface = select_terrain_sea_surface(
+            kSeaDatumTerrainPolicy, elevation, planet.water_coverage.value > 0);
         if (!surface)
           return std::unexpected{ContactSurfaceError::sampling_failure};
         elevation = surface->elevation_metres;

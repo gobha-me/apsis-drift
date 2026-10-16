@@ -153,7 +153,8 @@ inline auto plan_selected_tiles(const PhysicalLocalSystem& owner, BodyId body,
     throw std::invalid_argument("selected stream surface is unavailable");
   const double planner_radius =
       observer_radius - require(select_terrain_sea_surface(
-                                    terrain_policy, sample->elevation_metres))
+                                    terrain_policy, sample->elevation_metres,
+                                    sampler->planet().water_coverage.value > 0))
                             .elevation_metres;
   if (!std::isfinite(planner_radius) || planner_radius < 1 ||
       planner_radius > 1.0e10)
@@ -227,8 +228,9 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
       if (!selected)
         sample = with_relief(sample, planet, reference, relief_version);
       if (surface_policy == kSeaDatumTerrainPolicy) {
-        const auto top = require(select_terrain_sea_surface(
-            surface_policy, sample.elevation_metres));
+        const auto top = require(
+            select_terrain_sea_surface(surface_policy, sample.elevation_metres,
+                                       planet.water_coverage.value > 0));
         sample.elevation_metres = top.elevation_metres;
         tile->wetness.push_back(top.wet_datum ? 1.0 : 0.0);
         if (top.wet_datum) sample.color = planet.palette.shallow_water;
@@ -293,7 +295,8 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
       }
       if (surface_policy == kSeaDatumTerrainPolicy)
         elevation =
-            require(select_terrain_sea_surface(surface_policy, elevation))
+            require(select_terrain_sea_surface(surface_policy, elevation,
+                                               planet.water_coverage.value > 0))
                 .elevation_metres;
       return mul(unit(probe), radius + elevation);
     };

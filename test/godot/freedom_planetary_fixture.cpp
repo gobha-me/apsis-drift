@@ -268,7 +268,7 @@ struct Trace {
                           "Terrain height refused");
     return need(select_terrain_sea_surface(
                     session.document().model.terrain_policy,
-                    raw.elevation_metres),
+                    raw.elevation_metres, view.planet.water_coverage.value > 0),
                 "Selected terrain top refused")
         .elevation_metres;
   }

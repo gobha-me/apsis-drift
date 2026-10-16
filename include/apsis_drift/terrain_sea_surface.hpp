@@ -33,16 +33,19 @@ struct TerrainSeaSurfaceSample {
 }
 
 // The same vertex operation serves streamed geometry and finest contact.
-// Wetness is the raw datum sign, never palette, phase or support evidence.
+// Wetness is the raw datum sign only when the descriptor has water coverage;
+// signed relief cannot create a sea on a zero-water body. Never infer phase
+// or support from this flag.
 // Legacy policies retain their exact height, including a signed zero.
 [[nodiscard]] inline auto select_terrain_sea_surface(std::uint32_t policy,
-                                                     double raw_height)
+                                                     double raw_height,
+                                                     bool sea_present)
     -> std::expected<TerrainSeaSurfaceSample, TerrainSeaSurfaceError> {
   if (!valid_terrain_surface_policy(policy))
     return std::unexpected{TerrainSeaSurfaceError::unsupported_policy};
   if (!std::isfinite(raw_height))
     return std::unexpected{TerrainSeaSurfaceError::non_finite_height};
-  if (policy != kSeaDatumTerrainPolicy)
+  if (policy != kSeaDatumTerrainPolicy || !sea_present)
     return TerrainSeaSurfaceSample{raw_height, false};
   return TerrainSeaSurfaceSample{raw_height > 0 ? raw_height : 0.0,
                                  raw_height <= 0};

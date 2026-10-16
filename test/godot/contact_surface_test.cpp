@@ -701,7 +701,8 @@ auto sea_datum_helper_contract() -> void {
                   (policy == 3 ? 2U : policy),
           "sea-top policy did not retain its selected raw terrain recipe");
     for (const auto height : {-123.0, -0.0, 0.0, 123.0}) {
-      const auto selected = require(select_terrain_sea_surface(policy, height));
+      const auto selected =
+          require(select_terrain_sea_surface(policy, height, true));
       if (policy < 3)
         check(std::bit_cast<std::uint64_t>(selected.elevation_metres) ==
                       std::bit_cast<std::uint64_t>(height) &&
@@ -713,10 +714,19 @@ auto sea_datum_helper_contract() -> void {
                   selected.wet_datum == (height <= 0),
               "sea-top height clamp or raw datum flag is incorrect");
     }
+    for (const auto height : {-123.0, -0.0, 0.0, 123.0}) {
+      const auto dry =
+          require(select_terrain_sea_surface(policy, height, false));
+      check(std::bit_cast<std::uint64_t>(dry.elevation_metres) ==
+                    std::bit_cast<std::uint64_t>(height) &&
+                !dry.wet_datum,
+            "zero-water descriptor acquired sea geometry or material from "
+            "relief");
+    }
     for (const auto height : {std::numeric_limits<double>::quiet_NaN(),
                               std::numeric_limits<double>::infinity(),
                               -std::numeric_limits<double>::infinity()}) {
-      const auto result = select_terrain_sea_surface(policy, height);
+      const auto result = select_terrain_sea_surface(policy, height, true);
       check(!result &&
                 result.error() == TerrainSeaSurfaceError::non_finite_height,
             "nonfinite raw height entered selected geometry");
@@ -725,7 +735,7 @@ auto sea_datum_helper_contract() -> void {
   for (const auto policy :
        {0U, 4U, std::numeric_limits<std::uint32_t>::max()}) {
     const auto raw = terrain_surface_raw_recipe(policy);
-    const auto selected = select_terrain_sea_surface(policy, 12);
+    const auto selected = select_terrain_sea_surface(policy, 12, true);
     check(!valid_terrain_surface_policy(policy) && !raw && !selected &&
               raw.error() == TerrainSeaSurfaceError::unsupported_policy &&
               selected.error() == TerrainSeaSurfaceError::unsupported_policy,

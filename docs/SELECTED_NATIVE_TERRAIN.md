@@ -69,7 +69,9 @@ formats retain their exact arithmetic and accepted policies. Recovery, travel,
 walking and nested wrappers preserve the selected owner and policy.
 
 The underlying terrain remains recipe2. A shared C++ operation raises raw
-sub-datum TOP vertices to zero and retains their raw wetness. Streamed meshes,
+sub-datum TOP vertices to zero and retains their raw wetness when the C++
+descriptor has nonzero water coverage. Zero-water bodies retain negative relief
+as dry geometry/material; the existing conservative support checks still apply. Streamed meshes,
 contact recipe4 and hull clearance use those vertices and the existing finest
 topology. Fully dry triangles keep their original vertices and normals. Mixed
 shoreline triangles change when submerged vertices rise; preserving their dry
