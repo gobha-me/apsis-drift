@@ -7,14 +7,15 @@ policy; Godot presents the selected geometry rather than adding shader-only
 displacement. See [local-detail sampling](TERRAIN_LOCAL_DETAIL.md) and the
 [planetary scale contract](PLANETARY_SCALE_CONTRACT.md).
 
-## Two explicit policies
+## Explicit terrain policies
 
 | Saved flight policy | Physical height and top geometry |
 | --- | --- |
 | `1`, historical | Existing terrain-v1 sampling and saved contact recipe2; unchanged legacy arithmetic |
-| `2`, new native game | Physical local-detail recipe2 over unchanged terrain-v1 source-LOD8 vertices, with saved contact recipe3 |
+| `2`, selected local detail | Physical local-detail recipe2 over unchanged terrain-v1 source-LOD8 vertices, with saved contact recipe3 |
+| `3`, new native game | Recipe2 heights raised to the sea datum when submerged, raw wetness retained, saved contact recipe4 |
 
-Both keep terrain tile generator1 and its original source cache/checksums.
+All keep terrain tile generator1 and its original source cache/checksums.
 Policy2 adds continuous macro interpolation and independently seeded local
 relief; it does not reinterpret the legacy integer tiles or generator-version
 tuple. The complete physical catalog/body owner distinguishes authored Origin
@@ -43,7 +44,7 @@ a mandatory ninth model field, `terrain_policy: 2`, in these explicit formats:
 Docking/journey flatten the flight envelope, so their decoders restore the
 matching selected lower layer. Formats 31/32/33 can retain the explicit active
 world owner; they do not invent another universe or clock. New Game selects
-policy2. Continue preserves the saved selection without silently upgrading old
+policy3 in the explicit optics1 envelopes below. Continue preserves the saved selection without silently upgrading old
 terrain, relocating a craft or changing its landed anchor.
 
 Outer starting-assembly 21, boarding 22, surface 23, resources 24, knowledge 25,
@@ -59,6 +60,38 @@ default it to 2. Failed decode or validation does not commit a replacement
 session; rejected writes preserve existing destination bytes. See the
 [save layers](FREEDOM_SAVE_FORMAT.md), [saved flight](SAVED_NATIVE_FLIGHT.md) and
 [landed lifecycle](LANDED_CRAFT.md).
+
+## Triangulated ocean top
+
+Policy3 is available only in explicit optics1 flight/docking/journey envelopes
+39/40/41. New Game selects it; historical optical policies1/2 and all earlier
+formats retain their exact arithmetic and accepted policies. Recovery, travel,
+walking and nested wrappers preserve the selected owner and policy.
+
+The underlying terrain remains recipe2. A shared C++ operation raises raw
+sub-datum TOP vertices to zero and retains their raw wetness. Streamed meshes,
+contact recipe4 and hull clearance use those vertices and the existing finest
+topology. Fully dry triangles keep their original vertices and normals. Mixed
+shoreline triangles change when submerged vertices rise; preserving their dry
+portions exactly would require additional clipping topology.
+
+These are actual triangulated chords, with interiors slightly below the datum,
+not an exact spherical shell. Radial first-surface queries intersect the actual
+facet. Reported reference altitude remains radius-relative; it is not a terrain
+clearance. No radius inflation or tolerance relaxation conceals chord sag.
+
+Raw triangle wetness classifies all-dry, all-wet and mixed facets. Wet facets
+refuse landing, and mixed facets remain unsupported for landing/walking. Existing
+dry support/slope checks remain required. Ordinary flight still has no terrain
+floor guard; the optional impact prototype retains its explicit refusal of
+unsupported wet/shore intersections. There is no supported water-entry response,
+swimming, buoyancy, waves or phase simulation.
+
+C++ supplies wetness with the terrain buffers; native shading blends bounded
+water albedo/roughness/specular response. Coarse wetness interpolates through the
+same morph correspondence as geometry. Invalid base attributes and morph weights
+refuse before upload. Material blending across a mixed facet grants no support
+or survey knowledge, and pale terrain remains styling rather than physical ice.
 
 ## Streaming and residency
 
@@ -101,10 +134,9 @@ historical packets use the neutral shader fallback. Current presentation applies
 the cosmetic profile without changing saved recipes or full save bytes.
 
 Terrain heights, physical normals and contact remain unchanged. This does not
-certify load-bearing ice or add slippery surfaces. Existing sub-datum terrain
-refuses landing/walking, but remains the actual basin geometry: an ocean surface
-above it needs an explicit C++ sea-datum/clearance/contact policy before rendering.
-Blue basin shading alone is not an ocean implementation.
+certify load-bearing ice or add slippery surfaces. Historical policies1/2 retain basin geometry and sub-datum landing/walking
+refusal. Policy3 selects the triangulated sea top described above; material
+finishes themselves do not alter that physical selection.
 
 The bounded software comparison uses authored, fixed material planes and one
 retained actual ground view. It shows brighter glacial art and warmer arid art;

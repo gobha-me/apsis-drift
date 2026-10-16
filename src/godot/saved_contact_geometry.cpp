@@ -9,6 +9,7 @@ auto saved_contact_recipe(std::uint32_t terrain_policy)
     -> std::optional<ContactSurfaceRecipe> {
   if (terrain_policy == 1) return kExperimentalSavedContactSurface;
   if (terrain_policy == 2) return kLocalDetailSavedContactSurface;
+  if (terrain_policy == 3) return kSeaDatumSavedContactSurface;
   return {};
 }
 
@@ -19,7 +20,8 @@ auto prepare_saved_contact(const PhysicalLocalSystem& owner,
                            ContactSurfaceRecipe recipe)
     -> std::expected<SavedContactProvenance, SavedContactError> {
   if (recipe != kExperimentalSavedContactSurface &&
-      recipe != kLocalDetailSavedContactSurface)
+      recipe != kLocalDetailSavedContactSurface &&
+      recipe != kSeaDatumSavedContactSurface)
     return std::unexpected{SavedContactError::unsupported_recipe};
   if (!validate_local_system(owner))
     return std::unexpected{SavedContactError::invalid_physical_owner};
@@ -77,7 +79,8 @@ auto query_saved_contact(const SavedContactProvenance& provenance,
       continue;
     }
     const auto triangle =
-        provenance.recipe == kLocalDetailSavedContactSurface
+        provenance.recipe == kLocalDetailSavedContactSurface ||
+                provenance.recipe == kSeaDatumSavedContactSurface
             ? build_selected_contact_triangle(provenance.owner,
                                               provenance.planet,
                                               provenance.recipe, *id, cache)

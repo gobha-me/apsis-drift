@@ -1,4 +1,5 @@
 #include "apsis_drift/planet_surface_walker.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 
 #include "apsis_drift/terrain_touchdown.hpp"
 #include "godot/contact_geometry_internal.hpp"
@@ -84,6 +85,13 @@ auto PlanetSurfaceWalkTerrain::ground(V direction)
       owner_, planet_, *recipe, *id, cache_);
   if (!triangle)
     return std::unexpected{PlanetSurfaceWalkStatus::terrain_unresolved};
+  if (*recipe == kSeaDatumSavedContactSurface) {
+    const auto datum = classify_terrain_datum_mask(triangle->datum_mask);
+    if (!datum)
+      return std::unexpected{PlanetSurfaceWalkStatus::terrain_unresolved};
+    if (*datum != TerrainDatumClass::dry)
+      return std::unexpected{PlanetSurfaceWalkStatus::water};
+  }
   const V n{triangle->outward_normal.x, triangle->outward_normal.y,
             triangle->outward_normal.z};
   const auto& first = triangle->vertices[0];

@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/planet_optics.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <cmath>
@@ -460,7 +461,9 @@ auto NativeFreedomFlightSession::relative_state() const
       model.atmosphere.version != kAtmosphericFlightVersion ||
       model.hold.version != kOrbitHoldVersion ||
       (model.terrain_policy != kFreedomLegacyTerrainPolicy &&
-       model.terrain_policy != kFreedomLocalDetailTerrainPolicy))
+       model.terrain_policy != kFreedomLocalDetailTerrainPolicy &&
+       !(model.terrain_policy == kFreedomSeaDatumTerrainPolicy &&
+         model.optics == kPlanetOpticsVersion)))
     return std::unexpected{"Session system observation owner or model refused"};
   const auto body =
       reframe_rigid_body(RigidBodyWorldContext{system_}, source,

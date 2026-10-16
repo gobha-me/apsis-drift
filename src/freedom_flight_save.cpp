@@ -150,11 +150,18 @@ auto validate_flight_origin(const FreedomFlightSaveDocument& document)
         SaveSchemaErrorCode::incompatible_generator_version,
         "$.flight_model.optics", "unsupported planetary optics selection")};
   if (document.model.terrain_policy != kFreedomLegacyTerrainPolicy &&
-      document.model.terrain_policy != kFreedomLocalDetailTerrainPolicy)
+      document.model.terrain_policy != kFreedomLocalDetailTerrainPolicy &&
+      document.model.terrain_policy != kFreedomSeaDatumTerrainPolicy)
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
                 "$.flight_model.terrain_policy",
                 "unsupported physical terrain policy")};
+  if (document.model.terrain_policy == kFreedomSeaDatumTerrainPolicy &&
+      document.model.optics != kPlanetOpticsVersion)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::incompatible_generator_version,
+                "$.flight_model.terrain_policy",
+                "sea-datum terrain requires an explicit optics1 envelope")};
   return {};
 }
 
@@ -510,11 +517,13 @@ auto decode_flight(std::string_view text, bool system_import)
                  "$.flight_model");
       !valid)
     return std::unexpected{valid.error()};
-  if (selected && (!m.contains("terrain_policy") ||
-                   !m["terrain_policy"].is_number_unsigned() ||
-                   (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
-                    ((!importing && !release && !optical) ||
-                     m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
+  if (selected &&
+      (!m.contains("terrain_policy") ||
+       !m["terrain_policy"].is_number_unsigned() ||
+       (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
+        !(optical && m["terrain_policy"] == kFreedomSeaDatumTerrainPolicy) &&
+        ((!importing && !release && !optical) ||
+         m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version,
         "$.flight_model.terrain_policy",

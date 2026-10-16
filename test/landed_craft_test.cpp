@@ -4,6 +4,7 @@
 #include "apsis_drift/planet_surface_walker.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/terrain_hull_clearance.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
 #include "contact_geometry_internal.hpp"
 #include "flight_endurance_meter.hpp"
@@ -1199,6 +1200,42 @@ auto surface_walk_session(const Fixture& f,
                                                   session.document().flight))
             << '\n';
 }
+auto sea_datum_dry_walking() -> void {
+  const Fixture raw{kFreedomLocalDetailTerrainPolicy};
+  const Fixture sea{kSeaDatumTerrainPolicy};
+  check(raw.fixed == sea.fixed,
+        "Sea-top selection preserves the established dry landing pose");
+  const auto raw_source = raw.source(raw.fixed);
+  const auto sea_source = sea.source(sea.fixed);
+  const auto raw_anchor = required(prepare_landed_craft(
+      raw.owner, raw.rotation, raw_source, true,
+      required(rigid_body_state_checksum(raw.context, raw_source)),
+      raw.terrain_policy));
+  const auto sea_anchor = required(prepare_landed_craft(
+      sea.owner, sea.rotation, sea_source, true,
+      required(rigid_body_state_checksum(sea.context, sea_source)),
+      sea.terrain_policy));
+  auto raw_terrain = required(PlanetSurfaceWalkTerrain::create(
+      raw.owner, raw.rotation, raw_anchor, raw_source.tick));
+  auto sea_terrain = required(PlanetSurfaceWalkTerrain::create(
+      sea.owner, sea.rotation, sea_anchor, sea_source.tick));
+  auto raw_actor = required(raw_terrain.entry());
+  auto sea_actor = required(sea_terrain.entry());
+  check(raw_actor == sea_actor,
+        "Sea-top selection preserves the dry hatch's supported actor entry");
+  for (unsigned tick = 0; tick < 8; ++tick) {
+    const auto raw_step = required(raw_terrain.advance(raw_actor, {-1, 0, 0}));
+    const auto sea_step = required(sea_terrain.advance(sea_actor, {-1, 0, 0}));
+    check(raw_step.status == PlanetSurfaceWalkStatus::supported &&
+              sea_step.status == raw_step.status &&
+              sea_step.actor == raw_step.actor,
+          "Sea-top selection changed an actual supported dry walking step");
+    raw_actor = raw_step.actor;
+    sea_actor = sea_step.actor;
+  }
+  check(sea_terrain.anchor() == sea_anchor,
+        "Sea-top walking cannot change the retained landed anchor");
+}
 auto surface_walking(const Fixture& f) -> void {
   const auto source = f.source(f.fixed);
   const auto checksum = required(rigid_body_state_checksum(f.context, source));
@@ -1650,6 +1687,7 @@ auto main(int argc, char** argv) -> int {
       std::filesystem::create_directories(directory);
       daynight_snapshots(f, directory);
     } else if (argc == 2 && std::string_view{argv[1]} == "--local-detail") {
+      sea_datum_dry_walking();
       hull_and_idle(f);
       persistence_and_session(f);
       surface_walking(f);

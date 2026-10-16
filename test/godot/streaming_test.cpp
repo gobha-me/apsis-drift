@@ -50,7 +50,7 @@ static auto selected_stream_contract() -> void {
   const auto& planet =
       owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
   const auto body = body_id(planet.id);
-  for (const auto policy : {0U, 3U, std::numeric_limits<std::uint32_t>::max()})
+  for (const auto policy : {0U, 4U, std::numeric_limits<std::uint32_t>::max()})
     rejects([&] { PlanetStream bad(owner, body, policy); });
   auto forged = owner;
   ++forged.stellar_gm_km3_per_second2;
@@ -92,6 +92,72 @@ static auto selected_stream_contract() -> void {
         "unchanged selected cover needlessly regenerated");
   std::cout << "Selected six-face local-detail cover: worker ms="
             << batch.milliseconds << "; bytes=" << batch.bytes() << '\n';
+}
+static auto sea_surface_stream_contract() -> void {
+  const auto owner = require(generate_physical_origin_system(Seed{42}, 2));
+  const auto& planet =
+      owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  const auto body = body_id(planet.id);
+  auto cache = require(TerrainTileCache::create(2));
+  TileMap cover;
+  std::size_t wet{}, dry{};
+  for (unsigned face = 0; face < 6; ++face) {
+    const StreamKey key{face, 0, 0, 0};
+    const auto raw = build_stream_tile(owner, body, key, 2, cache);
+    const auto top = build_stream_tile(owner, body, key, 3, cache);
+    check(
+        raw->wetness.empty() && top->wetness.size() == top->vertices.size(),
+        "sea attributes changed historical buffers or lost top/skirt entries");
+    constexpr unsigned n = kStreamIntervals + 1;
+    for (unsigned i = 0; i < n * n; ++i) {
+      const bool submerged = raw->elevations[i] <= 0;
+      check(top->elevations[i] == std::max(raw->elevations[i], 0.0) &&
+                top->wetness[i] == (submerged ? 1.0 : 0.0),
+            "sea top or raw datum classification differs from authoritative "
+            "recipe2");
+      if (submerged) {
+        ++wet;
+        check(top->colors[i] == planet.palette.shallow_water,
+              "wet vertex retained a contradictory land color");
+      } else {
+        ++dry;
+        check(top->vertices[i] == raw->vertices[i] &&
+                  top->colors[i] == raw->colors[i],
+              "sea selection changed a dry vertex");
+      }
+    }
+    cover.emplace(key, top);
+  }
+  check(wet > 0 && dry > 0,
+        "fixed Home sea fixture lost its land/water coverage");
+  stream_morph_detail::validate_cover(cover);
+  const auto& coarse = *cover.at({0, 0, 0, 0});
+  const auto fine = build_stream_tile(owner, body, {0, 1, 0, 0}, 3, cache);
+  const auto endpoint = stream_morph_detail::endpoints(*fine, coarse, true);
+  check(endpoint.coarse_wetness.size() == fine->wetness.size() &&
+            endpoint.coarse_wetness[1] ==
+                (coarse.wetness[0] + coarse.wetness[1]) * .5,
+        "sea morph lost barycentric wetness correspondence");
+  for (const auto value : endpoint.coarse_wetness)
+    check(std::isfinite(value) && value >= 0 && value <= 1,
+          "sea morph emitted invalid material weights");
+  auto broken = std::make_shared<StreamTile>(coarse);
+  broken->wetness.pop_back();
+  auto bad = cover;
+  bad[{0, 0, 0, 0}] = broken;
+  rejects([&] { stream_morph_detail::validate_cover(bad); });
+  broken->wetness = coarse.wetness;
+  broken->wetness[0] = std::numeric_limits<double>::quiet_NaN();
+  rejects([&] { stream_morph_detail::validate_cover(bad); });
+  PlanetStream stream(owner, body, 3);
+  const StreamPoint observer{planet.radius.value * 1000.0 + 1e8, 0, 0};
+  check(stream.request(observer), "sea policy worker did not schedule");
+  const auto batch = await_batch(stream);
+  check(batch.tiles.size() == 6, "sea policy lost its distant six-face cover");
+  for (const auto& [key, tile] : batch.tiles)
+    check(tile->vertices == cover.at(key)->vertices &&
+              tile->wetness == cover.at(key)->wetness,
+          "sea worker diverged from synchronous C++ geometry");
 }
 struct ElevatedTerrainFixture {
   PhysicalLocalSystem owner;
@@ -520,6 +586,7 @@ auto main() -> int {
     selected_morph_contract();
     selected_clearance_planning();
     selected_stream_contract();
+    sea_surface_stream_contract();
     const auto planet = generate_planet_descriptor(Seed{42});
     const auto origin =
         require(planet_fixed_from_geodetic(planet, {.25, .4, 2500}));

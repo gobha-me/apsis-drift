@@ -25,6 +25,15 @@ namespace apsis_drift::godot_spike::detail {
                                                    TerrainTileCache&)
     -> std::expected<ContactTriangle, ContactSurfaceError>;
 
+// One owned radial first-surface query against the actual selected TOP facet.
+// Includes sea-datum chord sag; not a scalar-height or support certificate.
+[[nodiscard]] auto query_selected_contact_surface(const PhysicalLocalSystem&,
+                                                  const PlanetDescriptor&,
+                                                  ContactSurfaceRecipe,
+                                                  PlanetFixedDirection,
+                                                  TerrainTileCache&)
+    -> std::expected<ContactSurfacePoint, ContactSurfaceError>;
+
 struct NominalContactRectangle {
   PlanetFixedPositionMetres center, width, depth, up;
 };

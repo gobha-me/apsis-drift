@@ -19,6 +19,7 @@ varying vec3 surface_normal;
 varying vec3 mineral_position;
 varying vec3 radial_normal;
 varying float elevation;
+varying float datum_wetness;
 
 float hash_cell(vec3 p) {
 	p = fract(p * vec3(0.1031, 0.11369, 0.13787));
@@ -43,12 +44,14 @@ void vertex() {
 		NORMAL = mix(CUSTOM1.xyz, NORMAL, fine_weight);
 		COLOR.rgb = mix(CUSTOM2.rgb, COLOR.rgb, fine_weight);
 		UV.x = mix(CUSTOM0.w, UV.x, fine_weight);
+		UV.y = mix(CUSTOM1.w, UV.y, fine_weight);
 	}
 	surface_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	surface_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 	mineral_position = planet_tile ? VERTEX + tile_origin : surface_position + vec3(0.0, altitude_origin, 0.0);
 	radial_normal = planet_tile ? normalize(MODEL_NORMAL_MATRIX * normalize(VERTEX + tile_origin)) : vec3(0.0, 1.0, 0.0);
 	elevation = planet_tile ? UV.x : surface_position.y + altitude_origin;
+	datum_wetness = planet_tile ? clamp(UV.y, 0.0, 1.0) : 0.0;
 }
 
 void fragment() {
@@ -95,9 +98,18 @@ void fragment() {
 		ALBEDO = color * (0.40 + chips * 0.10 + grit * 0.04);
 	}
 	ROUGHNESS = clamp(0.92 - exposed * 0.20 + grit * 0.05, 0.6, 1.0);
+	SPECULAR = 0.5;
 	if (planet_tile && surface_profile_enabled) {
 		ROUGHNESS = clamp(surface_roughness + (grit - 0.5) * 0.06 - exposed * 0.08, 0.05, 1.0);
 		SPECULAR = clamp(surface_specular, 0.0, 1.0);
+	}
+	// C++ supplies raw datum wetness with the clamped top geometry. Material
+	// blending at a mixed facet is visual only; it grants no landing support.
+	// No waves, displaced normals, clock or independent hydrology field.
+	if (planet_tile) {
+		ALBEDO = mix(ALBEDO, clamp(COLOR.rgb * 0.50, vec3(0.0), vec3(1.0)), datum_wetness);
+		ROUGHNESS = mix(ROUGHNESS, 0.16, datum_wetness);
+		SPECULAR = mix(SPECULAR, 0.75, datum_wetness);
 	}
 	// Use actual terrain slopes. Derivative bump normals from planet-scale
 	// mineral coordinates amplify float quantization into near-ground speckles.

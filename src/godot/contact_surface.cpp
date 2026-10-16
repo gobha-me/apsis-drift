@@ -4,6 +4,7 @@
 #include "apsis_drift/godot/relief.hpp"
 #include "apsis_drift/godot/saved_contact_geometry.hpp"
 #include "apsis_drift/terrain_local_detail.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -118,6 +119,15 @@ auto build_validated(const PlanetDescriptor& planet,
       if (!sample)
         return std::unexpected{ContactSurfaceError::sampling_failure};
       elevation = sample->elevation_metres;
+      if (recipe == kSeaDatumSavedContactSurface) {
+        const auto surface =
+            select_terrain_sea_surface(kSeaDatumTerrainPolicy, elevation);
+        if (!surface)
+          return std::unexpected{ContactSurfaceError::sampling_failure};
+        elevation = surface->elevation_metres;
+        if (surface->wet_datum)
+          triangle.datum_mask |= static_cast<std::uint8_t>(1U << i);
+      }
     } else {
       auto sample = sample_planet_surface(planet, *reference, 8, cache);
       if (!sample)
@@ -190,7 +200,8 @@ auto build_selected_contact_triangle(const PlanetDescriptor& planet,
                                      ContactTriangleId id,
                                      TerrainTileCache& cache)
     -> std::expected<ContactTriangle, ContactSurfaceError> {
-  if (recipe == kLocalDetailSavedContactSurface)
+  if (recipe == kLocalDetailSavedContactSurface ||
+      recipe == kSeaDatumSavedContactSurface)
     return std::unexpected{ContactSurfaceError::unsupported_recipe};
   if (id.planet != planet.id)
     return std::unexpected{ContactSurfaceError::wrong_planet};
@@ -207,14 +218,18 @@ auto build_selected_contact_triangle(const PhysicalLocalSystem& owner,
                                      TerrainTileCache& cache)
     -> std::expected<ContactTriangle, ContactSurfaceError> {
   if (recipe != kExperimentalSavedContactSurface &&
-      recipe != kLocalDetailSavedContactSurface)
+      recipe != kLocalDetailSavedContactSurface &&
+      recipe != kSeaDatumSavedContactSurface)
+    return std::unexpected{ContactSurfaceError::unsupported_recipe};
+  const auto policy = recipe == kSeaDatumSavedContactSurface
+                          ? kSeaDatumTerrainPolicy
+                      : recipe == kLocalDetailSavedContactSurface ? 2U
+                                                                  : 1U;
+  const auto raw_recipe = terrain_surface_raw_recipe(policy);
+  if (!raw_recipe)
     return std::unexpected{ContactSurfaceError::unsupported_recipe};
   const auto sampler = TerrainLocalDetailSampler::create(
-      owner, body_id(planet.id),
-      {recipe == kLocalDetailSavedContactSurface
-           ? kLocalDetailTerrainRecipe
-           : kLegacyPhysicalTerrainRecipe},
-      cache);
+      owner, body_id(planet.id), {*raw_recipe}, cache);
   if (!sampler) return std::unexpected{ContactSurfaceError::invalid_context};
   if (sampler->planet() != planet)
     return std::unexpected{ContactSurfaceError::owner_mismatch};
@@ -223,8 +238,23 @@ auto build_selected_contact_triangle(const PhysicalLocalSystem& owner,
   if (!valid_id(id))
     return std::unexpected{ContactSurfaceError::invalid_triangle};
   return build_validated(planet, recipe, id, cache,
-                         recipe == kLocalDetailSavedContactSurface ? &*sampler
-                                                                   : nullptr);
+                         recipe == kLocalDetailSavedContactSurface ||
+                                 recipe == kSeaDatumSavedContactSurface
+                             ? &*sampler
+                             : nullptr);
+}
+auto query_selected_contact_surface(const PhysicalLocalSystem& owner,
+                                    const PlanetDescriptor& planet,
+                                    ContactSurfaceRecipe recipe,
+                                    PlanetFixedDirection direction,
+                                    TerrainTileCache& cache)
+    -> std::expected<ContactSurfacePoint, ContactSurfaceError> {
+  const auto id = locate_validated(planet, direction);
+  if (!id) return std::unexpected{id.error()};
+  const auto triangle =
+      build_selected_contact_triangle(owner, planet, recipe, *id, cache);
+  if (!triangle) return std::unexpected{triangle.error()};
+  return intersect_validated(*triangle, direction);
 }
 } // namespace detail
 

@@ -362,6 +362,9 @@ auto coverage(const Prepared& p) -> std::optional<Coverage> {
   return result;
 }
 auto material_supported(const Prepared& p, const Triangle& triangle) -> bool {
+  // The sea top has no landing or water-impact response. Raw wetness remains
+  // explicit; chord sag and interpolated material color are not phase evidence.
+  if (triangle.datum_mask != 0) return false;
   const auto anchor = point(triangle.vertices[0]);
   const auto radial = mul(anchor, 1.0 / length(anchor));
   const double radius = p.planet.radius.value * 1000.0;

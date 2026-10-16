@@ -3,6 +3,7 @@
 #include "apsis_drift/godot/saved_contact_geometry.hpp"
 #include "apsis_drift/godot/snapshot.hpp"
 #include "apsis_drift/terrain_local_detail.hpp"
+#include "apsis_drift/terrain_sea_surface.hpp"
 
 #include <algorithm>
 #include <array>
@@ -139,8 +140,9 @@ inline auto plan_selected_tiles(const PhysicalLocalSystem& owner, BodyId body,
   if (!saved_contact_recipe(terrain_policy))
     throw std::invalid_argument("unsupported selected stream terrain policy");
   auto cache = require(TerrainTileCache::create(1));
-  const auto sampler =
-      TerrainLocalDetailSampler::create(owner, body, {terrain_policy}, cache);
+  const auto sampler = TerrainLocalDetailSampler::create(
+      owner, body, {require(terrain_surface_raw_recipe(terrain_policy))},
+      cache);
   if (!sampler)
     throw std::invalid_argument("invalid selected stream owner/body");
   if (terrain_policy == 1)
@@ -149,7 +151,10 @@ inline auto plan_selected_tiles(const PhysicalLocalSystem& owner, BodyId body,
       {observer.x, observer.y, observer.z}, kStreamMaxLod);
   if (!sample)
     throw std::invalid_argument("selected stream surface is unavailable");
-  const double planner_radius = observer_radius - sample->elevation_metres;
+  const double planner_radius =
+      observer_radius - require(select_terrain_sea_surface(
+                                    terrain_policy, sample->elevation_metres))
+                            .elevation_metres;
   if (!std::isfinite(planner_radius) || planner_radius < 1 ||
       planner_radius > 1.0e10)
     throw std::invalid_argument("unsafe selected stream clearance radius");
@@ -163,11 +168,13 @@ struct StreamTile {
   std::vector<StreamPoint> vertices, normals;
   std::vector<Rgb8> colors;
   std::vector<double> elevations;
+  // Empty for historical policies; selected sea-top vertices carry raw wetness.
+  std::vector<double> wetness;
   std::vector<std::int32_t> indices;
   auto bytes() const -> std::size_t {
     return vertices.size() * sizeof(StreamPoint) +
            normals.size() * sizeof(StreamPoint) + colors.size() * sizeof(Rgb8) +
-           elevations.size() * sizeof(double) +
+           (elevations.size() + wetness.size()) * sizeof(double) +
            indices.size() * sizeof(std::int32_t);
   }
 };
@@ -176,7 +183,8 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
                                    StreamKey key, unsigned source_lod,
                                    unsigned relief_version,
                                    TerrainTileCache& cache,
-                                   const TerrainLocalDetailSampler* selected)
+                                   const TerrainLocalDetailSampler* selected,
+                                   std::uint32_t surface_policy = 0)
     -> std::shared_ptr<const StreamTile> {
   if (source_lod > 10 || relief_version > kExperimentalReliefVersion)
     throw std::invalid_argument("invalid stream recipe");
@@ -218,6 +226,13 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
             planet, reference, static_cast<std::uint8_t>(source_lod), cache));
       if (!selected)
         sample = with_relief(sample, planet, reference, relief_version);
+      if (surface_policy == kSeaDatumTerrainPolicy) {
+        const auto top = require(select_terrain_sea_surface(
+            surface_policy, sample.elevation_metres));
+        sample.elevation_metres = top.elevation_metres;
+        tile->wetness.push_back(top.wet_datum ? 1.0 : 0.0);
+        if (top.wet_datum) sample.color = planet.palette.shallow_water;
+      }
       const auto position =
           tile_point(planet, key, u, v, sample.elevation_metres);
       fixed.push_back(position);
@@ -276,6 +291,10 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
             planet, probe, relief_version);
         elevation = sample.elevation_metres;
       }
+      if (surface_policy == kSeaDatumTerrainPolicy)
+        elevation =
+            require(select_terrain_sea_surface(surface_policy, elevation))
+                .elevation_metres;
       return mul(unit(probe), radius + elevation);
     };
     for (std::size_t i = 0; i < fixed.size(); ++i) {
@@ -315,6 +334,7 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
       tile->normals.push_back(tile->normals[top]);
       tile->colors.push_back(tile->colors[top]);
       tile->elevations.push_back(tile->elevations[top] - depth);
+      if (!tile->wetness.empty()) tile->wetness.push_back(tile->wetness[top]);
       if (i) {
         triangle(previous_top, top, previous_bottom, false);
         triangle(top, bottom, previous_bottom, false);
@@ -342,12 +362,14 @@ inline auto build_stream_tile(const PhysicalLocalSystem& owner, BodyId body,
     -> std::shared_ptr<const StreamTile> {
   if (!saved_contact_recipe(terrain_policy))
     throw std::invalid_argument("unsupported selected stream terrain policy");
-  const auto sampler =
-      TerrainLocalDetailSampler::create(owner, body, {terrain_policy}, cache);
+  const auto sampler = TerrainLocalDetailSampler::create(
+      owner, body, {require(terrain_surface_raw_recipe(terrain_policy))},
+      cache);
   if (!sampler)
     throw std::invalid_argument("invalid selected stream owner/body");
   return build_stream_tile_impl(sampler->planet(), key, 8, 0, cache,
-                                terrain_policy == 2 ? &*sampler : nullptr);
+                                terrain_policy >= 2 ? &*sampler : nullptr,
+                                terrain_policy);
 }
 
 using TileMap = std::map<StreamKey, std::shared_ptr<const StreamTile>>;
@@ -359,12 +381,12 @@ struct StreamMorphTile {
   // Actual coarse triangle endpoints, relative to the finer tile's anchor.
   std::vector<StreamPoint> coarse_vertices, coarse_normals;
   std::vector<std::array<double, 3>> coarse_colors; // Normalized RGB.
-  std::vector<double> coarse_elevations;
+  std::vector<double> coarse_elevations, coarse_wetness;
   auto bytes() const -> std::size_t {
     return coarse_vertices.size() * sizeof(StreamPoint) +
            coarse_normals.size() * sizeof(StreamPoint) +
            coarse_colors.size() * sizeof(std::array<double, 3>) +
-           coarse_elevations.size() * sizeof(double);
+           (coarse_elevations.size() + coarse_wetness.size()) * sizeof(double);
   }
 };
 struct StreamTransition {
@@ -400,7 +422,9 @@ inline auto validate_cover(const TileMap& tiles) -> void {
     if (!valid_key(key) || !tile || tile->key != key || !finite(tile->anchor) ||
         tile->vertices.size() != vertices || tile->normals.size() != vertices ||
         tile->colors.size() != vertices ||
-        tile->elevations.size() != vertices || tile->indices.size() != indices)
+        tile->elevations.size() != vertices ||
+        tile->indices.size() != indices ||
+        (!tile->wetness.empty() && tile->wetness.size() != vertices))
       throw std::invalid_argument("invalid morph tile shape or key");
     auto ancestor = key;
     while (ancestor.lod) {
@@ -415,7 +439,10 @@ inline auto validate_cover(const TileMap& tiles) -> void {
       const auto magnitude = length(tile->normals[i]);
       if (!finite(tile->vertices[i]) || !finite(tile->normals[i]) ||
           !std::isfinite(magnitude) || std::abs(magnitude - 1) > 1e-6 ||
-          !std::isfinite(tile->elevations[i]))
+          !std::isfinite(tile->elevations[i]) ||
+          (!tile->wetness.empty() &&
+           (!std::isfinite(tile->wetness[i]) || tile->wetness[i] < 0 ||
+            tile->wetness[i] > 1)))
         throw std::invalid_argument("invalid morph vertex attributes");
     }
     for (const auto index : tile->indices)
@@ -463,7 +490,9 @@ inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
   const unsigned scale = 1U << difference;
   if (fine.key.x / scale != coarse.key.x || fine.key.y / scale != coarse.key.y)
     throw std::invalid_argument("unrelated morph tiles");
-  StreamMorphTile result{coarse.key, refining, {}, {}, {}, {}};
+  if (fine.wetness.empty() != coarse.wetness.empty())
+    throw std::invalid_argument("incompatible morph surface attributes");
+  StreamMorphTile result{coarse.key, refining, {}, {}, {}, {}, {}};
   const auto count = fine.vertices.size();
   result.coarse_vertices.reserve(count);
   result.coarse_normals.reserve(count);
@@ -494,7 +523,7 @@ inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
                      : std::array{1 - y, x + y - 1, 1 - x};
       StreamPoint point{}, normal{};
       std::array<double, 3> color{};
-      double elevation{};
+      double elevation{}, wetness{};
       for (unsigned i = 0; i < 3; ++i) {
         const auto at = corners[i];
         point = add(point, mul(coarse.vertices[at], weights[i]));
@@ -503,6 +532,7 @@ inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
         color[1] += coarse.colors[at].green / 255.0 * weights[i];
         color[2] += coarse.colors[at].blue / 255.0 * weights[i];
         elevation += coarse.elevations[at] * weights[i];
+        if (!coarse.wetness.empty()) wetness += coarse.wetness[at] * weights[i];
       }
       point = add(point, anchor_delta);
       if (!finite(point) || !finite(normal) || length(normal) <= 1e-12 ||
@@ -512,6 +542,7 @@ inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
       result.coarse_normals.push_back(normal);
       result.coarse_colors.push_back(color);
       result.coarse_elevations.push_back(elevation);
+      if (!coarse.wetness.empty()) result.coarse_wetness.push_back(wetness);
     }
   // Preserve each fine skirt's existing inward offset below its associated top.
   // This morphs the top surface, not the old coarse skirt triangulation/depth.
@@ -535,6 +566,8 @@ inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
       result.coarse_normals.push_back(result.coarse_normals[top]);
       result.coarse_colors.push_back(result.coarse_colors[top]);
       result.coarse_elevations.push_back(elevation);
+      if (!coarse.wetness.empty())
+        result.coarse_wetness.push_back(result.coarse_wetness[top]);
     }
   return result;
 }
@@ -556,7 +589,7 @@ inline auto make_stream_transition(const TileMap& old, const TileMap& next)
           (tile->anchor != other.anchor || tile->vertices != other.vertices ||
            tile->normals != other.normals || tile->colors != other.colors ||
            tile->elevations != other.elevations ||
-           tile->indices != other.indices))
+           tile->wetness != other.wetness || tile->indices != other.indices))
         throw std::invalid_argument("shared morph tile changed geometry");
       result.draw_tiles.emplace(key, tile);
     } else if (const auto coarse = stream_morph_detail::ancestor_in(next, key);
@@ -617,8 +650,8 @@ class PlanetStream {
     if (!saved_contact_recipe(policy))
       throw std::invalid_argument("unsupported selected stream terrain policy");
     auto cache = require(TerrainTileCache::create(1));
-    const auto sampler =
-        TerrainLocalDetailSampler::create(owner, body, {policy}, cache);
+    const auto sampler = TerrainLocalDetailSampler::create(
+        owner, body, {require(terrain_surface_raw_recipe(policy))}, cache);
     if (!sampler)
       throw std::invalid_argument("invalid selected stream owner/body");
     return sampler->planet();
@@ -657,7 +690,7 @@ class PlanetStream {
   auto request(StreamPoint observer) -> bool {
     // Validate even while busy. Historical study/policy1 planning remains
     // exact.
-    const auto plan = terrain_policy == 2
+    const auto plan = terrain_policy >= 2
                           ? plan_selected_tiles(*physical_owner, *physical_body,
                                                 terrain_policy, observer)
                           : plan_tiles(planet, observer);
@@ -676,9 +709,10 @@ class PlanetStream {
           // move or outlives the job-local cache. Completed tiles own only mesh
           // values.
           std::optional<TerrainLocalDetailSampler> sampler;
-          if (owner && policy == 2)
+          if (owner && policy >= 2)
             sampler.emplace(require(TerrainLocalDetailSampler::create(
-                *owner, *body, {policy}, cache)));
+                *owner, *body, {require(terrain_surface_raw_recipe(policy))},
+                cache)));
           for (const auto& key : plan) {
             if (token.stop_requested()) break;
             if (auto it = old.find(key); it != old.end()) {
@@ -687,7 +721,8 @@ class PlanetStream {
             } else {
               batch.tiles.emplace(
                   key, build_stream_tile_impl(p, key, lod, relief, cache,
-                                              sampler ? &*sampler : nullptr));
+                                              sampler ? &*sampler : nullptr,
+                                              policy));
               ++batch.generated;
             }
           }

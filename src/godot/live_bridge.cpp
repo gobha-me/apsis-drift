@@ -2926,7 +2926,10 @@ class FreedomBridge : public godot::RefCounted {
                                static_cast<float>(n.z)});
             colors.push_back(
                 {c.red / 255.0f, c.green / 255.0f, c.blue / 255.0f, 1});
-            uv.push_back({static_cast<float>(tile->elevations[i]), 0});
+            uv.push_back({static_cast<float>(tile->elevations[i]),
+                          tile->wetness.empty()
+                              ? 0.0f
+                              : static_cast<float>(tile->wetness[i])});
           }
           for (auto i : tile->indices)
             indices.push_back(i);
@@ -2957,7 +2960,9 @@ class FreedomBridge : public godot::RefCounted {
           if (endpoint.coarse_vertices.size() != count ||
               endpoint.coarse_normals.size() != count ||
               endpoint.coarse_colors.size() != count ||
-              endpoint.coarse_elevations.size() != count)
+              endpoint.coarse_elevations.size() != count ||
+              (!endpoint.coarse_wetness.empty() &&
+               endpoint.coarse_wetness.size() != count))
             throw std::invalid_argument("incomplete terrain morph attributes");
           godot::PackedFloat32Array positions, normals, colors;
           for (std::size_t i = 0; i < count; ++i) {
@@ -2967,7 +2972,10 @@ class FreedomBridge : public godot::RefCounted {
             for (const auto value : {position.x, position.y, position.z,
                                      endpoint.coarse_elevations[i]})
               positions.push_back(as_float(value));
-            for (const auto value : {normal.x, normal.y, normal.z, 0.0})
+            for (const auto value :
+                 {normal.x, normal.y, normal.z,
+                  endpoint.coarse_wetness.empty() ? 0.0
+                                                  : endpoint.coarse_wetness[i]})
               normals.push_back(as_float(value));
             for (const auto value : {color[0], color[1], color[2], 1.0})
               colors.push_back(as_float(value));

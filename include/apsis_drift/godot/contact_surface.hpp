@@ -35,6 +35,9 @@ struct ContactTriangle {
   // Winding is NOT Godot front-face winding. normal is explicitly outward.
   std::array<PlanetFixedPositionMetres, 3> vertices;
   PlanetFixedDirection outward_normal;
+  // Recipe4: bit i marks raw elevation <=0 before sea-datum clamping.
+  // Other recipes keep zero. This is not interpolated material/support truth.
+  std::uint8_t datum_mask{};
   friend auto operator==(const ContactTriangle&, const ContactTriangle&)
       -> bool = default;
 };
