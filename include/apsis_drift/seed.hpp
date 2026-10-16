@@ -32,6 +32,7 @@ enum class SeedDomain : std::uint64_t {
   starter_craft = 13,
   jump_arrival = 14,
   surface_landmark = 15,
+  secondary_body = 16,
 };
 
 // Derives one child seed without consuming or exposing mutable random state.

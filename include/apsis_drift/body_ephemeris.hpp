@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -59,13 +60,33 @@ struct HierarchyBody {
   friend auto operator==(const HierarchyBody&, const HierarchyBody&)
       -> bool = default;
 };
+inline constexpr std::uint32_t kSecondaryBodyCatalogVersion{1};
+struct SecondaryBodyDescriptor {
+  HierarchyBody node;
+  std::uint32_t radius_metres{};
+  std::uint32_t spin_period_ticks{}, epoch_spin_phase_turns{};
+  Rgb8 tint;
+  friend auto operator==(const SecondaryBodyDescriptor&,
+                         const SecondaryBodyDescriptor&) -> bool = default;
+};
+// A separately selected population retains its complete physical owner. The
+// base star/planets remain unchanged; these descriptors add no force or
+// terrain.
+struct SecondaryBodyCatalog {
+  std::uint32_t version{kSecondaryBodyCatalogVersion};
+  PhysicalLocalSystem owner;
+  std::array<SecondaryBodyDescriptor, 2> bodies;
+  friend auto operator==(const SecondaryBodyCatalog&,
+                         const SecondaryBodyCatalog&) -> bool = default;
+};
 struct BodyHierarchy {
   std::uint32_t version{kBodyHierarchyVersion};
   SystemId system;
   std::vector<HierarchyBody> bodies;
   // Compatibility projections retain the complete actual catalog owner.
   // Absence denotes declared analytic geometry, not an admitted native world.
-  std::optional<std::variant<LocalSystemDescriptor, PhysicalLocalSystem>>
+  std::optional<std::variant<LocalSystemDescriptor, PhysicalLocalSystem,
+                             SecondaryBodyCatalog>>
       catalog;
 };
 struct BodyEphemeris {
@@ -100,6 +121,8 @@ enum class BodyEphemerisError : std::uint8_t {
 [[nodiscard]] auto make_body_hierarchy(const LocalSystemDescriptor&)
     -> std::expected<BodyHierarchy, BodyEphemerisError>;
 [[nodiscard]] auto make_body_hierarchy(const PhysicalLocalSystem&)
+    -> std::expected<BodyHierarchy, BodyEphemerisError>;
+[[nodiscard]] auto make_body_hierarchy(const SecondaryBodyCatalog&)
     -> std::expected<BodyHierarchy, BodyEphemerisError>;
 [[nodiscard]] auto validate_body_hierarchy(const BodyHierarchy&)
     -> std::expected<void, BodyEphemerisError>;

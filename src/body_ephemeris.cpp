@@ -1,4 +1,5 @@
 #include "apsis_drift/body_ephemeris.hpp"
+#include "apsis_drift/secondary_bodies.hpp"
 
 #include <algorithm>
 #include <array>
@@ -36,6 +37,15 @@ auto projected(const LocalSystemDescriptor& catalog, std::uint32_t ephemeris)
              orbit.period_ticks, orbit.epoch_phase_turns,
              orbit.inclination_microdegrees, orbit.ascending_node_turns}});
   }
+  std::ranges::sort(result, {}, &HierarchyBody::id);
+  return result;
+}
+auto projected(const SecondaryBodyCatalog& catalog)
+    -> std::vector<HierarchyBody> {
+  auto result =
+      projected(catalog.owner.catalog, catalog.owner.ephemeris_version);
+  for (const auto& body : catalog.bodies)
+    result.push_back(body.node);
   std::ranges::sort(result, {}, &HierarchyBody::id);
   return result;
 }
@@ -106,16 +116,22 @@ auto prepare(const BodyHierarchy& hierarchy) -> std::expected<Prepared, Error> {
   if (hierarchy.catalog) {
     const bool matches = std::visit(
         [&](const auto& source) {
-          if (!validate_local_system(source)) return false;
           if constexpr (std::is_same_v<std::decay_t<decltype(source)>,
                                        LocalSystemDescriptor>)
-            return hierarchy.system == source.id &&
+            return validate_local_system(source).has_value() &&
+                   hierarchy.system == source.id &&
                    result.bodies ==
                        projected(source, kAnalyticEphemerisVersion);
-          else
-            return hierarchy.system == source.catalog.id &&
+          else if constexpr (std::is_same_v<std::decay_t<decltype(source)>,
+                                            PhysicalLocalSystem>)
+            return validate_local_system(source).has_value() &&
+                   hierarchy.system == source.catalog.id &&
                    result.bodies ==
                        projected(source.catalog, source.ephemeris_version);
+          else
+            return validate_secondary_body_catalog(source).has_value() &&
+                   hierarchy.system == source.owner.catalog.id &&
+                   result.bodies == projected(source);
         },
         *hierarchy.catalog);
     if (!matches) return std::unexpected{Error::invalid_catalog};
@@ -171,6 +187,13 @@ auto make_body_hierarchy(const PhysicalLocalSystem& source)
                        projected(source.catalog, source.ephemeris_version),
                        source};
 }
+auto make_body_hierarchy(const SecondaryBodyCatalog& source)
+    -> std::expected<BodyHierarchy, Error> {
+  if (auto valid = validate_secondary_body_catalog(source); !valid)
+    return std::unexpected{valid.error()};
+  return BodyHierarchy{kBodyHierarchyVersion, source.owner.catalog.id,
+                       projected(source), source};
+}
 auto validate_body_hierarchy(const BodyHierarchy& hierarchy)
     -> std::expected<void, Error> {
   const auto result = prepare(hierarchy);
@@ -187,7 +210,8 @@ auto resolve_body_ephemerides(const BodyHierarchy& hierarchy,
   // queries retain their existing full-width modulo domain.
   if (time.tick == std::numeric_limits<SimulationTick>::max() &&
       hierarchy.catalog &&
-      std::holds_alternative<PhysicalLocalSystem>(*hierarchy.catalog))
+      (std::holds_alternative<PhysicalLocalSystem>(*hierarchy.catalog) ||
+       std::holds_alternative<SecondaryBodyCatalog>(*hierarchy.catalog)))
     return std::unexpected{Error::invalid_time};
   const auto prepared = prepare(hierarchy);
   if (!prepared) return std::unexpected{prepared.error()};

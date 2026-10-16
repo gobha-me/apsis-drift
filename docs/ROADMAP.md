@@ -47,7 +47,12 @@ playable increments in that order without reopening the priority question.
 The first landmark increment is [seeded geological exposures](FREEDOM_SURFACE_LANDMARKS.md)
 ([#611](https://github.com/gobha-me/apsis-drift/issues/611)): visible ground
 bands, on-foot inspection and retained first visits using the existing terrain.
-Later increments still require their own concrete implementation scope.
+The queued flight/landing increment keeps aid feedback visible through its
+actual lifecycle ([#613](https://github.com/gobha-me/apsis-drift/issues/613)).
+The third increment is [distant optical contacts](DISTANT_CONTACTS.md)
+([#214](https://github.com/gobha-me/apsis-drift/issues/214)): a separately
+selected moon/minor catalog, true apparent size and phase, and explicit
+close-observation limits. New solid bodies, gravity and landing remain deferred.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

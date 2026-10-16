@@ -1,5 +1,6 @@
 extends SceneTree
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 const SurfaceAppearance = preload("res://scripts/native/native_surface_appearance.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
@@ -11,8 +12,11 @@ func check(ok: bool, message: String) -> void:
 		failures += 1
 		push_error(message)
 func _initialize() -> void:
+	# Closed packet, finite geometry and bounded buffers precede native staging.
+	check_distant_contacts()
 	call_deferred("run")
 func run() -> void:
+	if failures > 0: quit(1); return
 	var args := OS.get_cmdline_user_args()
 	if args.size() not in [5, 7]: quit(1); return
 	for path in args:
@@ -156,6 +160,71 @@ func run() -> void:
 	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, actual catalog2 anchored phases when supplied, no raster/hardware claim" % failures)
 	quit(0 if failures == 0 else 1)
 
+func check_distant_contacts() -> void:
+	var state := {"system_id": "21", "tick": "120", "distant_contacts": {"version": 1, "selected": true, "system_id": "21", "tick": "120", "contacts": [{"id": "11", "label": "Unidentified contact", "status": "visible", "direction": Vector3.FORWARD, "angular_radius": 0.01, "light_direction": Vector3.UP, "tint": Color(0.7, 0.6, 0.5, 1.0), "spin_radians": 0.4, "reason": "Distant optical contact"}, {"id": "12", "label": "Unidentified contact", "status": "unresolved", "direction": Vector3.RIGHT, "angular_radius": 0.000001, "light_direction": Vector3.UP, "tint": Color.WHITE, "spin_radians": -PI, "reason": "Below optical resolution"}]}}
+	var original := var_to_bytes(state)
+	var first := ShaderMaterial.new()
+	first.shader = NativeEnvironment.SkyShader
+	var second := ShaderMaterial.new()
+	second.shader = NativeEnvironment.SkyShader
+	var materials: Array[ShaderMaterial] = [first, second]
+	check(DistantContacts.valid(state) and DistantContacts.apply(state, materials), "Valid distant contacts refused")
+	for material in materials:
+		check(material.get_shader_parameter("distant_contact_count") == 1 and material.get_shader_parameter("distant_contact_directions")[0] == Vector3.FORWARD and is_equal_approx(material.get_shader_parameter("distant_contact_angular_radii")[0], 0.01), "Resolved geometry lost its true angular size or unresolved contact became a silhouette")
+	check(DistantContacts.selected_contact(state, "12") == state.distant_contacts.contacts[1] and DistantContacts.selected_contact(state, "99").is_empty(), "Contact selection invented a catalog entry")
+	var malformed_states: Array[Dictionary] = []
+	for invalid in [null, false, 1, [], "contacts"]:
+		var malformed := state.duplicate(true)
+		malformed.distant_contacts = invalid
+		malformed_states.append(malformed)
+	for key in state.distant_contacts:
+		var malformed := state.duplicate(true)
+		malformed.distant_contacts.erase(key)
+		malformed_states.append(malformed)
+	for changes in [{"version": 1.0}, {"version": 2}, {"selected": 1}, {"selected": false}, {"system_id": "22"}, {"tick": "121"}, {"contacts": null}, {"contacts": [null]}, {"extra": true}]:
+		var malformed := state.duplicate(true)
+		malformed.distant_contacts.merge(changes, true)
+		malformed_states.append(malformed)
+	for key in state.distant_contacts.contacts[0]:
+		var malformed := state.duplicate(true)
+		malformed.distant_contacts.contacts[0].erase(key)
+		malformed_states.append(malformed)
+	for changes in [{"id": "01"}, {"id": "-1"}, {"id": "18446744073709551616"}, {"id": ""}, {"id": 11}, {"label": null}, {"label": "x".repeat(65)}, {"reason": "x".repeat(161)}, {"status": null}, {"status": "landable"}, {"direction": Vector3.ZERO}, {"direction": Vector3(INF, 0, 0)}, {"direction": Vector3(NAN, 0, 0)}, {"direction": null}, {"light_direction": Vector3.ONE}, {"light_direction": null}, {"angular_radius": NAN}, {"angular_radius": INF}, {"angular_radius": -0.001}, {"angular_radius": 0.20001}, {"angular_radius": 0}, {"spin_radians": NAN}, {"spin_radians": PI + 0.0001}, {"spin_radians": -PI - 0.0001}, {"tint": null}, {"tint": Color(INF, 0, 0, 1)}, {"tint": Color(0, 0, 0, 0.5)}, {"tint": Color(-0.01, 0, 0, 1)}, {"extra": true}]:
+		var malformed := state.duplicate(true)
+		malformed.distant_contacts.contacts[0].merge(changes, true)
+		malformed_states.append(malformed)
+	var duplicate := state.duplicate(true)
+	duplicate.distant_contacts.contacts[1].id = "11"
+	malformed_states.append(duplicate)
+	var oversized := state.duplicate(true)
+	oversized.distant_contacts.contacts.append(state.distant_contacts.contacts[0].duplicate(true))
+	malformed_states.append(oversized)
+	var accepted := {}
+	for uniform in ["distant_contact_count", "distant_contact_directions", "distant_contact_angular_radii", "distant_contact_light_directions", "distant_contact_tints", "distant_contact_spins"]:
+		accepted[uniform] = first.get_shader_parameter(uniform)
+	for malformed in malformed_states:
+		check(not DistantContacts.valid(malformed) and not DistantContacts.apply(malformed, materials), "Malformed distant packet accepted")
+		for material in materials:
+			for uniform in accepted:
+				check(material.get_shader_parameter(uniform) == accepted[uniform], "Rejected packet changed previously accepted sky: " + uniform)
+	var wrong := ShaderMaterial.new()
+	wrong.shader = preload("res://shaders/terrain.gdshader")
+	check(not DistantContacts.apply({}, [first, wrong]) and not DistantContacts.apply({}, [first, null]), "Invalid later sky destination accepted")
+	for uniform in accepted:
+		check(first.get_shader_parameter(uniform) == accepted[uniform], "Invalid later destination changed the first accepted sky: " + uniform)
+	for status in ["unresolved", "occluded", "close_unavailable"]:
+		var hidden := state.duplicate(true)
+		hidden.distant_contacts.contacts[0].status = status
+		check(DistantContacts.apply(hidden, materials) and first.get_shader_parameter("distant_contact_count") == 0, "Unsupported or hidden contact was rendered as a physical silhouette")
+	var boundaries := state.duplicate(true)
+	boundaries.distant_contacts.contacts[0].angular_radius = 0.2
+	boundaries.distant_contacts.contacts[0].spin_radians = PI
+	boundaries.distant_contacts.contacts[1].angular_radius = 0.0
+	check(DistantContacts.valid(boundaries), "Inclusive distant geometry bounds refused")
+	for historical in [{}, {"system_id": "21", "tick": "120", "distant_contacts": {"version": 1, "selected": false, "system_id": "21", "tick": "120", "contacts": []}}]:
+		check(DistantContacts.apply(historical, materials) and first.get_shader_parameter("distant_contact_count") == 0, "Historical absent/unselected contacts left sky rendering enabled")
+	check(var_to_bytes(state) == original, "Distant contact presenter mutated authoritative input")
+
 func check_surface_appearance(state: Dictionary) -> void:
 	if not state.has("surface_appearance") or not SurfaceAppearance.valid(state):
 		check(false, "Actual C++ surface appearance packet is unavailable")
@@ -207,6 +276,7 @@ func check_surface_appearance(state: Dictionary) -> void:
 
 func check_planet_optics(historical: Dictionary, output: String) -> void:
 	check(not historical.has("optics") and PlanetOptics.valid(historical), "Historical save gained an optical selection")
+	check(DistantContacts.valid(historical) and historical.get("distant_contacts") is Dictionary and not historical.distant_contacts.selected and historical.distant_contacts.contacts.is_empty(), "Historical save gained a secondary population selection")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	# Pure bridge packet check: use the explicit pending transaction. The
 	# ordinary shell separately owns model staging before displaying a journey.
@@ -225,6 +295,8 @@ func check_planet_optics(historical: Dictionary, output: String) -> void:
 	var bytes := FileAccess.get_file_as_bytes(output)
 	var environment := Environment.new()
 	var sky := NativeEnvironment.install(environment)
+	# Reuse this actual New Game: no second world stage or synthetic catalog.
+	check_actual_distant_contacts(owner, state, sky, output, bytes)
 	var terrain := ShaderMaterial.new()
 	terrain.shader = preload("res://shaders/terrain.gdshader")
 	var materials: Array[ShaderMaterial] = [sky, terrain]
@@ -265,6 +337,52 @@ func check_planet_optics(historical: Dictionary, output: String) -> void:
 	for material in materials:
 		check(not material.get_shader_parameter("optical_enabled") and material.get_shader_parameter("optical_atlas") == null, "Historical clear state left optical rendering enabled")
 	check(owner.get_freedom_flight_state() == state and owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == bytes, "Optical presentation changed complete New Game save bytes or clock")
+
+func check_actual_distant_contacts(owner: Variant, state: Dictionary, sky: ShaderMaterial, output: String, bytes: PackedByteArray) -> void:
+	var packet: Variant = state.get("distant_contacts")
+	if not check_actual_contact_packet(state): return
+	check(NativeEnvironment.apply_sky(state, sky), "Actual New Game contact/lighting sky transfer refused")
+	var visible := 0
+	for contact: Dictionary in packet.contacts:
+		if contact.status == "visible" and contact.angular_radius > 0.0: visible += 1
+	check(sky.get_shader_parameter("distant_contact_count") == visible, "Native sky invented an eligible actual contact")
+	# The New Game actor is still walking in the station. Exercise the ordinary
+	# FlightView's local selection refresh over its actual flight projection,
+	# without claiming a staged seated/controller interaction or adding assets.
+	var view := FlightView.new()
+	view.state = state
+	for contact: Dictionary in packet.contacts:
+		view.selected_contact_id = contact.id
+		view.refresh_distant_contacts()
+		check(view.selected_contact_id == contact.id and DistantContacts.selected_contact(view.state, view.selected_contact_id) == contact, "View-local selection lost an actual C++ optical contact")
+		check(owner.get_freedom_flight_state() == state, "Contact selection advanced or changed actual C++ flight")
+	view.selected_contact_id = ""
+	view.refresh_distant_contacts()
+	check(view.selected_contact_id.is_empty() and DistantContacts.selected_contact(view.state, "").is_empty(), "View-local selection clearing invented a target")
+	view.free()
+	check(owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == bytes and owner.get_freedom_flight_state() == state, "Actual optical reads/selection changed complete New Game save, clock or checksum")
+	var continued: Variant = ClassDB.instantiate("FreedomBridge")
+	if not continued.stage_freedom_continue(output):
+		check(false, "Actual selected companions Continue staging refused: " + str(continued.get_last_error()))
+		return
+	var pending: Dictionary = continued.get_pending_freedom_start()
+	if not continued.commit_pending_freedom_start(pending.candidate_id):
+		check(false, "Actual selected companions Continue commit refused")
+		return
+	var restored: Dictionary = continued.get_freedom_flight_state()
+	check(check_actual_contact_packet(restored) and restored.distant_contacts == packet and restored.tick == state.tick and restored.checksum == state.checksum, "Continue changed actual companion selection, projection or same-tick ownership")
+	var restored_path := output + ".contacts-continued.json"
+	check(continued.save_freedom_as(restored_path) and FileAccess.get_file_as_bytes(restored_path) == bytes, "Companion Continue changed complete canonical New Game save")
+	continued = null
+
+func check_actual_contact_packet(state: Dictionary) -> bool:
+	var packet: Variant = state.get("distant_contacts")
+	var valid: bool = DistantContacts.valid(state) and packet is Dictionary and packet.selected and packet.contacts.size() == 2 and packet.system_id == state.system_id and packet.tick == state.tick
+	check(valid, "Actual C++ New Game lacks two closed same-tick selected optical contacts")
+	if not valid: return false
+	for contact: Dictionary in packet.contacts:
+		check(contact.label == "Unidentified contact" and contact.size() == 9, "Actual optical packet leaked a catalog name or additional body metadata")
+	return true
 
 func daynight_visibility(elevation: float, horizon: float, width: float) -> float:
 	var fraction := clampf((elevation - horizon + width) / (2.0 * width), 0.0, 1.0)

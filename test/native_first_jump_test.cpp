@@ -78,6 +78,7 @@ auto leg(NativeFreedomFlightSession& live, const std::filesystem::path& path)
   need(live.begin_jump());
   auto resumed = resume(live, path);
   const auto source_tick = live.document().flight.tick;
+  const auto companions = live.document().model.companions;
   const auto before_charges = live.resources()->jump_charges;
   for (SimulationTick t = 1; t <= kJumpSpoolTicks + kJumpTransitTicks; ++t) {
     const auto step = need(live.advance({}));
@@ -114,7 +115,8 @@ auto leg(NativeFreedomFlightSession& live, const std::filesystem::path& path)
       check(step.jump_arrived,
             "Actual session performs scheduled physical handoff");
   }
-  check(live.document().flight.tick ==
+  check(live.document().model.companions == companions &&
+            live.document().flight.tick ==
                 source_tick + kJumpSpoolTicks + kJumpTransitTicks &&
             need(live.travel_document()) == need(resumed.travel_document()),
         "Uninterrupted and all-boundary resumed native leg converge exactly");
@@ -226,6 +228,10 @@ auto seated_continuity(const std::filesystem::path& path) -> void {
   auto document = need(fixture({42}).travel_document());
   auto& flight =
       std::get<FreedomFlightSaveDocument>(document.voyage.voyage.voyage.base);
+  flight.model.optics = on_station.document().model.optics;
+  flight.model.companions = on_station.document().model.companions;
+  check(flight.model.companions == 1,
+        "Selected NewGame companion component enters the seated travel route");
   flight.flight.tick = on_station.document().flight.tick;
   flight.origin.state.tick = flight.flight.tick;
   document.voyage.voyage.resources.tick = flight.flight.tick;

@@ -1,4 +1,13 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  foreach(secondary_case IN ITEMS secondary-bodies secondary-observations)
+    string(REPLACE "-" "_" secondary_source "${secondary_case}")
+    add_executable(apsis-drift-${secondary_case}-tests test/${secondary_source}_test.cpp)
+    target_link_libraries(apsis-drift-${secondary_case}-tests PRIVATE apsis-drift::core)
+    target_compile_options(apsis-drift-${secondary_case}-tests PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+    add_test(NAME ${secondary_case}-contract COMMAND apsis-drift-${secondary_case}-tests)
+    set_tests_properties(${secondary_case}-contract PROPERTIES TIMEOUT 120)
+  endforeach()
   add_executable(apsis-drift-surface-landmarks-tests test/surface_landmarks_test.cpp)
   target_link_libraries(apsis-drift-surface-landmarks-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-surface-landmarks-tests PRIVATE
