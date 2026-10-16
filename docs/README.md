@@ -36,6 +36,7 @@ player's station-to-flight journey.
 - [Starting assembly](NATIVE_STARTING_ASSEMBLY.md) and [station view](NATIVE_STATION_VIEW.md)
 - [Flight controls/reference](NATIVE_FLIGHT_REFERENCE.md)
 - [Terrain pad assessment](TERRAIN_TOUCHDOWN.md), [landed craft lifecycle](LANDED_CRAFT.md) and [surface walking](FREEDOM_SURFACE_WALK.md)
+- [Local geological exposures](FREEDOM_SURFACE_LANDMARKS.md): seeded ground bands, on-foot inspection and retained first visits.
 - [Versioned physical local-detail sampling](TERRAIN_LOCAL_DETAIL.md) over unchanged [terrain-v1 source tiles](TERRAIN_TILES.md)
 - [Selected native terrain](SELECTED_NATIVE_TERRAIN.md): saved policy compatibility, shared physical top geometry, streaming identity/residency and focused checks.
 - [Experimental terrain impacts](TERRAIN_IMPACTS.md): explicit consequence selection, localized condition, contact episodes and standard recovery.

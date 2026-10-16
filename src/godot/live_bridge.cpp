@@ -370,6 +370,12 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::replace_freedom_surface_marker);
     godot::ClassDB::bind_method(godot::D_METHOD("clear_freedom_surface_marker"),
                                 &FreedomBridge::clear_freedom_surface_marker);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("enable_freedom_surface_landmarks"),
+        &FreedomBridge::enable_freedom_surface_landmarks);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("inspect_freedom_surface_landmark", "id"),
+        &FreedomBridge::inspect_freedom_surface_landmark);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_surface_walk",
                                                 "elapsed", "controls",
                                                 "paused"),
@@ -1228,6 +1234,28 @@ class FreedomBridge : public godot::RefCounted {
       return session.clear_surface_marker();
     });
   }
+  auto enable_freedom_surface_landmarks() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.enable_surface_landmarks();
+    });
+  }
+  auto inspect_freedom_surface_landmark(const godot::String& id) -> bool {
+    const auto utf8 = id.utf8();
+    const std::string_view text{utf8.get_data(),
+                                static_cast<std::size_t>(utf8.length())};
+    std::uint64_t value{};
+    const auto parsed =
+        std::from_chars(text.data(), text.data() + text.size(), value);
+    if (text.empty() || text.size() > 20 || parsed.ec != std::errc{} ||
+        parsed.ptr != text.data() + text.size() ||
+        std::to_string(value) != text) {
+      last_error = "Exposure ID must be a canonical unsigned decimal word";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.inspect_surface_landmark(SurfaceLandmarkId{value});
+    });
+  }
   auto advance_freedom_surface_walk(double elapsed,
                                     const godot::PackedFloat64Array& controls,
                                     bool paused) -> bool {
@@ -1632,6 +1660,73 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  static auto project_surface_landmarks(const SavedFlightWorld& selected,
+                                        const SavedFlightProjection& view)
+      -> godot::Dictionary {
+    const auto landmarks = require(selected.session.surface_landmarks_view());
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    godot::Dictionary result;
+    result["version"] = 1;
+    result["selected"] = landmarks.selected;
+    result["can_enable"] = landmarks.can_enable;
+    result["system_id"] = decimal(selected.session.system().catalog.id.value);
+    result["planet_id"] = decimal(view.planet.id.value);
+    result["tick"] = decimal(selected.session.document().flight.tick);
+    result["inspection_count"] =
+        static_cast<std::int64_t>(landmarks.inspection_count);
+    godot::Array sites;
+    for (const auto& item : landmarks.sites) {
+      const auto& identity = item.site.identity;
+      const auto& v = item.target_craft_relative_metres;
+      const auto& a = view.system_axes;
+      const godot::Vector3 position{
+          static_cast<godot::real_t>(a[0].east * v.x + a[1].east * v.y +
+                                     a[2].east * v.z),
+          static_cast<godot::real_t>(a[0].up * v.x + a[1].up * v.y +
+                                     a[2].up * v.z),
+          static_cast<godot::real_t>(
+              -(a[0].north * v.x + a[1].north * v.y + a[2].north * v.z))};
+      if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+          !std::isfinite(position.z))
+        throw std::runtime_error("Exposure projection is non-finite");
+      const char* label = "Pale exposure";
+      const char* description =
+          "Pale bands interrupt the darker surface. Composition unresolved.";
+      switch (identity.kind) {
+        case SurfaceLandmarkKind::pale_exposure: break;
+        case SurfaceLandmarkKind::ochre_exposure:
+          label = "Ochre exposure";
+          description = "Ochre bands cross the surface. Colour alone does not "
+                        "identify their composition.";
+          break;
+        case SurfaceLandmarkKind::dark_exposure:
+          label = "Dark exposure";
+          description = "Dark bands interrupt the surrounding ground. "
+                        "Composition unresolved.";
+          break;
+      }
+      godot::Dictionary site;
+      site["id"] = decimal(identity.id.value);
+      site["kind"] = static_cast<std::int64_t>(identity.kind);
+      site["label"] = label;
+      site["description"] = description;
+      site["position"] = position;
+      site["radius_metres"] = identity.radius_metres;
+      site["tint"] =
+          godot::Color{identity.tint.red / 255.0F, identity.tint.green / 255.0F,
+                       identity.tint.blue / 255.0F, 1.0F};
+      site["distance_metres"] = item.distance_metres;
+      site["nearby"] = item.nearby;
+      site["can_inspect"] = item.can_inspect;
+      site["inspected"] = item.inspected;
+      sites.append(site);
+    }
+    result["sites"] = sites;
+    return result;
+  }
+
   static auto project_flight_state(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
@@ -1673,6 +1768,7 @@ class FreedomBridge : public godot::RefCounted {
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
       result["surface_marker"] = project_surface_marker(selected, view);
+      result["surface_landmarks"] = project_surface_landmarks(selected, view);
       result["station_available"] = view.station_available;
       result["station_id"] = view.station_available
                                  ? decimal(view.station.id.value)

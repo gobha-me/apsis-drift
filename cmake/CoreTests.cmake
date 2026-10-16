@@ -1,4 +1,10 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-surface-landmarks-tests test/surface_landmarks_test.cpp)
+  target_link_libraries(apsis-drift-surface-landmarks-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-surface-landmarks-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME surface-landmarks-contract COMMAND apsis-drift-surface-landmarks-tests)
+  set_tests_properties(surface-landmarks-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-terrain-local-detail-tests
     test/terrain_local_detail_test.cpp)
   target_link_libraries(apsis-drift-terrain-local-detail-tests PRIVATE apsis-drift::core)

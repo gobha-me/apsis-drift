@@ -277,6 +277,7 @@ auto native_new_game(Seed universe_seed)
   auto knowledge = make_freedom_starting_knowledge(
       universe_seed, kFreedomObservedKnowledgeVersion);
   if (!knowledge) return std::unexpected{"Starting chart rejected"};
+  knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
   return select_document(
       FreedomKnowledgeSaveDocument{{{std::move(*document), {}}, resources},
                                    std::move(*knowledge)},

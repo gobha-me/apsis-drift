@@ -54,6 +54,18 @@ struct FreedomSurfaceMarkerView {
   std::optional<std::string> known_system_name, known_body_name;
 };
 
+struct FreedomSurfaceLandmarkView {
+  SurfaceLandmarkSite site;
+  RigidVector3 target_craft_relative_metres;
+  double distance_metres{};
+  bool nearby{}, can_inspect{}, inspected{};
+};
+struct FreedomSurfaceLandmarksView {
+  bool selected{}, can_enable{};
+  std::size_t inspection_count{};
+  std::vector<FreedomSurfaceLandmarkView> sites;
+};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -223,6 +235,12 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto clear_surface_marker() -> std::expected<void, std::string>;
   [[nodiscard]] auto surface_marker_view() const
       -> std::expected<FreedomSurfaceMarkerView, std::string>;
+  [[nodiscard]] auto enable_surface_landmarks()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto inspect_surface_landmark(SurfaceLandmarkId)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto surface_landmarks_view() const
+      -> std::expected<FreedomSurfaceLandmarksView, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto last_gear_clearance() const
       -> std::optional<TerrainPadGapSample>;
@@ -292,5 +310,10 @@ class NativeFreedomFlightSession {
   std::optional<PlanetSurfaceWalkerState> surface_walker_;
   std::optional<PlanetSurfaceWalkStatus> surface_walk_blockage_;
   std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
+  // Pure derived terrain memoization, never a saved world or actor owner.
+  mutable std::shared_ptr<SurfaceLandmarkField> surface_landmark_field_;
+  mutable SystemId surface_landmark_system_{};
+  mutable PlanetId surface_landmark_planet_{};
+  mutable std::uint32_t surface_landmark_policy_{};
 };
 } // namespace apsis_drift

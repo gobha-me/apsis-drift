@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <type_traits>
 
 namespace {
@@ -383,6 +385,175 @@ auto surface_marker_metadata() -> void {
         "Marker metadata cannot bypass duplicate-key or bounded input limits");
 }
 
+auto surface_landmark_metadata() -> void {
+  const Seed seed{42};
+  const auto system = need(generate_physical_origin_system(seed, 2));
+  const auto& body = system.catalog.planets.front().descriptor;
+  std::vector<FreedomSurfaceLandmarkInspection> records;
+  const auto radius = static_cast<double>(body.radius.value) * 1000;
+  // Identity-only shell samples authenticate bounded codec fixtures without
+  // creating contact geometry or pretending they were player inspections.
+  for (unsigned sample = 0; sample < 512 && records.size() < 65; ++sample) {
+    const auto angle = 2 * std::numbers::pi * sample / 512;
+    const SurfaceLandmarkCell base{
+        static_cast<std::int32_t>(
+            std::floor(radius * std::cos(angle) / kSurfaceLandmarkCellMetres)),
+        static_cast<std::int32_t>(
+            std::floor(radius * std::sin(angle) / kSurfaceLandmarkCellMetres)),
+        0};
+    for (std::int32_t x = -1; x <= 1; ++x)
+      for (std::int32_t y = -1; y <= 1; ++y)
+        for (std::int32_t z = -1; z <= 1; ++z) {
+          const SurfaceLandmarkCell cell{base.x + x, base.y + y, base.z + z};
+          const auto identity = need(identify_surface_landmark(body, cell));
+          if (!identity || records.size() == 65 ||
+              std::ranges::any_of(records, [&](const auto& record) {
+                return record.site == identity->id;
+              }))
+            continue;
+          records.push_back(
+              {system.catalog.id, body.id, cell, identity->id, 3, 7});
+        }
+  }
+  if (records.size() != 65)
+    throw std::runtime_error("Landmark identity fixtures unavailable");
+  std::ranges::sort(records, {},
+                    [](const auto& record) { return record.site.value; });
+  for (auto version :
+       {kFreedomKnowledgeVersion, kFreedomObservedKnowledgeVersion,
+        kFreedomTravelKnowledgeVersion}) {
+    auto knowledge = need(make_freedom_starting_knowledge(seed, version));
+    const auto historical = need(encode_freedom_knowledge_json(knowledge, 7));
+    check(!Json::parse(historical).contains("surface_landmarks") &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(historical, 7)), 7)) ==
+                  historical,
+          "Unselected landmarks preserve each historical recipe encoding");
+    knowledge.surface_landmarks = FreedomSurfaceLandmarkState{};
+    if (version == kFreedomKnowledgeVersion) {
+      auto malformed = Json::parse(historical);
+      malformed["surface_landmarks"] = {{"version", 1U},
+                                        {"inspections", Json::array()}};
+      check(!validate_freedom_knowledge(knowledge, 7) &&
+                !encode_freedom_knowledge_json(knowledge, 7) &&
+                !decode_freedom_knowledge_json(malformed.dump(), 7),
+            "Chart-only historical recipes cannot select landmarks");
+      continue;
+    }
+    const auto empty = need(encode_freedom_knowledge_json(knowledge, 7));
+    check(need(decode_freedom_knowledge_json(empty, 7)) == knowledge &&
+              Json::parse(empty)["surface_landmarks"]["inspections"].empty(),
+          "Explicit empty landmark selection retains its version");
+    knowledge.surface_landmarks->inspections = {records[0], records[1]};
+    knowledge.surface_marker = FreedomSurfaceMarkerState{};
+    const auto facts = knowledge.entries;
+    const auto recipe = knowledge.recipe;
+    const auto selected = need(encode_freedom_knowledge_json(knowledge, 7));
+    check(need(decode_freedom_knowledge_json(selected, 7)) == knowledge &&
+              knowledge.entries == facts && knowledge.recipe == recipe,
+          "Landmarks and marker coexist without adding sensor facts or "
+          "changing recipe domains");
+    if (version == kFreedomTravelKnowledgeVersion) {
+      knowledge.recipe.craft_lineage = FreedomCraftLineage{1, 1};
+      check(need(decode_freedom_knowledge_json(
+                need(encode_freedom_knowledge_json(knowledge, 7)), 7)) ==
+                knowledge,
+            "Inspection metadata is independent of recovered craft identity");
+    }
+  }
+  auto selected = need(
+      make_freedom_starting_knowledge(seed, kFreedomObservedKnowledgeVersion));
+  selected.surface_landmarks = FreedomSurfaceLandmarkState{1, {records[0]}};
+  for (std::uint32_t policy = 1; policy <= 3; ++policy) {
+    selected.surface_landmarks->inspections.front().terrain_policy = policy;
+    check(validate_freedom_knowledge(selected, 7).has_value(),
+          "Inspections retain their explicit supported contact policy");
+  }
+  auto full = selected;
+  full.surface_landmarks->inspections.assign(records.begin(),
+                                             records.end() - 1);
+  check(need(decode_freedom_knowledge_json(
+            need(encode_freedom_knowledge_json(full, 7)), 7)) == full,
+        "Exactly64 authenticated sorted inspections fit the metadata budget");
+  for (unsigned fault = 0; fault < 11; ++fault) {
+    auto bad = selected;
+    auto& state = bad.surface_landmarks.value();
+    auto& record = state.inspections.front();
+    switch (fault) {
+      case 0: state.version = 2; break;
+      case 1: record.system = {}; break;
+      case 2: record.planet = {}; break;
+      case 3: record.site.value ^= 1; break;
+      case 4: record.cell = {}; break;
+      case 5: record.cell.x = 32768; break;
+      case 6: record.terrain_policy = 0; break;
+      case 7: record.terrain_policy = 4; break;
+      case 8: record.tick = 8; break;
+      case 9: state.inspections.push_back(record); break;
+      case 10: state.inspections = records; break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 7) &&
+              !encode_freedom_knowledge_json(bad, 7),
+          "Invalid landmark selectors, identities, bounds and provenance "
+          "refuse before encoding");
+  }
+  auto reversed = selected;
+  reversed.surface_landmarks->inspections = {records[1], records[0]};
+  check(!validate_freedom_knowledge(reversed, 7),
+        "Reordered authenticated inspections cannot silently recanonicalize");
+  const auto encoded = need(encode_freedom_knowledge_json(selected, 7));
+  for (unsigned fault = 0; fault < 26; ++fault) {
+    auto root = Json::parse(encoded);
+    auto& state = root["surface_landmarks"];
+    auto& record = state["inspections"][0];
+    switch (fault) {
+      case 0: state = nullptr; break;
+      case 1: state["version"] = 2U; break;
+      case 2: state["version"] = 1.0; break;
+      case 3: state["extra"] = 0; break;
+      case 4: state.erase("inspections"); break;
+      case 5: state["inspections"] = nullptr; break;
+      case 6: record = nullptr; break;
+      case 7: record["extra"] = 0; break;
+      case 8: record.erase("site"); break;
+      case 9: record["system"] = -1; break;
+      case 10: record["planet"] = 0U; break;
+      case 11: record["site"] = "1"; break;
+      case 12: record["site"] = 1.0; break;
+      case 13: record["tick"] = 8U; break;
+      case 14: record["terrain_policy"] = 0U; break;
+      case 15: record["terrain_policy"] = UINT64_MAX; break;
+      case 16: record["cell"] = Json::array({0, 0}); break;
+      case 17: record["cell"][0] = 1.0; break;
+      case 18: record["cell"][0] = "0"; break;
+      case 19: record["cell"][0] = UINT64_MAX; break;
+      case 20: record["cell"][0] = INT64_MIN; break;
+      case 21: record["cell"][0] = 32768; break;
+      case 22: record["cell"][0] = nullptr; break;
+      case 23: state["inspections"].push_back(record); break;
+      case 24:
+        while (state["inspections"].size() < 65)
+          state["inspections"].push_back(state["inspections"][0]);
+        break;
+      case 25: root["extra"] = 0; break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(root.dump(), 7),
+          "Landmark decoder refuses malformed closed records and numbers");
+  }
+  auto duplicate = encoded;
+  const auto at = duplicate.find("\"surface_landmarks\": {");
+  duplicate.insert(at, "\"surface_landmarks\": null, ");
+  auto nested_duplicate = encoded;
+  nested_duplicate.insert(nested_duplicate.find("\"site\":"), "\"site\": 0, ");
+  check(!decode_freedom_knowledge_json(duplicate, 7) &&
+            !decode_freedom_knowledge_json(nested_duplicate, 7) &&
+            !decode_freedom_knowledge_json(
+                encoded + std::string(kMaximumFreedomKnowledgeBytes, ' '), 7),
+        "Landmark metadata preserves duplicate-key and complete input bounds");
+}
+
 auto native_saves(const std::filesystem::path& dir) -> void {
   const Seed seed{42};
   auto selected = need(native_new_game(seed));
@@ -473,6 +644,7 @@ auto main() -> int {
       fixture(seed);
     invalid_inputs();
     surface_marker_metadata();
+    surface_landmark_metadata();
     native_saves(dir);
     check(fingerprint == 2913154867708375063ULL,
           "Version1 ordered ledger and observation sequence retain their "

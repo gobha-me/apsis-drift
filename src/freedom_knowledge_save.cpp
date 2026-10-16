@@ -27,6 +27,15 @@ auto unsigned_fields(const Json& j,
       return false;
   return true;
 }
+auto bounded_cell_coordinate(const Json& coordinate) -> bool {
+  if (coordinate.is_number_unsigned())
+    return coordinate.get<std::uint64_t>() <=
+           static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
+  if (!coordinate.is_number_integer()) return false;
+  const auto value = coordinate.get<std::int64_t>();
+  return value >= std::numeric_limits<std::int32_t>::min() &&
+         value <= std::numeric_limits<std::int32_t>::max();
+}
 auto bounded_nesting(std::string_view text) -> bool {
   std::array<char, 64> stack{};
   std::size_t depth{};
@@ -139,6 +148,20 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
     root["surface_marker"] = {{"version", k.surface_marker->version},
                               {"point", std::move(point)}};
   }
+  if (k.surface_landmarks) {
+    Json inspections = Json::array();
+    for (const auto& inspection : k.surface_landmarks->inspections)
+      inspections.push_back(
+          {{"system", inspection.system.value},
+           {"planet", inspection.planet.value},
+           {"cell", Json::array({inspection.cell.x, inspection.cell.y,
+                                 inspection.cell.z})},
+           {"site", inspection.site.value},
+           {"terrain_policy", inspection.terrain_policy},
+           {"tick", inspection.tick}});
+    root["surface_landmarks"] = {{"version", k.surface_landmarks->version},
+                                 {"inspections", std::move(inspections)}};
+  }
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -150,8 +173,12 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (!root) return std::unexpected{root.error()};
   const bool marker_selected =
       root->is_object() && root->contains("surface_marker");
-  if (!(marker_selected ? fields(*root, {"recipe", "entries", "surface_marker"})
-                        : fields(*root, {"recipe", "entries"})) ||
+  const bool landmarks_selected =
+      root->is_object() && root->contains("surface_landmarks");
+  auto root_shape = *root;
+  if (marker_selected) root_shape.erase("surface_marker");
+  if (landmarks_selected) root_shape.erase("surface_landmarks");
+  if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
   const auto& r = (*root)["recipe"];
@@ -236,6 +263,40 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
           {m["planet"].get<std::uint64_t>()},
           {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
           m["tick"].get<SimulationTick>()};
+    }
+  }
+  if (landmarks_selected) {
+    const auto& landmarks = (*root)["surface_landmarks"];
+    if (!observed || !fields(landmarks, {"version", "inspections"}) ||
+        !unsigned_fields(landmarks, {"version"}) ||
+        landmarks["version"] != kFreedomSurfaceLandmarkVersion ||
+        !landmarks["inspections"].is_array() ||
+        landmarks["inspections"].size() >
+            kMaximumFreedomSurfaceLandmarkInspections)
+      return std::unexpected{failure("unsupported surface landmark selection")};
+    k.surface_landmarks = FreedomSurfaceLandmarkState{};
+    for (const auto& inspection : landmarks["inspections"]) {
+      if (!fields(inspection, {"system", "planet", "cell", "site",
+                               "terrain_policy", "tick"}) ||
+          !unsigned_fields(inspection, {"system", "planet", "site",
+                                        "terrain_policy", "tick"}) ||
+          inspection["terrain_policy"] >
+              std::numeric_limits<std::uint32_t>::max() ||
+          !inspection["cell"].is_array() || inspection["cell"].size() != 3)
+        return std::unexpected{failure("invalid closed landmark inspection")};
+      const auto& cell = inspection["cell"];
+      for (const auto& coordinate : cell)
+        if (!bounded_cell_coordinate(coordinate))
+          return std::unexpected{
+              failure("bounded integer landmark cell required")};
+      k.surface_landmarks->inspections.push_back(
+          {{inspection["system"].get<std::uint64_t>()},
+           {inspection["planet"].get<std::uint64_t>()},
+           {cell[0].get<std::int32_t>(), cell[1].get<std::int32_t>(),
+            cell[2].get<std::int32_t>()},
+           {inspection["site"].get<std::uint64_t>()},
+           inspection["terrain_policy"].get<std::uint32_t>(),
+           inspection["tick"].get<SimulationTick>()});
     }
   }
   const auto& entries = (*root)["entries"];

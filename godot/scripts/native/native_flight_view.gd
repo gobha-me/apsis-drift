@@ -19,6 +19,8 @@ const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
 const SurfaceAppearance = preload("res://scripts/native/native_surface_appearance.gd")
 var surface_appearance := SurfaceAppearance.new()
+const SurfaceLandmarks = preload("res://scripts/native/native_surface_landmarks.gd")
+var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 var observation_cue := Status.ObservationCue.new()
@@ -114,6 +116,8 @@ var surface_marker_button: Button
 var clear_surface_marker_button: Button
 var show_surface_marker_button: Button
 var show_personal_marker := false
+var landmark_enable_button: Button
+var landmark_inspect_button: Button
 
 
 func surface_walking() -> bool:
@@ -154,7 +158,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_state(value: Dictionary) -> bool:
-	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value) or not valid_surface_marker(value): return false
+	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value) or not SurfaceLandmarks.valid(value) or not valid_surface_marker(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -420,7 +424,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		error = "Canonical terrain appearance is unavailable"
 		return false
 	terrain.terrain_material_created.connect(func(material: ShaderMaterial):
-		if not planet_optics.apply(state, [material]) or not surface_appearance.apply([material]): pause_on_error("Canonical terrain appearance is unavailable"))
+		if not planet_optics.apply(state, [material]) or not surface_appearance.apply([material]) or not surface_landmarks.apply(state, [material]): pause_on_error("Canonical terrain appearance is unavailable"))
 	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		error = "Canonical native environment is unavailable"
 		return false
@@ -769,6 +773,11 @@ func update_compact_hud() -> void:
 		if not marker_text.is_empty():
 			primary_status.text += "\n" + marker_text
 			primary_status.tooltip_text += "\n" + marker_text
+	var exposure := SurfaceLandmarks.nearest_nearby(state)
+	if error.is_empty() and not exposure.is_empty():
+		var exposure_text := "Nearby exposure · %s · %.1f m\n%s" % [exposure.label, exposure.distance_metres, "Controls → Inspect exposure" if exposure.can_inspect else "Move within 8 m to inspect"]
+		primary_status.text += "\n" + exposure_text
+		primary_status.tooltip_text += "\n" + exposure_text
 	context_source = null
 	if surface_walking(): context_source = surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
@@ -814,6 +823,8 @@ func setup_controls() -> void:
 	surface_marker_button = controls_menu.add_button(survey_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
 	clear_surface_marker_button = controls_menu.add_button(survey_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
 	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
+	landmark_enable_button = controls_menu.add_button(survey_column, "Enable local landmarks", enable_surface_landmarks)
+	landmark_inspect_button = controls_menu.add_button(survey_column, "Inspect exposure", inspect_surface_landmark)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		refresh_impact_action()
@@ -904,6 +915,42 @@ func toggle_suit_lamp() -> void:
 	if not paused or not focused or not surface_walking() or journey_dialog_open or save_dialog.visible or recovery_notified or not error.is_empty(): return
 	suit_lamp_enabled = not suit_lamp_enabled
 	refresh_suit_lamp()
+
+
+func enable_surface_landmarks() -> void:
+	if not marker_controls_available() or not state.get("surface_landmarks", {}).get("can_enable", false): return
+	if not bridge.enable_freedom_surface_landmarks():
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	report_action_status("Local landmarks enabled for this journey.")
+	controls_menu.resume_button.grab_focus()
+
+
+func inspect_surface_landmark() -> void:
+	if not marker_controls_available() or not surface_walking(): return
+	var site := SurfaceLandmarks.nearest_nearby(state)
+	if site.is_empty(): return
+	if not bridge.inspect_freedom_surface_landmark(site.id):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	var notice := "Exposure inspection already recorded." if site.inspected else "Exposure inspected and recorded."
+	report_action_status(notice)
+	controls_menu.show_surface_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button)
+
+
+func refresh_surface_landmarks() -> void:
+	if landmark_enable_button == null: return
+	landmark_enable_button.visible = state.get("surface_landmarks", {}).get("can_enable", false)
+	var site := SurfaceLandmarks.nearest_nearby(state)
+	landmark_inspect_button.visible = not site.is_empty()
+	landmark_inspect_button.disabled = site.is_empty() or not site.can_inspect
+	landmark_inspect_button.tooltip_text = "%s · %.1f m\nInspect within 8 m on supported ground." % [site.label, site.distance_metres] if not site.is_empty() else ""
 
 
 func marker_controls_available() -> bool:
@@ -1452,12 +1499,15 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	for node: MeshInstance3D in terrain.nodes.values():
 		if node.material_override is ShaderMaterial:
 			optical_materials.append(node.material_override)
-			if surface_appearance.changed: surface_materials.append(node.material_override)
+			surface_materials.append(node.material_override)
 	if surface_appearance.changed and not surface_appearance.apply(surface_materials):
 		pause_on_error("Canonical terrain appearance changed unexpectedly")
 		return
 	if not planet_optics.apply(state, optical_materials):
 		pause_on_error("Canonical planetary optics changed unexpectedly")
+		return
+	if not surface_landmarks.apply(state, surface_materials):
+		pause_on_error("Canonical local landmarks changed unexpectedly")
 		return
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
@@ -1572,4 +1622,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		if controls_menu.saved_note != null:
 			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
 	refresh_surface_marker()
+	refresh_surface_landmarks()
 	update_compact_hud()

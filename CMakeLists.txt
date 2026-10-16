@@ -227,6 +227,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_surface_walk_save.cpp
   src/native_surface_maneuver.cpp
   src/native_surface_walk.cpp
+  src/native_surface_landmarks.cpp
   src/freedom_resources.cpp
   src/freedom_resource_save.cpp
   src/freedom_surface_save.cpp
@@ -265,6 +266,7 @@ add_library(apsis_drift_core STATIC
   src/system_flight.cpp
   src/terrain_tiles.cpp
   src/terrain_local_detail.cpp
+  src/surface_landmarks.cpp
   src/universe_navigation.cpp
   src/freedom_navigation.cpp
   src/freedom_knowledge.cpp
@@ -289,7 +291,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/terrain_local_detail.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/terrain_local_detail.cpp src/surface_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
