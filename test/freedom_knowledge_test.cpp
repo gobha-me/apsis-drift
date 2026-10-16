@@ -4,6 +4,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <type_traits>
 
@@ -283,6 +284,105 @@ auto invalid_inputs() -> void {
         "Byte and nesting bounds refuse before unbounded parsing");
 }
 
+auto surface_marker_metadata() -> void {
+  const Seed seed{42};
+  const auto system = need(generate_physical_origin_system(seed, 2));
+  const auto& planet = system.catalog.planets.front().descriptor;
+  const FreedomSurfaceMarkerPoint point{
+      system.catalog.id,
+      planet.id,
+      {static_cast<double>(planet.radius.value) * 1000 + 123.5, -0.0, 0},
+      7};
+  for (auto version :
+       {kFreedomKnowledgeVersion, kFreedomObservedKnowledgeVersion,
+        kFreedomTravelKnowledgeVersion}) {
+    auto legacy = need(make_freedom_starting_knowledge(seed, version));
+    const auto text = need(encode_freedom_knowledge_json(legacy, 7));
+    check(Json::parse(text).size() == 2 &&
+              !Json::parse(text).contains("surface_marker") &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(text, 7)), 7)) == text,
+          "Unselected historical knowledge recipes retain their exact JSON");
+    legacy.surface_marker = FreedomSurfaceMarkerState{1, point};
+    if (version == kFreedomKnowledgeVersion) {
+      check(!validate_freedom_knowledge(legacy, 7) &&
+                !encode_freedom_knowledge_json(legacy, 7),
+            "Historical chart-only policy cannot select marker metadata");
+      continue;
+    }
+    const auto entries = legacy.entries;
+    const auto recipe = legacy.recipe;
+    const auto encoded = need(encode_freedom_knowledge_json(legacy, 7));
+    check(need(decode_freedom_knowledge_json(encoded, 7)) == legacy &&
+              legacy.entries == entries && legacy.recipe == recipe,
+          "Selected marker roundtrips point and tick without changing facts "
+          "or recipe domains");
+    legacy.surface_marker->point.reset();
+    const auto cleared = need(encode_freedom_knowledge_json(legacy, 7));
+    check(Json::parse(cleared)["surface_marker"]["point"].is_null() &&
+              need(decode_freedom_knowledge_json(cleared, 7)) == legacy,
+          "Explicitly cleared metadata retains selected version1");
+  }
+  auto marked = need(
+      make_freedom_starting_knowledge(seed, kFreedomObservedKnowledgeVersion));
+  marked.surface_marker = FreedomSurfaceMarkerState{1, point};
+  for (unsigned fault = 0; fault < 10; ++fault) {
+    auto bad = marked;
+    auto& m = *bad.surface_marker->point;
+    switch (fault) {
+      case 0: bad.surface_marker->version = 2; break;
+      case 1: m.system = {}; break;
+      case 2: m.planet = {}; break;
+      case 3: m.tick = 8; break;
+      case 4: m.position.x = std::numeric_limits<double>::quiet_NaN(); break;
+      case 5: m.position.y = std::numeric_limits<double>::infinity(); break;
+      case 6: m.position = {}; break;
+      case 7: m.position = {1e8 + 1, 0, 0}; break;
+      case 8: m.position = {1, 0, 0}; break;
+      case 9:
+        m.planet = need(generate_physical_origin_system(Seed{43}, 2))
+                       .catalog.planets.front()
+                       .descriptor.id;
+        break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 7) &&
+              !encode_freedom_knowledge_json(bad, 7),
+          "Invalid marker version, owner, tick or finite spatial envelope "
+          "refuses before encoding");
+  }
+  const auto encoded = need(encode_freedom_knowledge_json(marked, 7));
+  for (unsigned fault = 0; fault < 13; ++fault) {
+    auto root = Json::parse(encoded);
+    auto& marker = root["surface_marker"];
+    switch (fault) {
+      case 0: marker = nullptr; break;
+      case 1: marker["version"] = 2U; break;
+      case 2: marker["version"] = 1.0; break;
+      case 3: marker["extra"] = 0; break;
+      case 4: marker.erase("point"); break;
+      case 5: marker["point"]["system"] = -1; break;
+      case 6: marker["point"]["planet"] = 0U; break;
+      case 7: marker["point"]["tick"] = 8U; break;
+      case 8: marker["point"]["body_fixed_metres"] = Json::array({0, 0}); break;
+      case 9: marker["point"]["body_fixed_metres"][0] = "0"; break;
+      case 10: marker["point"]["body_fixed_metres"][0] = 1e100; break;
+      case 11: marker["point"]["extra"] = 0; break;
+      case 12: root["recipe"]["version"] = 1U; break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(root.dump(), 7),
+          "Marker decoder enforces the complete closed selected schema");
+  }
+  auto duplicate = encoded;
+  const auto at = duplicate.find("\"surface_marker\": {");
+  duplicate.insert(at, "\"surface_marker\": null, ");
+  check(!decode_freedom_knowledge_json(duplicate, 7) &&
+            !decode_freedom_knowledge_json(
+                encoded + std::string(kMaximumFreedomKnowledgeBytes, ' '), 7),
+        "Marker metadata cannot bypass duplicate-key or bounded input limits");
+}
+
 auto native_saves(const std::filesystem::path& dir) -> void {
   const Seed seed{42};
   auto selected = need(native_new_game(seed));
@@ -372,6 +472,7 @@ auto main() -> int {
     for (auto seed : {Seed{0}, Seed{42}, Seed{UINT64_MAX}})
       fixture(seed);
     invalid_inputs();
+    surface_marker_metadata();
     native_saves(dir);
     check(fingerprint == 2913154867708375063ULL,
           "Version1 ordered ledger and observation sequence retain their "

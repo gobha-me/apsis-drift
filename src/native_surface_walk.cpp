@@ -1,6 +1,144 @@
 #include "apsis_drift/native_flight_session.hpp"
 
+#include <cmath>
+
 namespace apsis_drift {
+namespace {
+auto marker_rotated(RigidOrientation q, PlanetFixedPositionMetres v)
+    -> RigidVector3 {
+  const double n = ((q.w * q.w + q.x * q.x) + q.y * q.y) + q.z * q.z;
+  const double k = 2 * (q.x * v.x + q.y * v.y + q.z * v.z) / n;
+  const double s = (q.w * q.w - q.x * q.x - q.y * q.y - q.z * q.z) / n;
+  return {s * v.x + k * q.x + 2 * q.w * (q.y * v.z - q.z * v.y) / n,
+          s * v.y + k * q.y + 2 * q.w * (q.z * v.x - q.x * v.z) / n,
+          s * v.z + k * q.z + 2 * q.w * (q.x * v.y - q.y * v.x) / n};
+}
+} // namespace
+
+auto NativeFreedomFlightSession::mark_surface_marker()
+    -> std::expected<void, std::string> {
+  return store_surface_marker(false);
+}
+auto NativeFreedomFlightSession::replace_surface_marker()
+    -> std::expected<void, std::string> {
+  return store_surface_marker(true);
+}
+auto NativeFreedomFlightSession::store_surface_marker(bool replace)
+    -> std::expected<void, std::string> {
+  if (recovery_pending() || !knowledge_ || !surface_walker_ ||
+      !surface_walk_terrain_ || !surface_ || !surface_->landed ||
+      surface_walk_terrain_->anchor() != *surface_->landed)
+    return std::unexpected{
+        "Recording a marker requires the supported outside actor"};
+  const bool present = knowledge_->surface_marker &&
+                       knowledge_->surface_marker->point.has_value();
+  if (present != replace)
+    return std::unexpected{
+        replace ? "No surface marker to replace"
+                : "Use Replace marker to change the saved point"};
+  if (auto valid = surface_walk_terrain_->validate(*surface_walker_); !valid)
+    return std::unexpected{valid.error()};
+  const auto& actor = *surface_walker_;
+  if (actor.frame.kind != RigidFrameKind::planet_fixed ||
+      actor.frame.system != system_.catalog.id || !actor.frame.planet ||
+      actor.frame.station)
+    return std::unexpected{"Surface marker actor owner is unavailable"};
+  auto candidate = *this;
+  candidate.knowledge_->surface_marker = FreedomSurfaceMarkerState{
+      kFreedomSurfaceMarkerVersion,
+      FreedomSurfaceMarkerPoint{actor.frame.system,
+                                *actor.frame.planet,
+                                {actor.foot_position_metres.x,
+                                 actor.foot_position_metres.y,
+                                 actor.foot_position_metres.z},
+                                document_.flight.tick}};
+  const auto saved = candidate.save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
+  *this = std::move(candidate);
+  return {};
+}
+auto NativeFreedomFlightSession::clear_surface_marker()
+    -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before clearing the marker"};
+  if (!knowledge_ || !knowledge_->surface_marker ||
+      !knowledge_->surface_marker->point)
+    return std::unexpected{"No surface marker to clear"};
+  auto candidate = *this;
+  candidate.knowledge_->surface_marker->point.reset();
+  const auto saved = candidate.save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
+  *this = std::move(candidate);
+  return {};
+}
+auto NativeFreedomFlightSession::surface_marker_view() const
+    -> std::expected<FreedomSurfaceMarkerView, std::string> {
+  FreedomSurfaceMarkerView view;
+  if (!knowledge_ || !knowledge_->surface_marker) return view;
+  const auto now = document_.flight.tick;
+  if (!validate_freedom_knowledge(*knowledge_, now))
+    return std::unexpected{"Surface marker knowledge owner is invalid"};
+  view.selected = true;
+  view.point = knowledge_->surface_marker->point;
+  if (!view.point) return view;
+  const auto& point = *view.point;
+  const auto name = [&](KnowledgeSubject subject)
+      -> std::expected<std::optional<std::string>, std::string> {
+    const auto known = query_freedom_knowledge(
+        *knowledge_, subject, KnowledgeFact::identity_type, now);
+    if (!known) return std::unexpected{"Surface marker identity query refused"};
+    if (*known)
+      if (const auto* identity = std::get_if<KnownIdentity>(&(*known)->value))
+        return identity->name;
+    return std::optional<std::string>{};
+  };
+  auto system_name =
+      name({KnowledgeSubjectKind::system, point.system, point.system.value});
+  auto body_name =
+      name({KnowledgeSubjectKind::planet, point.system, point.planet.value});
+  if (!system_name) return std::unexpected{system_name.error()};
+  if (!body_name) return std::unexpected{body_name.error()};
+  view.known_system_name = std::move(*system_name);
+  view.known_body_name = std::move(*body_name);
+  if (point.system != system_.catalog.id ||
+      point.planet != rotation_.rotation.planet)
+    return view;
+  const auto body = relative_state();
+  if (!body) return view;
+  if (body->frame.kind != RigidFrameKind::planet_relative_inertial ||
+      body->frame.system != point.system || body->frame.planet != point.planet)
+    return view;
+  const auto rotation = resolve_planet_rotation(system_, rotation_, now);
+  if (!rotation) return view;
+  const auto target =
+      marker_rotated(rotation->geometry.fixed_to_system, point.position);
+  const RigidVector3 relative{target.x - body->position_metres.x,
+                              target.y - body->position_metres.y,
+                              target.z - body->position_metres.z};
+  double distance = std::hypot(relative.x, relative.y, relative.z);
+  if (surface_walker_) {
+    if (surface_walker_->frame !=
+        RigidCoordinateFrame{
+            RigidFrameKind::planet_fixed, point.system, point.planet, {}})
+      return std::unexpected{"Surface marker observer owner differs"};
+    const auto& foot = surface_walker_->foot_position_metres;
+    distance = std::hypot(point.position.x - foot.x, point.position.y - foot.y,
+                          point.position.z - foot.z);
+  }
+  if (!std::isfinite(relative.x) || !std::isfinite(relative.y) ||
+      !std::isfinite(relative.z) || !std::isfinite(distance))
+    return std::unexpected{"Surface marker bearing is unavailable"};
+  view.current_body = true;
+  view.target_craft_relative_metres = relative;
+  view.straight_line_distance_metres = distance;
+  return view;
+}
+
 auto NativeFreedomFlightSession::surface_walk_document() const
     -> std::expected<FreedomSurfaceWalkSaveDocument, std::string> {
   auto voyage = recovery_document();

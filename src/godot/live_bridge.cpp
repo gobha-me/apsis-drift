@@ -363,6 +363,13 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("mark_freedom_surface_marker"),
+                                &FreedomBridge::mark_freedom_surface_marker);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("replace_freedom_surface_marker"),
+        &FreedomBridge::replace_freedom_surface_marker);
+    godot::ClassDB::bind_method(godot::D_METHOD("clear_freedom_surface_marker"),
+                                &FreedomBridge::clear_freedom_surface_marker);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_surface_walk",
                                                 "elapsed", "controls",
                                                 "paused"),
@@ -1206,6 +1213,21 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto mark_freedom_surface_marker() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.mark_surface_marker();
+    });
+  }
+  auto replace_freedom_surface_marker() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.replace_surface_marker();
+    });
+  }
+  auto clear_freedom_surface_marker() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.clear_surface_marker();
+    });
+  }
   auto advance_freedom_surface_walk(double elapsed,
                                     const godot::PackedFloat64Array& controls,
                                     bool paused) -> bool {
@@ -1555,6 +1577,61 @@ class FreedomBridge : public godot::RefCounted {
                         : godot::Dictionary{};
   }
 
+  static auto project_surface_marker(const SavedFlightWorld& selected,
+                                     const SavedFlightProjection& view)
+      -> godot::Dictionary {
+    const auto& session = selected.session;
+    const auto marker = require(session.surface_marker_view());
+    const auto& knowledge = session.knowledge();
+    const bool supported =
+        knowledge &&
+        (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
+         knowledge->recipe.version == kFreedomTravelKnowledgeVersion);
+    godot::Dictionary result;
+    result["version"] = 1;
+    result["selected"] = marker.selected;
+    result["present"] = marker.point.has_value();
+    result["current_body"] = marker.current_body;
+    result["can_mark"] = supported && session.surface_walker().has_value() &&
+                         !session.recovery_pending();
+    result["can_clear"] =
+        marker.point.has_value() && !session.recovery_pending();
+    result["system_name"] = godot::String{
+        marker.known_system_name.value_or("Unresolved system").c_str()};
+    result["planet_name"] = godot::String{
+        marker.known_body_name.value_or("Unresolved planet").c_str()};
+    if (marker.point) {
+      const auto decimal = [](std::uint64_t value) {
+        return godot::String{std::to_string(value).c_str()};
+      };
+      result["system_id"] = decimal(marker.point->system.value);
+      result["planet_id"] = decimal(marker.point->planet.value);
+      result["tick"] = decimal(marker.point->tick);
+    }
+    if (marker.current_body) {
+      if (!marker.target_craft_relative_metres ||
+          !marker.straight_line_distance_metres ||
+          !std::isfinite(*marker.straight_line_distance_metres) ||
+          *marker.straight_line_distance_metres < 0)
+        throw std::runtime_error("Surface marker projection is unavailable");
+      const auto& v = *marker.target_craft_relative_metres;
+      const auto& a = view.system_axes;
+      const godot::Vector3 position{
+          static_cast<godot::real_t>(a[0].east * v.x + a[1].east * v.y +
+                                     a[2].east * v.z),
+          static_cast<godot::real_t>(a[0].up * v.x + a[1].up * v.y +
+                                     a[2].up * v.z),
+          static_cast<godot::real_t>(
+              -(a[0].north * v.x + a[1].north * v.y + a[2].north * v.z))};
+      if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+          !std::isfinite(position.z))
+        throw std::runtime_error("Surface marker projection is nonfinite");
+      result["position"] = position;
+      result["distance_metres"] = *marker.straight_line_distance_metres;
+    }
+    return result;
+  }
+
   static auto project_flight_state(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
@@ -1595,6 +1672,7 @@ class FreedomBridge : public godot::RefCounted {
       result["terrain_policy"] =
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
+      result["surface_marker"] = project_surface_marker(selected, view);
       result["station_available"] = view.station_available;
       result["station_id"] = view.station_available
                                  ? decimal(view.station.id.value)

@@ -43,6 +43,21 @@ longitude on the current planet. They follow the committed ground position
 through walking and Continue. Reading them preserves the voyage clock and
 saved state.
 
+The paused controls also offer **Mark this spot** for your actual supported
+foot position. One personal marker is retained per journey; **Replace marker**
+explicitly overwrites it and **Clear marker** removes the point. These actions
+preserve ship time and recorded sensor knowledge. Save/Continue, travel and
+standard recovery retain the point and its original tick.
+
+Choose **Show personal marker: On** in paused controls to follow **MARK** on
+the current body, on foot or aboard. Its range is a straight-line distance from
+your feet outside or the craft centre aboard. MARK replaces the existing
+navigation cue: RETURN/SHIP outside or HOME aboard. The ground RETURN distance
+and hatch action remain available. Turning the choice off restores the normal
+cue; Continue starts with the normal cue. A point on another body remains listed
+with already-known names and has no local bearing. A marker does not survey its
+surroundings, steer the craft, identify obstacles or certify access or landing.
+
 Tangent walking speed is 2 metres/second with normalized diagonal demand. Dry
 support, a maximum 35-degree slope and a 0.30-metre step bound restrict individual
 steps. A conservative standing capsule sweep against the registered craft box
@@ -81,6 +96,14 @@ The optional ground actor supersedes the retained seated occupancy while outside
 the retained cabin record does not authorize flight until that actor returns.
 The wrapper persists after reboarding, liftoff and station return. Historical
 saves and ordinary New Game retain their existing explicit formats.
+
+Recording a personal marker explicitly selects optional `surface_marker`
+metadata version **1** in the existing knowledge document, alongside its fact
+entries. The point stores system/body identities, planet-fixed metres and the
+recorded simulation tick. Clearing retains the selected version with a null
+point. Historical saves without this field retain their exact encoding; no
+knowledge recipe or outer save format changes. This editable navigation record
+is separate from retained sensor evidence and retired-craft history.
 
 Save As writes through the existing bounded atomic file path. Continue stages
 the actual actor, landed model and terrain while paused before committing the
@@ -130,6 +153,11 @@ route checks malformed buffers first, pause/focus, outside Continue, transaction
 corrupt selection, camera frames and complete Save parity through real-thrust
 liftoff. This initialized fixture does not claim a flown station-to-site journey.
 Headless results do not establish GPU quality, listening or hardware controls.
+
+Knowledge, landed-craft and native-first-jump contracts also cover marker schema
+refusals, complete-save capacity, actual on-foot recording, travel and recovery
+retention. The native walking tests exercise keyboard/controller mark, replace,
+clear, projection and Continue while comparing the remaining complete state.
 
 The separate `native_surface_loop` contract starts at the ordinary seed-42
 station. Its recorded public commands walk to the craft, board, undock, descend

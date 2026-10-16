@@ -10,6 +10,7 @@ inline constexpr std::uint32_t kFreedomKnowledgeVersion{1};
 inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
+inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
 
@@ -75,9 +76,28 @@ struct FreedomKnowledgeRecipe {
   friend auto operator==(const FreedomKnowledgeRecipe&,
                          const FreedomKnowledgeRecipe&) -> bool = default;
 };
+// Personal navigation metadata, separate from generated truth and sensor facts.
+// The point is planet-fixed; neither craft replacement nor travel moves it.
+struct FreedomSurfaceMarkerPoint {
+  SystemId system;
+  PlanetId planet;
+  PlanetFixedPositionMetres position;
+  SimulationTick tick{};
+  friend auto operator==(const FreedomSurfaceMarkerPoint&,
+                         const FreedomSurfaceMarkerPoint&) -> bool = default;
+};
+struct FreedomSurfaceMarkerState {
+  std::uint32_t version{kFreedomSurfaceMarkerVersion};
+  std::optional<FreedomSurfaceMarkerPoint> point;
+  friend auto operator==(const FreedomSurfaceMarkerState&,
+                         const FreedomSurfaceMarkerState&) -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
+  // Absence preserves historical knowledge JSON. A selected empty marker
+  // retains its explicit version after the pilot clears the point.
+  std::optional<FreedomSurfaceMarkerState> surface_marker{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -94,7 +114,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_transition,
   invalid_tick,
   invalid_ledger,
-  oversized_ledger
+  oversized_ledger,
+  invalid_surface_marker
 };
 
 struct KnownIdentity {
