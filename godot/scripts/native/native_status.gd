@@ -1,6 +1,77 @@
 extends RefCounted
 ## Presentation of C++ observations; never advances or edits the voyage.
 const NativeIds = preload("res://scripts/native/native_environment.gd")
+const REFERENCE_MARGIN_LABELS := {
+	"minimum_temperature": "Minimum temperature",
+	"maximum_temperature": "Maximum temperature",
+	"radiation": "Radiation",
+	"electrical": "Electrical field",
+	"pressure": "Pressure",
+	"gust": "Wind loading",
+	"ground_motion": "Ground motion",
+	"gravity": "Gravity rating",
+	"vertical_thrust": "Vertical thrust",
+	"support_load": "Landing support",
+}
+
+static func reference_limits_text(assessment: Dictionary) -> String:
+	var margins: Variant = assessment.get("margins")
+	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size():
+		return "Reference margin details are unavailable."
+	var limits := PackedStringArray()
+	var seen := {}
+	for margin in margins:
+		if not margin is Dictionary or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or margin.get("rating") not in ["SAFE", "MARGINAL", "INSUFFICIENT"]:
+			return "Reference margin details are unavailable."
+		seen[margin.kind] = true
+		if margin.rating != "SAFE":
+			limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], margin.rating])
+	var detail := "Known reference limits: " + "; ".join(limits) if not limits.is_empty() else ""
+	if not assessment.get("operation_supported", true):
+		detail = "This frame does not support this operation." + ("\n" + detail if not detail.is_empty() else "")
+	return detail
+
+
+static func valid_surface_reference_packet(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 6: return false
+	for field in ["rating", "shielding_thermal", "structural", "propulsion"]:
+		if not value.get(field) is String or value[field] not in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"]: return false
+	if typeof(value.get("operation_supported")) != TYPE_BOOL: return false
+	var margins: Variant = value.get("margins")
+	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size(): return false
+	var seen := {}
+	for margin in margins:
+		if not margin is Dictionary or margin.size() != 2 or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or not margin.get("rating") is String or margin.rating not in ["SAFE", "MARGINAL", "INSUFFICIENT"]: return false
+		seen[margin.kind] = true
+	return true
+
+
+static func surface_reference_warning(command: String, assessments: Array) -> String:
+	var operations := PackedStringArray()
+	if command == "request_freedom_landing": operations = PackedStringArray(["Touchdown", "Return ascent"])
+	elif command == "liftoff_freedom_surface": operations = PackedStringArray(["Return ascent"])
+	else: return ""
+	if assessments.size() != operations.size(): return ""
+	# Validate all required projections before using any of their contents.
+	for assessment in assessments:
+		if not valid_surface_reference_packet(assessment): return ""
+	var warnings := PackedStringArray()
+	for index in operations.size():
+		var assessment: Dictionary = assessments[index]
+		var limits := PackedStringArray()
+		for rating in ["INSUFFICIENT", "MARGINAL"]:
+			for margin: Dictionary in assessment.margins:
+				if margin.rating == rating:
+					limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], rating])
+		var details := PackedStringArray()
+		if not assessment.operation_supported: details.append("frame operation unsupported")
+		for limit in mini(2, limits.size()): details.append(limits[limit])
+		if limits.size() > 2: details.append("more in Surface conditions")
+		if not details.is_empty(): warnings.append(operations[index] + ": " + "; ".join(details))
+	if warnings.is_empty(): return ""
+	warnings.insert(0, "Recorded reference only; not weather or site clearance.")
+	var message := "\n".join(warnings)
+	return message if message.length() <= 400 else ""
 
 class ObservationCue extends RefCounted:
 	## A transient presentation latch over the bounded C++ knowledge counter.

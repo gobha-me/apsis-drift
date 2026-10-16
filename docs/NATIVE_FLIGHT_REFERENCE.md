@@ -92,3 +92,14 @@ pause, focus and menu reads freeze that brief result; Continue starts quietly
 without replaying an old outcome. Explicit cancellation also confirms the
 accepted action when C++ clears its note. This feedback adds no terrain queries,
 flight rules, save fields or input bindings.
+
+2026-10-16, #102 adds a brief reference warning to an accepted **Landing** or
+**Liftoff** request when the ship already knows a marginal or insufficient
+operating margin, or the frame does not support the operation. Landing checks
+both touchdown and return ascent; liftoff checks return ascent. The warning
+names up to two limiting margins per operation and points to **Surface
+conditions** for additional detail. It labels the information as recorded
+reference limits, not current weather or site clearance. Unknown and historical
+unsurveyed conditions gain no invented assessment. Refused commands retain their
+actual refusal. Reading these existing C++ assessments adds no simulation ticks,
+observations, save fields, confirmation gate or new damage policy.

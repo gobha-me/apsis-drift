@@ -58,7 +58,10 @@ func check_surface_aid_feedback(shell: Control, owner: Variant, source: String, 
 	var view: Control = shell.current_view
 	install_recorded_input(view)
 	if not resume(view): return
+	var landing_reference: Array = [owner.get_freedom_environment_assessment(3), owner.get_freedom_environment_assessment(4)]
+	check(landing_reference[0].has("error") and landing_reference[1].has("error") and FlightView.Status.surface_reference_warning("request_freedom_landing", landing_reference).is_empty(), "Historical surface fixture gained an unselected environmental survey or warning")
 	view.port_command("request_freedom_landing")
+	check(view.save_status.text == "Landing aid requested.", "Historical landing request announced absent reference knowledge")
 	check(view.state.surface.maneuver == "landing" and view.state.surface.note in view.primary_status.text and not view.hud_scroll.visible, "Actual landing aid note requires opening the paused instruments")
 	# Actual manual input, rather than a synthetic outcome packet, cancels aid.
 	view.player_input.axes[6] = 1.0
@@ -73,6 +76,7 @@ func check_surface_aid_feedback(shell: Control, owner: Variant, source: String, 
 	# Liftoff while airborne is a genuine refusal, with no physical mutation.
 	view.port_command("liftoff_freedom_surface")
 	var refusal: String = view.save_status.text.left(180)
+	check(view.save_status.text == owner.get_last_error(), "Historical refused liftoff acquired a reference warning")
 	check(not refusal.is_empty() and refusal in view.primary_status.text and view.primary_status.text.find(refusal) < view.primary_status.text.find(note) and owner.get_freedom_flight_state() == canceled and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Aid result hid command refusal or changed the authoritative voyage")
 	for repeat in 3: view.update_view(0.0)
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Quiet aid feedback reads changed a complete save")

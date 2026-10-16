@@ -884,35 +884,16 @@ func setup_controls() -> void:
 	refresh_control_hint()
 
 
-const REFERENCE_MARGIN_LABELS := {
-	"minimum_temperature": "Minimum temperature",
-	"maximum_temperature": "Maximum temperature",
-	"radiation": "Radiation",
-	"electrical": "Electrical field",
-	"pressure": "Pressure",
-	"gust": "Wind loading",
-	"ground_motion": "Ground motion",
-	"gravity": "Gravity rating",
-	"vertical_thrust": "Vertical thrust",
-	"support_load": "Landing support",
-}
-
 static func reference_limits_text(assessment: Dictionary) -> String:
-	var margins: Variant = assessment.get("margins")
-	if not margins is Array or margins.size() > REFERENCE_MARGIN_LABELS.size():
-		return "Reference margin details are unavailable."
-	var limits := PackedStringArray()
-	var seen := {}
-	for margin in margins:
-		if not margin is Dictionary or not margin.get("kind") is String or not REFERENCE_MARGIN_LABELS.has(margin.kind) or margin.kind in seen or margin.get("rating") not in ["SAFE", "MARGINAL", "INSUFFICIENT"]:
-			return "Reference margin details are unavailable."
-		seen[margin.kind] = true
-		if margin.rating != "SAFE":
-			limits.append("%s %s" % [REFERENCE_MARGIN_LABELS[margin.kind], margin.rating])
-	var detail := "Known reference limits: " + "; ".join(limits) if not limits.is_empty() else ""
-	if not assessment.get("operation_supported", true):
-		detail = "This frame does not support this operation." + ("\n" + detail if not detail.is_empty() else "")
-	return detail
+	return Status.reference_limits_text(assessment)
+
+
+func surface_action_reference_warning(command: String) -> String:
+	var operations: Array = [3, 4] if command == "request_freedom_landing" else [4] if command == "liftoff_freedom_surface" else []
+	var assessments: Array = []
+	for operation in operations:
+		assessments.append(bridge.get_freedom_environment_assessment(operation))
+	return Status.surface_reference_warning(command, assessments)
 
 
 func surface_conditions_text() -> String:
@@ -1236,6 +1217,8 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	var reference_warning := surface_action_reference_warning(command)
+	if not reference_warning.is_empty(): reference_warning = "\n" + reference_warning
 	var canceled_aid := command == "cancel_freedom_surface_maneuver" and surface_aid_cue.accept_cancel(before, state)
 	if command in ["begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		look_offset = Vector2.ZERO
@@ -1255,9 +1238,9 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	elif canceled_aid:
 		report_action_status(surface_aid_cue.text())
 	elif command in ["request_freedom_landing", "liftoff_freedom_surface"] and state.surface.maneuver != "off":
-		report_action_status(("Landing aid requested." if command == "request_freedom_landing" else "Liftoff aid requested.") + (" Resume flight explicitly." if paused else ""))
+		report_action_status(("Landing aid requested." if command == "request_freedom_landing" else "Liftoff aid requested.") + (" Resume flight explicitly." if paused else "") + reference_warning)
 	elif command in ["request_freedom_landing", "stow_freedom_landing_gear", "liftoff_freedom_surface", "cancel_freedom_surface_maneuver"]:
-		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else ""))
+		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else "") + reference_warning)
 	else:
 		report_action_status("Port selected. Capture requires physical alignment and low closure.")
 

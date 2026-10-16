@@ -7,6 +7,7 @@ func check(value: bool, reason: String) -> void:
 
 func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
+	check_surface_reference_warning()
 	check_observation_cue()
 	check_surface_aid_cue()
 	for dimensions in [Vector2.ZERO, Vector2(-1, 720), Vector2(INF, 720), Vector2(1280, NAN)]:
@@ -299,3 +300,72 @@ func check_surface_aid_cue() -> void:
 	cue.reset(finished)
 	check(cue.text().is_empty(), "Explicit selection reset retained another view's outcome")
 	check(var_to_bytes(active) == original and var_to_bytes(finished) == original_finished, "Aid cue mutated authoritative dictionaries")
+
+
+func reference_packet(margins: Array, rating: String = "UNKNOWN", supported: Variant = true) -> Dictionary:
+	return {"rating": rating, "shielding_thermal": rating, "structural": rating, "propulsion": rating, "operation_supported": supported, "margins": margins}
+
+
+func check_surface_reference_warning() -> void:
+	const LAND := "request_freedom_landing"
+	const LIFT := "liftoff_freedom_surface"
+	const CAVEAT := "Recorded reference only; not weather or site clearance."
+	var known := reference_packet([{"kind": "pressure", "rating": "INSUFFICIENT"}], "INSUFFICIENT")
+	var unknown := reference_packet([])
+	# Complete malformed packets refuse before any known partial warning is used.
+	for packet in [null, true, 0, "unknown", [], {}, {"error": "legacy survey unavailable"}]:
+		check(Status.surface_reference_warning(LAND, [known, packet]).is_empty() and Status.surface_reference_warning(LIFT, [packet]).is_empty(), "Missing/error reference packet became a command warning")
+	for command in ["", "request_landing", "cancel_freedom_surface_maneuver", "begin_freedom_surface_walk"]:
+		check(Status.surface_reference_warning(command, [known]).is_empty(), "Unrelated command acquired a reference warning")
+	for packets in [[], [known], [known, known, known]]:
+		check(Status.surface_reference_warning(LAND, packets).is_empty(), "Landing accepted the wrong number of operation projections")
+	for packets in [[], [known, known]]:
+		check(Status.surface_reference_warning(LIFT, packets).is_empty(), "Liftoff accepted the wrong number of operation projections")
+	for field in ["rating", "shielding_thermal", "structural", "propulsion"]:
+		for value in [null, true, false, 0, 1, NAN, INF, [], {}, "safe", "unknown", ""]:
+			var malformed := known.duplicate(true)
+			malformed[field] = value
+			check(Status.surface_reference_warning(LIFT, [malformed]).is_empty(), "Malformed reference rating accepted: " + field)
+	for value in [null, 0, 1, "false", [], {}]:
+		var malformed := known.duplicate(true)
+		malformed.operation_supported = value
+		check(Status.surface_reference_warning(LIFT, [malformed]).is_empty(), "Malformed support flag became a known restriction")
+	for field in known:
+		var missing := known.duplicate(true)
+		missing.erase(field)
+		check(Status.surface_reference_warning(LIFT, [missing]).is_empty(), "Reference packet accepted a missing field: " + field)
+	var extra := known.duplicate(true)
+	extra.hidden_value = "secret measured value"
+	check(Status.surface_reference_warning(LIFT, [extra]).is_empty(), "Open reference packet admitted hidden values")
+	for margins in [null, {}, "unknown", [null], [[]], [{}], [{"kind": "pressure"}], [{"rating": "MARGINAL"}], [{"kind": "hidden_value", "rating": "MARGINAL"}], [{"kind": "pressure", "rating": "UNKNOWN"}], [{"kind": "pressure", "rating": 1}], [{"kind": "pressure", "rating": "INSUFFICIENT", "remaining": -999}], [{"kind": "pressure", "rating": "MARGINAL"}, {"kind": "pressure", "rating": "INSUFFICIENT"}]]:
+		var malformed := known.duplicate(true)
+		malformed.margins = margins
+		check(Status.surface_reference_warning(LIFT, [malformed]).is_empty(), "Malformed, duplicate or unknown margin became a warning")
+	var excessive := known.duplicate(true)
+	for repeat in 10: excessive.margins.append({"kind": "pressure", "rating": "MARGINAL"})
+	check(Status.surface_reference_warning(LIFT, [excessive]).is_empty(), "Oversized reference margin packet accepted")
+	check(Status.surface_reference_warning(LAND, [unknown, unknown]).is_empty(), "Unknown conditions invented a safe or hazardous assessment")
+	var safe := reference_packet([{"kind": "gravity", "rating": "SAFE"}], "SAFE")
+	check(Status.surface_reference_warning(LAND, [safe, safe]).is_empty(), "Safe reference invented a commitment warning")
+	var mixed := reference_packet([{"kind": "pressure", "rating": "MARGINAL"}], "UNKNOWN")
+	var before := var_to_bytes([mixed, unknown])
+	var warning := Status.surface_reference_warning(LAND, [mixed, unknown])
+	check(warning == CAVEAT + "\nTouchdown: Pressure MARGINAL" and not "SAFE" in warning and not "UNKNOWN" in warning and not "Return ascent" in warning, "Known mixed reference lost redaction or invented the missing return assessment")
+	check(var_to_bytes([mixed, unknown]) == before, "Warning formatting mutated operation projections")
+	check(Status.surface_reference_warning(LIFT, [known]) == CAVEAT + "\nReturn ascent: Pressure INSUFFICIENT", "Liftoff warning used the wrong operation or lost its reference caveat")
+	var unsupported := reference_packet([], "UNKNOWN", false)
+	check(Status.surface_reference_warning(LIFT, [unsupported]) == CAVEAT + "\nReturn ascent: frame operation unsupported", "Known unsupported frame disappeared behind unrelated unknown margins")
+	var competing := reference_packet([{"kind": "pressure", "rating": "MARGINAL"}, {"kind": "gust", "rating": "INSUFFICIENT"}, {"kind": "gravity", "rating": "MARGINAL"}, {"kind": "vertical_thrust", "rating": "INSUFFICIENT"}], "INSUFFICIENT")
+	warning = Status.surface_reference_warning(LIFT, [competing])
+	check("Wind loading INSUFFICIENT" in warning and "Vertical thrust INSUFFICIENT" in warning and not "MARGINAL" in warning and "more in Surface conditions" in warning, "Warning cap hid severe known limits or omitted its detail pointer")
+	var all_limits := reference_packet([], "INSUFFICIENT", false)
+	for kind in Status.REFERENCE_MARGIN_LABELS: all_limits.margins.append({"kind": kind, "rating": "INSUFFICIENT"})
+	before = var_to_bytes([all_limits, all_limits])
+	warning = Status.surface_reference_warning(LAND, [all_limits, all_limits])
+	check(not warning.is_empty() and warning.length() <= 400 and warning.count("INSUFFICIENT") == 4 and warning.count("more in Surface conditions") == 2 and warning.begins_with(CAVEAT), "Two maximum operation packets escaped the bounded warning contract")
+	check(var_to_bytes([all_limits, all_limits]) == before, "Bounded warning reordered or edited known margins")
+	# Preserve the existing paused reference formatter's exact legacy behavior.
+	check(Status.reference_limits_text({"margins": []}).is_empty(), "Paused reference lost its default supported behavior")
+	check(Status.reference_limits_text({"margins": known.margins, "operation_supported": false}) == "This frame does not support this operation.\nKnown reference limits: Pressure INSUFFICIENT", "Paused reference text changed while sharing the formatter")
+	check(Status.reference_limits_text({"margins": [{"kind": "pressure", "rating": "MARGINAL", "legacy_extra": 7}]}) == "Known reference limits: Pressure MARGINAL", "Existing paused formatter acquired new closed-shape restrictions")
+	check(Status.reference_limits_text({}) == "Reference margin details are unavailable." and Status.reference_limits_text({"margins": [{"kind": "pressure", "rating": "UNKNOWN"}]}) == "Reference margin details are unavailable.", "Existing paused invalid-data wording changed")
