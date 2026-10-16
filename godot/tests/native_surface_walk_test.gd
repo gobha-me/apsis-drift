@@ -257,6 +257,9 @@ func check_far_visibility(source: String, assets: String, output: String, render
 
 func check_ground_controller_look(view: Control, owner: Variant, output: String) -> void:
 	var settings: Dictionary = view.player_input.settings.duplicate(true)
+	var persist: bool = view.player_input.persist
+	view.player_input.persist = false
+	check(view.player_input.apply_preferences({"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}), "Ground default look preferences refused")
 	var device: int = view.player_input.device
 	var look: Vector2 = view.look_offset
 	var before: Dictionary = owner.get_freedom_flight_state()
@@ -289,6 +292,7 @@ func check_ground_controller_look(view: Control, owner: Variant, output: String)
 		Input.parse_input_event(event)
 	Input.flush_buffered_events()
 	view.player_input.settings = settings
+	view.player_input.persist = persist
 	view.player_input.device = device
 	view.look_offset = look
 	check(resume(view), "Ground controller probe did not restore neutral Resume")
