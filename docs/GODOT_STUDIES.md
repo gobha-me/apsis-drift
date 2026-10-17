@@ -203,7 +203,7 @@ The launcher configures a TermForge-free `build-native` and builds the C++
 bridge before opening Godot. Ordinary New Game starts on Origin Station's hub
 floor, walking through the workshop to D1 using the
 [saved C++ station actor](SAVED_STATION_WALK.md). WASD/left-stick walks;
-right-drag/right-stick looks; Escape pauses. Contact and support use the actual
+ordinary mouse/right-stick looks; Escape releases the pointer and pauses. Contact and support use the actual
 bounded station geometry. The open docking well stops unsupported travel;
 open-hatch/ladder boarding, sitting and departure from New Game remain in development.
 
