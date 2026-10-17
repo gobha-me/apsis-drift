@@ -159,10 +159,12 @@ func install_walk_access(access: Dictionary) -> void:
 			gate.add_child(bar)
 		var label := Label3D.new()
 		label.text = limit[2]
-		label.position.y = 1.4
+		# The arrival guard is close to the spawn: keep both lines at eye level
+		# rather than below the camera's vertical field of view.
+		label.position.y = 1.7
+		label.pixel_size = 0.0015
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.font_size = 32
-		label.pixel_size = 0.002
 		gate.add_child(label)
 
 
