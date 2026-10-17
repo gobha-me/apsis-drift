@@ -9,9 +9,13 @@ const StationPresentation = preload("res://scripts/native/native_station_view.gd
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
+var cockpit_displays: Node3D
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
 const Controls = preload("res://scripts/ui/player_input.gd")
+const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
+var mouse_look := MouseLook.new()
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 var stick_settings_path := Controls.SETTINGS_PATH
 var stick_preferences: Dictionary = {}
@@ -30,6 +34,9 @@ var viewport: SubViewport
 var telemetry: Label
 var pause_button: Button
 var board_button: Button
+var boarding_prompt: Label
+var boarding_availability: Dictionary = {}
+var boarding_query_elapsed := 0.1
 var export_save_button: Button
 var replace_save_button: Button
 var save_button: Button
@@ -75,6 +82,7 @@ static func finite_triplet(value: Variant) -> bool:
 
 
 static func valid_state(value: Dictionary) -> bool:
+	if value.has("walk_access") and not StationPresentation.valid_walk_access(value.walk_access): return false
 	if value.get("mode") != "freedom_walk" or not value.get("geometry_version") is int or value.get("geometry_version") != 1:
 		return false
 	for key in ["foot_position_metres", "eye_position_metres", "velocity_metres_per_second", "actor_position_metres", "actor_global_position_metres"]:
@@ -94,6 +102,14 @@ static func valid_state(value: Dictionary) -> bool:
 		for digit in text.to_utf8_buffer():
 			if digit < 48 or digit > 57:
 				return false
+	return true
+
+
+static func valid_boarding_availability(value: Variant, actor: Dictionary) -> bool:
+	if not value is Dictionary or value.size() != 7 or value.get("version") != 1 or not value.get("version") is int or not value.get("available") is bool or not value.get("reason") is String or value.reason.is_empty() or value.reason.length() > 512:
+		return false
+	for key in ["universe_seed", "system_id", "craft_id", "tick"]:
+		if not NativeEnvironment.decimal(value.get(key)) or value[key] != actor.get(key): return false
 	return true
 
 
@@ -177,6 +193,11 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	ship = Node3D.new()
 	scene.add_child(ship)
 	ship.add_child(model)
+	cockpit_displays = CockpitDisplays.new()
+	ship.add_child(cockpit_displays)
+	if not cockpit_displays.bind_screens(model.specification.screens) or not cockpit_displays.refresh(flight, 0.0, true):
+		error = "The Wayfarer instrument screens are unavailable"
+		return false
 	camera = Camera3D.new()
 	camera.name = "StationActorEye"
 	camera.near = 0.03
@@ -188,6 +209,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	var environment := Environment.new()
 	station_environment = environment
 	sky_material = NativeEnvironment.install(environment)
+	if not NativeEnvironment.bind_background(flight, sky_material, owner.get_freedom_background_sky(pending.get("candidate_id", ""))):
+		error = "The saved universe background is unavailable"
+		return false
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.6, 0.75, 0.95)
 	environment.ambient_light_energy = 0.7
@@ -224,6 +248,7 @@ func activate() -> void:
 	paused = state.continued or not controls_armed
 	if paused: pause_controls("Release walking and look controls, then Resume explicitly.")
 	update_view()
+	sync_mouse_look()
 	set_process(true)
 	set_process_input(true)
 
@@ -254,13 +279,22 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	var hint := hud_text()
 	hud_hint = hint
-	hint.text = "WASD / left stick walk · Look keys / right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk toward D1 · E / A board Wayfarer"
+	hint.text = "WASD / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer"
 	column.add_child(hint)
 	board_button = Button.new()
 	board_button.text = "Board Wayfarer · E / A"
 	board_button.focus_mode = Control.FOCUS_NONE
 	board_button.pressed.connect(board_requested)
 	column.add_child(board_button)
+	boarding_prompt = Label.new()
+	boarding_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boarding_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	boarding_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boarding_prompt.add_theme_font_size_override("font_size", 22)
+	boarding_prompt.add_theme_color_override("font_shadow_color", Color.BLACK)
+	boarding_prompt.add_theme_constant_override("shadow_offset_x", 2)
+	boarding_prompt.add_theme_constant_override("shadow_offset_y", 2)
+	add_child(boarding_prompt)
 	pause_button = Button.new()
 	pause_button.focus_mode = Control.FOCUS_ALL
 	pause_button.text = "Resume" if paused else "Pause"
@@ -383,6 +417,10 @@ func layout_hud() -> void:
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
 	# so follow-focus cannot round a bottom action past the clipping edge.
 	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y).floor()
+	if boarding_prompt != null:
+		boarding_prompt.position = Vector2(margin, size.y - margin - 70 * scale)
+		boarding_prompt.size = Vector2(usable.x, 64 * scale)
+		boarding_prompt.add_theme_font_size_override("font_size", roundi(22 * scale))
 
 
 func set_paused(value: bool) -> void:
@@ -394,9 +432,11 @@ func set_paused(value: bool) -> void:
 
 func pause_controls(reason: String) -> void:
 	paused = true
+	mouse_look.set_active(false)
 	controls_armed = false
 	refresh_profile_actions()
 	if board_button != null: board_button.disabled = true
+	if boarding_prompt != null: boarding_prompt.hide()
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
@@ -432,7 +472,8 @@ func resume_requested() -> void:
 		save_status.text = "Release walking and look controls before Resume."
 		return
 	paused = false
-	board_button.disabled = not focused
+	sync_mouse_look()
+	refresh_boarding_action()
 	pause_button.text = "Pause"
 	# Resume may come from Escape while any paused HUD action owns focus.
 	# Active arrow look must not also navigate that action's GUI neighbors.
@@ -572,7 +613,7 @@ func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
 		error = str(bridge.get_last_error())
 		set_paused(true)
 		return false
-	update_view()
+	update_view(delta)
 	return true
 
 
@@ -587,12 +628,41 @@ func board_requested() -> void:
 		return
 	if not bridge.begin_freedom_boarding():
 		save_status.text = str(bridge.get_last_error())
+		boarding_query_elapsed = 0.1
 		return
 	pitch = 0.0
 	update_view()
+	sync_mouse_look()
 
 
-func update_view() -> void:
+func sync_mouse_look() -> void:
+	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not boarding_transition() and not mode_change_pending)
+
+
+func _exit_tree() -> void:
+	mouse_look.set_active(false)
+
+
+func refresh_boarding_action() -> void:
+	if board_button == null or boarding_prompt == null: return
+	if not boarding_transition() and bridge.has_method("get_freedom_boarding_availability") and boarding_query_elapsed >= 0.1:
+		var queried: Variant = bridge.get_freedom_boarding_availability()
+		boarding_availability = queried if valid_boarding_availability(queried, state) else {}
+		boarding_query_elapsed = 0.0
+	var available: bool = boarding_availability.get("available", false) and not boarding_transition()
+	board_button.visible = available
+	board_button.disabled = not available or paused or not focused or not current_controls_neutral()
+	var binding := "E / left click"
+	if available_pads.get(selected_pad, false):
+		preferences_provider.device = selected_pad
+		binding += " / " + ("Cross" if preferences_provider.playstation() else "A")
+	board_button.text = "Climb aboard Wayfarer · " + binding
+	board_button.tooltip_text = str(boarding_availability.get("reason", "Approach the D1 ladder."))
+	boarding_prompt.visible = available and focused and not paused and not journey_dialog_open and not boarding_transition()
+	boarding_prompt.text = binding + " · Climb aboard Wayfarer" if current_controls_neutral() else "Release movement controls · " + binding + " to climb aboard"
+
+
+func update_view(delta: float = 0.0) -> void:
 	var next_state: Dictionary = bridge.get_freedom_walk_state()
 	if next_state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
 		# Consume the completed C++ pose before deferred view replacement. A
@@ -634,6 +704,10 @@ func update_view() -> void:
 		error = "The station sky projection is unavailable"
 		set_paused(true)
 		return
+	if not cockpit_displays.refresh(flight, delta, paused):
+		error = "The Wayfarer instrument readings are unavailable"
+		set_paused(true)
+		return
 	state = next_state
 	if boarding_transition():
 		requested_heading = state.heading_radians
@@ -641,8 +715,7 @@ func update_view() -> void:
 	station.transform = Transform3D(state.station_basis, state.station_position)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
-	board_button.visible = not boarding_transition()
-	board_button.disabled = paused or not focused
+	refresh_boarding_action()
 	if boarding_transition():
 		var cues := {"approach": "Approaching the ladder", "ladder": "Climbing through the hatch", "cabin": "Moving into the cabin", "seat": "Taking the pilot seat", "hardware": "Securing the hatch", "complete": "Ready"}
 		telemetry.text = "%s · %d%%\n%s" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
@@ -653,6 +726,7 @@ func update_view() -> void:
 func _process(delta: float) -> void:
 	if bridge == null or not activated:
 		return
+	sync_mouse_look()
 	if settings_open():
 		stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
 	if settings_return_frames > 0:
@@ -666,6 +740,7 @@ func _process(delta: float) -> void:
 		return
 	if not focused or not error.is_empty() or save_dialog.visible:
 		return
+	if is_finite(delta) and delta > 0.0: boarding_query_elapsed = minf(0.1, boarding_query_elapsed + delta)
 	advance_requested(delta, input_controls(minf(delta, 0.1)))
 
 
@@ -767,12 +842,13 @@ func _input(event: InputEvent) -> void:
 		else:
 			resume_requested()
 		get_viewport().set_input_as_handled()
-	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A):
+	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and boarding_availability.get("available", false))):
 		board_requested()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and not boarding_transition() and not paused and error.is_empty() and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-		requested_heading = wrapf(requested_heading - event.relative.x * 0.003, -PI, PI)
-		pitch = clampf(pitch - event.relative.y * 0.003, -1.3, 1.3)
+	elif event is InputEventMouseMotion and not boarding_transition() and not paused and error.is_empty():
+		var motion := MouseLook.motion_delta(event.relative, preferences_provider.settings)
+		requested_heading = wrapf(requested_heading - motion.x, -PI, PI)
+		pitch = clampf(pitch - motion.y, -1.3, 1.3)
 
 func refresh_profile_actions() -> void:
 	if replace_save_button == null or bridge == null or not bridge.has_method("get_freedom_profile_state"): return

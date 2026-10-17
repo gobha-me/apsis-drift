@@ -334,6 +334,9 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::advance_freedom_walk);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_boarding"),
                                 &FreedomBridge::begin_freedom_boarding);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_boarding_availability"),
+        &FreedomBridge::get_freedom_boarding_availability);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_disembarking"),
                                 &FreedomBridge::begin_freedom_disembarking);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_boarding_state"),
@@ -434,6 +437,9 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::enable_orbit_practice);
     godot::ClassDB::bind_method(godot::D_METHOD("get_sky_catalog"),
                                 &FreedomBridge::get_sky_catalog);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_background_sky", "candidate_id"),
+        &FreedomBridge::get_freedom_background_sky);
     godot::ClassDB::bind_method(godot::D_METHOD("start_practice", "reentry"),
                                 &FreedomBridge::start_practice);
     godot::ClassDB::bind_method(godot::D_METHOD("camera_clearance", "offset"),
@@ -1429,6 +1435,26 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto get_freedom_boarding_availability() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto& session = saved_flight->session;
+    const auto& document = session.document();
+    const auto available = session.boarding_available();
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = 1;
+    result["available"] = available.has_value();
+    result["reason"] = available ? godot::String{"Climb aboard Wayfarer"}
+                                 : godot::String{available.error().c_str()};
+    result["universe_seed"] =
+        decimal(document.origin.recipe.universe_seed.value);
+    result["system_id"] = decimal(session.system().catalog.id.value);
+    result["craft_id"] = decimal(document.origin.state.craft.value);
+    result["tick"] = decimal(document.flight.tick);
+    return result;
+  }
   auto begin_freedom_disembarking() -> bool {
     return change_freedom_port(
         [](NativeFreedomFlightSession& session) {
@@ -1573,6 +1599,12 @@ class FreedomBridge : public godot::RefCounted {
       result["tick"] = decimal(document.flight.tick);
       result["geometry_version"] =
           static_cast<std::int64_t>(actor.geometry_version);
+      godot::Dictionary access;
+      access["minimum_x"] = kOriginWalkMinimumXMetres;
+      access["maximum_x"] = kOriginWalkMaximumXMetres;
+      access["minimum_z"] = kOriginWalkMinimumZMetres;
+      access["maximum_z"] = kOriginWalkMaximumZMetres;
+      result["walk_access"] = access;
       result["continued"] = session.source_save().has_value();
       result["foot_position_metres"] = coordinates(foot);
       result["eye_position_metres"] = coordinates(eye);
@@ -2249,6 +2281,9 @@ class FreedomBridge : public godot::RefCounted {
           view.rotation.recipe.physical_catalog_generator);
       lighting["star_id"] = decimal(source_star.id.value);
       lighting["direction"] = result["star_direction"];
+      // system_axes already include the actual saved frame and body rotation.
+      // station_basis is system-to-native, not the station's orbital attitude.
+      lighting["native_to_system"] = station_basis.transposed();
       lighting["star_color"] = godot::Color(source_star.color.red / 255.0f,
                                             source_star.color.green / 255.0f,
                                             source_star.color.blue / 255.0f, 1);
@@ -2584,6 +2619,39 @@ class FreedomBridge : public godot::RefCounted {
       return project_station_geometry(generate_origin_station(
           saved_flight->session.document().origin.recipe.universe_seed));
     return {};
+  }
+
+  auto get_freedom_background_sky(const godot::String& candidate_id) const
+      -> godot::Dictionary {
+    const SavedFlightWorld* selected = saved_flight.get();
+    if (!candidate_id.is_empty()) {
+      if (!pending || candidate_id != godot::String{pending->id.c_str()})
+        return {};
+      selected = pending->flight.get();
+    }
+    if (!selected) return {};
+    const auto universe =
+        selected->session.document().origin.recipe.universe_seed;
+    godot::Dictionary result;
+    result["version"] = std::int64_t{1};
+    result["universe_seed"] =
+        godot::String{std::to_string(universe.value).c_str()};
+    // Reuse preview catalog1 only as distant background art. Its arbitrary
+    // directions are not route positions, discoveries or navigable systems.
+    result["disclosure"] = "background_only";
+    godot::Array stars;
+    for (const auto& star : flight_lab::sky_catalog(universe)) {
+      godot::Dictionary item;
+      item["direction"] =
+          godot::Vector3(star.direction.x, star.direction.y, star.direction.z);
+      item["color"] =
+          godot::Color(star.color.red / 255.0f, star.color.green / 255.0f,
+                       star.color.blue / 255.0f, 1);
+      item["brightness"] = star.brightness;
+      stars.append(item);
+    }
+    result["stars"] = stars;
+    return result;
   }
 
   auto get_sky_catalog() const -> godot::Array {

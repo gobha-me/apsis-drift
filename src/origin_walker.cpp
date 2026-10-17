@@ -13,25 +13,33 @@
 #include <nlohmann/json.hpp>
 
 #include "apsis_drift/origin_walk_geometry.hpp"
+#include "origin_walk_index.hpp"
 
 namespace apsis_drift {
+namespace origin_walk_detail {
+namespace {
+thread_local QueryWork* query_work{};
+}
+auto exchange_query_work(QueryWork* next) noexcept -> QueryWork* {
+  return std::exchange(query_work, next);
+}
+} // namespace origin_walk_detail
 namespace {
 using Vector = std::array<double, 3>;
 using Triangle = std::array<Vector, 3>;
-constexpr Vector crop_minimum{-24.5, -.05, -.875};
-constexpr Vector crop_maximum{.45, 2.1, .875};
-constexpr std::size_t x_bins{13}, z_bins{1};
+constexpr Vector crop_minimum{kOriginWalkMinimumXMetres, -.05,
+                              kOriginWalkMinimumZMetres};
+constexpr Vector crop_maximum{kOriginWalkMaximumXMetres, 2.1,
+                              kOriginWalkMaximumZMetres};
 constexpr double floor_tolerance{.03}, clearance{.045};
 constexpr std::string_view source_sha{
     "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6"};
 constexpr std::string_view model_sha{
     "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80"};
-struct Bounds {
-  Vector low, high;
-};
+using Bounds = origin_walk_detail::Bounds;
 struct Mesh {
   std::vector<Triangle> triangles;
-  std::array<std::vector<std::size_t>, x_bins * z_bins> bins;
+  origin_walk_detail::TriangleIndex index;
 };
 auto subtract(const Vector& a, const Vector& b) -> Vector {
   return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
@@ -56,12 +64,6 @@ auto overlaps(const Bounds& a, const Bounds& b) -> bool {
   for (std::size_t i = 0; i < 3; ++i)
     if (a.low[i] > b.high[i] || a.high[i] < b.low[i]) return false;
   return true;
-}
-auto bin(double coordinate, std::size_t axis) -> std::size_t {
-  const auto count = axis == 0 ? x_bins : z_bins;
-  const auto value = std::floor((coordinate - crop_minimum[axis]) / 2.0);
-  return static_cast<std::size_t>(
-      std::clamp(value, 0.0, static_cast<double>(count - 1)));
 }
 auto read_mesh(std::string_view text) -> std::expected<Mesh, std::string> {
   if (text.empty() || text.size() > std::size_t{16U} * 1024U * 1024U)
@@ -137,6 +139,8 @@ auto read_mesh(std::string_view text) -> std::expected<Mesh, std::string> {
     }
     Mesh mesh;
     mesh.triangles.reserve(faces.size());
+    std::vector<Bounds> triangle_bounds;
+    triangle_bounds.reserve(faces.size());
     for (const auto& row : faces) {
       if (!row.is_array() || row.size() != 3)
         return std::unexpected("Origin contact triangle dimensions");
@@ -156,12 +160,10 @@ auto read_mesh(std::string_view text) -> std::expected<Mesh, std::string> {
       const auto b = bounds(triangle);
       if (!overlaps(b, {crop_minimum, crop_maximum}))
         return std::unexpected("Origin contact triangle outside crop");
-      const auto id = mesh.triangles.size();
       mesh.triangles.push_back(triangle);
-      for (auto x = bin(b.low[0], 0); x <= bin(b.high[0], 0); ++x)
-        for (auto z = bin(b.low[2], 2); z <= bin(b.high[2], 2); ++z)
-          mesh.bins[x * z_bins + z].push_back(id);
+      triangle_bounds.push_back(b);
     }
+    mesh.index = origin_walk_detail::TriangleIndex{std::move(triangle_bounds)};
     return mesh;
   } catch (const nlohmann::json::exception&) {
     return std::unexpected("Malformed Origin contact document");
@@ -173,15 +175,7 @@ auto geometry() -> const std::expected<Mesh, std::string>& {
 }
 auto candidates(const Mesh& mesh, const Bounds& box)
     -> std::vector<std::size_t> {
-  std::vector<std::size_t> result;
-  for (auto x = bin(box.low[0], 0); x <= bin(box.high[0], 0); ++x)
-    for (auto z = bin(box.low[2], 2); z <= bin(box.high[2], 2); ++z) {
-      const auto& entries = mesh.bins[x * z_bins + z];
-      result.insert(result.end(), entries.begin(), entries.end());
-    }
-  std::ranges::sort(result);
-  result.erase(std::unique(result.begin(), result.end()), result.end());
-  return result;
+  return mesh.index.query(box, origin_walk_detail::query_work);
 }
 // Triangle/box SAT checks face normal, box axes and nine edge cross axes.
 // The box is the complete swept standing reservation, conservatively covering

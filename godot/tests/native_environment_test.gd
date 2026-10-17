@@ -1,6 +1,7 @@
 extends SceneTree
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
+const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 const SurfaceAppearance = preload("res://scripts/native/native_surface_appearance.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
@@ -14,6 +15,8 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void:
 	# Closed packet, finite geometry and bounded buffers precede native staging.
 	check_distant_contacts()
+	check_background_inputs()
+	check_cockpit_inputs()
 	call_deferred("run")
 func run() -> void:
 	if failures > 0: quit(1); return
@@ -57,6 +60,8 @@ func run() -> void:
 	var environment := Environment.new()
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	var material := NativeEnvironment.install(environment)
+	check_background_binding(owner, state, material, args[1])
+	check_cockpit_binding(state)
 	var light := DirectionalLight3D.new()
 	light.light_energy = 2.25
 	var local_light := DirectionalLight3D.new()
@@ -159,6 +164,105 @@ func run() -> void:
 	await process_frame
 	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, actual catalog2 anchored phases when supplied, no raster/hardware claim" % failures)
 	quit(0 if failures == 0 else 1)
+
+func check_background_inputs() -> void:
+	var star := {"direction": Vector3.UP, "color": Color.WHITE, "brightness": 0.5}
+	var stars: Array = []
+	stars.resize(1536)
+	stars.fill(star)
+	var state := {"universe_seed": "42"}
+	var packet := {"version": 1, "universe_seed": "42", "disclosure": "background_only", "stars": stars}
+	check(NativeEnvironment.valid_background(state, packet), "Bounded pure background packet refused")
+	for value in [null, [], {}, {"version": 1, "universe_seed": "42", "disclosure": "background_only", "stars": []}]:
+		check(not NativeEnvironment.valid_background(state, value), "Missing/wrong-sized background packet accepted")
+	for changes in [{"version": 1.0}, {"version": 2}, {"universe_seed": "43"}, {"universe_seed": "042"}, {"disclosure": "charted_systems"}, {"extra": true}, {"stars": null}]:
+		var malformed := packet.duplicate(true)
+		malformed.merge(changes, true)
+		check(not NativeEnvironment.valid_background(state, malformed), "Malformed background owner/disclosure accepted")
+	for changes in [{"direction": Vector3.ZERO}, {"direction": Vector3(INF, 0, 0)}, {"direction": Vector3(NAN, 0, 0)}, {"color": Color(INF, 0, 0, 1)}, {"color": Color(1, 1, 1, 0)}, {"brightness": NAN}, {"brightness": INF}, {"brightness": 0.24}, {"brightness": 1.01}, {"brightness": 1}, {"system_seed": "hidden"}]:
+		var malformed := packet.duplicate(true)
+		malformed.stars[-1].merge(changes, true)
+		check(not NativeEnvironment.valid_background(state, malformed), "Malformed final background star accepted")
+	var oversized := packet.duplicate(true)
+	oversized.stars.append(star)
+	check(not NativeEnvironment.valid_background(state, oversized), "Oversized background catalog accepted")
+
+func cockpit_calibration() -> Array:
+	var screens: Array = []
+	for index in 3:
+		screens.append({"page": index, "transform": [[1, 0, 0], [0, 1, 0], [0, 0, 1], [index * 0.4, 1, -1]], "size": [0.335, 0.25]})
+	return screens
+
+func check_cockpit_inputs() -> void:
+	var screens := cockpit_calibration()
+	check(CockpitDisplays.valid_screens(screens), "Pure three-screen calibration refused")
+	var display := CockpitDisplays.new()
+	for value in [null, [], [screens[0]], [screens[0], screens[1], null]]:
+		check(not CockpitDisplays.valid_screens(value), "Malformed cockpit screen count/type accepted")
+	for changes in [{"page": 0}, {"size": [0.0, 0.2]}, {"size": [0.2, INF]}, {"size": [0.2]}, {"transform": []}, {"transform": [[1, 0, 0], [0, 0, 0], [0, 0, 1], [0, 0, 0]]}, {"transform": [[1, 0, 0], [0, 1, 0], [0, 0, 1], [NAN, 0, 0]]}]:
+		var malformed := screens.duplicate(true)
+		malformed[-1].merge(changes, true)
+		check(not CockpitDisplays.valid_screens(malformed) and not display.bind_screens(malformed) and display.get_child_count() == 0 and display.viewports.is_empty(), "Invalid final screen allocated a partial cockpit")
+	var state := {"mode": "freedom_flight", "tick": "0", "assistance": false, "attached": false, "altitude": 10.0, "planet_radius": 3000000.0, "surface_speed": 0.0, "radial_rate": 0.0, "periapsis_radius": 0.0, "apoapsis_radius": null, "orbit_classification": "impact", "resources": {"selected": false}, "positive_force_body": PackedFloat64Array([0, 0, 0]), "negative_force_body": PackedFloat64Array([0, 0, 0]), "positive_force_ratings": PackedFloat64Array([1, 1, 1]), "negative_force_ratings": PackedFloat64Array([1, 1, 1])}
+	check(CockpitDisplays.valid_state(state) and CockpitDisplays.rows(state).size() == 3, "Pure native instrument schema refused")
+	for changes in [{"tick": "00"}, {"altitude": NAN}, {"planet_radius": 0.0}, {"surface_speed": -1.0}, {"radial_rate": INF}, {"periapsis_radius": -1.0}, {"apoapsis_radius": INF}, {"orbit_classification": "safe_landing"}, {"assistance": 1}, {"resources": null}, {"resources": {"selected": true, "fraction": NAN, "jump_charges": 3}}, {"resources": {"selected": true, "fraction": 0.5, "jump_charges": 4}}, {"positive_force_body": PackedFloat64Array([0, 0])}, {"negative_force_body": PackedFloat64Array([0, 0, INF])}, {"positive_force_ratings": PackedFloat64Array([1, 0, 1])}]:
+		var malformed := state.duplicate(true)
+		malformed.merge(changes, true)
+		check(not CockpitDisplays.valid_state(malformed) and CockpitDisplays.rows(malformed).is_empty() and not display.refresh(malformed, 0.0, true) and display.get_child_count() == 0, "Malformed native instrument schema allocated or produced readings")
+	for basis in [Basis(Vector3.ZERO, Vector3.UP, Vector3.BACK), Basis(Vector3(INF, 0, 0), Vector3.UP, Vector3.BACK), Basis(Vector3.LEFT, Vector3.UP, Vector3.BACK)]:
+		check(not NativeEnvironment.rigid_basis(basis), "Invalid background rotation accepted")
+	display.free()
+
+func check_background_binding(owner: Variant, state: Dictionary, material: ShaderMaterial, output: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var bytes := FileAccess.get_file_as_bytes(output)
+	var packet: Dictionary = owner.get_freedom_background_sky("")
+	var accepted := NativeEnvironment.valid_background(state, packet) and NativeEnvironment.bind_background(state, material, packet)
+	check(accepted, "Actual saved-owner C++ background could not bind")
+	if not accepted: return
+	var texture: Variant = material.get_shader_parameter("background_stars")
+	check(texture is ImageTexture and texture.get_width() == 4096 and texture.get_height() == 2048 and material.get_shader_parameter("background_enabled") and material.get_shader_parameter("background_native_to_system").is_equal_approx(state.station_basis.transposed()), "Background texture/frame differs from the actual saved observer")
+	for repeat in 3:
+		check(NativeEnvironment.bind_background(state, material, packet) and material.get_shader_parameter("background_stars") == texture, "Repeated quiet background reads rebuilt a texture")
+	var malformed := packet.duplicate(true)
+	malformed.stars[-1].brightness = NAN
+	check(not NativeEnvironment.bind_background(state, material, malformed) and material.get_shader_parameter("background_stars") == texture and NativeEnvironment.background_texture == texture, "Malformed background changed accepted texture/cache")
+	var bad_frame := state.duplicate(true)
+	bad_frame.lighting.native_to_system = Basis(Vector3.ZERO, Vector3.UP, Vector3.BACK)
+	check(not NativeEnvironment.apply_sky(bad_frame, material) and material.get_shader_parameter("background_stars") == texture and material.get_shader_parameter("background_native_to_system").is_equal_approx(state.lighting.native_to_system), "Invalid native frame changed accepted background")
+	var changed_owner := state.duplicate(true)
+	changed_owner.universe_seed = "0" if state.universe_seed != "0" else "1"
+	check(not NativeEnvironment.apply_sky(changed_owner, material) and not NativeEnvironment.bind_background(changed_owner, material, packet) and material.get_shader_parameter("background_stars") == texture, "Wrong universe silently reused an accepted background")
+	check(owner.get_freedom_background_sky("not-a-candidate").is_empty() and owner.get_freedom_flight_state() == before and owner.save_freedom_as(output) and FileAccess.get_file_as_bytes(output) == bytes, "Background getter/texture reads changed actual C++ save or clock")
+
+func check_cockpit_binding(state: Dictionary) -> void:
+	check(CockpitDisplays.valid_state(state), "Actual native state cannot supply cockpit instruments")
+	var display := CockpitDisplays.new()
+	root.add_child(display)
+	var accepted := display.bind_screens(cockpit_calibration()) and display.viewports.size() == 3 and display.panels.size() == 3 and display.refresh(state, 0.0, true)
+	check(accepted, "Bounded cockpit texture/actual observation binding refused")
+	if not accepted:
+		display.free()
+		return
+	var shown := display.presented_rows.duplicate(true)
+	var textures: Array = []
+	for index in 3:
+		textures.append(display.panels[index].material_override.albedo_texture)
+		check(display.viewports[index].size.x <= 512 and display.viewports[index].size.y <= 512 and display.panels[index].layers == 2, "Cockpit viewport/layer escaped its small close-render bound")
+	check("Reference altitude" in "\n".join(shown[1]) and "Not terrain or landing clearance" in "\n".join(shown[0]) and not "not simulated" in "\n".join(shown[2]) and state.tick in "\n".join(shown[1]), "Cockpit instruments retained study claims or lost actual native observations")
+	for field in ["altitude", "planet_radius", "surface_speed", "radial_rate", "periapsis_radius"]:
+		var malformed := state.duplicate(true)
+		malformed[field] = NAN
+		check(not CockpitDisplays.valid_state(malformed) and not display.refresh(malformed, 1.0, true) and display.presented_rows == shown, "Malformed native cockpit reading changed accepted instruments")
+	for delta in [-1.0, NAN, INF]:
+		check(not display.refresh(state, delta, true) and display.presented_rows == shown, "Invalid cockpit refresh time changed instruments")
+	for repeat in 3: check(display.refresh(state, 100.0) and display.presented_rows == shown, "Quiet cockpit read changed frozen observations")
+	# Presentation-only timing fixture, not a forged bridge/world advancement.
+	var changed := state.duplicate(true)
+	changed.tick = "1" if state.tick != "1" else "2"
+	check(display.refresh(changed, 0.05) and display.presented_rows == shown and display.refresh(changed, 0.05) and display.presented_rows == CockpitDisplays.rows(changed), "Cockpit refresh ignored its bounded cadence or failed to update changed readings")
+	for index in 3: check(display.panels[index].material_override.albedo_texture == textures[index], "Quiet cockpit reads recreated texture/material resources")
+	display.free()
 
 func check_distant_contacts() -> void:
 	var state := {"system_id": "21", "tick": "120", "distant_contacts": {"version": 1, "selected": true, "system_id": "21", "tick": "120", "contacts": [{"id": "11", "label": "Unidentified contact", "status": "visible", "direction": Vector3.FORWARD, "angular_radius": 0.01, "light_direction": Vector3.UP, "tint": Color(0.7, 0.6, 0.5, 1.0), "spin_radians": 0.4, "reason": "Distant optical contact"}, {"id": "12", "label": "Unidentified contact", "status": "unresolved", "direction": Vector3.RIGHT, "angular_radius": 0.000001, "light_direction": Vector3.UP, "tint": Color.WHITE, "spin_radians": -PI, "reason": "Below optical resolution"}]}}
@@ -284,10 +388,13 @@ func check_planet_optics(historical: Dictionary, output: String) -> void:
 		check(false, "Actual optical New Game could not stage: " + str(owner.get_last_error()))
 		return
 	var candidate: Dictionary = owner.get_pending_freedom_start()
+	var pending_background: Dictionary = owner.get_freedom_background_sky(candidate.candidate_id)
+	check(NativeEnvironment.valid_background(candidate.flight_state, pending_background) and owner.get_freedom_background_sky("").is_empty(), "Pending New Game background used an absent committed owner")
 	if not owner.commit_pending_freedom_start(candidate.candidate_id):
 		check(false, "Actual optical New Game could not commit")
 		return
 	var state: Dictionary = owner.get_freedom_flight_state()
+	check(owner.get_freedom_background_sky("") == pending_background, "Background changed at the exact pending/committed ownership handoff")
 	if not PlanetOptics.valid(state) or not state.has("optics"):
 		check(false, "Actual C++ optical packet failed validation")
 		return

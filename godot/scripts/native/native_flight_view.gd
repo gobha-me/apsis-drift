@@ -14,7 +14,11 @@ const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dec
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
+const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
+var mouse_look := MouseLook.new()
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
+var cockpit_displays: Node3D
 const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
@@ -345,6 +349,11 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 			error = "The selected Wayfarer exterior exhaust interface is unavailable"
 			return false
 		ship.add_child(exhaust)
+		cockpit_displays = CockpitDisplays.new()
+		ship.add_child(cockpit_displays)
+		if not cockpit_displays.bind_screens(model.specification.screens) or not cockpit_displays.refresh(state, 0.0, true):
+			error = "The Wayfarer instrument screens are unavailable"
+			return false
 	else:
 		# Preserve the registered legacy frame without relabelling it Wayfarer.
 		var placeholder := MeshInstance3D.new()
@@ -407,6 +416,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	var environment := Environment.new()
 	planet_environment = environment
 	sky_material = NativeEnvironment.install(environment)
+	if not NativeEnvironment.bind_background(state, sky_material, owner.get_freedom_background_sky(pending.get("candidate_id", ""))):
+		error = "The saved universe background is unavailable"
+		return false
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.35, 0.45, 0.7)
 	environment.ambient_light_energy = 0.6
@@ -460,6 +472,7 @@ func activate() -> void:
 	layout_hud()
 	setup_controls()
 	update_view(0.0)
+	sync_mouse_look()
 	set_process(true)
 	set_process_input(true)
 
@@ -1069,10 +1082,10 @@ func refresh_control_hint() -> void:
 	if player_input == null:
 		return
 	if surface_walking():
-		hint.text = "WASD / left stick walk · Look keys / right-drag / right stick look\nEsc / Start controls · Return near the aft ground access to reboard"
+		hint.text = "WASD / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse · Return near the aft ground access to reboard"
 		return
 	var family := "pad" if player_input.last_device == "pad" else "key"
-	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nF3: legacy camera alias. Flight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family)]
+	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nHold right mouse to look · %s recenter head\nFlight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family), player_input.binding_label("recenter", family)]
 
 
 func request_assistance(enabled: bool) -> void:
@@ -1122,6 +1135,7 @@ func open_save_dialog() -> void:
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	mouse_look.set_active(false)
 	if state.get("surface", {}).get("maneuver", "off") != "off":
 		bridge.cancel_freedom_surface_maneuver()
 		state = bridge.get_freedom_flight_state()
@@ -1296,6 +1310,7 @@ func toggle_pause() -> void:
 		player_input.status = save_status.text
 		return
 	paused = false
+	sync_mouse_look()
 	instruments_open = false
 	# The already-observed neutral latch owns resume; do not reset it again.
 	player_input.enabled = true
@@ -1310,10 +1325,10 @@ func observe_neutral_controls() -> void:
 	if not focused or player_input == null:
 		return
 	var neutral: bool = player_input.observe_neutral()
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): neutral = false
 	if surface_walking():
 		for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
 			if Input.is_physical_key_pressed(key): neutral = false
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): neutral = false
 		if player_input.device >= 0:
 			for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
 				if absf(Input.get_joy_axis(player_input.device, axis)) > float(player_input.settings.deadzone): neutral = false
@@ -1341,9 +1356,22 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), heading])
 
 
+func sync_mouse_look() -> void:
+	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and not recovery_notified and save_dialog != null and not save_dialog.visible and (surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
+
+
+func _exit_tree() -> void:
+	mouse_look.set_active(false)
+
+
 func _input(event: InputEvent) -> void:
-	if surface_walking() and focused and not paused and not save_dialog.visible and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-		look_offset += event.relative * 0.003
+	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		sync_mouse_look()
+	elif event is InputEventMouseMotion and (surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)):
+		look_offset += MouseLook.motion_delta(event.relative, player_input.settings)
+		look_offset.x = wrapf(look_offset.x, -PI, PI) if surface_walking() else clampf(look_offset.x, -1.2 if cockpit else -PI, 1.2 if cockpit else PI)
+		look_offset.y = clampf(look_offset.y, -1.3 if surface_walking() else -0.8 if cockpit else -1.2, 1.3 if surface_walking() else 0.8 if cockpit else 1.2)
 
 
 func _notification(what: int) -> void:
@@ -1384,6 +1412,7 @@ func pause_on_error(message: String) -> void:
 
 func _process(delta: float) -> void:
 	if not activated or recovery_notified: return
+	sync_mouse_look()
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
 		hide_exhaust()
 		return
@@ -1519,6 +1548,9 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			stow_gear_button.disabled = stow_gear_button.disabled or surface_walking()
 		surface_status.text = ("Landed" if landed else "Airborne") + " · Gear " + ("deployed" if surface.get("gear_deployed", false) else "stowed") + "\n" + str(surface.get("note", "Surface aid off"))
 	ship.basis = state.body_basis
+	if cockpit_displays != null and not cockpit_displays.refresh(state, delta, paused):
+		pause_on_error("The Wayfarer instrument readings are unavailable")
+		return
 	if station == null and state.get("station_available", true) and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
 		scene.add_child(station)

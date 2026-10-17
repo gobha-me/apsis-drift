@@ -1,5 +1,7 @@
 extends SceneTree
 const Status = preload("res://scripts/native/native_status.gd")
+const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
+const StationView = preload("res://scripts/native/native_station_view.gd")
 var failed := 0
 
 func check(value: bool, reason: String) -> void:
@@ -7,6 +9,7 @@ func check(value: bool, reason: String) -> void:
 
 func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
+	check_mouse_boundaries()
 	check_surface_reference_warning()
 	check_observation_cue()
 	check_surface_aid_cue()
@@ -135,6 +138,23 @@ func _initialize() -> void:
 	check(clearance == clearance_before, "Clearance formatter mutated observations")
 	print("Native status: %d failures" % failed)
 	quit(1 if failed else 0)
+
+
+func check_mouse_boundaries() -> void:
+	var preferences := {"look_speed": 1.6, "invert_look": false}
+	var original := preferences.duplicate(true)
+	for invalid in [null, true, 1, "motion", [], {}, Vector2(INF, 0), Vector2(0, NAN), Vector2(1000001, 0)]:
+		check(MouseLook.motion_delta(invalid, preferences) == Vector2.ZERO, "Malformed mouse motion reached the camera")
+	for invalid in [null, true, NAN, INF, -INF, 0.0, 4.1, "speed", [], {}]:
+		check(MouseLook.motion_delta(Vector2(100, 50), {"look_speed": invalid, "invert_look": false}) == Vector2.ZERO, "Invalid mouse sensitivity accepted")
+	for invalid in [null, 1, "inverted", [], {}]:
+		check(MouseLook.motion_delta(Vector2.ONE, {"look_speed": 1.6, "invert_look": invalid}) == Vector2.ZERO, "Invalid mouse inversion accepted")
+	check(MouseLook.motion_delta(Vector2(100, 50), preferences).is_equal_approx(Vector2(0.3, 0.15)), "Default mouse look signs/rate changed")
+	check(MouseLook.motion_delta(Vector2(100, 50), {"look_speed": 3.2, "invert_look": true}).is_equal_approx(Vector2(0.6, -0.3)), "Mouse look ignored shared speed/inversion")
+	check(preferences == original, "Mouse read changed control preferences")
+	for invalid in [null, [], {}, {"minimum_x": 0, "maximum_x": 0, "minimum_z": -1, "maximum_z": 1}, {"minimum_x": NAN, "maximum_x": 1, "minimum_z": -1, "maximum_z": 1}, {"minimum_x": -1, "maximum_x": 1, "minimum_z": -INF, "maximum_z": 1}]:
+		check(not StationView.valid_walk_access(invalid), "Malformed station access limits reached a visible guide")
+	check(StationView.valid_walk_access({"minimum_x": -24.5, "maximum_x": 0.45, "minimum_z": -0.875, "maximum_z": 0.875}), "Existing finite corridor limits refused")
 
 
 func observation_state(count: Variant) -> Dictionary:

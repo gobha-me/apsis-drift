@@ -238,22 +238,34 @@ auto NativeFreedomFlightSession::boarding_view() const
 }
 auto NativeFreedomFlightSession::begin_boarding()
     -> std::expected<void, std::string> {
-  if (!actor_ ||
-      (boarding_ && boarding_->phase != FreedomBoardingPhase::station))
-    return std::unexpected{"Boarding requires a station actor"};
   return begin_boarding_route(GameplayBoardingDirection::board);
+}
+auto NativeFreedomFlightSession::boarding_available() const
+    -> std::expected<void, std::string> {
+  const auto prepared =
+      prepare_boarding_route(GameplayBoardingDirection::board);
+  if (!prepared) return std::unexpected{prepared.error()};
+  return {};
 }
 auto NativeFreedomFlightSession::begin_disembarking()
     -> std::expected<void, std::string> {
-  if (surface_walker_)
-    return std::unexpected{
-        "Return from the surface before using station boarding"};
-  if (actor_ || !boarding_ || boarding_->phase != FreedomBoardingPhase::seated)
-    return std::unexpected{"Disembarking requires a seated pilot"};
   return begin_boarding_route(GameplayBoardingDirection::disembark);
 }
-auto NativeFreedomFlightSession::begin_boarding_route(
-    GameplayBoardingDirection direction) -> std::expected<void, std::string> {
+auto NativeFreedomFlightSession::prepare_boarding_route(
+    GameplayBoardingDirection direction) const
+    -> std::expected<FreedomBoardingState, std::string> {
+  if (direction == GameplayBoardingDirection::board) {
+    if (!actor_ ||
+        (boarding_ && boarding_->phase != FreedomBoardingPhase::station))
+      return std::unexpected{"Boarding requires a station actor"};
+  } else {
+    if (surface_walker_)
+      return std::unexpected{
+          "Return from the surface before using station boarding"};
+    if (actor_ || !boarding_ ||
+        boarding_->phase != FreedomBoardingPhase::seated)
+      return std::unexpected{"Disembarking requires a seated pilot"};
+  }
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -279,20 +291,32 @@ auto NativeFreedomFlightSession::begin_boarding_route(
   auto route = begin_origin_gameplay_boarding(craft_binding_, *pose, eye,
                                               entry.heading_radians, direction);
   if (!route) return std::unexpected{route.error()};
-  auto candidate = *this;
-  candidate.boarding_ =
+  const auto boarding =
       FreedomBoardingState{direction == GameplayBoardingDirection::board
                                ? FreedomBoardingPhase::boarding
                                : FreedomBoardingPhase::disembarking,
                            entry, document_.flight.tick, *route};
-  const auto view = candidate.boarding_view();
+  const auto view =
+      view_origin_gameplay_boarding(craft_binding_, boarding.route);
   if (!view) return std::unexpected{view.error()};
-  candidate.actor_ = route_actor(*candidate.boarding_, *view);
-  if (auto valid =
-          validate_freedom_boarding_document(candidate.boarding_document());
+  if (auto valid = validate_freedom_boarding_document({{document_, *docking_},
+                                                       *starting_assembly_,
+                                                       boarding,
+                                                       std::nullopt});
       !valid)
     return std::unexpected{valid.error().detail};
-  *this = std::move(candidate);
+  return boarding;
+}
+auto NativeFreedomFlightSession::begin_boarding_route(
+    GameplayBoardingDirection direction) -> std::expected<void, std::string> {
+  const auto prepared = prepare_boarding_route(direction);
+  if (!prepared) return std::unexpected{prepared.error()};
+  const auto view =
+      view_origin_gameplay_boarding(craft_binding_, prepared->route);
+  if (!view) return std::unexpected{view.error()};
+  const auto actor = route_actor(*prepared, *view);
+  boarding_ = *prepared;
+  actor_ = actor;
   return {};
 }
 

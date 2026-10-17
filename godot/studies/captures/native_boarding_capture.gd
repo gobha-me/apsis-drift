@@ -20,6 +20,8 @@ func _initialize() -> void:
 
 func freeze_view() -> void:
 	var view: Control = shell.current_view
+	# Capture owns no physical input; release any activation-time pointer grab.
+	view.mouse_look.set_active(false)
 	view.set_process(false)
 	view.set_process_input(false)
 	view.set_process_unhandled_input(false)
@@ -28,6 +30,18 @@ func freeze_view() -> void:
 		view.player_input.set_process_input(false)
 		view.player_input.set_process_unhandled_input(false)
 		view.controls_menu.set_process_input(false)
+		view.player_input.focused = true
+	else:
+		view.preferences_provider.focused = true
+	# This scripted render review owns no desktop input. A compositor may leave
+	# its window unfocused; emulate focus only for the public command route.
+	# Physical focus/capture acceptance remains a separate manual check.
+	view.focused = true
+	if view is WalkView:
+		# Normal processing refreshes this bounded read at 10 Hz. Frozen captures
+		# explicitly refresh it so the ladder cue represents the current pose.
+		view.boarding_query_elapsed = 0.1
+		view.refresh_boarding_action()
 
 
 func fail(message: String) -> void:
@@ -40,7 +54,9 @@ func walk_ticks(count: int, controls: PackedFloat64Array) -> bool:
 	if not view is WalkView:
 		fail("Walking presentation is required for route advancement")
 		return false
+	freeze_view()
 	if view.paused: view.resume_requested()
+	view.mouse_look.set_active(false)
 	if view.paused:
 		fail("The neutral walking view could not resume")
 		return false
@@ -59,6 +75,7 @@ func snapshot(label: String) -> void:
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw
+	freeze_view()
 	if owner.get_freedom_walk_state() != before_walk or owner.get_freedom_flight_state() != before_flight or owner.get_freedom_boarding_state() != before_boarding:
 		fail("Rendering waits advanced the authoritative journey")
 		return
@@ -127,7 +144,20 @@ func run() -> void:
 		quit(1)
 		return
 	freeze_view()
-	if not walk_ticks(2960, PackedFloat64Array([0.0, -1.0, 0.0])) or not walk_ticks(1, PackedFloat64Array([0.0, 0.0, PI / 2.0])):
+	await snapshot("junction-access")
+	var initial_heading: float = owner.get_freedom_walk_state().heading_radians
+	if not walk_ticks(1, PackedFloat64Array([0.0, 0.0, wrapf(initial_heading + PI, -PI, PI)])):
+		quit(1)
+		return
+	await snapshot("arrivals-access")
+	if not walk_ticks(1, PackedFloat64Array([0.0, 0.0, initial_heading])):
+		quit(1)
+		return
+	if not walk_ticks(750, PackedFloat64Array([0.0, -1.0, 0.0])):
+		quit(1)
+		return
+	await snapshot("workbench-aisle")
+	if not walk_ticks(2210, PackedFloat64Array([0.0, -1.0, 0.0])) or not walk_ticks(1, PackedFloat64Array([0.0, 0.0, PI / 2.0])):
 		quit(1)
 		return
 	var original_model: Node3D = shell.current_view.staged_model
@@ -219,11 +249,11 @@ func run() -> void:
 		quit(1)
 		return
 	var sources := {}
-	for name in ["studies/captures/native_boarding_capture.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_station_view.gd", "scripts/characters/hopper_presentation.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
+	for name in ["studies/captures/native_boarding_capture.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_station_view.gd", "scripts/native/native_environment.gd", "scripts/native/native_cockpit_displays.gd", "scripts/native/native_mouse_look.gd", "scripts/world/navigation_sky.gd", "shaders/native_navigation_sky.gdshader", "scripts/characters/hopper_presentation.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
 		sources[name] = FileAccess.get_sha256("res://" + name)
 	var report := FileAccess.open(output.path_join("capture.json"), FileAccess.WRITE)
 	if report == null: quit(1); return
-	report.store_string(JSON.stringify({"schema_version": 2, "scope": "Playable authored boarding, actuator departure/approach, explicit capture and reverse unboard on one authoritative C++ session; body proxy and corridor are gameplay approximations, not anatomical or continuous-collision certification", "seed": "42", "sources_sha256": sources, "selected_binding": WalkCapture.binding_metadata(owner.get_freedom_craft_binding()), "station_sha256": WalkView.StationPresentation.STATION_HASH, "render_path": "Actual NewGame42, public walk2960ticks plus one look tick, Board, Release, physical withdrawal720ticks then main12ticks, approach, Capture and Unboard; rendering waits freeze time; same model and session throughout", "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
+	report.store_string(JSON.stringify({"schema_version": 2, "scope": "Playable authored boarding, actuator departure/approach, explicit capture and reverse unboard on one authoritative C++ session; body proxy and corridor are gameplay approximations, not anatomical or continuous-collision certification", "seed": "42", "sources_sha256": sources, "selected_binding": WalkCapture.binding_metadata(owner.get_freedom_craft_binding()), "station_sha256": WalkView.StationPresentation.STATION_HASH, "render_path": "Actual NewGame42, public walk2960ticks plus three look ticks, Board, Release, physical withdrawal720ticks then main12ticks, approach, Capture and Unboard; rendering waits freeze time; scripted focus only, not hardware input acceptance; same model and session throughout", "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
 	report.close()
 	shell.free()
 	print("Native authored boarding captures: %d" % captures.size())

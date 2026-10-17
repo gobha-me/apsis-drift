@@ -11,6 +11,9 @@ uniform vec3 sun_direction;
 uniform vec3 sun_color : source_color;
 uniform float sun_angular_radius;
 uniform float sun_visibility;
+uniform bool background_enabled = false;
+uniform sampler2D background_stars : filter_linear, repeat_enable;
+uniform mat3 background_native_to_system;
 // C++ same-tick native-tangent projections, in far-to-near order. These are
 // optical silhouettes, never world meshes or supported approach surfaces.
 uniform int distant_contact_count = 0;
@@ -58,6 +61,13 @@ void sky() {
 	vec3 scatter = atmosphere_tint * (0.35 + 0.65 * max(0.0, d.y)) * illumination;
 	scatter += vec3(0.55, 0.19, 0.065) * warm * pow(toward_sun, 4.0);
 	COLOR = scatter * sun_color * haze;
+	if (!ground && background_enabled) {
+		vec3 inertial = normalize(background_native_to_system * d);
+		vec2 star_uv = vec2(atan(inertial.z, inertial.x) / TAU + 0.5, acos(clamp(inertial.y, -1.0, 1.0)) / PI);
+		// C++ background catalog only. Atmospheric washout uses the existing
+		// optical depth/illumination, with clouds composed below as before.
+		COLOR += texture(background_stars, star_uv).rgb * 2.0 * exp(-optical * (0.15 + 2.0 * illumination));
+	}
 	float sun_angle = acos(clamp(dot(d, sun_direction), -1.0, 1.0));
 	float antialias = max(0.00001, fwidth(sun_angle));
 	float sun_disc = 1.0 - smoothstep(max(0.0, sun_angular_radius - antialias), sun_angular_radius + antialias, sun_angle);
