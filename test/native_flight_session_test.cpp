@@ -118,6 +118,8 @@ auto boarding_availability(const Fixture& f,
   const auto probe = [&](const NativeFreedomFlightSession& source,
                          bool expected) {
     const auto before = saved(source);
+    // Own the snapshot so a mutation cannot also change the expected value.
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- snapshot
     const auto path = source.source_save();
     const auto result = source.boarding_available();
     for (unsigned repeat = 0; repeat < 4; ++repeat) {
