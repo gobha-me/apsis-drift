@@ -142,9 +142,9 @@ func install_walk_access(access: Dictionary) -> void:
 	var x: float = access.maximum_x - junction_length * 0.5
 	var z: float = (access.minimum_z + access.maximum_z) * 0.5
 	var limits := [
-		[Vector3(access.maximum_x, 0.0, z), Vector3(0.035, 0.07, width), "ARRIVALS\nAccess closed in this build"],
-		[Vector3(x, 0.0, access.minimum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nFollow D1 to the workshop"],
-		[Vector3(x, 0.0, access.maximum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nFollow D1 to the workshop"]]
+		[Vector3(access.maximum_x, 0.0, z), Vector3(0.035, 0.07, width), "ACCESS CLOSED\nUse D1 workshop"],
+		[Vector3(x, 0.0, access.minimum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nUse D1 workshop"],
+		[Vector3(x, 0.0, access.maximum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nUse D1 workshop"]]
 	for limit in limits:
 		var gate := Node3D.new()
 		gate.position = limit[0]
