@@ -14,21 +14,29 @@ Follow [native setup](../godot/README.md). From the repository root:
 tools/run_godot_native.sh --new-game=42
 ```
 
-The current native path is Linux x86_64. Connect the controller before launch.
+The current native path is Linux x86_64. Keyboard/mouse work directly; a controller is optional.
 New Game starts a first-person actor on Origin Station's hub floor. WASD or the
-left stick walks; arrow keys, right-drag or the right stick look. **Esc / Start · Controls**
+left stick walks; ordinary mouse movement, arrow keys or the right stick look. **Esc / Start · Controls**
 opens paused controls. The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md). Look speed and vertical inversion apply to
 on-foot keys and the right stick as well as flight look. Walking keeps its
-default stick rate; the speed setting scales it. Right-drag retains its fixed rate.
+default stick rate; the speed setting scales it. Mouse look uses the same speed
+and vertical inversion preferences. Walking captures the pointer; pause, focus
+loss and dialogs release it. Resume explicitly after releasing controls. In the
+cockpit, hold the right mouse button to look and use the displayed recenter
+binding to face forward; releasing the button restores the cursor.
 
 Resizing the window while movement, flight or look controls are held pauses
 input. Release those controls, then resume explicitly; the craft retains its
 committed pose and momentum. A resize with neutral controls keeps the current
 running or paused state. Initial layout does not add a pause.
 
-Walk through the workshop to D1. Release movement controls, then use **E**,
-controller **A**, or **Board Wayfarer**. The authored boarding sequence takes
+The arrivals and side branches remain outside the current supported walk route;
+visible access rails mark that limit at the junction. Follow D1 toward the
+workshop. Near the ladder, a contextual **Climb aboard** prompt names the action.
+Release movement controls, then use **E**, left click while the prompt is shown,
+controller **A**, or **Climb aboard
+Wayfarer**. The authored boarding sequence takes
 you through the hatch to the pilot seat. The open docking well stops ordinary
 unsupported walking; approach the craft through the supported station route.
 
@@ -47,6 +55,13 @@ and range. Use [the approach aid](PORT_APPROACH_AID.md) for an aligned return;
 it applies thrusters and consumes fuel. **Capture port** remains your action.
 While attached at D1, **Unboard to station** restores station walking and
 [free station replenishment](FREEDOM_RESOURCES.md) can restore both resources.
+
+The three cockpit screens show native NAV, FLIGHT and SYSTEMS readings,
+including fuel, jump charges and applied propulsion. Reference altitude is
+height above the body's reference sphere, not ground clearance. Use paused
+Controls for commands; the screens themselves are read-only instruments.
+The seeded background stars are visual reference points, not selectable chart
+destinations or newly granted observations.
 
 The [neighboring-system trip](FREEDOM_NATIVE_TRAVEL.md) supports chart selection,
 jump commitment and home return. Three initial jump charges leave an outbound,

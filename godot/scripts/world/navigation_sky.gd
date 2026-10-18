@@ -1,6 +1,6 @@
 extends RefCounted
 ## Bounded runtime texture from identified C++ stars, not a second generator.
-static func material(catalog: Array, tint: Color, pressure: float) -> ShaderMaterial:
+static func texture(catalog: Array) -> ImageTexture:
 	var image := Image.create(4096, 2048, false, Image.FORMAT_RGB8)
 	image.fill(Color.BLACK)
 	for star in catalog:
@@ -19,9 +19,12 @@ static func material(catalog: Array, tint: Color, pressure: float) -> ShaderMate
 				var px := posmod(x + dx, image.get_width())
 				var py := clampi(y + dy, 0, image.get_height() - 1)
 				image.set_pixel(px, py, image.get_pixel(px, py) + color * weight * 1.5)
+	return ImageTexture.create_from_image(image)
+
+static func material(catalog: Array, tint: Color, pressure: float) -> ShaderMaterial:
 	var result := ShaderMaterial.new()
 	result.shader = preload("res://shaders/navigation_sky.gdshader")
-	result.set_shader_parameter("stars", ImageTexture.create_from_image(image))
+	result.set_shader_parameter("stars", texture(catalog))
 	result.set_shader_parameter("view_to_inertial", Basis.IDENTITY)
 	result.set_shader_parameter("atmosphere_tint", tint)
 	result.set_shader_parameter("atmosphere_density", pressure / 1013.25)

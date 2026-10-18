@@ -55,7 +55,18 @@ static func valid_geometry(value: Variant, station_id: String) -> bool:
 	return true
 
 
+static func valid_walk_access(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 4: return false
+	for key in ["minimum_x", "maximum_x", "minimum_z", "maximum_z"]:
+		var coordinate: Variant = value.get(key)
+		if not (coordinate is int or coordinate is float) or not is_finite(float(coordinate)) or absf(coordinate) > 1000.0: return false
+	return value.minimum_x < value.maximum_x and value.minimum_z < value.maximum_z
+
+
 func initialize(start: Dictionary, contract: Dictionary, assets: String, inspection_camera: bool = true) -> bool:
+	if start.has("walk_access") and not valid_walk_access(start.walk_access):
+		error = "Station access limits are unavailable or invalid"
+		return false
 	if not valid_geometry(contract, str(start.get("station_id", ""))):
 		error = "C++ station geometry is unavailable or invalid"
 		return false
@@ -79,6 +90,7 @@ func initialize(start: Dictionary, contract: Dictionary, assets: String, inspect
 	model.name = "OriginStationAsset"
 	model.position = vector(contract.asset_offset_metres)
 	add_child(model)
+	if start.has("walk_access"): install_walk_access(start.walk_access)
 	for port in contract.ports:
 		var marker := Node3D.new()
 		marker.name = "OriginPortD%d" % port.ordinal
@@ -115,6 +127,45 @@ func initialize(start: Dictionary, contract: Dictionary, assets: String, inspect
 	camera.current = true
 	update_camera()
 	return true
+
+
+func install_walk_access(access: Dictionary) -> void:
+	# A visible guard for the existing C++ crop; this never supplies collision.
+	var guides := Node3D.new()
+	guides.name = "WalkAccess"
+	add_child(guides)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.64, 0.12)
+	var width: float = access.maximum_z - access.minimum_z
+	var junction_length := minf(1.5, access.maximum_x - access.minimum_x)
+	var x: float = access.maximum_x - junction_length * 0.5
+	var z: float = (access.minimum_z + access.maximum_z) * 0.5
+	var limits := [
+		[Vector3(access.maximum_x, 0.0, z), Vector3(0.035, 0.07, width), "ACCESS CLOSED\nUse D1 workshop"],
+		[Vector3(x, 0.0, access.minimum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nUse D1 workshop"],
+		[Vector3(x, 0.0, access.maximum_z), Vector3(junction_length, 0.07, 0.035), "ACCESS CLOSED\nUse D1 workshop"]]
+	for limit in limits:
+		var gate := Node3D.new()
+		gate.position = limit[0]
+		guides.add_child(gate)
+		for height in [0.55, 1.05]:
+			var bar := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = limit[1]
+			bar.mesh = box
+			bar.material_override = material
+			bar.position.y = height
+			gate.add_child(bar)
+		var label := Label3D.new()
+		label.text = limit[2]
+		# The arrival guard is close to the spawn: keep both lines at eye level
+		# rather than below the camera's vertical field of view.
+		label.position.y = 1.7
+		label.pixel_size = 0.0015
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.font_size = 32
+		gate.add_child(label)
 
 
 func update_camera() -> void:

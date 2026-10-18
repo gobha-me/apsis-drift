@@ -223,3 +223,13 @@ spawn, already facing the workshop. Actor and craft ticks agree throughout. The 
 look changes only presentation pitch, not the supported actor pose. Evidence
 is retained locally in `build-native/walk-review-gcc` and
 `build-native/walk-review-clang`; no target-hardware acceptance is implied.
+
+The 2026-10-17 workbench fix replaces the coarse horizontal candidate bins with
+one immutable local AABB hierarchy over the same authenticated contact
+triangles. Queries retain ascending original triangle IDs and the existing
+support, clearance, collision and validation predicates. The normal hub →
+workshop → hub route and 60/120 Hz replay retain every actor state. An opt-in
+`--measure-route` mode of `apsis-drift-origin-walker-tests` reports warmed CPU
+query work and timing by aisle position; it does not measure rendering, frame
+rate or initial geometry loading. The visible junction guards consume the
+original C++ corridor limits and add no new collision geometry or walkable area.

@@ -65,3 +65,12 @@ retained throughout; the craft is not reset to its pre-departure state. See
 orbit compatibility. The low-thrust main plume now survives the transparent
 camera composite. The small withdrawal nozzles are difficult to read at chase
 distance; nozzle/camera readability remains a presentation refinement.
+
+Owner keyboard/mouse review, 2026-10-17: the boarding animation reads well, but
+the 90-degree parked seat and tight approach deserve another ingress pass.
+That swivel is explicitly authored in the operating asset; the suggested
+180-degree entry needs a coordinated operating-recipe/asset change, rather
+than a presentation-only axis correction. Fixed transition camera facing and
+the reverse view remain recorded limitations. This feedback does not reopen
+the deferred anatomical studies. Contextual ladder actions and ordinary mouse
+look are addressed separately from changing that authored route.

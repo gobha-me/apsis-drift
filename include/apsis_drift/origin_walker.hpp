@@ -13,6 +13,11 @@ inline constexpr double kOriginWalkSpeedMetresPerSecond{2.0};
 inline constexpr double kOriginWalkerHalfWidthMetres{.32};
 inline constexpr double kOriginWalkerHeightMetres{1.93};
 inline constexpr double kOriginWalkerEyeHeightMetres{1.70};
+// The supported prototype corridor, also projected for visible access limits.
+inline constexpr double kOriginWalkMinimumXMetres{-24.5};
+inline constexpr double kOriginWalkMaximumXMetres{.45};
+inline constexpr double kOriginWalkMinimumZMetres{-.875};
+inline constexpr double kOriginWalkMaximumZMetres{.875};
 struct OriginWalkerState {
   std::uint32_t geometry_version{kOriginWalkGeometryVersion};
   std::uint64_t actor_id{1};

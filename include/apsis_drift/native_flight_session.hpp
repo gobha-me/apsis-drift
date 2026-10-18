@@ -190,6 +190,10 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto boarding_view() const
       -> std::expected<GameplayBoardingView, std::string>;
+  // Same preparation/validation as begin_boarding, without installing an
+  // actor/route, advancing time or copying world catalogs/geometry/recovery.
+  [[nodiscard]] auto boarding_available() const
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_boarding() -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_disembarking() -> std::expected<void, std::string>;
   [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
@@ -267,6 +271,8 @@ class NativeFreedomFlightSession {
       -> std::expected<NativeFlightControls, std::string>;
   [[nodiscard]] auto begin_boarding_route(GameplayBoardingDirection)
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto prepare_boarding_route(GameplayBoardingDirection) const
+      -> std::expected<FreedomBoardingState, std::string>;
   [[nodiscard]] auto boarding_document() const -> FreedomBoardingSaveDocument;
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)

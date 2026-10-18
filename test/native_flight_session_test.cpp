@@ -109,6 +109,85 @@ struct Fixture {
     return d;
   }
 };
+auto boarding_availability(const Fixture& f,
+                           const std::filesystem::path& directory) -> void {
+  const auto saved = [](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  const auto probe = [&](const NativeFreedomFlightSession& source,
+                         bool expected) {
+    const auto before = saved(source);
+    // Own the snapshot so a mutation cannot also change the expected value.
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- snapshot
+    const auto path = source.source_save();
+    const auto result = source.boarding_available();
+    for (unsigned repeat = 0; repeat < 4; ++repeat) {
+      const auto repeated = source.boarding_available();
+      check(repeated.has_value() == result.has_value() &&
+                (repeated || repeated.error() == result.error()),
+            "Boarding availability and its diagnostic are repeatable");
+    }
+    auto attempted = source;
+    const auto actual = attempted.begin_boarding();
+    check(result.has_value() == expected &&
+              actual.has_value() == result.has_value() &&
+              (actual || actual.error() == result.error()),
+          "Read-only availability uses the actual boarding eligibility and "
+          "refusal diagnostic");
+    check(saved(source) == before && source.source_save() == path,
+          "Boarding availability preserves complete save bytes and source "
+          "identity");
+    if (actual)
+      check(attempted.document() == source.document() &&
+                attempted.resources() == source.resources() &&
+                attempted.knowledge() == source.knowledge() &&
+                attempted.boarding()->phase == FreedomBoardingPhase::boarding,
+            "Accepted boarding installs only its actor/route at the current "
+            "clock without changing resources or observations");
+    else
+      check(saved(attempted) == before,
+            "Refused boarding matches the unchanged availability source");
+  };
+  probe(f.open(f.document()), false);
+  auto station = required(
+      NativeFreedomFlightSession::open(required(native_new_game(Seed{42}))));
+  probe(station, false);
+  // Actual source-supported corridor movement crosses the existing reach
+  // edge between1193 and1194 fixed steps. No actor pose is injected.
+  for (unsigned tick = 0; tick < 1193; ++tick)
+    required(station.advance_walk({0, -1, 0}));
+  probe(station, false);
+  required(station.advance_walk({0, -1, 0}));
+  probe(station, true);
+  const auto path = directory / "boarding-availability.json";
+  check(station.save_as(path).has_value(),
+        "Nearby availability source saves through its complete owner");
+  auto continued = required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+  probe(continued, true);
+  check(contents(path) == saved(station),
+        "Availability cannot rewrite the selected source save");
+  auto pending = station;
+  const auto recovery = required(pending.recovery_document());
+  check(pending
+            .record_loss(
+                FreedomLossCause::recoverable_destruction,
+                pending.document().origin.state.craft,
+                pending.document().flight.tick,
+                required(freedom_recovery_source_checksum(recovery.voyage)))
+            .has_value(),
+        "Nearby loss fixture records the actual same-tick source");
+  probe(pending, false);
+  check(station.begin_boarding().has_value(),
+        "Actually reachable actor begins the available route");
+  probe(station, false);
+  for (unsigned tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    required(station.advance_walk({}));
+  check(station.boarding()->phase == FreedomBoardingPhase::seated,
+        "Availability test reaches the actual occupied endpoint");
+  probe(station, false);
+}
 auto invalid(const Fixture& f) -> void {
   check(!NativeFreedomFlightSession::open(
             {NativeStartup::Mode::freedom,
@@ -440,6 +519,7 @@ int main() {
     std::filesystem::create_directories(directory);
     Fixture f;
     invalid(f);
+    boarding_availability(f, directory);
     ordinary_and_hold(f);
     boundary_composition(f);
     for (Seed seed :

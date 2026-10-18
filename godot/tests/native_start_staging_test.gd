@@ -257,16 +257,28 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	walk.selected_pad = 19
 	check(walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Staged station light diverged from authoritative star")
 	var original: Dictionary = bridge.get_freedom_walk_state()
+	var availability: Dictionary = bridge.get_freedom_boarding_availability()
+	check(WalkView.valid_boarding_availability(availability, original) and not availability.available and not walk.board_button.visible, "Far station actor received a boarding action")
 	check(not bridge.begin_freedom_boarding() and bridge.get_freedom_walk_state() == original, "Distant boarding changed the walker")
 	for tick in 2960:
 		if not bridge.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, -1.0, 0.0])):
 			check(false, "Supported approach to D1 refused")
 			return
+	walk.boarding_query_elapsed = 0.1
 	walk.update_view()
 	var entry: Dictionary = bridge.get_freedom_walk_state()
+	check(walk.board_button.visible and not walk.board_button.disabled and walk.boarding_prompt.visible and "Climb aboard" in walk.boarding_prompt.text, "Nearby ladder lost its contextual action")
 	var model: Node3D = walk.staged_model
 	var roots: Array = model.replacement_nodes.duplicate()
-	walk.board_requested()
+	var board_key := InputEventKey.new()
+	board_key.keycode = KEY_E
+	board_key.physical_keycode = KEY_E
+	board_key.pressed = true
+	Input.parse_input_event(board_key)
+	Input.flush_buffered_events()
+	board_key.pressed = false
+	Input.parse_input_event(board_key)
+	Input.flush_buffered_events()
 	var malformed: Dictionary = bridge.get_freedom_boarding_state().pose.duplicate(true)
 	malformed.craft_world_deltas.seat_lift[0] = NAN
 	check(not model.set_pose(malformed) and model.valid_current_pose(), "Nonfinite runtime pose changed the current installed model")

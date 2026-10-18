@@ -2,6 +2,10 @@ extends RefCounted
 ## Read-only current-body lighting; C++ owns the body, atmosphere and time.
 const SkyShader = preload("res://shaders/native_navigation_sky.gdshader")
 const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
+const NavigationSky = preload("res://scripts/world/navigation_sky.gd")
+# One universe texture, independent of changing planets, ticks and cameras.
+static var background_owner := ""
+static var background_texture: ImageTexture
 
 static func decimal(value: Variant) -> bool:
 	if not value is String or value.is_empty() or value.length() > 20: return false
@@ -12,6 +16,32 @@ static func decimal(value: Variant) -> bool:
 
 static func color(value: Variant) -> bool:
 	return value is Color and is_finite(value.r) and is_finite(value.g) and is_finite(value.b) and value.r >= 0 and value.r <= 1 and value.g >= 0 and value.g <= 1 and value.b >= 0 and value.b <= 1 and value.a == 1
+
+static func rigid_basis(value: Variant) -> bool:
+	return value is Basis and value.is_finite() and absf(value.determinant() - 1.0) < 0.0001 and value.is_equal_approx(value.orthonormalized())
+
+static func valid_background(state: Dictionary, packet: Variant) -> bool:
+	if not packet is Dictionary or packet.size() != 4 or typeof(packet.get("version")) != TYPE_INT or packet.version != 1 or packet.get("disclosure") != "background_only": return false
+	if not decimal(packet.get("universe_seed")) or packet.universe_seed != state.get("universe_seed"): return false
+	var stars: Variant = packet.get("stars")
+	if not stars is Array or stars.size() != 1536: return false
+	for star in stars:
+		if not star is Dictionary or star.size() != 3 or not DistantContacts.unit_vector(star.get("direction")) or not color(star.get("color")): return false
+		if not star.get("brightness") is float or not is_finite(star.brightness) or star.brightness < 0.25 or star.brightness > 1.0: return false
+	return true
+
+static func bind_background(state: Dictionary, material: ShaderMaterial, packet: Dictionary) -> bool:
+	# Refusal precedes texture allocation, cache mutation and uniform changes.
+	if not valid(state) or not valid_background(state, packet) or material == null or material.shader != SkyShader: return false
+	if background_texture == null or background_owner != packet.universe_seed:
+		var texture := NavigationSky.texture(packet.stars)
+		background_owner = packet.universe_seed
+		background_texture = texture
+	material.set_shader_parameter("background_stars", background_texture)
+	material.set_shader_parameter("background_native_to_system", state.lighting.native_to_system)
+	material.set_shader_parameter("background_enabled", true)
+	material.set_meta("background_universe_seed", packet.universe_seed)
+	return true
 
 static func valid(state: Dictionary) -> bool:
 	if not DistantContacts.valid(state): return false
@@ -29,6 +59,7 @@ static func valid(state: Dictionary) -> bool:
 		if data.sea_density != 0 or data.atmosphere_edge != 0: return false
 	elif data.scale_height < 0 or data.sea_density <= 0 or data.atmosphere_edge <= 0: return false
 	if not color(data.get("star_color")) or data.star_color.r + data.star_color.g + data.star_color.b <= 0 or not color(data.get("atmosphere_tint")): return false
+	if not rigid_basis(data.get("native_to_system")) or not rigid_basis(state.get("station_basis")) or not data.native_to_system.is_equal_approx(state.station_basis.transposed()): return false
 	var direction: Variant = data.get("direction")
 	return direction is Vector3 and direction.is_finite() and absf(direction.length_squared() - 1.0) < 0.0001 and direction == state.get("star_direction")
 
@@ -54,11 +85,13 @@ static func sun_visibility(state: Dictionary) -> float:
 static func apply_sky(state: Dictionary, material: ShaderMaterial) -> bool:
 	var visibility := sun_visibility(state)
 	if visibility < 0.0 or material == null or material.shader != SkyShader: return false
+	if material.get_meta("background_universe_seed", "") not in ["", state.get("universe_seed")]: return false
 	if not DistantContacts.apply(state, [material]): return false
 	var data: Dictionary = state.lighting
 	for pair in [["radius", state.planet_radius], ["altitude", state.altitude], ["scale_height", data.scale_height], ["sea_density", data.sea_density], ["atmosphere_edge", data.atmosphere_edge], ["atmosphere_tint", data.atmosphere_tint], ["sun_direction", data.direction], ["sun_color", data.star_color], ["sun_angular_radius", data.star_angular_radius]]:
 		material.set_shader_parameter(pair[0], pair[1])
 	material.set_shader_parameter("sun_visibility", visibility)
+	material.set_shader_parameter("background_native_to_system", data.native_to_system)
 	return true
 
 static func apply(state: Dictionary, environment: Environment, light: DirectionalLight3D, material: ShaderMaterial, local_light: DirectionalLight3D) -> bool:

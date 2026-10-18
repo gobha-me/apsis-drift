@@ -99,6 +99,31 @@ func right_mouse(pressed: bool) -> void:
 	check(Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) == pressed, "Software right mouse did not update current input")
 
 
+func check_free_mouse(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	check(view.mouse_look.active and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT), "Running station did not own ordinary mouse look")
+	var heading: float = view.requested_heading
+	var pitch: float = view.pitch
+	var motion := InputEventMouseMotion.new()
+	motion.relative = Vector2(40, -20)
+	view._input(motion)
+	check(view.requested_heading < heading and view.pitch > pitch, "Station mouse required an undisclosed right-button drag")
+	var accepted_heading: float = view.requested_heading
+	var accepted_pitch: float = view.pitch
+	motion.relative = Vector2(NAN, INF)
+	view._input(motion)
+	check(view.requested_heading == accepted_heading and view.pitch == accepted_pitch, "Non-finite mouse motion contaminated station view")
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Uncommitted mouse look mutated saved C++ state")
+	view.pause_controls("Mouse release check")
+	check(not view.mouse_look.active, "Pause retained pointer capture")
+	motion.relative = Vector2(20, 20)
+	view._input(motion)
+	check(view.requested_heading == accepted_heading and view.pitch == accepted_pitch, "Paused mouse moved the view")
+	view.requested_heading = heading
+	view.pitch = pitch
+	view.resume_requested()
+	check(not view.paused and view.mouse_look.active, "Explicit neutral Resume did not restore mouse look")
+
+
 func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictionary, flight: Dictionary, bytes: PackedByteArray, pose: Transform3D, heading: float, pitch: float, label: String) -> void:
 	view._process(60.0)
 	check(view.advance_requested(60.0, PackedFloat64Array([1.0, 1.0, PI])), label + ": paused request failed")
@@ -748,6 +773,16 @@ func run() -> void:
 	owner.get_freedom_walk_state()
 	owner.get_freedom_flight_state()
 	owner.get_freedom_station_geometry()
+	var availability: Dictionary = owner.get_freedom_boarding_availability()
+	check(WalkView.valid_boarding_availability(availability, start) and not availability.available, "Far boarding availability is malformed or actionable")
+	for field in ["version", "available", "reason", "universe_seed", "system_id", "craft_id", "tick"]:
+		var bad_availability := availability.duplicate(true)
+		bad_availability[field] = null
+		check(not WalkView.valid_boarding_availability(bad_availability, start), "Malformed boarding availability accepted: " + field)
+	for field in ["universe_seed", "system_id", "craft_id", "tick"]:
+		var foreign := availability.duplicate(true)
+		foreign[field] = "999999"
+		check(not WalkView.valid_boarding_availability(foreign, start), "Foreign or stale boarding availability accepted: " + field)
 	check(owner.get_last_error() == refusal, "Read-only query erased command refusal")
 	for key in ["foot_position_metres", "actor_global_position_metres"]:
 		var bad := start.duplicate(true)
@@ -773,6 +808,8 @@ func run() -> void:
 	root.add_child(view)
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and not view.paused, "Fresh already-neutral view did not retain running startup")
+	check_free_mouse(view, owner, path, originals[0])
+	check(view.station.get_node_or_null("WalkAccess") != null and not view.board_button.visible and not view.boarding_prompt.visible, "Station lost visible access limits or offered distant boarding")
 	check(view.light.basis.z.is_equal_approx(flight.star_direction), "Fresh station light substituted a fixed sun")
 	check_sky(view, flight, "New Game")
 	sky_refusals(view, start, flight)

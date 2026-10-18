@@ -2,7 +2,7 @@
 
 After a supported, stable Wayfarer landing, **Leave Wayfarer · suit** selects
 first-person ground walking. Release controls and resume explicitly. WASD and
-the left stick walk; arrow keys, right-drag and the right stick look. **Return through hatch**
+the left stick walk; ordinary mouse movement, arrow keys and the right stick look. Pause and focus loss release the mouse; Resume captures it again. **Return through hatch**
 works within 3.5 metres of the original ground access point. Reboarding pauses
 again, after which the ordinary flight controls and thruster liftoff resume.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
