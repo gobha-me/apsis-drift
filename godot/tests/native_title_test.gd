@@ -162,6 +162,7 @@ func run() -> void:
 	check(shell.current_view.state.actor_id == "1", "New Game did not create the player actor")
 	var started: Control = shell.current_view
 	started.set_process(false)
+	check(not started.preferences_provider.is_processing_input() and not started.observations_view.is_processing_input(), "Staged preference/reader children bypassed station input ownership on tree entry")
 	check(started.selected_pad == 41 and started.paused and not started.controls_armed, "New Game lost title controller ownership or resumed its held stick")
 	var ownership_save := args[1].get_base_dir().path_join("title-controller-newgame.json")
 	check(owner.save_freedom_as(ownership_save), "Could not save title controller baseline")

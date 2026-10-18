@@ -233,6 +233,10 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 func activate() -> void:
 	# Called only after the exact C++ pending token commits and view enters tree.
 	activated = true
+	# Godot enables scripted _input on tree entry, overriding the staging flags.
+	# Keep station device filtering in this view after the children are ready.
+	preferences_provider.set_process_input(false)
+	observations_view.set_process_input(false)
 	if initial_controller_device != -2:
 		selected_pad = initial_controller_device
 		if selected_pad >= 0: available_pads[selected_pad] = true
