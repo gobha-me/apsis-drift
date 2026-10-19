@@ -47,13 +47,38 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	camera = Camera3D.new()
 	camera.near = 0.05
-	camera.far = minf(1.0e9, maxf(100000.0, state.body_radius * 4.0))
+	camera.far = 200.0
 	camera.fov = 75.0
-	scene.add_child(camera)
+	camera.cull_mask = 3
+	# Reuse planetary flight's close/distant composition. A single cockpit-to-
+	# lunar-diameter frustum loses nearby geometry in the renderer's float math.
+	var near_container := SubViewportContainer.new()
+	near_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	near_container.stretch = true
+	near_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var close_material := ShaderMaterial.new()
+	close_material.shader = preload("res://shaders/native_close_composite.gdshader")
+	near_container.material = close_material
+	add_child(near_container)
+	near_viewport = SubViewport.new()
+	near_viewport.size = far_viewport.size
+	near_viewport.transparent_bg = true
+	near_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	near_container.add_child(near_viewport)
+	near_viewport.add_child(camera)
 	camera.make_current()
+	terrain_camera = Camera3D.new()
+	terrain_camera.cull_mask = 1
+	terrain_camera.fov = camera.fov
+	scene.add_child(terrain_camera)
+	terrain_camera.make_current()
 	light = DirectionalLight3D.new()
-	light.shadow_enabled = true
+	light.light_cull_mask = 1
 	scene.add_child(light)
+	local_light = DirectionalLight3D.new()
+	local_light.light_cull_mask = 2
+	local_light.shadow_enabled = true
+	scene.add_child(local_light)
 	var environment_node := WorldEnvironment.new()
 	planet_environment = Environment.new()
 	planet_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -72,6 +97,10 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	planet_environment.background_mode = Environment.BG_SKY
 	environment_node.environment = planet_environment
 	scene.add_child(environment_node)
+	near_environment = planet_environment.duplicate()
+	near_environment.background_mode = Environment.BG_CLEAR_COLOR
+	camera.environment = near_environment
+	set_ship_layer(ship)
 	terrain = MoonTerrain.new()
 	terrain.bridge = bridge
 	terrain.expected_body_id = state.body_id
@@ -145,6 +174,7 @@ func build_ui() -> void:
 
 func activate() -> void:
 	activated = true
+	near_viewport.world_3d = far_viewport.find_world_3d()
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	last_window_size = get_window().size
 	get_window().size_changed.connect(window_resized)
@@ -155,7 +185,8 @@ func activate() -> void:
 	set_process_input(true)
 
 func layout_hud() -> void:
-	if far_viewport != null: far_viewport.size = Vector2i(maxi(1, int(size.x)), maxi(1, int(size.y)))
+	# The stretched SubViewportContainer owns the lunar viewport dimensions.
+	pass
 
 func setup_controls() -> void:
 	player_input = PlayerInput.new()
@@ -269,10 +300,14 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 		camera.transform = Transform3D(state.body_basis * look, state.body_basis * pilot_eye)
 	else:
 		camera.transform = Transform3D(Basis.IDENTITY, state.body_basis * (look * Vector3(17, 9, 28))).looking_at(Vector3.ZERO, state.body_basis.y)
+	if not apply_moon_camera_depth(): return
 	light.basis = star_light_basis(state.star_direction)
-	light.light_color = state.get("star_color", Color.WHITE)
+	light.light_color = state.star_color
+	light.light_energy = 1.4
+	local_light.basis = light.basis
+	local_light.light_color = light.light_color
 	var horizon := -acos(clampf(state.body_radius / (state.body_radius + maxf(0.0, state.altitude)), 0.0, 1.0))
-	light.light_energy = 1.4 if asin(clampf(state.star_direction.y, -1.0, 1.0)) > horizon else 0.0
+	local_light.light_energy = 1.4 if asin(clampf(state.star_direction.y, -1.0, 1.0)) > horizon else 0.0
 	sky_material.set_shader_parameter("view_to_inertial", state.station_basis.transposed())
 	sky_material.set_shader_parameter("radius", state.body_radius)
 	sky_material.set_shader_parameter("altitude", state.altitude)
@@ -319,3 +354,20 @@ func _process(delta: float) -> void:
 	update_view(delta)
 	terrain.tick(delta, camera.position, paused or save_dialog.visible)
 	if not terrain.error.is_empty(): pause_on_error(terrain.error)
+	else: apply_moon_camera_depth()
+
+func apply_moon_camera_depth() -> bool:
+	var distant := PlanetStreamView.mesh_depth_range(terrain.nodes, camera.transform, 100000.0)
+	if distant == Vector2.ZERO:
+		pause_on_error("Lunar camera depth is unavailable")
+		return false
+	var close_depth := surface_depth_range(state.surface_walk.eye_position, distant.y) if surface_walking() else Vector2(0.05, 200.0)
+	if close_depth == Vector2.ZERO:
+		pause_on_error("Lunar surface camera depth is unavailable")
+		return false
+	camera.near = close_depth.x
+	camera.far = maxf(close_depth.y, distant.x * 1.01)
+	terrain_camera.near = distant.x
+	terrain_camera.far = distant.y
+	terrain_camera.transform = camera.transform
+	return true

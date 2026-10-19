@@ -137,13 +137,27 @@ func check_cover(view: Control, owner: Variant) -> void:
 		rejected.expected_body_id = before.body_id
 		check(not rejected.accept_cover(bad) and rejected.nodes.is_empty() and rejected.staged.is_empty() and rejected.get_child_count() == 0, "Malformed Moon cover allocated/changed residency: " + damage)
 		rejected.free()
+	# The terrain consumer owns and clears the accepted tile array on completion.
+	var expected_count: int = packet.tiles.size()
+	var first_id: String = packet.tiles[0].id
 	if not check(view.terrain.accept_cover(packet), "Actual C++ Moon cover failed typed upload gate"): return
-	for index in packet.tiles.size():
+	for index in expected_count:
 		view.terrain.tick(0.0, view.camera.position, true)
 		if not check(view.terrain.error.is_empty(), "Actual Moon upload failed: " + view.terrain.error): return
-	check(view.terrain.is_ready and view.terrain.resident_ids.size() == packet.tiles.size(), "Actual Moon cover never became resident")
-	var mesh: ArrayMesh = view.terrain.nodes[packet.tiles[0].id].mesh
+	if not check(view.terrain.is_ready and view.terrain.resident_ids.size() == expected_count, "Actual Moon cover never became resident"): return
+	var mesh: ArrayMesh = view.terrain.nodes[first_id].mesh
 	check(mesh.surface_get_array_len(0) == 1221 and mesh.surface_get_array_index_len(0) == 7680, "Actual uploaded Moon mesh differs from C++32-interval tile")
+	view.update_view(0.0)
+	check(view.error.is_empty(), "Resident Moon camera depth refresh failed: " + view.error)
+	check(view.near_viewport != view.far_viewport and view.near_viewport.find_world_3d() == view.far_viewport.find_world_3d() and view.camera.get_world_3d() == view.terrain_camera.get_world_3d(), "Moon depth passes lost their shared world or viewport isolation")
+	check(view.camera.get_viewport() == view.near_viewport and view.terrain_camera.get_viewport() == view.far_viewport and view.near_viewport.transparent_bg and view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1, "Moon close craft/terrain composition lost its viewport or layer ownership")
+	check(view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov, "Resident Moon close/distant camera registration differs")
+	for depth_camera in [view.camera, view.terrain_camera]:
+		if check(is_finite(depth_camera.near) and is_finite(depth_camera.far) and depth_camera.near > 0.0 and depth_camera.far > depth_camera.near, "Resident Moon camera has invalid clip planes"):
+			check(depth_camera.far / depth_camera.near <= 500001.0, "Resident Moon camera exceeds the bounded depth ratio")
+	check(view.camera.far > view.terrain_camera.near, "Resident Moon close/distant depth bands have no rounding overlap")
+	var join: Vector3 = view.camera.transform * Vector3(0, 0, -view.terrain_camera.near * 0.999)
+	check(view.camera.is_position_in_frustum(join), "Actual Moon close frustum clips before the distant near plane")
 	check(owner.get_freedom_flight_state() == before, "Paused lunar streaming advanced authoritative state")
 
 func check_assistance(view: Control, owner: Variant, output: String) -> void:
@@ -218,8 +232,14 @@ func check_outside(phases: String, assets: String, output: String) -> void:
 	view._process(1.0 / 120.0)
 	check(is_equal_approx(view.state.surface_walk.heading, 0.7), "First resumed Moon tick reset the saved walking heading")
 	var peer: Variant = ClassDB.instantiate("FreedomBridge")
-	check(peer.initialize_freedom_continue(phases.path_join("outside.json")) and peer.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, 0, 0.7]), false), "Independent Moon neutral-continuation tick refused")
+	var peer_shell := shell_for(peer, phases.path_join("outside.json"), assets)
+	if peer_shell == null:
+		shell.free()
+		return
+	check(peer.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, 0, 0.7]), false), "Independent Moon neutral-continuation tick refused")
 	check(save_bytes(owner, output.path_join("outside-resumed.json")) == save_bytes(peer, output.path_join("outside-peer.json")), "Actual Moon UI neutral continuation differs from complete direct next Save")
+	peer_shell.free()
+	await process_frame
 	var before := save_bytes(owner, output.path_join("outside-held-before.json"))
 	key(KEY_W, true)
 	view.request_surface_interaction()
@@ -269,8 +289,11 @@ func run() -> void:
 	await process_frame
 	for label in PHASES:
 		var restored: Variant = ClassDB.instantiate("FreedomBridge")
-		check(restored.initialize_freedom_continue(phases.path_join(label + ".json")), "Actual Moon phase Continue refused: " + label)
-		check(MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
+		var phase_shell := shell_for(restored, phases.path_join(label + ".json"), assets)
+		if phase_shell == null: continue
+		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
+		phase_shell.free()
+		await process_frame
 	await check_outside(phases, assets, output)
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Native Moon test rewrote C++ source phase: " + label)
 	print("Native Moon: %d failures" % failures)

@@ -386,12 +386,17 @@ func tick(delta: float, observer: Vector3, animate := true) -> void:
 # AABBs include actual relief, coarse chords and skirts; no terrain recipe is
 # duplicated here. The cap/ratio remain the existing distant-depth policy.
 func depth_range(relation: Transform3D, minimum_far: float) -> Vector2:
-	if not relation.is_finite() or absf(relation.basis.determinant()) < 0.000001 or not is_finite(minimum_far) or minimum_far < 100000.0 or minimum_far > 1000000000.0 or nodes.size() > 768:
+	return mesh_depth_range(nodes, relation, minimum_far)
+
+
+# Both physical planet and Moon views use the same C++ mesh-bound calculation.
+static func mesh_depth_range(mesh_nodes: Dictionary, relation: Transform3D, minimum_far: float) -> Vector2:
+	if not relation.is_finite() or absf(relation.basis.determinant()) < 0.000001 or not is_finite(minimum_far) or minimum_far < 100000.0 or minimum_far > 1000000000.0 or mesh_nodes.size() > 768:
 		return Vector2.ZERO
 	var inverse := relation.affine_inverse()
 	if not inverse.is_finite(): return Vector2.ZERO
 	var far_clip := minimum_far
-	for node in nodes.values():
+	for node in mesh_nodes.values():
 		if not is_instance_valid(node) or not node is MeshInstance3D or node.mesh == null or not node.transform.is_finite():
 			return Vector2.ZERO
 		var bounds: AABB = node.mesh.get_aabb()
