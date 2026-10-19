@@ -39,6 +39,9 @@ controller **A**, or **Climb aboard
 Wayfarer**. The authored boarding sequence takes
 you through the hatch to the pilot seat. The open docking well stops ordinary
 unsupported walking; approach the craft through the supported station route.
+Walking and boarding show a compact status/help card. Pause restores the full
+scrollable controls. You can look around during boarding; the view settles back
+toward the authored route near its end before handing over to the cockpit.
 
 ## Depart, explore and return
 
@@ -69,6 +72,9 @@ return and reserve charge. [Landings](LANDED_CRAFT.md) use deployed gear and
 certified dry terrain; [suited walking](FREEDOM_SURFACE_WALK.md) permits nearby
 exploration, return through the hatch and thruster liftoff. Flight basics gives
 the supported actions and conditions for each mode.
+On foot, release walking and look controls and use **E**, captured **left click**
+or selected-pad **A/Cross** for the nearby hatch or geological inspection. The
+hatch takes priority when within reach; inspection opens a paused reader.
 
 ## Save and report problems
 
