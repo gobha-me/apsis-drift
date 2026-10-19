@@ -79,7 +79,6 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	local_light.light_cull_mask = 2
 	local_light.shadow_enabled = true
 	scene.add_child(local_light)
-	var environment_node := WorldEnvironment.new()
 	planet_environment = Environment.new()
 	planet_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	planet_environment.ambient_light_color = Color(0.17, 0.18, 0.21)
@@ -95,6 +94,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	sky.sky_material = sky_material
 	planet_environment.sky = sky
 	planet_environment.background_mode = Environment.BG_SKY
+	var environment_node := WorldEnvironment.new()
 	environment_node.environment = planet_environment
 	scene.add_child(environment_node)
 	near_environment = planet_environment.duplicate()
@@ -115,6 +115,13 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	return error.is_empty()
 
 func build_ui() -> void:
+	# The same direction cue used on planets; targets remain C++ observations.
+	home_marker = HomeNavigation.new()
+	home_marker.visible = false
+	add_child(home_marker)
+	ship_marker = HomeNavigation.new()
+	ship_marker.visible = false
+	add_child(ship_marker)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	for side in ["left", "top", "right", "bottom"]: margin.add_theme_constant_override("margin_" + side, 18)
@@ -213,6 +220,10 @@ func setup_controls() -> void:
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Select jump home", select_home)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Begin / cancel local spool", jump_requested)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
+	var marker_column: Node = controls_menu.save_button.get_parent()
+	surface_marker_button = controls_menu.add_button(marker_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
+	clear_surface_marker_button = controls_menu.add_button(marker_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
+	show_surface_marker_button = controls_menu.add_button(marker_column, "Show personal marker: Off", toggle_surface_marker)
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func(): pause_controls("Controls changed. Release controls, then resume."))
@@ -243,30 +254,60 @@ func select_home() -> void:
 	report_action_status("Home selected. One charge commits after spooling.")
 	update_view(0.0)
 
+func landed_hatch_available() -> bool:
+	return state.get("body_kind") == "moon" and state.get("surface", {}).get("landed", false) and not surface_walking() and state.get("boarding", {}).get("seated", false) and state.get("jump", {}).get("phase", "") == "idle" and not state.get("recovery_pending", true)
+
 func request_surface_interaction() -> void:
 	if surface_walking():
 		# Share the existing foot-only neutral/modal gates: E is also a flight key.
 		super.request_surface_interaction()
 		return
-	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not player_input.waiting_action.is_empty(): return
-	port_command("begin_freedom_surface_walk")
+	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty() or not landed_hatch_available(): return
+	if not controls_armed or not player_input.landed_hatch_neutral() or not surface_interaction_neutral():
+		report_action_status("Release flight and look controls to use the hatch.")
+		return
+	# The ordinary port-command gate treats the held E interaction as strafe.
+	# This landed-only gate checked every other flight demand independently.
+	if not bridge.begin_freedom_surface_walk():
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	look_offset = Vector2.ZERO
+	pause_controls("On the surface. Release controls, then resume to walk.")
+	update_view(0.0)
 
 func surface_action_reference_warning(_command: String) -> String:
 	return ""
 
 func refresh_control_hint() -> void:
-	if player_input != null: player_input.surface_interaction_enabled = surface_walking()
+	if player_input != null:
+		player_input.surface_interaction_enabled = surface_walking()
+		player_input.landed_hatch_enabled = landed_hatch_available()
 
 func update_compact_hud() -> void:
 	if primary_status == null: return
 	var resources: Dictionary = state.get("resources", {})
 	primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
+	primary_status.text += "\n" + MoonState.gear_clearance_text(state)
+	var marker: Dictionary = state.surface_marker
+	if marker.get("present", false):
+		if show_personal_marker and marker.current_body:
+			primary_status.text += "\nMARK · %.1f m · straight-line distance" % marker.distance_metres
+		elif not marker.current_body:
+			primary_status.text += "\nMARK retained · %s / %s · another body" % [marker.system_name, SurfaceMarker.body_name(marker)]
+	if surface_walking() and state.surface_walk.return_access.get("available", false):
+		primary_status.text += "\nHatch · %.1f m" % state.surface_walk.return_access.distance_metres
+	primary_status.tooltip_text = "Signed terrain-normal gaps beneath all deployed gear pads. Negative values indicate gear-stroke overlap. This does not certify hull clearance or a safe landing; it is not radar altitude."
 	var landed: bool = state.get("surface", {}).get("landed", false)
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	assist_button.set_pressed_no_signal(state.assistance)
 	assist_button.disabled = surface_walking() or jumping
 	context_action.visible = landed or surface_walking()
-	context_action.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit"
+	var hatch_binding := "E"
+	if player_input != null and player_input.available_pads.get(player_input.device, false):
+		hatch_binding += " / " + ("Cross" if player_input.playstation() else "A")
+	context_action.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit · " + hatch_binding
+	if landed_hatch_available(): primary_status.text += "\n" + hatch_binding + ": leave Wayfarer · suit"
 	context_action.disabled = surface_walking() and not state.surface_walk.get("return_access", {}).get("within_reach", false)
 	landing_button.disabled = landed or surface_walking() or jumping
 	stow_gear_button.disabled = landed or surface_walking() or jumping or not state.get("surface", {}).get("gear_deployed", false)
@@ -274,6 +315,10 @@ func update_compact_hud() -> void:
 	moon_select_button.disabled = landed or surface_walking() or jumping
 	moon_jump_button.disabled = not state.get("jump", {}).get("available", false) and state.get("jump", {}).get("phase", "idle") != "spool"
 	moon_jump_button.text = "Cancel local spool" if state.get("jump", {}).get("phase", "idle") == "spool" else "Begin local jump"
+	var jump_reason := str(state.jump.get("refusal", "Local jump unavailable."))
+	moon_jump_button.tooltip_text = jump_reason if moon_jump_button.disabled else ""
+	if moon_jump_button.disabled and not landed and not surface_walking() and not jumping:
+		primary_status.text += "\nJump unavailable · " + jump_reason
 	pause_button.text = "Resume" if paused else "Pause"
 
 func update_view(delta: float, _defer_exhaust: bool = false) -> void:
@@ -316,6 +361,16 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	sky_material.set_shader_parameter("sun_angular_radius", state.get("star_angular_radius", 0.00465))
 	suit_lamp.visible = surface_walking() and suit_lamp_enabled
 	if exhaust != null: exhaust.update_applied(state, delta, paused or surface_walking())
+	# Staging builds this view detached; window/camera projections begin only
+	# after activation attaches it to the scene tree.
+	if is_inside_tree():
+		home_marker.visible = false
+		ship_marker.visible = surface_walking()
+		if ship_marker.visible:
+			var access: Dictionary = state.surface_walk.return_access
+			ship_marker.label_text = "RETURN" if access.available else "SHIP"
+			ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
+		refresh_surface_marker()
 	refresh_control_hint()
 	update_compact_hud()
 

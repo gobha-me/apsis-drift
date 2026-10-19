@@ -30,6 +30,7 @@ func run() -> void:
 	check_foot_keyboard_look()
 	check_foot_controller_look()
 	check_surface_interaction()
+	check_landed_hatch_neutral()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -431,4 +432,140 @@ func check_surface_interaction() -> void:
 	controls.surface_interaction_enabled = false
 	controls._input(event)
 	check(calls == [2, 1], "Leaving foot mode failed to restore the remapped flight camera")
+	controls.landed_hatch_enabled = true
+	controls._input(event)
+	check(calls == [3, 1], "Landed hatch E lost priority to its remapped camera action")
+	check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_Y}) and controls.rebind("camera", "key", {"kind": "key", "code": KEY_W}), "Landed walking-key/camera overlap remap refused")
+	event.physical_keycode = KEY_W
+	controls._input(event)
+	check(calls == [3, 2], "Landed hatch context suppressed a non-E walking-key flight camera")
+	controls.surface_interaction_enabled = true
+	controls._input(event)
+	check(calls == [3, 2], "Outside context stopped suppressing a walking-key flight camera")
+	controls.surface_interaction_enabled = false
+	for device in [9, 19]:
+		var pad := InputEventJoypadButton.new()
+		pad.device = device
+		pad.button_index = JOY_BUTTON_A
+		pad.pressed = true
+		controls._input(pad)
+	check(calls == [4, 2], "Landed hatch A admitted a foreign controller or refused selected owner")
+	controls.available_pads[19] = false
+	var lost := InputEventJoypadButton.new()
+	lost.device = 19
+	lost.button_index = JOY_BUTTON_A
+	lost.pressed = true
+	controls._input(lost)
+	check(calls == [4, 2], "Disconnected landed controller retained contextual A")
+	controls.free()
+
+
+func check_landed_hatch_neutral() -> void:
+	var controls := Controls.new()
+	controls.persist = false
+	controls.thrust_mode = true
+	controls.initial_device = 0
+	root.add_child(controls)
+	controls.available_pads = {0: true, 9: true}
+	controls.set_process_input(false)
+	var snapshot := func() -> Array:
+		return [controls.enabled, controls.focused, controls.needs_neutral, controls.waiting_action, controls.remap_neutral_overflow, controls.remap_neutral_events.duplicate(), controls.foot_remap_keys.duplicate(), controls.settings.duplicate(true), controls.bindings.duplicate(true), controls.source_document.duplicate(true), controls.status, controls.device, controls.looking, controls.look_axes_needs_neutral, controls.assist, controls.surface_interaction_enabled, controls.landed_hatch_enabled]
+	var probe := func(expected: bool, label: String) -> void:
+		var before: Array = snapshot.call()
+		check(controls.landed_hatch_neutral() == expected, label)
+		check(snapshot.call() == before, "Read-only hatch query changed provider state: " + label)
+	probe.call(false, "Hatch query bypassed initial neutral latch")
+	check(controls.observe_neutral(), "Hatch fixture could not establish ordinary neutral")
+	probe.call(true, "Released active controls blocked landed hatch")
+	physical_key(KEY_E, true)
+	check(Input.is_physical_key_pressed(KEY_E) and controls.sample().thrust_axes[5] == 1.0, "Physical E lost its ordinary free-flight strafe demand")
+	probe.call(true, "Physical interaction E alone blocked landed hatch")
+	# Each independent key/action is inspected; opposed demands cannot cancel.
+	for action in controls.ACTIONS:
+		var code: int = int(controls.bindings[action].key.code)
+		if code == KEY_E: continue
+		physical_key(code, true)
+		probe.call(false, "Held flight key bypassed landed hatch: " + action)
+		physical_key(code, false)
+		Input.action_press("pilot_" + action, 0.7)
+		probe.call(false, "Raw flight demand bypassed landed hatch: " + action)
+		Input.action_release("pilot_" + action)
+	for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+		for value in [-0.7, 0.7]:
+			joy_axis(axis, value, 0)
+			probe.call(false, "Selected stick demand bypassed landed hatch")
+		joy_axis(axis, 0.0, 0)
+	joy_axis(JOY_AXIS_TRIGGER_LEFT, 0.7, 0)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.7, 0)
+	probe.call(false, "Opposed selected engines canceled into hatch permission")
+	joy_axis(JOY_AXIS_TRIGGER_LEFT, 0.0, 0)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0, 0)
+	# This is the SAME action as E: its pad channel must remain authoritative.
+	joy_button(JOY_BUTTON_RIGHT_SHOULDER, true, 0)
+	probe.call(false, "E exemption also ignored its action's selected-pad strafe")
+	joy_button(JOY_BUTTON_RIGHT_SHOULDER, false, 0)
+	joy_button(JOY_BUTTON_LEFT_SHOULDER, true, 0)
+	probe.call(false, "Selected-pad opposite strafe bypassed landed hatch")
+	joy_button(JOY_BUTTON_LEFT_SHOULDER, false, 0)
+	joy_button(JOY_BUTTON_LEFT_STICK, true, 0)
+	probe.call(false, "Selected look modifier bypassed landed hatch")
+	joy_button(JOY_BUTTON_LEFT_STICK, false, 0)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.8, 9)
+	probe.call(true, "Foreign pad took ownership of landed hatch neutrality")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0, 9)
+	joy_button(JOY_BUTTON_A, true, 0)
+	probe.call(true, "Reserved selected interaction A blocked landed hatch")
+	joy_button(JOY_BUTTON_A, false, 0)
+	controls.available_pads[0] = false
+	probe.call(false, "Unavailable selected owner retained hatch permission")
+	controls.available_pads[0] = true
+	controls.enabled = false
+	probe.call(false, "Disabled provider granted landed hatch")
+	controls.enabled = true
+	controls.focused = false
+	probe.call(false, "Unfocused provider granted landed hatch")
+	controls.focused = true
+	controls.waiting_action = "camera"
+	probe.call(false, "Pending remap granted landed hatch")
+	controls.waiting_action = ""
+	controls.needs_neutral = true
+	probe.call(false, "Held E cleared an existing neutral latch")
+	physical_key(KEY_E, false)
+	check(controls.observe_neutral(), "Released hatch fixture did not recover ordinary neutral")
+	Input.action_press("pilot_strafe_right", 0.7)
+	probe.call(false, "Unheld physical E exempted a raw action demand")
+	Input.action_release("pilot_strafe_right")
+	# Rebinding retains a real removed physical key. Queries must not prune it.
+	check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_T}), "Hatch history fixture first remap refused")
+	check(controls.observe_neutral(), "Hatch history fixture first remap remained blocked")
+	physical_key(KEY_T, true)
+	check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_Y}), "Hatch history fixture second remap refused")
+	check(not controls.remap_neutral_events.is_empty(), "Hatch history did not retain the actual removed key")
+	# Inspect the retained barrier independently of the already-tested latch.
+	controls.needs_neutral = false
+	probe.call(false, "Held removed flight key bypassed hatch barrier")
+	physical_key(KEY_T, false)
+	probe.call(true, "Released retained event still blocked hatch without mutating history")
+	check(not controls.remap_neutral_events.is_empty(), "Pure hatch query pruned released remap history")
+	check(controls.observe_neutral(), "Ordinary observer could not prune released hatch history")
+	controls.remap_neutral_overflow = true
+	probe.call(false, "Hatch query cleared or ignored remap overflow")
+	check(controls.observe_neutral(), "Ordinary observer could not recover fully released overflow")
+	# A retained walking key can be unrelated to every current flight mapping.
+	physical_key(KEY_J, true)
+	controls.foot_remap_keys.append(KEY_J)
+	probe.call(false, "Held old walking key bypassed hatch barrier")
+	physical_key(KEY_J, false)
+	probe.call(true, "Released walking barrier still blocked hatch")
+	check(controls.foot_remap_keys == [KEY_J], "Pure hatch query pruned walking history")
+	# E can be remapped to a discrete camera action; contextual priority is
+	# already checked above, and its unrelated pad camera binding must not vanish.
+	check(controls.rebind("strafe_right", "key", {"kind": "key", "code": KEY_T}) and controls.rebind("camera", "key", {"kind": "key", "code": KEY_E}), "Hatch camera-overlap fixture remap refused")
+	check(controls.observe_neutral(), "Camera-overlap fixture could not establish ordinary neutral")
+	physical_key(KEY_E, true)
+	probe.call(true, "Remapped physical E camera action blocked landed hatch")
+	joy_button(JOY_BUTTON_X, true, 0)
+	probe.call(false, "Remapped E exemption ignored independent selected camera button")
+	joy_button(JOY_BUTTON_X, false, 0)
+	physical_key(KEY_E, false)
 	controls.free()

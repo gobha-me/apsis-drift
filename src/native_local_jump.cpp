@@ -60,9 +60,17 @@ auto NativeFreedomFlightSession::local_jump_preview() const
       local.outbound ? local.outbound->request.home_model : document_.model;
   const auto result = freeze_local_body_jump_arrival(
       {1, document_, *local.selected, travel_->next_attempt, home_model});
-  if (!result)
+  if (!result) {
+    if (result.error() == FreedomLocalBodyJumpError::unclear_departure)
+      return std::unexpected{
+          "Departure volume is obstructed. Fly clear of nearby bodies and "
+          "terrain before retrying this jump."};
+    if (result.error() == FreedomLocalBodyJumpError::unclear_arrival)
+      return std::unexpected{"Destination arrival volume is obstructed. This "
+                             "local jump is unavailable."};
     return std::unexpected{"Local jump source, destination or clearance is "
                            "outside the supported route"};
+  }
   return *result;
 }
 auto NativeFreedomFlightSession::local_jump_available() const

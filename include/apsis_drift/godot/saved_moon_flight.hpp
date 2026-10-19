@@ -1,16 +1,75 @@
 #pragma once
 
+#include "apsis_drift/moon_surface_contact.hpp"
 #include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/physical_moon_rotation.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 
 namespace apsis_drift::godot_spike {
 inline constexpr std::uint32_t kSavedMoonFlightProjectionVersion{1};
+struct MoonGearClearanceReading {
+  std::uint32_t version{1}, terrain_version{kMoonTerrainRecipeVersion};
+  RigidCoordinateFrame frame;
+  BodyId body;
+  CraftFrameRecipe craft;
+  SimulationTick tick{};
+  std::uint64_t source_checksum{};
+  double minimum_gap_metres{}, maximum_gap_metres{};
+  friend auto operator==(const MoonGearClearanceReading&,
+                         const MoonGearClearanceReading&) -> bool = default;
+};
+// One current observation of every deployed pad's certified finite top plane.
+// Signed gaps enclose WHOLE footprints along their respective facet normals;
+// negative is stroke overlap, never a hull/landing/readiness permission. The
+// caller gates its actual seated/idle mode. No contact query belongs in the
+// ordinary transform projection or a per-tile presentation operation.
+inline auto project_moon_gear_clearance(
+    const PhysicalMoonDescriptor& moon, const RigidBodyState& body,
+    bool gear_deployed,
+    std::uint32_t terrain_version = kMoonTerrainRecipeVersion)
+    -> std::optional<MoonGearClearanceReading> {
+  if (!gear_deployed) return std::nullopt;
+  const auto snapshot =
+      MoonContactSnapshot::create(moon, body, true, terrain_version);
+  if (!snapshot) return std::nullopt;
+  const auto query = snapshot->query();
+  if (query.support_count != 3) return std::nullopt;
+  double minimum = std::numeric_limits<double>::infinity();
+  double maximum = -minimum;
+  for (unsigned i = 0; i < query.support_count; ++i) {
+    const auto& pad = query.supports[i];
+    if (!pad.geometry || !pad.geometry->has_value() || !pad.support ||
+        !pad.support->has_value())
+      return std::nullopt;
+    const auto& geometry = **pad.geometry;
+    const auto& support = **pad.support;
+    if (support.surface != TouchdownSurface::solid ||
+        !support.footprint_supported ||
+        !std::isfinite(geometry.minimum_gap_metres) ||
+        !std::isfinite(geometry.maximum_gap_metres) ||
+        geometry.minimum_gap_metres > geometry.maximum_gap_metres)
+      return std::nullopt;
+    minimum = std::min(minimum, geometry.minimum_gap_metres);
+    maximum = std::max(maximum, geometry.maximum_gap_metres);
+  }
+  return MoonGearClearanceReading{1,
+                                  terrain_version,
+                                  body.frame,
+                                  moon.body,
+                                  body.craft,
+                                  body.tick,
+                                  query.provenance.original_state_checksum,
+                                  minimum,
+                                  maximum};
+}
 struct MoonSphericalPose {
   double latitude_radians{}, longitude_radians{}, altitude_metres{};
   friend auto operator==(const MoonSphericalPose&, const MoonSphericalPose&)

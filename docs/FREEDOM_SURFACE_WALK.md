@@ -103,8 +103,9 @@ The wrapper persists after reboarding, liftoff and station return. Historical
 saves and ordinary New Game retain their existing explicit formats.
 
 Recording a personal marker explicitly selects optional `surface_marker`
-metadata version **1** in the existing knowledge document, alongside its fact
-entries. The point stores system/body identities, planet-fixed metres and the
+metadata version **1** for a planet, or explicit version **2** for the
+[supported airless moon](AIRLESS_MOON.md), in the existing knowledge document,
+alongside its fact entries. The point stores system/body identities, body-fixed metres and the
 recorded simulation tick. Clearing retains the selected version with a null
 point. Historical saves without this field retain their exact encoding; no
 knowledge recipe or outer save format changes. This editable navigation record

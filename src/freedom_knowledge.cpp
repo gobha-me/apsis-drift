@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_knowledge.hpp"
 
+#include "apsis_drift/physical_moon.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
 #include <algorithm>
@@ -198,20 +199,43 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
   if (k.surface_marker) {
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
          k.recipe.version != kFreedomTravelKnowledgeVersion) ||
-        k.surface_marker->version != kFreedomSurfaceMarkerVersion)
+        (k.surface_marker->version != kFreedomSurfaceMarkerVersion &&
+         k.surface_marker->version != kFreedomMoonSurfaceMarkerVersion))
       return std::unexpected{Error::invalid_surface_marker};
     if (k.surface_marker->point) {
-      const auto& m = *k.surface_marker->point;
-      const auto* body =
-          planet(w, {KnowledgeSubjectKind::planet, m.system, m.planet.value});
-      const auto& p = m.position;
-      const auto radius = std::hypot(p.x, p.y, p.z);
-      // Match the supported walker's finite spatial envelope. This is a saved
-      // point, not a renewed support, route or landing certificate.
-      if (!body || m.tick > now || !std::isfinite(p.x) || !std::isfinite(p.y) ||
-          !std::isfinite(p.z) || !std::isfinite(radius) || radius > 1e8 ||
-          radius <= static_cast<double>(body->descriptor.radius.value) * 1000)
-        return std::unexpected{Error::invalid_surface_marker};
+      if (k.surface_marker->version == kFreedomSurfaceMarkerVersion) {
+        const auto* m =
+            std::get_if<FreedomSurfaceMarkerPoint>(&*k.surface_marker->point);
+        if (!m) return std::unexpected{Error::invalid_surface_marker};
+        const auto* body = planet(
+            w, {KnowledgeSubjectKind::planet, m->system, m->planet.value});
+        const auto& p = m->position;
+        const auto radius = std::hypot(p.x, p.y, p.z);
+        // Preserve the original planet walker's spatial envelope exactly.
+        if (!body || m->tick > now || !std::isfinite(p.x) ||
+            !std::isfinite(p.y) || !std::isfinite(p.z) ||
+            !std::isfinite(radius) || radius > 1e8 ||
+            radius <= static_cast<double>(body->descriptor.radius.value) * 1000)
+          return std::unexpected{Error::invalid_surface_marker};
+      } else {
+        const auto* m = std::get_if<FreedomMoonSurfaceMarkerPoint>(
+            &*k.surface_marker->point);
+        // Match the physical Moon's existing origin-only owner selection,
+        // independently of the current travel/recovery body. Regeneration
+        // authenticates the complete source before accepting saved geometry.
+        if (!m || m->system != w.origin.catalog.id || m->tick > now)
+          return std::unexpected{Error::invalid_surface_marker};
+        const auto catalog = generate_secondary_body_catalog(w.origin);
+        if (!catalog || !generate_physical_moon_descriptor(*catalog, m->body))
+          return std::unexpected{Error::invalid_surface_marker};
+        const auto& p = m->position;
+        const auto radius = std::hypot(p.x, p.y, p.z);
+        // Dry negative relief is supported. This is navigation metadata,
+        // not a fresh terrain/support/landing certificate or sensor fact.
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+            !std::isfinite(radius) || radius <= 1 || radius > 1e8)
+          return std::unexpected{Error::invalid_surface_marker};
+      }
     }
   }
   if (k.surface_landmarks) {

@@ -5,6 +5,8 @@ const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const MoonView = preload("res://scripts/native/native_moon_view.gd")
 const MoonState = preload("res://scripts/native/native_moon_state.gd")
 const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
+const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
+const Navigation = preload("res://scripts/native/home_navigation.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -25,13 +27,25 @@ func check(value: bool, message: String) -> bool:
 func _initialize() -> void:
 	call_deferred("run")
 
-func key(code: int, down: bool) -> void:
+func key(code: int, down: bool) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.keycode = code
 	event.physical_keycode = code
 	event.pressed = down
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+	return event
+
+func hatch_pad(view: Control, device: int, down: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = JOY_BUTTON_A
+	event.pressed = down
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	# Headless GUI focus may consume the event before ordinary dispatch.
+	# Still exercise the actual provider's selected-device and context gates.
+	if down and not view.surface_walking(): view.player_input._input(event)
 
 func save_bytes(owner: Variant, path: String) -> PackedByteArray:
 	if not check(owner.save_freedom_as(path), "Actual Moon Save failed: " + str(owner.get_last_error())): return PackedByteArray()
@@ -62,6 +76,68 @@ func check_state_refusals(state: Dictionary) -> void:
 			"planet_alias": bad.planet_id = state.body_id
 			"body_version": bad.body_version = 999
 		check(not MoonState.valid(bad), "Malformed Moon packet accepted before staging: " + damage)
+
+func check_clearance_refusals(state: Dictionary, binding: Dictionary) -> void:
+	# Damage only copies of the genuine near-pad packet. These pure admission
+	# checks run before any staged model/viewport allocation or bridge command.
+	for damage in ["missing", "null", "unavailable_extra", "unavailable_type", "available_short", "version", "version_type", "terrain_version", "body_version", "frame_version", "body_id", "system_id", "craft_id", "frame_id", "tick", "source_checksum", "min_nan", "min_inf", "max_nan", "max_inf", "reversed", "min_type", "max_type", "extra"]:
+		var bad := state.duplicate(true)
+		var clearance: Dictionary = bad.surface.gear_clearance
+		match damage:
+			"missing": bad.surface.erase("gear_clearance")
+			"null": bad.surface.gear_clearance = null
+			"unavailable_extra": bad.surface.gear_clearance = {"available": false, "minimum_gap_metres": 0.0}
+			"unavailable_type": bad.surface.gear_clearance = {"available": 0}
+			"available_short": bad.surface.gear_clearance = {"available": true}
+			"version": clearance.version = 2
+			"version_type": clearance.version = 1.0
+			"terrain_version": clearance.terrain_version = 2
+			"body_version": clearance.body_version = state.body_version + 1
+			"frame_version": clearance.frame_version = state.frame_version + 1
+			"body_id", "system_id", "craft_id", "frame_id", "tick": clearance[damage] = "0" if state[damage] != "0" else "1"
+			"source_checksum": clearance.source_checksum = "0" if state.checksum != "0" else "1"
+			"min_nan": clearance.minimum_gap_metres = NAN
+			"min_inf": clearance.minimum_gap_metres = INF
+			"max_nan": clearance.maximum_gap_metres = NAN
+			"max_inf": clearance.maximum_gap_metres = -INF
+			"reversed": clearance.minimum_gap_metres = clearance.maximum_gap_metres + 1.0
+			"min_type": clearance.minimum_gap_metres = 0
+			"max_type": clearance.maximum_gap_metres = "0.0"
+			"extra": clearance.extra = true
+		var pending := {"candidate_id": "1", "mode": "freedom_flight", "craft_binding": binding, "walk_state": {}, "flight_state": bad, "station_state": {}, "station_geometry": {}, "streaming_ready": true}
+		check(not MoonState.valid(bad) and not Shell.valid_pending(pending) and not CockpitDisplays.valid_state(bad), "Malformed Moon gear clearance passed a presentation admission gate: " + damage)
+
+func check_gear_clearance(view: Control, owner: Variant, output: String, label: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	if not check(before.surface.get("gear_clearance") is Dictionary, "Actual Moon phase has no explicit gear-clearance packet: " + label): return
+	var camera_before: Transform3D = view.camera.transform
+	var look_before: Vector2 = view.look_offset
+	var cockpit_before: bool = view.cockpit
+	var clearance: Dictionary = before.surface.gear_clearance
+	var frozen := save_bytes(owner, output.path_join(label + "-clearance-before.json"))
+	if not check(not frozen.is_empty(), "Moon clearance baseline Save unavailable: " + label): return
+	if label == "touchdown-source":
+		if not check(clearance.get("available") == true and before.surface.gear_deployed and not before.surface.landed and before.surface_walk.is_empty() and before.jump.phase == "idle", "Actual durable near-pad source did not expose its seated free-Moon clearance"): return
+		check(clearance.size() == 13 and clearance.version == 1 and clearance.terrain_version == 1, "Actual Moon gear clearance lost its closed recipe/version shape")
+		for field in ["body_id", "body_version", "system_id", "craft_id", "frame_id", "frame_version", "tick"]:
+			check(clearance[field] == before[field], "Actual Moon clearance differs from its live owner/clock: " + field)
+		check(clearance.source_checksum == before.checksum, "Actual Moon clearance is not bound to current canonical source physics")
+		check(clearance.minimum_gap_metres is float and clearance.maximum_gap_metres is float and is_finite(clearance.minimum_gap_metres) and is_finite(clearance.maximum_gap_metres) and clearance.minimum_gap_metres <= clearance.maximum_gap_metres, "Actual normal-plane gear gap is nonfinite or reversed")
+		var span := "%.3f…%.3f m" % [clearance.minimum_gap_metres, clearance.maximum_gap_metres]
+		view.update_view(0.0)
+		check(view.error.is_empty() and "Gear clearance" in view.primary_status.text and span in view.primary_status.text, "Near-pad Moon HUD omitted actual min/max gear gaps")
+		check(view.cockpit_displays.refresh(before, 0.0, true), "Actual Moon cockpit clearance refresh refused")
+		var instruments := ""
+		for page in view.cockpit_displays.presented_rows: instruments += "\n".join(page) + "\n"
+		check("Gear clearance" in instruments and span in instruments, "Moon cockpit instrument omitted the actual gear-gap span")
+		check_clearance_refusals(before, owner.get_freedom_craft_binding())
+	elif label in ["arrival", "landed", "outside"]:
+		check(clearance == {"available": false}, "Moon gear-off/supported/outside phase invented or retained a clearance witness: " + label)
+	for repeat in 3:
+		check(owner.get_freedom_flight_state() == before, "Reading Moon clearance changed live source state: " + label)
+		view.update_view(0.0)
+		check(view.cockpit_displays.refresh(before, 0.0, true), "Quiet Moon clearance cockpit refresh failed: " + label)
+	check(view.paused and view.error.is_empty() and view.camera.transform == camera_before and view.look_offset == look_before and view.cockpit == cockpit_before and owner.get_freedom_flight_state() == before and save_bytes(owner, output.path_join(label + "-clearance-after.json")) == frozen, "Moon clearance projection/readouts changed pause, camera/look, clock, resources, physics or complete Save: " + label)
 
 func check_rollback(shell: Control, owner: Variant) -> void:
 	var previous: Control = shell.current_view
@@ -190,6 +266,9 @@ func check_home(shell: Control, owner: Variant, assets: String, output: String) 
 	neutral.resize(12)
 	for tick in 600:
 		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual Moon-to-home travel tick refused"): return
+		if tick == 360:
+			var transit: Dictionary = owner.get_freedom_flight_state()
+			check(MoonState.valid(transit) and transit.jump.phase == "transit" and transit.surface.gear_clearance == {"available": false}, "Actual committed Moon transit exposed a terrain gear-clearance witness")
 	var home: Dictionary = owner.get_freedom_flight_state()
 	if not check(home.get("body_kind") != "moon" and home.get("station_available", false) and home.jump.phase == "idle" and home.resources.jump_charges == charges - 1, "Charged return lost the real home planet/station/one-charge bill"): return
 	view._process(0.0)
@@ -253,6 +332,222 @@ func check_outside(phases: String, assets: String, output: String) -> void:
 	shell.free()
 	await process_frame
 
+func check_landed_hatch(view: Control, owner: Variant, output: String, label: String, controller: bool) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var prefix := output.path_join(label + "-context-hatch")
+	var frozen := save_bytes(owner, prefix + "-before.json")
+	if not check(view.paused and view.landed_hatch_available() and not view.surface_walking() and not frozen.is_empty(), "Actual supported seated Moon source lacks its contextual hatch: " + label): return
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(peer.stage_freedom_continue(prefix + "-before.json"), "Direct landed Moon hatch peer staging refused"): return
+	var pending: Dictionary = peer.get_pending_freedom_start()
+	if not check(peer.commit_pending_freedom_start(pending.candidate_id) and peer.begin_freedom_surface_walk(), "Direct actual Moon departure refused"): return
+	var expected := save_bytes(peer, prefix + "-direct.json")
+	# Every refusal observes the same real landed source; only presentation gates
+	# change. No synthetic recovery, actor placement, tick or saved state is used.
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-paused.json") == frozen, "Paused contextual Moon hatch changed the complete Save")
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Landed Moon hatch could not explicitly resume after neutral"): return
+	check(view.player_input.landed_hatch_enabled and not view.player_input.surface_interaction_enabled, "Landed hatch context reused the on-foot movement mode")
+	view.controls_armed = false
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-unarmed.json") == frozen, "Unarmed contextual Moon hatch changed the complete Save")
+	view.observe_neutral_controls()
+	key(KEY_W, true)
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-held.json") == frozen and not view.surface_walking(), "Held W bypassed landed Moon hatch neutrality")
+	key(KEY_W, false)
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.request_surface_interaction()
+	check(view.paused and save_bytes(owner, prefix + "-focus.json") == frozen, "Unfocused contextual Moon hatch changed the complete Save")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Focus return auto-resumed or prevented explicit Moon hatch rearm"): return
+	view.save_dialog.show()
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-save-modal.json") == frozen, "Save modal allowed contextual Moon departure")
+	view.save_dialog.hide()
+	view.journey_dialog_open = true
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-journey-modal.json") == frozen, "Journey modal allowed contextual Moon departure")
+	view.journey_dialog_open = false
+	view.recovery_notified = true
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-recovery-gate.json") == frozen, "Recovery presentation gate allowed contextual Moon departure")
+	view.recovery_notified = false
+	view.refresh_control_hint()
+	if controller:
+		# Connection notifications plus real button events simulate software pad
+		# ownership, as in the existing input cases; this is not hardware testing.
+		Input.joy_connection_changed.emit(0, true)
+		Input.joy_connection_changed.emit(7, true)
+		view.observe_neutral_controls()
+		if view.paused: view.toggle_pause()
+		if not check(view.player_input.device == 0 and not view.paused and view.controls_armed, "Selected controller could not explicitly resume landed Moon context"): return
+		hatch_pad(view, 7, true)
+		hatch_pad(view, 7, false)
+		check(view.player_input.device == 0 and not view.surface_walking() and save_bytes(owner, prefix + "-foreign-pad.json") == frozen, "Foreign pad stole selection or opened the Moon hatch")
+		hatch_pad(view, 0, true)
+		hatch_pad(view, 0, false)
+		Input.joy_connection_changed.emit(7, false)
+		Input.joy_connection_changed.emit(0, false)
+	else:
+		var event := key(KEY_E, true)
+		check(Input.is_physical_key_pressed(KEY_E), "Contextual Moon departure did not hold actual physical E")
+		if not view.surface_walking(): view.player_input._input(event)
+		key(KEY_E, false)
+	var actual: Dictionary = owner.get_freedom_flight_state()
+	check(view.surface_walking() and view.paused and view.error.is_empty() and view.look_offset == Vector2(-float(actual.surface_walk.get("heading", 0.0)), 0.0), "Contextual Moon departure failed fresh outside/pause/look handoff: " + label)
+	check(actual.tick == before.tick and actual.resources == before.resources and save_bytes(owner, prefix + "-after.json") == expected, "Contextual Moon hatch differs from the same zero-tick direct C++ departure: " + label)
+
+func marker_state_only(state: Dictionary) -> Dictionary:
+	var result := state.duplicate(true)
+	result.erase("surface_marker")
+	return result
+
+func activate_marker(view: Control, button: Button, controller := false) -> void:
+	var mode := button.process_mode
+	button.process_mode = Node.PROCESS_MODE_ALWAYS
+	await process_frame
+	button.grab_focus()
+	view.controls_menu.left_scroll.ensure_control_visible(button)
+	check(button.visible and not button.disabled and button.has_focus() and button.can_process(), "Lunar marker action lacks keyboard/controller focus")
+	if controller:
+		for pressed in [true, false]:
+			var event := InputEventJoypadButton.new()
+			event.device = view.player_input.device
+			event.button_index = JOY_BUTTON_A
+			event.pressed = pressed
+			Input.parse_input_event(event)
+			Input.flush_buffered_events()
+			await process_frame
+	else:
+		key(KEY_ENTER, true)
+		await process_frame
+		key(KEY_ENTER, false)
+	button.process_mode = mode
+	button.release_focus()
+
+func check_marker_refusals(state: Dictionary, binding: Dictionary) -> void:
+	for field in ["version", "selected", "present", "current_body", "can_mark", "can_clear", "position", "distance_metres", "system_id", "body_kind", "body_version", "body_id", "tick", "system_name", "body_name"]:
+		var bad := state.duplicate(true)
+		bad.surface_marker[field] = null
+		check(not MoonState.valid(bad), "Malformed typed lunar marker field accepted: " + field)
+	for damage in ["alias", "owner", "system", "kind", "body_version", "version_type", "future", "position", "range", "infinite", "extra"]:
+		var bad := state.duplicate(true)
+		match damage:
+			"alias": bad.surface_marker.planet_id = state.body_id
+			"owner": bad.surface_marker.body_id = "0" if state.body_id != "0" else "1"
+			"system": bad.surface_marker.system_id = "0" if state.system_id != "0" else "1"
+			"kind": bad.surface_marker.body_kind = "planet"
+			"body_version": bad.surface_marker.body_version = 999
+			"version_type": bad.surface_marker.version = 2.0
+			"future": bad.surface_marker.tick = "18446744073709551615"
+			"position": bad.surface_marker.position = Vector3(NAN, 0, 0)
+			"range": bad.surface_marker.distance_metres = -1.0
+			"infinite": bad.surface_marker.distance_metres = INF
+			"extra": bad.surface_marker.extra = true
+		var pending := {"candidate_id": "1", "mode": "freedom_flight", "craft_binding": binding, "walk_state": {}, "flight_state": bad, "station_state": {}, "station_geometry": {}, "streaming_ready": true}
+		check(not MoonState.valid(bad) and not FlightView.valid_surface_marker(bad) and not Shell.valid_pending(pending) and not CockpitDisplays.valid_state(bad), "Malformed lunar marker passed a presentation admission gate: " + damage)
+
+func check_moon_marker(phases: String, assets: String, output: String) -> void:
+	# Continue the physically reached outside source, not a manufactured actor.
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := shell_for(owner, phases.path_join("outside.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	var frozen := save_bytes(owner, output.path_join("marker-unselected.json"))
+	check(view.paused and view.surface_walking() and initial.surface_marker.can_mark and not initial.surface_marker.present and view.ship_marker.label_text == "RETURN", "Actual Moon walker lacks marker/return controls")
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.surface_marker_button.pressed.emit()
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.controls_menu.show_settings()
+	view.surface_marker_button.pressed.emit()
+	view.controls_menu.close_settings()
+	check(save_bytes(owner, output.path_join("marker-refused.json")) == frozen, "Unfocused/nested Moon marker callback changed full Save")
+	await activate_marker(view, view.surface_marker_button)
+	var marked: Dictionary = owner.get_freedom_flight_state()
+	var point: Dictionary = marked.surface_marker.duplicate(true)
+	check(point.version == 2 and point.present and point.current_body and point.body_kind == "moon" and point.body_id == marked.body_id and point.body_version == marked.body_version and point.tick == marked.tick and not point.has("planet_id") and point.distance_metres < 0.000001, "Moon mark did not retain its genuine body/current supported foot")
+	check(point.body_name == "Unresolved moon" and marker_state_only(marked) == marker_state_only(initial) and owner.get_freedom_observations() == records, "Moon mark invented a name/knowledge or changed physics/resources/clock")
+	check(not owner.mark_freedom_surface_marker() and owner.get_freedom_flight_state() == marked, "Repeated Moon Mark silently overwrote the point")
+	check_marker_refusals(marked, owner.get_freedom_craft_binding())
+	await activate_marker(view, view.show_surface_marker_button)
+	check(view.show_personal_marker and view.ship_marker.label_text == "MARK" and not view.home_marker.visible, "Lunar MARK overlapped RETURN or invented HOME")
+	var heading: float = marked.surface_walk.heading
+	for tick in 120:
+		if not check(owner.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, 1, heading]), false), "Actual marked Moon walk refused"): shell.free(); return
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	var moved: Dictionary = view.state
+	check(moved.surface_marker.tick == point.tick and moved.surface_marker.distance_metres > 0.5 and "straight-line distance" in view.primary_status.text and "Hatch" in view.primary_status.text, "Walking moved the saved Moon marker or lost hatch/range information")
+	var expected := Navigation.project(view.camera, moved.surface_marker.position, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
+	check(view.ship_marker.cue == expected, "Lunar MARK differs from the C++ current-body projection")
+	check(not save_bytes(owner, output.path_join("moon-marker-walked.json")).is_empty(), "Actual marked walking phase Save unavailable")
+	view.player_input.device = 0
+	view.player_input.available_pads[0] = true
+	view.player_input.install()
+	var replace_records: Dictionary = owner.get_freedom_observations()
+	await activate_marker(view, view.surface_marker_button, true)
+	view.player_input.available_pads.erase(0)
+	view.player_input.device = -2
+	view.player_input.install()
+	var replaced: Dictionary = owner.get_freedom_flight_state()
+	check(replaced.surface_marker.tick == replaced.tick and replaced.surface_marker.tick != point.tick and replaced.surface_marker.distance_metres < 0.000001 and marker_state_only(replaced) == marker_state_only(moved) and owner.get_freedom_observations() == replace_records, "Selected-pad Moon Replace changed more than the actual foot metadata")
+	var path := output.path_join("moon-personal-marker.json")
+	var saved := save_bytes(owner, path)
+	for repeat in 3: view.update_view(0.0)
+	check(save_bytes(owner, path + ".review.json") == saved, "Reviewing lunar marker changed the complete Save")
+	check(shell.select_start(owner, {"mode": "continue", "value": path, "assets": assets}), "Moon personal marker Continue refused")
+	view = shell.current_view
+	view.set_process(false)
+	check(view.paused and not view.show_personal_marker and view.state.surface_marker == replaced.surface_marker and view.ship_marker.label_text == "RETURN" and save_bytes(owner, path + ".continued.json") == saved, "Continue moved the Moon marker or retained its display selection")
+	for tick in 120:
+		if not check(owner.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, -1, heading]), false), "Actual Moon return walk refused"): shell.free(); return
+	check(owner.return_from_freedom_surface_walk(), "Marked Moon walker failed actual hatch return")
+	view.state = owner.get_freedom_flight_state()
+	view.pause_controls("Inspect marked Moon from cockpit")
+	view.update_view(0.0)
+	await activate_marker(view, view.show_surface_marker_button)
+	check(view.home_marker.visible and view.home_marker.label_text == "MARK" and not view.ship_marker.visible and view.state.surface_marker.tick == replaced.surface_marker.tick, "Reboarding lost Moon marker or used a phantom HOME target")
+	check(owner.liftoff_freedom_surface(), "Marked Moon release refused")
+	var up := PackedFloat64Array()
+	up.resize(12)
+	up[1] = 0.1
+	for tick in 600:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, up, false), "Marked Moon actual ascent refused"): shell.free(); return
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	check(view.state.surface_marker.current_body and view.state.surface_marker.tick == replaced.surface_marker.tick and not view.state.surface.landed, "Ascent lost the fixed lunar point")
+	var low := save_bytes(owner, output.path_join("marker-low-ascent.json"))
+	view.select_home()
+	check("Departure volume is obstructed" in view.save_status.text and "Fly clear" in view.save_status.text and save_bytes(owner, output.path_join("marker-low-refused.json")) == low, "Actual low lunar home-selection UI lost actionable C++ clearance feedback or changed the full Save")
+	# Fly beyond the existing global relief/hull envelope before selecting home.
+	# This is a bounded authored climb using actual thrusters, not a pose edit.
+	up[1] = 1.0
+	var climb_ticks := 0
+	while view.state.altitude < 5000.0 and climb_ticks < 7200:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, up, false), "Marked Moon clearance climb refused"): shell.free(); return
+		view.state = owner.get_freedom_flight_state()
+		climb_ticks += 1
+	if not check(view.state.altitude >= 5000.0 and view.state.surface_marker.tick == replaced.surface_marker.tick and view.state.resources.fraction > 0.0, "Bounded actual ascent did not reach clear local departure with its retained marker"): shell.free(); return
+	view.update_view(0.0)
+	await check_home(shell, owner, assets, output.path_join("marker"))
+	view = shell.current_view
+	var home: Dictionary = owner.get_freedom_flight_state()
+	check(not view is MoonView and home.surface_marker.version == 2 and home.surface_marker.present and not home.surface_marker.current_body and not home.surface_marker.has("position") and not home.surface_marker.has("distance_metres") and view.show_surface_marker_button.disabled and "another body" in view.primary_status.text, "Home return lost Moon metadata or invented a local bearing")
+	var before_clear: Dictionary = home.duplicate(true)
+	var home_records: Dictionary = owner.get_freedom_observations()
+	await activate_marker(view, view.clear_surface_marker_button)
+	var cleared: Dictionary = owner.get_freedom_flight_state()
+	check(cleared.surface_marker.version == 2 and cleared.surface_marker.selected and not cleared.surface_marker.present and marker_state_only(cleared) == marker_state_only(before_clear) and owner.get_freedom_observations() == home_records, "Off-body Clear changed more than the selected Moon marker")
+	shell.free()
+	await process_frame
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -292,9 +587,20 @@ func run() -> void:
 		var phase_shell := shell_for(restored, phases.path_join(label + ".json"), assets)
 		if phase_shell == null: continue
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
+		check_gear_clearance(phase_shell.current_view, restored, output, label)
+		var phase_view: Control = phase_shell.current_view
+		var observed: Dictionary = restored.get_freedom_flight_state()
+		if phase_view.moon_jump_button.disabled:
+			check(not phase_view.moon_jump_button.tooltip_text.is_empty() and phase_view.moon_jump_button.tooltip_text == str(observed.jump.refusal), "Disabled Moon jump control omitted its actual C++ reason: " + label)
+			if not observed.surface.landed and observed.surface_walk.is_empty() and observed.jump.phase == "idle":
+				check("Jump unavailable" in phase_view.primary_status.text and str(observed.jump.refusal) in phase_view.primary_status.text, "Compact Moon HUD omitted controller-readable jump refusal: " + label)
+		if label in ["landed", "returned"]:
+			check_landed_hatch(phase_shell.current_view, restored, output, label, label == "returned")
 		phase_shell.free()
 		await process_frame
 	await check_outside(phases, assets, output)
+	DirAccess.make_dir_recursive_absolute(output.path_join("marker"))
+	await check_moon_marker(phases, assets, output)
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Native Moon test rewrote C++ source phase: " + label)
 	print("Native Moon: %d failures" % failures)
 	quit(1 if failures else 0)

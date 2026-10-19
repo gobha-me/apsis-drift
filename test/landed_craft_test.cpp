@@ -1038,7 +1038,7 @@ auto surface_marker_session(NativeFreedomFlightSession session,
         "clear require an existing point");
   required(session.mark_surface_marker());
   const auto marked = session.knowledge()->surface_marker;
-  const auto point = *marked->point;
+  const auto point = std::get<FreedomSurfaceMarkerPoint>(*marked->point);
   const auto view = required(session.surface_marker_view());
   check(point.system == actor.frame.system &&
             point.planet == actor.frame.planet &&
@@ -1058,6 +1058,34 @@ auto surface_marker_session(NativeFreedomFlightSession session,
   const auto marked_text = saved(session);
   check(!session.mark_surface_marker() && saved(session) == marked_text,
         "Mark cannot silently replace the selected point");
+  {
+    // Authenticated saved Moon metadata fixture, not a physically reached Moon
+    // visit. The existing supported planetary actor must explicitly replace it.
+    auto document = required(session.surface_walk_document());
+    auto& knowledge =
+        std::get<FreedomKnowledgeSaveDocument>(document.voyage.voyage);
+    const auto catalog =
+        required(generate_secondary_body_catalog(session.system()));
+    const auto moon = required(generate_physical_moon_descriptor(
+        catalog, catalog.bodies.front().node.id));
+    knowledge.knowledge.surface_marker = FreedomSurfaceMarkerState{
+        kFreedomMoonSurfaceMarkerVersion,
+        FreedomMoonSurfaceMarkerPoint{
+            session.system().catalog.id,
+            moon.body,
+            {static_cast<double>(moon.radius_metres) + 123.5, 0, 0},
+            tick}};
+    auto replaced = required(NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom, document, f.planet, {}}));
+    check(!required(replaced.surface_marker_view()).current_body &&
+              !replaced.mark_surface_marker(),
+          "Planet Mark cannot silently overwrite another body's Moon point");
+    required(replaced.replace_surface_marker());
+    check(replaced.knowledge()->surface_marker == marked &&
+              saved(replaced) == marked_text,
+          "Actual planet Replace restores exact original v1 marker and full "
+          "voyage bytes from a retained Moon point");
+  }
   const auto path =
       std::filesystem::temp_directory_path() /
       ("apsis-surface-marker-" +
@@ -1099,7 +1127,9 @@ auto surface_marker_session(NativeFreedomFlightSession session,
         "Reviewing marker direction preserves every saved owner and clock");
   required(session.replace_surface_marker());
   const auto replacement = session.knowledge()->surface_marker;
-  check(replacement != marked && replacement->point->tick == body.tick &&
+  check(replacement != marked &&
+            std::get<FreedomSurfaceMarkerPoint>(*replacement->point).tick ==
+                body.tick &&
             required(session.surface_marker_view())
                     .straight_line_distance_metres == 0,
         "Explicit Replace records the new actual supported point and tick");

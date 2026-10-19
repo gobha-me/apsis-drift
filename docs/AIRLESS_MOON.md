@@ -82,18 +82,50 @@ onto suitable ground. Flight assistance controls rotation; it does not hover or
 cancel lunar gravity. The landing-aid autopilot and atmospheric controls do not
 apply here. Keep flight fuel for braking and ascent. The lunar altitude readout is above
 the reference radius, not radar clearance; dry terrain can lie below that datum.
+The HUD and cockpit also show **Gear clearance**: the current signed minimum
+and maximum terrain-normal gaps across all three deployed pad footprints.
+Negative values indicate overlap within the gear stroke. This reading requires
+complete existing contact certificates for every pad; stowed gear, incomplete
+terrain support, landed/outside modes and active travel show **unavailable**.
+It is an observation, not radar altitude, hull clearance or landing permission.
+Reading it does not advance time, alter a save or change the landing envelope.
 Only suitably slow,
 supported three-pad contact with certified hull clearance creates a landed
 anchor. The first pad may compress its existing rated gear stroke only while
 all pad geometry is valid and the swept hull is clear; a hull strike or unknown
 contact is not a landing.
 
-Use the contextual hatch action to walk outside. The same walking controls,
+After landing, release controls and resume, then use **E** or the selected
+controller's **A/Cross** to leave through the hatch. The HUD shows the current
+action; the paused Controls action remains available. Every other flight/look
+demand must be neutral. The same walking controls,
 slope/step limits and return-access checks apply as on the home planet. Return
 to the hatch, board, release surface support and apply up thrust to lift off.
 **Select jump home** and the normal jump command return to the real home body,
 using the retained home model and actual station ephemeris. Local jumps are
 unavailable while outside, landed or attached to a port.
+Climb clear of the Moon's full terrain-and-hull envelope before selecting
+home; releasing landing support alone is not enough. For the Wayfarer, about
+5 km above the reference radius clears the Moon's conservative relief envelope.
+This is a departure-volume rule, separate from the local signed gear gaps.
+A disabled local-jump control shows its current C++ refusal reason in the
+HUD and tooltip during free flight. A refused home selection reports when the
+departure volume is obstructed; it does not change the selected voyage or spend
+a charge. These messages explain the existing rule rather than estimating a
+safe local jump from terrain samples.
+
+Paused Controls also offer **Mark this spot**, **Replace marker**, **Clear
+marker** and **Show personal marker** during lunar walks. The point records
+only the actual supported foot position and its original ship time. There is
+one personal marker per journey, so replacing it on another body is explicit.
+MARK shows a direction and straight-line range from your feet or craft centre,
+not a terrain route or landing certificate. With MARK off, RETURN points toward
+the hatch; its distance remains in the HUD while MARK is shown. Continue starts
+with the normal return cue. The saved lunar point survives boarding, ascent and
+travel home, where it is listed as being on another body without a local
+bearing. These metadata actions do not spend fuel, advance time or grant sensor
+facts. The Moon name remains unresolved rather than being borrowed from a
+planetary identity.
 
 This first local branch connects the origin home body and its selected moon.
 It does not add arbitrary local-body selection, landable asteroids, a new
@@ -117,6 +149,14 @@ outbound commitment and current local leg. Charges, attempt numbers, clocks,
 origin ephemeris and home model survive Save/Continue; historical intersystem
 format27/version1 is not reinterpreted. Native free flight consumes the same RK4
 and gross fuel transaction.
+
+Lunar personal points explicitly select nested `surface_marker` version2 with
+the canonical typed body target, moon-fixed metres and recorded tick. Clearing
+retains that version with a null point; replacing it on a planet selects the
+existing version1 planetary point. The absent/v1 marker encoding and outer
+voyage formats remain unchanged. Source validation regenerates the actual
+origin Moon from its seed, including dry ground below the reference radius;
+retained metadata does not claim renewed terrain support.
 
 ## Presentation and checks
 

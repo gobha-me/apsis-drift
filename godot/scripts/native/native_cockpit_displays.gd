@@ -75,6 +75,7 @@ static func rows(state: Dictionary) -> Array[PackedStringArray]:
 	else:
 		nav = PackedStringArray(["NAV / CENTRAL-BODY FORECAST", "Orbit: " + state.orbit_classification.capitalize(), "Periapsis: " + distance(state.periapsis_radius - state.planet_radius), "Apoapsis: " + (distance(state.apoapsis_radius - state.planet_radius) if state.apoapsis_radius != null else "unavailable"), "Thrust and drag change this forecast", "Not terrain or landing clearance"])
 	var flight := PackedStringArray(["FLIGHT / CURRENT OBSERVATIONS", "Reference altitude: " + distance(state.altitude), "Surface speed: %.1f m/s" % state.surface_speed, "Radial rate: %+.1f m/s" % state.radial_rate, "Attached" if state.attached else "Free craft", "C++ tick " + state.tick])
+	if state.get("body_kind") == "moon": flight[4] = MoonState.gear_clearance_text(state)
 	var resources: Dictionary = state.get("resources", {})
 	var systems := PackedStringArray(["SYSTEMS / APPLIED PROPULSION", "Fuel: %.1f%%" % (resources.fraction * 100.0) if resources.get("selected", false) else "Fuel tracking unavailable", "Jump charges: %d/3" % resources.jump_charges if resources.get("selected", false) else "Historical resource selection", "Main %.0f%% / Retro %.0f%%" % [clampf(state.negative_force_body[2] / state.negative_force_ratings[2], 0, 1) * 100, clampf(state.positive_force_body[2] / state.positive_force_ratings[2], 0, 1) * 100], "Flight assistance: " + ("ON" if state.assistance else "OFF"), "Actual C++ readings / no flight commands"])
 	return [nav, flight, systems]

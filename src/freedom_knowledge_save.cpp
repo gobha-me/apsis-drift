@@ -138,12 +138,25 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
   if (k.surface_marker) {
     Json point = nullptr;
     if (k.surface_marker->point) {
-      const auto& m = *k.surface_marker->point;
-      point = {{"system", m.system.value},
-               {"planet", m.planet.value},
-               {"body_fixed_metres",
-                Json::array({m.position.x, m.position.y, m.position.z})},
-               {"tick", m.tick}};
+      if (const auto* m = std::get_if<FreedomSurfaceMarkerPoint>(
+              &*k.surface_marker->point)) {
+        point = {{"system", m->system.value},
+                 {"planet", m->planet.value},
+                 {"body_fixed_metres",
+                  Json::array({m->position.x, m->position.y, m->position.z})},
+                 {"tick", m->tick}};
+      } else {
+        const auto& moon =
+            std::get<FreedomMoonSurfaceMarkerPoint>(*k.surface_marker->point);
+        const auto target = encode_body_target({moon.system, moon.body});
+        if (!target)
+          return std::unexpected{failure("invalid Moon marker target")};
+        point = {
+            {"target", Json::parse(*target)},
+            {"body_fixed_metres",
+             Json::array({moon.position.x, moon.position.y, moon.position.z})},
+            {"tick", moon.tick}};
+      }
     }
     root["surface_marker"] = {{"version", k.surface_marker->version},
                               {"point", std::move(point)}};
@@ -243,13 +256,20 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const auto& marker = (*root)["surface_marker"];
     if (!observed || !fields(marker, {"version", "point"}) ||
         !unsigned_fields(marker, {"version"}) ||
-        marker["version"] != kFreedomSurfaceMarkerVersion)
+        (marker["version"] != kFreedomSurfaceMarkerVersion &&
+         marker["version"] != kFreedomMoonSurfaceMarkerVersion))
       return std::unexpected{failure("unsupported surface marker selection")};
-    k.surface_marker = FreedomSurfaceMarkerState{};
+    k.surface_marker =
+        FreedomSurfaceMarkerState{marker["version"].get<std::uint32_t>(), {}};
     const auto& m = marker["point"];
     if (!m.is_null()) {
-      if (!fields(m, {"system", "planet", "body_fixed_metres", "tick"}) ||
-          !unsigned_fields(m, {"system", "planet", "tick"}) ||
+      const bool moon =
+          k.surface_marker->version == kFreedomMoonSurfaceMarkerVersion;
+      if (!(moon ? fields(m, {"target", "body_fixed_metres", "tick"})
+                 : fields(m,
+                          {"system", "planet", "body_fixed_metres", "tick"})) ||
+          !(moon ? unsigned_fields(m, {"tick"})
+                 : unsigned_fields(m, {"system", "planet", "tick"})) ||
           !m["body_fixed_metres"].is_array() ||
           m["body_fixed_metres"].size() != 3)
         return std::unexpected{failure("invalid closed surface marker point")};
@@ -258,11 +278,22 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
         if (!component.is_number())
           return std::unexpected{
               failure("numeric surface marker point required")};
-      k.surface_marker->point = FreedomSurfaceMarkerPoint{
-          {m["system"].get<std::uint64_t>()},
-          {m["planet"].get<std::uint64_t>()},
-          {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
-          m["tick"].get<SimulationTick>()};
+      if (moon) {
+        const auto target = decode_body_target(m["target"].dump());
+        if (!target || target->body.kind != BodyKind::moon)
+          return std::unexpected{failure("invalid typed Moon marker target")};
+        k.surface_marker->point = FreedomMoonSurfaceMarkerPoint{
+            target->system,
+            target->body,
+            {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
+            m["tick"].get<SimulationTick>()};
+      } else {
+        k.surface_marker->point = FreedomSurfaceMarkerPoint{
+            {m["system"].get<std::uint64_t>()},
+            {m["planet"].get<std::uint64_t>()},
+            {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
+            m["tick"].get<SimulationTick>()};
+      }
     }
   }
   if (landmarks_selected) {
