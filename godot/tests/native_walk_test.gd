@@ -904,6 +904,9 @@ func run() -> void:
 	physical_key(KEY_W, true)
 	check(view.input_controls(0.0)[0] == 0.0, "Removed W continued moving station actor")
 	physical_key(KEY_W, false)
+	# The independent long trace requests heading zero from its first tick.
+	# Match that input demand; New Game itself starts facing PI/2.
+	view.requested_heading = 0.0
 	for axis in [-1.0, 1.0]:
 		var movement_key := KEY_F if axis < 0 else KEY_H
 		physical_key(movement_key, true)

@@ -778,7 +778,7 @@ func update_compact_hud() -> void:
 	# Quiet refreshes absorb command/load changes without inventing a finding.
 	observation_cue.observe(state, false, 0.0)
 	surface_aid_cue.observe(state, false, 0.0)
-	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
+	primary_status.text = Status.summary(state, player_input.foot_keyboard_label() if player_input != null else "WASD") if error.is_empty() else "Flight paused\n" + error
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
 		if not outcome.is_empty(): primary_status.text += "\n" + outcome
@@ -1774,7 +1774,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\n%s / left stick: walk\nMouse / look keys / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship." % player_input.foot_keyboard_label()
 	refresh_surface_marker()
 	refresh_surface_landmarks()
 	refresh_distant_contacts()
