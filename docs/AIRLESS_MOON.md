@@ -2,9 +2,10 @@
 
 The owner selected one approachable, landable, walkable moon on 2026-10-19.
 [#623](https://github.com/gobha-me/apsis-drift/issues/623) tracks the complete
-Wayfarer journey. The first C++ providers below do not yet add a playable moon
-or change ordinary New Game. Existing [distant contacts](DISTANT_CONTACTS.md)
-retain their optical-only limits until actual flight and surface consumers land.
+Wayfarer journey. The bounded implementation connects the existing station start, charged local
+travel, real lunar flight, contact and suited walking. Godot consumes the same
+C++ state and meshes. This does not make the other
+[distant contacts](DISTANT_CONTACTS.md) landable.
 
 ## Physical source
 
@@ -67,12 +68,38 @@ shared tick. Liftoff release checks actual local GM/r² and adds no impulse.
 `moon_surface_walker.hpp` consumes those top facets through the same movement,
 slope, step, obstruction and return-access kernel as planet walking.
 
-Native presentation and travel still need to consume those providers in a whole
-journey. A bounded
-local jump branch can reuse the existing charge commitment and recovery
-semantics; it must retain explicit body ownership and preserve the old
-intersystem route validators. No opaque relocation or initialized landed demo
-can substitute for the actual trip.
+## Local voyage and operation
+
+New Game still starts on Origin Station. Walk to Wayfarer, board, sit, release
+the port and withdraw using the existing flight controls. **Select nearby moon
+jump** chooses the actual origin moon. The normal jump command spools and
+commits one charge, advances the existing transit clock and arrives above that
+moon. Selecting a target does not spend a charge. The starting three charges
+cover outbound, home and reserve.
+
+The moon uses manual descent: deploy gear, brake with real thrusters and settle
+onto suitable ground. Flight assistance controls rotation; it does not hover or
+cancel lunar gravity. The landing-aid autopilot and atmospheric controls do not
+apply here. Keep flight fuel for braking and ascent. The lunar altitude readout is above
+the reference radius, not radar clearance; dry terrain can lie below that datum.
+Only suitably slow,
+supported three-pad contact with certified hull clearance creates a landed
+anchor. The first pad may compress its existing rated gear stroke only while
+all pad geometry is valid and the swept hull is clear; a hull strike or unknown
+contact is not a landing.
+
+Use the contextual hatch action to walk outside. The same walking controls,
+slope/step limits and return-access checks apply as on the home planet. Return
+to the hatch, board, release surface support and apply up thrust to lift off.
+**Select jump home** and the normal jump command return to the real home body,
+using the retained home model and actual station ephemeris. Local jumps are
+unavailable while outside, landed or attached to a port.
+
+This first local branch connects the origin home body and its selected moon.
+It does not add arbitrary local-body selection, landable asteroids, a new
+intersystem risk policy or seamless gravity transitions. The existing
+intersystem route retains its validators; switching from a retained local
+voyage into that route is explicitly refused in this increment.
 
 The explicit moon flight codec uses format42 and a separate optional moon world
 selection on the shared flight document. It cannot coexist with a planet world
@@ -84,9 +111,33 @@ exposes an explicit moon result; planet atmosphere/rotation outputs are
 unavailable for that selection. Moon surface format43 retains gear and an
 optional genuine supported moon anchor, while the resource envelope keeps the
 same craft and clock. Historical surface23 cannot reinterpret a moon anchor.
-Native free-flight consumes the same RK4 and gross fuel transaction. Landing,
-walking, travel and presentation dispatch still need the whole-route integration
-before the moon is playable.
+Moon walking uses explicit format44, retaining the real body-fixed actor and
+heading. Local travel uses format45/version2, retaining both the original
+outbound commitment and current local leg. Charges, attempt numbers, clocks,
+origin ephemeris and home model survive Save/Continue; historical intersystem
+format27/version1 is not reinterpreted. Native free flight consumes the same RK4
+and gross fuel transaction.
+
+## Presentation and checks
+
+The native lunar view uses the complete C++ cube-sphere cover and typed
+moon-fixed anchors. The 32-interval top mesh matches the contact triangles.
+Near the observer, the bounded cover refines the contact footprint to LOD13,
+including cube edges and corners. Skirts close visual cracks and never provide
+physics support. Uploads are staged; an old complete cover remains visible
+until its replacement is complete. C++ also supplies the actual star direction,
+apparent radius and background catalog. There are no clouds or ocean on this
+body. Cockpit instruments, exhaust and fuel readings consume actual state.
+
+The opt-in voyage fixture flies the continuous station-to-moon route with real
+commands and no injected landing pose. It saves arrival, approach, the tick
+before touchdown, landed, outside, returned, released and ascent phases.
+Contact-fixture geometry provides a navigation destination, not a replacement
+for flight. Focused headless contracts separately test invalid state, frame and
+owner mismatches, bounded geometry, old save compatibility and exact
+Save/Continue. Godot integration, raster review and manual play are separate
+checks; a headless result alone does not qualify visual quality or controller
+feel.
 
 Suit oxygen/exposure, economy, missions, a wider fleet and multi-body gravity
 are separate scopes. The existing local central-body approximation remains a

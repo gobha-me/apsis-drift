@@ -47,7 +47,7 @@ player's station-to-flight journey.
 
 - [Seed derivation](SEED_DERIVATION.md) and [planet generation](PLANET_GENERATION.md)
 - [Body identity and circular hierarchy](BODY_EPHEMERIS.md): compatible catalog projections, parent transforms and full-width target serialization.
-- [Airless moon integration](AIRLESS_MOON.md): selected physical-body increment, source ownership and remaining playable journey.
+- [Airless moon integration](AIRLESS_MOON.md): local charged voyage, physical surface, walking, controls and versioned ownership.
 - [Planetary scale and surface-fidelity contract](PLANETARY_SCALE_CONTRACT.md): physical units, handoffs and capture/fixture targets.
 - [Immutable planetary ambient environment](PLANET_AMBIENT.md)
 - [Distant optical contacts](DISTANT_CONTACTS.md): separately seeded moons and minor bodies, truthful sky size/phase and explicit approach limits.

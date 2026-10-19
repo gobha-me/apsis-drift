@@ -26,7 +26,9 @@ New Game starts on Origin Station. Walk to Wayfarer, board and sit, release the
 port and use real thrusters to depart. The prototype supports atmospheric
 flight, suitable dry-ground landing, suited walking, reboarding and home return.
 It starts with finite flight fuel and three jump charges; station refueling is
-free. **Esc / Start · Controls** opens paused controls and Flight basics.
+free. A [local moon voyage](docs/AIRLESS_MOON.md) adds charged travel to one
+airless moon, manual descent, walking, ascent and a jump home.
+**Esc / Start · Controls** opens paused controls and Flight basics.
 
 [First Flight instructions](docs/FIRST_FLIGHT.md) explain the route and current
 limitations. [Save, Load and Continue](docs/NATIVE_PROFILES.md) preserve C++ world

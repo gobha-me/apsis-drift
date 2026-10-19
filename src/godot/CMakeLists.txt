@@ -5,6 +5,12 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  # Opt-in real Moon voyage exporter; intentionally absent from default CTest.
+  add_executable(apsis-drift-freedom-moon-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_moon_fixture.cpp")
+  target_include_directories(apsis-drift-freedom-moon-fixture PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(apsis-drift-freedom-moon-fixture PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-freedom-moon-fixture PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   # Opt-in composed voyage exporter. Its conservative pilot is test code only;
   # consumers render the actual phase saves rather than relocated practice starts.
   add_executable(apsis-drift-freedom-planetary-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_planetary_fixture.cpp")

@@ -97,7 +97,7 @@ func build_ui() -> void:
 	panel.add_child(column)
 	primary_status = RichTextLabel.new()
 	primary_status.fit_content = true
-	primary_status.custom_minimum_size.y = 115
+	primary_status.custom_minimum_size.y = 140
 	column.add_child(primary_status)
 	assist_button = CheckButton.new()
 	assist_button.text = "Flight assistance"
@@ -181,7 +181,7 @@ func setup_controls() -> void:
 	add_child(controls_menu)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Select jump home", select_home)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Begin / cancel local spool", jump_requested)
-	controls_menu.add_button(controls_menu.save_button.get_parent(), "Use Wayfarer hatch", request_surface_interaction)
+	controls_menu.add_button(controls_menu.save_button.get_parent(), "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func(): pause_controls("Controls changed. Release controls, then resume."))
@@ -213,9 +213,12 @@ func select_home() -> void:
 	update_view(0.0)
 
 func request_surface_interaction() -> void:
-	if not focused or not error.is_empty() or save_dialog.visible: return
-	var command := "return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"
-	port_command(command)
+	if surface_walking():
+		# Share the existing foot-only neutral/modal gates: E is also a flight key.
+		super.request_surface_interaction()
+		return
+	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not player_input.waiting_action.is_empty(): return
+	port_command("begin_freedom_surface_walk")
 
 func surface_action_reference_warning(_command: String) -> String:
 	return ""
@@ -226,7 +229,7 @@ func refresh_control_hint() -> void:
 func update_compact_hud() -> void:
 	if primary_status == null: return
 	var resources: Dictionary = state.get("resources", {})
-	primary_status.text = "AIRLESS MOON\nAltitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
+	primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
 	var landed: bool = state.get("surface", {}).get("landed", false)
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	assist_button.set_pressed_no_signal(state.assistance)

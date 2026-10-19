@@ -267,6 +267,7 @@ jobs:
           apsis-drift-freedom-start-fixture
           apsis-drift-freedom-planetary-fixture
           apsis-drift-landed-craft-tests
+          apsis-drift-freedom-moon-fixture
           apsis-drift-native-impact-tests
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
@@ -282,7 +283,7 @@ jobs:
           --timeout 900
           --test input --test control_settings --test recorded_observations --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
-          --test saved_flight --test native_environment --test native_audio --test first_jump --test native_recovery
+          --test saved_flight --test native_environment --test native_audio --test first_jump --test native_moon --test native_recovery
           --test native_port --test native_walk
           --test native_assembly --test native_start_staging --test native_title --test native_profile --test native_planetary --test native_voyage
           --test native_roundtrip --test native_roundtrip_pilot

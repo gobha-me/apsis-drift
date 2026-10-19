@@ -29,3 +29,12 @@ generated asset copies by default and retains compact evidence; `--keep-work`
 preserves them for a deliberate replay. Failed runs retain their stage for
 diagnosis. Review those outputs before cleanup rather than deleting a source
 package or another contributor's work.
+
+The opt-in `apsis-drift-freedom-moon-fixture` target exports eight complete
+phase saves from a continuous station-to-moon voyage using real native commands.
+Build it with the native bridge configuration, then run
+`build-native/src/godot/apsis-drift-freedom-moon-fixture OUTPUT_DIRECTORY`
+with a new output directory beneath an existing parent. It is test support,
+not a gameplay autopilot, and is deliberately absent from default CTest.
+`tools/test_godot_native.py --test native_moon` prepares and consumes those
+phases for the bounded [airless moon integration](../docs/AIRLESS_MOON.md).

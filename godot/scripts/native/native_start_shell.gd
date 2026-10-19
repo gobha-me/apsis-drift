@@ -676,6 +676,10 @@ func switch_journey_view() -> void:
 		previous.pause_controls(previous.error)
 		return
 	var parent := model.get_parent()
+	# Staging may rebind the borrowed exterior's exhaust pass. Keep its exact
+	# accepted override until the complete replacement view has succeeded.
+	var skin := model.find_child("HopperStructure", true, false) as MeshInstance3D
+	var previous_override: Material = skin.get_surface_override_material(model.exterior_surface) if skin != null else null
 	parent.remove_child(model)
 	var candidate: Control = WalkView.new() if wants_walk else MoonView.new() if wants_moon else FlightView.new()
 	inherit_controller(previous, candidate)
@@ -684,6 +688,7 @@ func switch_journey_view() -> void:
 		error = candidate.error if not candidate.error.is_empty() else "Wayfarer view handoff failed"
 		if model.get_parent() != null: model.get_parent().remove_child(model)
 		parent.add_child(model)
+		if skin != null: skin.set_surface_override_material(model.exterior_surface, previous_override)
 		candidate.free()
 		previous.error = error
 		previous.pause_controls(error)
