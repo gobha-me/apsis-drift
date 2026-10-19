@@ -44,10 +44,11 @@ before choosing the missions, economy or story that give those actions purpose.
 Owner-approved feature order, 2026-10-16: **surface landmarks**, then
 **flight and landing usability**, then **moons and asteroids**. Deliver bounded
 playable increments in that order without reopening the priority question.
-The first landmark increment is [seeded geological exposures](FREEDOM_SURFACE_LANDMARKS.md)
+The first increments in all three areas are now delivered. The landmark
+increment is [seeded geological exposures](FREEDOM_SURFACE_LANDMARKS.md)
 ([#611](https://github.com/gobha-me/apsis-drift/issues/611)): visible ground
 bands, on-foot inspection and retained first visits using the existing terrain.
-The queued flight/landing increment keeps aid feedback visible through its
+The flight/landing increment keeps aid feedback visible through its
 actual lifecycle ([#613](https://github.com/gobha-me/apsis-drift/issues/613)).
 The third increment is [distant optical contacts](DISTANT_CONTACTS.md)
 ([#214](https://github.com/gobha-me/apsis-drift/issues/214)): a separately
