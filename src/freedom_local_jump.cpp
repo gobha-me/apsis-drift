@@ -163,6 +163,9 @@ auto freeze_local_body_jump_arrival(const FreedomLocalBodyJumpRequest& request)
                                                {station.id, 1}, tick);
     if (!port) return std::unexpected{Error::invalid_geometry};
     auto pose = port->planet_relative;
+    // A port supplies geometry, not a replacement craft selection. Preserve
+    // the actual source frame exactly, as the dock-constraint adapter does.
+    pose.craft = source.flight.craft;
     const auto outward = geometry->ports[0].outward_normal;
     pose.position_metres.x += outward.x * kAssistedOriginArrivalStandoffMetres;
     pose.position_metres.y += outward.y * kAssistedOriginArrivalStandoffMetres;

@@ -8,8 +8,8 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string_view>
-#include <utility>
 #include <type_traits>
+#include <utility>
 
 namespace {
 using namespace apsis_drift;
@@ -235,6 +235,13 @@ auto surface_saves() -> void {
                 need(release_moon_landed_craft(contact.moon, anchor,
                                                session.document().flight.tick)),
         "Moon liftoff removes support without a synthetic launch impulse");
+  const auto release = session.document().flight;
+  for (unsigned tick = 0; tick < 30; ++tick)
+    need(session.advance(thrust));
+  check(!session.surface()->moon_landed &&
+            session.document().flight.tick == release.tick + 30,
+        "Actual outward thrust leaves deployed Moon gear without immediate "
+        "recapture");
   need(session.set_landing_gear(false));
   check(!session.surface()->gear_deployed,
         "Moon gear commands dispatch to actual Moon owner");

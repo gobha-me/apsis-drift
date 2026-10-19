@@ -7,6 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <string_view>
+#include <type_traits>
 
 namespace {
 using namespace apsis_drift;
@@ -20,6 +21,11 @@ auto check(bool pass, std::string_view message) -> void {
 template <class T, class E> auto need(const std::expected<T, E>& result) -> T {
   if (!result) {
     std::cerr << "FAIL: local body jump fixture refused\n";
+    if constexpr (requires { result.error().detail; })
+      std::cerr << result.error().detail << '\n';
+    else if constexpr (std::is_enum_v<E>)
+      std::cerr << "error enum " << static_cast<unsigned>(result.error())
+                << '\n';
     std::exit(1);
   }
   return *result;
@@ -48,6 +54,7 @@ auto fixture() -> FreedomLocalBodyJumpRequest {
   source.model.frame_policy = 2;
   source.model.optics = 1;
   source.model.companions = 1;
+  source.flight.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
   // This pure source has no docking owner. The outer journey separately
   // refuses attached/outside pilots before an actual jump can begin.
   const auto catalog = need(generate_secondary_body_catalog(system));

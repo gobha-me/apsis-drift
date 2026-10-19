@@ -1,5 +1,7 @@
 #include "apsis_drift/freedom_travel_save.hpp"
 
+#include "freedom_local_travel_save_internal.hpp"
+
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -245,8 +247,32 @@ auto free_pilot(const FreedomSurfaceBaseSave& base) -> bool {
       base);
 }
 } // namespace
+namespace detail {
+auto travel_frozen_json(const FrozenFreedomJumpArrival& value)
+    -> std::expected<nlohmann::ordered_json, SaveSchemaError> {
+  return frozen_json(value);
+}
+auto travel_frozen_value(const nlohmann::ordered_json& value)
+    -> std::expected<FrozenFreedomJumpArrival, SaveSchemaError> {
+  return frozen_value(value);
+}
+auto travel_resources_json(const FreedomResources& value)
+    -> nlohmann::ordered_json {
+  return resources_json(value);
+}
+auto travel_resources_value(const nlohmann::ordered_json& value)
+    -> std::expected<FreedomResources, SaveSchemaError> {
+  return resources_value(value);
+}
+auto travel_binding_json(const NativeStartingAssemblySelection& value)
+    -> nlohmann::ordered_json {
+  return binding_json(value);
+}
+} // namespace detail
 auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (d.travel.local || d.travel.version == kFreedomLocalTravelStateVersion)
+    return detail::validate_local_travel(d);
   if (auto v = validate_freedom_knowledge_document(d.voyage); !v) return v;
   const auto& voyage = d.voyage.voyage.voyage;
   const auto flight = surface_base_flight(voyage.base);
@@ -367,6 +393,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
 }
 auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
+  if (d.travel.local || d.travel.version == kFreedomLocalTravelStateVersion)
+    return detail::encode_local_travel(d);
   if (auto v = validate_freedom_travel_document(d); !v)
     return std::unexpected{v.error()};
   const auto voyage = encode_freedom_knowledge_document_json(d.voyage);
@@ -413,6 +441,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root) return std::unexpected{root.error()};
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
+  if ((*root)["format_version"] == kFreedomLocalTravelSaveFormatVersion)
+    return detail::decode_local_travel(*root);
   if ((*root)["format_version"] != kFreedomTravelSaveFormatVersion)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::unsupported_format_version,

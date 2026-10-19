@@ -12,7 +12,11 @@ auto check(bool good, const char* message) -> void {
   if (!good) throw std::runtime_error(message);
 }
 template <class T, class E> auto need(std::expected<T, E> result) -> T {
-  if (!result) throw std::runtime_error("Moon retained-state fixture refused");
+  if (!result) {
+    if constexpr (requires { result.error().detail; })
+      std::cerr << result.error().detail << '\n';
+    throw std::runtime_error("Moon retained-state fixture refused");
+  }
   return std::move(*result);
 }
 auto run() -> void {
@@ -28,6 +32,7 @@ auto run() -> void {
   home.flight = need(resolve_origin_port_pose(physical, station, geometry,
                                               {station.id, 1}, 1200, 12))
                     .planet_relative;
+  home.flight.craft = assembly.journey.voyage.flight.flight.craft;
   home.origin.state.tick = home.flight.tick;
   home.world = FreedomActiveWorldSelection{1, physical.catalog.id,
                                            home.origin.recipe.home_planet};

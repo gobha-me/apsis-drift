@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <cmath>
 #include <limits>
@@ -129,6 +130,17 @@ auto NativeFreedomFlightSession::try_moon_surface_contact() -> void {
   if (!moon_ || !surface_ || !surface_->gear_deployed ||
       surface_->moon_landed || actor_ || surface_walker_)
     return;
+  const auto fixed = reframe_rigid_body(
+      RigidBodyWorldContext{*moon_}, document_.flight,
+      {{RigidFrameKind::body_fixed, system_.catalog.id, {}, {}, moon_->body},
+       document_.flight.tick},
+      *moon_);
+  if (!fixed) return;
+  const auto& p = fixed->position_metres;
+  const auto& v = fixed->linear_velocity_metres_per_second;
+  // Releasing support never supplies an impulse. Actual outward thrust must
+  // be able to leave the gear stroke without auto-capturing on every tick.
+  if ((p.x * v.x + p.y * v.y) + p.z * v.z > 0) return;
   const auto checksum = rigid_body_state_checksum(RigidBodyWorldContext{*moon_},
                                                   document_.flight);
   if (checksum) (void)commit_moon_touchdown(*checksum);

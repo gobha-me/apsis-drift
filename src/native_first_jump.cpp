@@ -20,6 +20,9 @@ auto NativeFreedomFlightSession::travel_document() const
 }
 auto NativeFreedomFlightSession::select_jump(SystemId destination)
     -> std::expected<void, std::string> {
+  if (moon_ || (travel_ && travel_->local))
+    return std::unexpected{
+        "The selected local moon route retains its own travel history"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
         condition_)
@@ -90,6 +93,8 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
 }
 auto NativeFreedomFlightSession::jump_preview() const
     -> std::expected<FreedomJumpPreview, std::string> {
+  if (moon_ || (travel_ && travel_->local))
+    return std::unexpected{"Local body travel uses its typed local preview"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
         condition_)
@@ -128,6 +133,7 @@ auto NativeFreedomFlightSession::jump_preview() const
 }
 auto NativeFreedomFlightSession::jump_available() const
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->local) return local_jump_available();
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
         condition_)
@@ -171,6 +177,7 @@ auto NativeFreedomFlightSession::jump_available() const
 }
 auto NativeFreedomFlightSession::begin_jump()
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->local) return begin_local_jump();
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -222,6 +229,7 @@ auto NativeFreedomFlightSession::cancel_jump()
 auto NativeFreedomFlightSession::advance_jump(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (travel_ && travel_->local) return advance_local_jump(controls, step);
   if (!std::isfinite(step.count()) || step != kSimulationStep || !travel_ ||
       travel_->phase == FreedomJumpPhase::idle)
     return std::unexpected{"Jump step requires an active fixed tick"};

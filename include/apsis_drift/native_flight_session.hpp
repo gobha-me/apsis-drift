@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/freedom_local_jump.hpp"
 #include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
@@ -120,6 +121,11 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto travel_document() const
       -> std::expected<FreedomTravelSaveDocument, std::string>;
   [[nodiscard]] auto select_jump(SystemId) -> std::expected<void, std::string>;
+  [[nodiscard]] auto select_local_jump(BodyTarget)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto local_jump_preview() const
+      -> std::expected<FrozenLocalBodyJumpArrival, std::string>;
+
   [[nodiscard]] auto jump_preview() const
       -> std::expected<FreedomJumpPreview, std::string>;
   [[nodiscard]] auto begin_jump() -> std::expected<void, std::string>;
@@ -292,6 +298,12 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_moon_surface_walk(const OriginWalkControls&,
                                                SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto local_jump_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_local_jump() -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_local_jump(const NativeFlightControls&,
+                                        SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto store_surface_marker(bool replace)
       -> std::expected<void, std::string>;
