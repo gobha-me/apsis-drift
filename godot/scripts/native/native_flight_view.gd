@@ -1429,7 +1429,7 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 	# The camera vector is float32; a neutral tick must preserve the saved
 	# float64 heading. Apply only the change from its rounded display baseline.
 	var heading := float(state.surface_walk.heading)
-	var baseline := Vector2(-heading, 0.0).x
+	var baseline := Vector2(wrapf(Vector2(-heading, 0.0).x, -PI, PI), 0.0).x
 	if look_offset.x != baseline:
 		heading = wrapf(heading - wrapf(look_offset.x - baseline, -PI, PI), -PI, PI)
 	# Recentered yaw has one canonical save representation, including signed zero.
