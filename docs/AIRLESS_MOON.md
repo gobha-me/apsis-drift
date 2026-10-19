@@ -108,6 +108,11 @@ Climb clear of the Moon's full terrain-and-hull envelope before selecting
 home; releasing landing support alone is not enough. For the Wayfarer, about
 5 km above the reference radius clears the Moon's conservative relief envelope.
 This is a departure-volume rule, separate from the local signed gear gaps.
+A disabled local-jump control shows its current C++ refusal reason in the
+HUD and tooltip during free flight. A refused home selection reports when the
+departure volume is obstructed; it does not change the selected voyage or spend
+a charge. These messages explain the existing rule rather than estimating a
+safe local jump from terrain samples.
 
 Paused Controls also offer **Mark this spot**, **Replace marker**, **Clear
 marker** and **Show personal marker** during lunar walks. The point records

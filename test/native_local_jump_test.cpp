@@ -248,6 +248,20 @@ auto moon_marker_branch(NativeFreedomFlightSession session) -> void {
   moon_marker_projection(
       session, std::get<FreedomMoonSurfaceMarkerPoint>(*marked->point));
   need(session.release_surface());
+  const BodyTarget home_target{
+      session.system().catalog.id,
+      body_id(session.document().origin.recipe.home_planet)};
+  const auto below_departure_volume = bytes(session);
+  const auto refused_home = session.select_local_jump(home_target);
+  check(
+      !refused_home &&
+          refused_home.error().find("Departure volume is obstructed") !=
+              std::string::npos &&
+          refused_home.error().find("Fly clear of nearby bodies and terrain") !=
+              std::string::npos &&
+          bytes(session) == below_departure_volume,
+      "Actual low-Moon home selection explains departure clearance without "
+      "changing the complete Save, clock, fuel or jump charges");
   // The existing jump provider excludes the whole Moon relief envelope plus
   // the craft hull. Releasing gear support alone is not departure clearance.
   const auto ascent_tick = session.document().flight.tick;
@@ -275,9 +289,7 @@ auto moon_marker_branch(NativeFreedomFlightSession session) -> void {
         "Bounded actual Moon ascent reaches the unchanged departure envelope "
         "with its own clock/fuel and the exact retained marker");
   session = continued(session);
-  need(session.select_local_jump(
-      {session.system().catalog.id,
-       body_id(session.document().origin.recipe.home_planet)}));
+  need(session.select_local_jump(home_target));
   leg(session);
   const auto retained = need(session.surface_marker_view());
   check(!session.moon() && session.knowledge()->surface_marker == marked &&

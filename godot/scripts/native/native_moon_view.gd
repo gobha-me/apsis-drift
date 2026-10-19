@@ -315,6 +315,10 @@ func update_compact_hud() -> void:
 	moon_select_button.disabled = landed or surface_walking() or jumping
 	moon_jump_button.disabled = not state.get("jump", {}).get("available", false) and state.get("jump", {}).get("phase", "idle") != "spool"
 	moon_jump_button.text = "Cancel local spool" if state.get("jump", {}).get("phase", "idle") == "spool" else "Begin local jump"
+	var jump_reason := str(state.jump.get("refusal", "Local jump unavailable."))
+	moon_jump_button.tooltip_text = jump_reason if moon_jump_button.disabled else ""
+	if moon_jump_button.disabled and not landed and not surface_walking() and not jumping:
+		primary_status.text += "\nJump unavailable · " + jump_reason
 	pause_button.text = "Resume" if paused else "Pause"
 
 func update_view(delta: float, _defer_exhaust: bool = false) -> void:

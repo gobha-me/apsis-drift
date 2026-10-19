@@ -524,7 +524,8 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	view.update_view(0.0)
 	check(view.state.surface_marker.current_body and view.state.surface_marker.tick == replaced.surface_marker.tick and not view.state.surface.landed, "Ascent lost the fixed lunar point")
 	var low := save_bytes(owner, output.path_join("marker-low-ascent.json"))
-	check(not owner.select_freedom_home_body_jump() and save_bytes(owner, output.path_join("marker-low-refused.json")) == low, "Low lunar ascent bypassed the existing conservative jump-clearance rule")
+	view.select_home()
+	check("Departure volume is obstructed" in view.save_status.text and "Fly clear" in view.save_status.text and save_bytes(owner, output.path_join("marker-low-refused.json")) == low, "Actual low lunar home-selection UI lost actionable C++ clearance feedback or changed the full Save")
 	# Fly beyond the existing global relief/hull envelope before selecting home.
 	# This is a bounded authored climb using actual thrusters, not a pose edit.
 	up[1] = 1.0
@@ -587,6 +588,12 @@ func run() -> void:
 		if phase_shell == null: continue
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
 		check_gear_clearance(phase_shell.current_view, restored, output, label)
+		var phase_view: Control = phase_shell.current_view
+		var observed: Dictionary = restored.get_freedom_flight_state()
+		if phase_view.moon_jump_button.disabled:
+			check(not phase_view.moon_jump_button.tooltip_text.is_empty() and phase_view.moon_jump_button.tooltip_text == str(observed.jump.refusal), "Disabled Moon jump control omitted its actual C++ reason: " + label)
+			if not observed.surface.landed and observed.surface_walk.is_empty() and observed.jump.phase == "idle":
+				check("Jump unavailable" in phase_view.primary_status.text and str(observed.jump.refusal) in phase_view.primary_status.text, "Compact Moon HUD omitted controller-readable jump refusal: " + label)
 		if label in ["landed", "returned"]:
 			check_landed_hatch(phase_shell.current_view, restored, output, label, label == "returned")
 		phase_shell.free()
