@@ -70,7 +70,15 @@ Owner keyboard/mouse review, 2026-10-17: the boarding animation reads well, but
 the 90-degree parked seat and tight approach deserve another ingress pass.
 That swivel is explicitly authored in the operating asset; the suggested
 180-degree entry needs a coordinated operating-recipe/asset change, rather
-than a presentation-only axis correction. Fixed transition camera facing and
-the reverse view remain recorded limitations. This feedback does not reopen
-the deferred anatomical studies. Contextual ladder actions and ordinary mouse
-look are addressed separately from changing that authored route.
+than a presentation-only axis correction. This feedback does not reopen the
+deferred anatomical studies. Contextual ladder actions and ordinary mouse look
+are addressed separately from changing that authored route.
+
+Mouse, configured look keys and the selected right stick let the player look
+around during either direction of the authored interaction. Looking only offsets
+the camera; the C++ eye position, movement, heading and saved route stay unchanged.
+The view gently recentres during the final second of the twelve-second route so
+seating and ordinary station walking resume without a camera snap. Pause, focus
+loss and dialogs release the pointer and suppress look input; Continue starts
+paused with a centred view. This does not widen the route or guarantee
+clipping-free views inside the provisional mesh.

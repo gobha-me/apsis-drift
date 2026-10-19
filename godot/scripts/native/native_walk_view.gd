@@ -66,6 +66,7 @@ var initial_controller_device := -2
 var available_pads: Dictionary = {}
 var requested_heading := 0.0
 var pitch := 0.0
+var boarding_look := Vector2.ZERO
 var error := ""
 var activated := false
 var staged_model: Node3D
@@ -596,21 +597,39 @@ func stick(value: float) -> float:
 
 
 func input_controls(delta: float) -> PackedFloat64Array:
-	if paused or not focused or not error.is_empty() or save_dialog.visible or boarding_transition():
+	if paused or not focused or not error.is_empty() or save_dialog.visible:
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
 	var keyboard_look: Vector2 = preferences_provider.foot_keyboard_look()
-	requested_heading -= keyboard_look.x * delta
-	pitch = clampf(pitch - keyboard_look.y * delta, -1.3, 1.3)
+	apply_look(keyboard_look * delta)
 	if available_pads.get(selected_pad, false):
 		forward -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_Y))
 		right += stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_X))
 		var controller_look: Vector2 = preferences_provider.foot_controller_look(selected_pad)
-		requested_heading -= controller_look.x * delta
-		pitch = clampf(pitch - controller_look.y * delta, -1.3, 1.3)
+		apply_look(controller_look * delta)
+	if boarding_transition():
+		# Looking around never steers the authored C++ actor route.
+		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	requested_heading = wrapf(requested_heading, -PI, PI)
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), requested_heading])
+
+
+func apply_look(motion: Vector2) -> void:
+	if not motion.is_finite(): return
+	if boarding_transition():
+		boarding_look.x = clampf(boarding_look.x + motion.x, -PI, PI)
+		boarding_look.y = clampf(boarding_look.y + motion.y, -1.3, 1.3)
+	else:
+		requested_heading = wrapf(requested_heading - motion.x, -PI, PI)
+		pitch = clampf(pitch - motion.y, -1.3, 1.3)
+
+
+static func boarding_look_weight(progress: float) -> float:
+	if not is_finite(progress) or progress < 0.0 or progress > 1.0: return 0.0
+	# The route lasts twelve seconds. Settle the camera during its final second,
+	# using authoritative progress rather than a render-rate-dependent timer.
+	return 1.0 - smoothstep(11.0 / 12.0, 1.0, progress)
 
 
 func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
@@ -638,12 +657,13 @@ func board_requested() -> void:
 		boarding_query_elapsed = 0.1
 		return
 	pitch = 0.0
+	boarding_look = Vector2.ZERO
 	update_view()
 	sync_mouse_look()
 
 
 func sync_mouse_look() -> void:
-	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not boarding_transition() and not mode_change_pending)
+	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not mode_change_pending)
 
 
 func _exit_tree() -> void:
@@ -686,6 +706,7 @@ func update_view(delta: float = 0.0) -> void:
 			set_paused(true)
 			return
 		state = next_state
+		boarding_look = Vector2.ZERO
 		station.transform = Transform3D(flight.station_basis, flight.station_position)
 		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
@@ -719,13 +740,16 @@ func update_view(delta: float = 0.0) -> void:
 	if boarding_transition():
 		requested_heading = state.heading_radians
 		pitch = 0.0
+	else:
+		boarding_look = Vector2.ZERO
 	station.transform = Transform3D(state.station_basis, state.station_position)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
-	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
+	var look := boarding_look * boarding_look_weight(float(boarding.get("progress", 0.0))) if boarding_transition() else Vector2.ZERO
+	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians - look.x) * Basis(Vector3.RIGHT, pitch - look.y), state.actor_eye_position)
 	refresh_boarding_action()
 	if boarding_transition():
 		var cues := {"approach": "Approaching the ladder", "ladder": "Climbing through the hatch", "cabin": "Moving into the cabin", "seat": "Taking the pilot seat", "hardware": "Securing the hatch", "complete": "Ready"}
-		telemetry.text = "%s · %d%%\n%s" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
+		telemetry.text = "%s · %d%%\n%s\nLook around · view settles near the end" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
 	else:
 		telemetry.text = "Origin Station · D1 workshop\nWalk to the Wayfarer ladder to board.%s" % ("\n" + error if not error.is_empty() else "")
 
@@ -853,10 +877,9 @@ func _input(event: InputEvent) -> void:
 	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and boarding_availability.get("available", false))):
 		board_requested()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and not boarding_transition() and not paused and error.is_empty():
+	elif event is InputEventMouseMotion and not paused and error.is_empty():
 		var motion := MouseLook.motion_delta(event.relative, preferences_provider.settings)
-		requested_heading = wrapf(requested_heading - motion.x, -PI, PI)
-		pitch = clampf(pitch - motion.y, -1.3, 1.3)
+		apply_look(motion)
 
 func refresh_profile_actions() -> void:
 	if replace_save_button == null or bridge == null or not bridge.has_method("get_freedom_profile_state"): return
