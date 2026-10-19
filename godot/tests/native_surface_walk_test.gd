@@ -482,7 +482,26 @@ func check_surface_context(source: String, assets: String, output: String) -> vo
 	var original: Dictionary = owner.get_freedom_flight_state()
 	var records: Dictionary = owner.get_freedom_observations()
 	var site := Landmarks.nearest_nearby(original)
-	check(not site.is_empty() and site.can_inspect and not original.surface_walk.return_access.within_reach, "Context fixture lacks a reachable exposure away from the hatch")
+	# The existing near-exposure fixture can still be within hatch reach. Walk
+	# toward its actual site until the two contextual actions are unambiguous.
+	for step in 240:
+		original = owner.get_freedom_flight_state()
+		site = Landmarks.nearest_nearby(original)
+		if site.is_empty() or not site.can_inspect or not original.surface_walk.return_access.within_reach: break
+		var walking: Dictionary = original.surface_walk
+		var direction: Vector3 = walking.basis.inverse() * (site.position - walking.eye_position)
+		var planar := Vector2(direction.x, -direction.z).normalized()
+		if not check(owner.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([planar.y, planar.x, 0.0]), false), "Actual context-fixture approach refused"):
+			shell.free()
+			return
+	original = owner.get_freedom_flight_state()
+	site = Landmarks.nearest_nearby(original)
+	records = owner.get_freedom_observations()
+	view.state = original
+	view.update_view(0.0)
+	if not check(not site.is_empty() and site.can_inspect and not original.surface_walk.return_access.within_reach, "Context fixture lacks a reachable exposure away from the hatch"):
+		shell.free()
+		return
 	check(view.context_source == view.landmark_inspect_button and "E / left click" in view.context_action.text, "Nearby exposure lacks the direct compact action")
 	# Presentation-only priority probe; no physical observation/command is forged.
 	view.state = original.duplicate(true)
