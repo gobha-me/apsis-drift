@@ -42,7 +42,7 @@ func _ready() -> void:
 	heading.text = "SETTINGS / CONTROLS"
 	column.add_child(heading)
 	var note := Label.new()
-	note.text = "Changes stay pending until Apply. Cancel leaves your controls unchanged.\nFlight bindings can be remapped in the paused flight controls.\nOn foot, look keys (arrows by default) use speed and inversion without a modifier. WASD/E retain walking/boarding priority.\nWalking sticks use dead zone and curve; right-stick look also uses speed and inversion. Mouse look keeps its fixed rate."
+	note.text = "Changes stay pending until Apply. Cancel leaves your controls unchanged.\nFlight bindings can be remapped in the paused flight controls.\nOn foot, look keys (arrows by default) use speed and inversion without a modifier. WASD/E retain walking/boarding priority.\nWalking sticks use dead zone and curve; right-stick and mouse look use speed and inversion."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
 	for item in [["deadzone", "Stick / trigger dead zone", 0.05, 0.45, 0.01], ["curve", "Response curve", 1.0, 3.0, 0.1], ["look_speed", "Look speed (flight / on-foot)", 0.3, 4.0, 0.1]]:

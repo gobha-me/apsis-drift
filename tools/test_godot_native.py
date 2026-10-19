@@ -112,8 +112,8 @@ SUCCESS = re.compile(r"\b0 failures\b")
 
 def timeout_seconds(value):
     number = float(value)
-    if not math.isfinite(number) or not 1 <= number <= 600:
-        raise argparse.ArgumentTypeError("timeout must be finite, 1..600 seconds")
+    if not math.isfinite(number) or not 1 <= number <= 900:
+        raise argparse.ArgumentTypeError("timeout must be finite, 1..900 seconds")
     return number
 
 

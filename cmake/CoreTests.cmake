@@ -22,9 +22,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME terrain-local-detail-contract
     COMMAND apsis-drift-terrain-local-detail-tests)
   set_tests_properties(terrain-local-detail-contract PROPERTIES TIMEOUT 120)
+  # Keep the deferred contracts on their optional library; the runtime tests
+  # following this block continue to exercise apsis-drift::core directly.
+  set(APSIS_BOARDING_RESEARCH_TEST_LIBRARY apsis-drift::boarding-research)
   add_executable(apsis-drift-boarding-route-intermediate-support01-tests
     test/origin_boarding_route_intermediate_support01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-support01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-support01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-support01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-support01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -33,7 +36,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-intermediate-support01-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-route-intermediate-support-self01-tests
     test/origin_boarding_route_intermediate_support_self01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-support-self01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-support-self01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-support-self01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-support-self01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -42,7 +45,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-intermediate-support-self01-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-route-intermediate-root-z01-tests
     test/origin_boarding_route_intermediate_root_z01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-root-z01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-root-z01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-root-z01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-root-z01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -51,7 +54,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-intermediate-root-z01-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-route-intermediate-hip-diagnostic01-tests
     test/origin_boarding_route_intermediate_hip_diagnostic01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-hip-diagnostic01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-hip-diagnostic01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-hip-diagnostic01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-hip-diagnostic01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -61,7 +64,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests
     test/origin_boarding_route_intermediate_hip_diagnostic02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -71,7 +74,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-intermediate-endpoint01-tests
     test/origin_boarding_intermediate_endpoint01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -81,7 +84,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-intermediate-reach-evidence01-tests
     test/origin_boarding_intermediate_reach_evidence01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-intermediate-reach-evidence01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-intermediate-reach-evidence01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-intermediate-reach-evidence01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-intermediate-reach-evidence01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -92,7 +95,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-endpoint02-tests
     test/origin_boarding_intermediate_endpoint02_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-endpoint02-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-endpoint02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-endpoint02-tests
@@ -104,7 +107,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-sector-evidence01-tests
     test/origin_boarding_intermediate_sector_evidence01_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-sector-evidence01-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-sector-evidence01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-sector-evidence01-tests
@@ -116,7 +119,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-endpoint03-tests
     test/origin_boarding_intermediate_endpoint03_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-endpoint03-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-endpoint03-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-endpoint03-tests
@@ -128,7 +131,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-sector-evidence02-tests
     test/origin_boarding_intermediate_sector_evidence02_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-sector-evidence02-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-sector-evidence02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-sector-evidence02-tests
@@ -140,7 +143,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-endpoint04-tests
     test/origin_boarding_intermediate_endpoint04_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-endpoint04-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-endpoint04-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-endpoint04-tests
@@ -152,7 +155,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-endpoint05-tests
     test/origin_boarding_intermediate_endpoint05_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-endpoint05-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-endpoint05-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-endpoint05-tests
@@ -198,7 +201,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-intermediate-endpoint06-tests
     test/origin_boarding_intermediate_endpoint06_test.cpp)
   target_link_libraries(apsis-drift-boarding-intermediate-endpoint06-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-intermediate-endpoint06-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-intermediate-endpoint06-tests
@@ -244,7 +247,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
     test/origin_boarding_knee_compatibility_diagnostic01_test.cpp)
   target_link_libraries(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-knee-compatibility-diagnostic01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
@@ -290,7 +293,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-hip-joint-plane-method01-tests
     test/origin_boarding_hip_joint_plane_method01_test.cpp)
   target_link_libraries(apsis-drift-boarding-hip-joint-plane-method01-tests
-    PRIVATE apsis-drift::core)
+    PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-hip-joint-plane-method01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   target_include_directories(apsis-drift-boarding-hip-joint-plane-method01-tests
@@ -335,7 +338,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-route-intermediate-unloaded01-tests
     test/origin_boarding_route_intermediate_unloaded01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-unloaded01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-unloaded01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-unloaded01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-unloaded01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -345,7 +348,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-route-intermediate-load01-tests
     test/origin_boarding_route_intermediate_load01_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-load01-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-load01-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-load01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-load01-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -355,7 +358,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-intermediate-pause-support02-tests
     test/origin_boarding_intermediate_pause_support02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-intermediate-pause-support02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-intermediate-pause-support02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-intermediate-pause-support02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-intermediate-pause-support02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -365,7 +368,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-intermediate-pause-envelope-tests
     test/origin_boarding_intermediate_pause_envelope_test.cpp)
-  target_link_libraries(apsis-drift-boarding-intermediate-pause-envelope-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-intermediate-pause-envelope-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-intermediate-pause-envelope-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-intermediate-pause-envelope-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -375,7 +378,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-intermediate-pause-support-tests
     test/origin_boarding_intermediate_pause_support_test.cpp)
-  target_link_libraries(apsis-drift-boarding-intermediate-pause-support-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-intermediate-pause-support-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-intermediate-pause-support-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-intermediate-pause-support-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -385,7 +388,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_executable(apsis-drift-boarding-route-intermediate-step02-tests
     test/origin_boarding_route_intermediate_step02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-step02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-step02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-step02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-step02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -396,7 +399,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-boarding-route-intermediate-sector-tests
     test/origin_boarding_route_intermediate_step_attribution_driver.cpp
     test/origin_boarding_route_intermediate_step_attribution_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/test")
   target_compile_options(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE
@@ -406,7 +409,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-intermediate-sector-attribution-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-intermediate-step-tests test/origin_boarding_route_intermediate_step_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-intermediate-step-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-step-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-intermediate-step-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-intermediate-step-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -414,7 +417,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-intermediate-step-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-separation-ring-material-tests test/origin_boarding_separation_ring_material_test.cpp)
-  target_link_libraries(apsis-drift-boarding-separation-ring-material-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-separation-ring-material-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-separation-ring-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-separation-ring-material-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -422,7 +425,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-separation-ring-material-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-world-material04-tests test/origin_boarding_route_checkpoint_world_material04_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material04-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material04-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-world-material04-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-world-material04-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -430,7 +433,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-world-material04-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-hatch-seal-material-tests test/origin_boarding_hatch_seal_material_test.cpp)
-  target_link_libraries(apsis-drift-boarding-hatch-seal-material-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-hatch-seal-material-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-hatch-seal-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-hatch-seal-material-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -438,7 +441,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-hatch-seal-material-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-world-material03-tests test/origin_boarding_route_checkpoint_world_material03_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material03-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material03-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-world-material03-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-world-material03-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -446,7 +449,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-world-material03-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-checkpoint-material-extension-tests test/origin_boarding_checkpoint_material_extension_test.cpp)
-  target_link_libraries(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -454,7 +457,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-checkpoint-material-extension-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-world-material02-tests test/origin_boarding_route_checkpoint_world_material02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -462,7 +465,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-world-material02-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-world-material-tests test/origin_boarding_route_checkpoint_world_material_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -470,7 +473,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-world-material-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-unload-self02-tests test/origin_boarding_route_checkpoint_unload_self02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -478,7 +481,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-unload-self02-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-checkpoint-unload-tests test/origin_boarding_route_checkpoint_unload_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -486,7 +489,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-checkpoint-unload-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-port-unload-tests test/origin_boarding_route_port_unload_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-port-unload-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-port-unload-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-port-unload-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-port-unload-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -494,7 +497,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-port-unload-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-initial-material-tests test/origin_boarding_initial_material_test.cpp)
-  target_link_libraries(apsis-drift-boarding-initial-material-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-initial-material-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-initial-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-initial-material-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -502,7 +505,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-initial-material-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-foot-phase-tests test/origin_boarding_route_foot_phase_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-foot-phase-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-foot-phase-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-route-foot-phase-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-route-foot-phase-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
@@ -510,137 +513,137 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(boarding-route-foot-phase-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-route-body-tests test/origin_boarding_route_body_test.cpp)
-  target_link_libraries(apsis-drift-boarding-route-body-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-route-body-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-route-body-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-route-body-contract COMMAND apsis-drift-boarding-route-body-tests)
   set_tests_properties(boarding-route-body-contract PROPERTIES TIMEOUT 90)
 
   add_executable(apsis-drift-boarding-self-model03-tests test/origin_boarding_self_model03_test.cpp)
-  target_link_libraries(apsis-drift-boarding-self-model03-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-self-model03-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-self-model03-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-self-model03-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-self-model03-contract COMMAND apsis-drift-boarding-self-model03-tests)
   set_tests_properties(boarding-self-model03-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-self-model02-tests test/origin_boarding_self_model02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-self-model02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-self-model02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-self-model02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-self-model02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-self-model02-contract COMMAND apsis-drift-boarding-self-model02-tests)
   set_tests_properties(boarding-self-model02-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-body-tests test/origin_boarding_body_test.cpp)
-  target_link_libraries(apsis-drift-boarding-body-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-body-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-body-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-body-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-body-contract COMMAND apsis-drift-boarding-body-tests)
   set_tests_properties(boarding-body-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-lateral-body02-tests test/origin_boarding_lateral_body02_test.cpp)
-  target_link_libraries(apsis-drift-boarding-lateral-body02-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-lateral-body02-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-lateral-body02-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-lateral-body02-contract COMMAND apsis-drift-boarding-lateral-body02-tests)
   set_tests_properties(boarding-lateral-body02-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-self-model04-tests test/origin_boarding_self_model04_test.cpp)
-  target_link_libraries(apsis-drift-boarding-self-model04-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-self-model04-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-self-model04-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-self-model04-contract COMMAND apsis-drift-boarding-self-model04-tests)
   set_tests_properties(boarding-self-model04-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-boarding-boot-support-tests test/origin_boarding_boot_support_test.cpp)
-  target_link_libraries(apsis-drift-boarding-boot-support-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-boot-support-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_compile_options(apsis-drift-boarding-boot-support-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-boot-support-contract COMMAND apsis-drift-boarding-boot-support-tests)
   set_tests_properties(boarding-boot-support-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-foot-sites-tests test/origin_boarding_foot_sites_test.cpp)
-  target_link_libraries(apsis-drift-boarding-foot-sites-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-foot-sites-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-foot-sites-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-foot-sites-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-foot-sites-contract COMMAND apsis-drift-boarding-foot-sites-tests)
   set_tests_properties(boarding-foot-sites-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-source-endpoint-tests test/origin_boarding_source_endpoint_test.cpp)
-  target_link_libraries(apsis-drift-boarding-source-endpoint-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-source-endpoint-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-source-endpoint-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-source-endpoint-contract COMMAND apsis-drift-boarding-source-endpoint-tests)
   set_tests_properties(boarding-source-endpoint-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-source-endpoint-self-tests test/origin_boarding_source_endpoint_self_test.cpp)
-  target_link_libraries(apsis-drift-boarding-source-endpoint-self-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-self-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-source-endpoint-self-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-source-endpoint-self-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-source-endpoint-self-contract COMMAND apsis-drift-boarding-source-endpoint-self-tests)
   set_tests_properties(boarding-source-endpoint-self-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-source-endpoint-load-tests test/origin_boarding_source_endpoint_load_test.cpp)
-  target_link_libraries(apsis-drift-boarding-source-endpoint-load-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-load-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-source-endpoint-load-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-source-endpoint-load-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-source-endpoint-load-contract COMMAND apsis-drift-boarding-source-endpoint-load-tests)
   set_tests_properties(boarding-source-endpoint-load-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-source-endpoint-surface-checkpoint-tests test/origin_boarding_source_endpoint_surface_checkpoint_test.cpp)
-  target_link_libraries(apsis-drift-boarding-source-endpoint-surface-checkpoint-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-surface-checkpoint-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-source-endpoint-surface-checkpoint-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-source-endpoint-surface-checkpoint-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-source-endpoint-surface-checkpoint-contract COMMAND apsis-drift-boarding-source-endpoint-surface-checkpoint-tests)
   set_tests_properties(boarding-source-endpoint-surface-checkpoint-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-lower-foot-transfer-tests test/origin_boarding_lower_foot_transfer_test.cpp)
-  target_link_libraries(apsis-drift-boarding-lower-foot-transfer-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-lower-foot-transfer-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-lower-foot-transfer-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-lower-foot-transfer-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-lower-foot-transfer-contract COMMAND apsis-drift-boarding-lower-foot-transfer-tests)
   set_tests_properties(boarding-lower-foot-transfer-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests test/origin_boarding_lower_foot_transfer_surface_sweep_test.cpp)
-  target_link_libraries(apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-lower-foot-transfer-surface-sweep-contract COMMAND apsis-drift-boarding-lower-foot-transfer-surface-sweep-tests)
   set_tests_properties(boarding-lower-foot-transfer-surface-sweep-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-world-checkpoint-tests test/origin_boarding_world_checkpoint_test.cpp)
-  target_link_libraries(apsis-drift-boarding-world-checkpoint-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-world-checkpoint-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-world-checkpoint-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-world-checkpoint-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-world-checkpoint-contract COMMAND apsis-drift-boarding-world-checkpoint-tests)
   set_tests_properties(boarding-world-checkpoint-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-planted-legs-tests test/origin_boarding_planted_legs_test.cpp)
-  target_link_libraries(apsis-drift-boarding-planted-legs-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-planted-legs-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-planted-legs-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-planted-legs-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-planted-legs-contract COMMAND apsis-drift-boarding-planted-legs-tests)
   set_tests_properties(boarding-planted-legs-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-planted-leg-timing-tests test/origin_boarding_planted_leg_timing_test.cpp)
-  target_link_libraries(apsis-drift-boarding-planted-leg-timing-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-planted-leg-timing-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-planted-leg-timing-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-planted-leg-timing-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-planted-leg-timing-contract COMMAND apsis-drift-boarding-planted-leg-timing-tests)
   set_tests_properties(boarding-planted-leg-timing-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-planted-body-tests test/origin_boarding_planted_body_test.cpp)
-  target_link_libraries(apsis-drift-boarding-planted-body-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-planted-body-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-planted-body-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-planted-body-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-planted-body-contract COMMAND apsis-drift-boarding-planted-body-tests)
   set_tests_properties(boarding-planted-body-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-planted-hip-preflight-tests test/origin_boarding_planted_hip_preflight_test.cpp)
-  target_link_libraries(apsis-drift-boarding-planted-hip-preflight-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-boarding-planted-hip-preflight-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY})
   target_include_directories(apsis-drift-boarding-planted-hip-preflight-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-boarding-planted-hip-preflight-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-planted-hip-preflight-contract COMMAND apsis-drift-boarding-planted-hip-preflight-tests)
   set_tests_properties(boarding-planted-hip-preflight-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-cabin-corridor-tests test/origin_cabin_corridor_test.cpp)
-  target_link_libraries(apsis-drift-cabin-corridor-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_link_libraries(apsis-drift-cabin-corridor-tests PRIVATE ${APSIS_BOARDING_RESEARCH_TEST_LIBRARY} nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-corridor-tests PRIVATE
     APSIS_LOWER_CONTACT_FIXTURE="${APSIS_LOWER_CONTACT_DATA}"
     APSIS_LOWER_CONTACT_POLICY_FIXTURE="${APSIS_LOWER_CONTACT_POLICY}"
@@ -649,6 +652,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME cabin-corridor-contract COMMAND apsis-drift-cabin-corridor-tests)
   set_tests_properties(cabin-corridor-contract PROPERTIES TIMEOUT 180)
+  unset(APSIS_BOARDING_RESEARCH_TEST_LIBRARY)
+
   add_executable(apsis-drift-lower-cockpit-contact-tests test/origin_lower_cockpit_contact_test.cpp)
   target_link_libraries(apsis-drift-lower-cockpit-contact-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-lower-cockpit-contact-tests PRIVATE
@@ -660,7 +665,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME lower-cockpit-contact-contract COMMAND apsis-drift-lower-cockpit-contact-tests)
   set_tests_properties(lower-cockpit-contact-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-stowed-lower-cockpit-contact-tests test/origin_stowed_lower_cockpit_contact_test.cpp)
-  target_link_libraries(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  # This runtime-contact regression also invokes the deferred corridor certifier.
+  target_link_libraries(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE apsis-drift::boarding-research nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE
     APSIS_LOWER_CONTACT_FIXTURE="${APSIS_LOWER_CONTACT_DATA}"
     APSIS_LOWER_CONTACT_POLICY_FIXTURE="${APSIS_LOWER_CONTACT_POLICY}"
