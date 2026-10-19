@@ -685,6 +685,23 @@ func check_station_settings(view: Control, owner: Variant, path: String, bytes: 
 	view.selected_pad = 41
 	view.available_pads = {41: true, 42: true}
 	view.open_settings()
+	# Godot needs the visible modal's container layout before focus navigation.
+	for frame in 4: await process_frame
+	var slider: HSlider = view.settings_view.fields.deadzone.control
+	var before_slider := slider.value
+	var direction := JOY_BUTTON_DPAD_LEFT if before_slider >= slider.max_value else JOY_BUTTON_DPAD_RIGHT
+	joy_button(direction, true, 42)
+	joy_button(direction, false, 42)
+	check(slider.value == before_slider and slider.has_focus(), "Foreign pad changed station pending slider/focus")
+	joy_button(direction, true, 41)
+	joy_button(direction, false, 41)
+	check(slider.value != before_slider and view.settings_view.pending.deadzone == slider.value, "Selected station pad could not adjust its pending slider")
+	check(provider.settings == original_settings and not FileAccess.file_exists(config_path), "Controller slider adopted or saved pending settings before Apply")
+	joy_button(JOY_BUTTON_DPAD_DOWN, true, 41)
+	await process_frame
+	joy_button(JOY_BUTTON_DPAD_DOWN, false, 41)
+	await process_frame
+	check(view.settings_view.fields.curve.control.has_focus(), "Selected station D-pad could not navigate Settings")
 	joy_button(JOY_BUTTON_B, true, 42)
 	joy_button(JOY_BUTTON_B, false, 42)
 	check(view.settings_open() and view.paused, "Foreign pad dismissed station Settings")
@@ -695,6 +712,21 @@ func check_station_settings(view: Control, owner: Variant, path: String, bytes: 
 	joy_button(JOY_BUTTON_START, true, 41)
 	joy_button(JOY_BUTTON_START, false, 41)
 	check(not view.settings_open() and view.paused, "Selected station Start resumed from nested Settings")
+	view.open_settings()
+	view.controller_connection_changed(41, false)
+	joy_button(JOY_BUTTON_START, true, 42)
+	joy_button(JOY_BUTTON_START, false, 42)
+	check(view.settings_open() and view.paused and view.selected_pad == 42, "Replacement station pad did not stay in paused Settings")
+	before_slider = slider.value
+	joy_button(direction, true, 41)
+	joy_button(direction, false, 41)
+	check(slider.value == before_slider, "Disconnected station pad changed pending settings")
+	joy_button(direction, true, 42)
+	joy_button(direction, false, 42)
+	check(slider.value != before_slider and provider.settings == original_settings and not FileAccess.file_exists(config_path), "Replacement station pad lost Settings navigation or applied pending choices")
+	joy_button(JOY_BUTTON_B, true, 42)
+	joy_button(JOY_BUTTON_B, false, 42)
+	check(not view.settings_open() and view.paused, "Replacement station pad could not cancel without resuming")
 	view.selected_pad = old_device
 	view.available_pads = old_devices
 	view.open_settings()

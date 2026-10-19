@@ -565,6 +565,9 @@ func open_settings() -> void:
 	pause_controls("Control choices stay pending until Apply.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
+	# The staged provider initially installs menus for its launch-time device.
+	# Rebind accepted mappings before this modal delegates navigation to Godot.
+	preferences_provider.install()
 	hud_scroll.hide()
 	settings_view.open()
 
@@ -764,6 +767,7 @@ func try_select_controller(event: InputEvent) -> bool:
 	if focused and save_dialog != null and not save_dialog.visible and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START and available_pads.get(event.device, false) and not available_pads.get(selected_pad, false):
 		selected_pad = event.device
 		if preferences_provider != null: preferences_provider.device = selected_pad
+		if settings_open(): preferences_provider.install()
 		pause_controls("Controller selected. Release controls, then Resume explicitly.")
 		return true
 	return false
