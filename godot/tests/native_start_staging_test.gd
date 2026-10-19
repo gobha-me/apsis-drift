@@ -231,6 +231,9 @@ func check_boarding_look(walk: Control, bridge: Variant, label: String) -> void:
 	motion.relative = Vector2(NAN, INF)
 	walk._input(motion)
 	check(walk.boarding_look == accepted, label + ": invalid mouse motion contaminated the transition")
+	# Exercise each input source away from the previous source's camera limit.
+	walk.boarding_look = Vector2.ZERO
+	accepted = walk.boarding_look
 	var key: int = walk.preferences_provider.bindings.look_right.key.code
 	physical_key(KEY_W, true)
 	physical_key(key, true)
@@ -239,6 +242,7 @@ func check_boarding_look(walk: Control, bridge: Variant, label: String) -> void:
 	physical_key(KEY_W, false)
 	check(walk.boarding_look.x > accepted.x, label + ": key look failed; before=%s after=%s key=%s paused=%s" % [accepted, walk.boarding_look, key, walk.paused])
 	check(commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": key look steered the route; commands=%s heading=%s" % [commands, heading])
+	walk.boarding_look = Vector2.ZERO
 	accepted = walk.boarding_look
 	joy_axis(JOY_AXIS_RIGHT_X, 0.8, 9)
 	walk.input_controls(0.1)
@@ -361,6 +365,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	board_key.pressed = true
 	Input.parse_input_event(board_key)
 	Input.flush_buffered_events()
+	board_key = board_key.duplicate()
 	board_key.pressed = false
 	Input.parse_input_event(board_key)
 	Input.flush_buffered_events()
