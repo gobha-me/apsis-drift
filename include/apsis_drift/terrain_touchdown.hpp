@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/godot/saved_contact_geometry.hpp"
+#include "apsis_drift/terrain_support.hpp"
 #include "apsis_drift/touchdown.hpp"
 
 namespace apsis_drift {
@@ -10,12 +11,6 @@ namespace apsis_drift {
 // selected physical local-detail field. Both use finest top triangulation,
 // rigid dry bedrock and no water landing.
 inline constexpr std::uint32_t kTerrainTouchdownPolicyVersion{1};
-
-enum class TerrainSupportError : std::uint8_t {
-  unresolved_geometry,
-  invalid_geometry,
-  first_surface_not_certified
-};
 
 struct TerrainTouchdownResult {
   std::uint32_t policy_version{kTerrainTouchdownPolicyVersion};

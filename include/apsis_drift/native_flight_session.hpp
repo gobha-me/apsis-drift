@@ -1,17 +1,28 @@
 #pragma once
 
+#include "apsis_drift/freedom_local_jump.hpp"
 #include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
 
 namespace apsis_drift {
+class MoonSurfaceWalkTerrain;
 struct NativeFlightControls {
   RigidVector3 positive_translation, negative_translation;
   RigidVector3 positive_rotation, negative_rotation;
 };
+struct NativeMoonFlightObservation {
+  MoonBodyGravity gravity;
+  PhysicalMoonRotationGeometry rotation;
+  double altitude_metres{}, speed_metres_per_second{};
+  double radial_speed_metres_per_second{}, tangential_speed_metres_per_second{};
+  friend auto operator==(const NativeMoonFlightObservation&,
+                         const NativeMoonFlightObservation&) -> bool = default;
+};
 struct NativeFlightObservation {
   AtmosphericFlightSample atmosphere;
   OrbitalTelemetry orbit;
+  std::optional<NativeMoonFlightObservation> moon{};
   friend auto operator==(const NativeFlightObservation&,
                          const NativeFlightObservation&) -> bool = default;
 };
@@ -22,6 +33,7 @@ struct NativeFlightStep {
   std::uint64_t fuel_debit_quanta{};
   bool propulsion_refused{};
   bool jump_committed{}, jump_arrived{};
+  std::optional<MoonBodyActuation> moon{};
 };
 
 // Transient player command, never part of the save/world recipe. The aid only
@@ -109,6 +121,11 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto travel_document() const
       -> std::expected<FreedomTravelSaveDocument, std::string>;
   [[nodiscard]] auto select_jump(SystemId) -> std::expected<void, std::string>;
+  [[nodiscard]] auto select_local_jump(BodyTarget)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto local_jump_preview() const
+      -> std::expected<FrozenLocalBodyJumpArrival, std::string>;
+
   [[nodiscard]] auto jump_preview() const
       -> std::expected<FreedomJumpPreview, std::string>;
   [[nodiscard]] auto begin_jump() -> std::expected<void, std::string>;
@@ -119,6 +136,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
+  }
+  [[nodiscard]] auto moon() const
+      -> const std::optional<PhysicalMoonDescriptor>& {
+    return moon_;
   }
   [[nodiscard]] auto rotation() const -> const PhysicalPlanetRotationRecipe& {
     return rotation_;
@@ -260,6 +281,30 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto set_moon_landing_gear(bool)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto commit_moon_touchdown(std::uint64_t)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto release_moon_surface() -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_moon_supported_tick(const NativeFlightControls&,
+                                                 SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  auto try_moon_surface_contact() -> void;
+  [[nodiscard]] auto begin_moon_surface_walk()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto moon_surface_return_access() const
+      -> std::expected<PlanetSurfaceReturnAccess, std::string>;
+  [[nodiscard]] auto return_from_moon_surface_walk()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_moon_surface_walk(const OriginWalkControls&,
+                                               SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto local_jump_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_local_jump() -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_local_jump(const NativeFlightControls&,
+                                        SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto store_surface_marker(bool replace)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_jump(const NativeFlightControls&,
@@ -276,6 +321,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto boarding_document() const -> FreedomBoardingSaveDocument;
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_moon_tick(const NativeFlightControls&,
+                                       SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto advance_impact_tick(const NativeFlightControls&,
                                          SimulationSeconds)
@@ -301,6 +349,7 @@ class NativeFreedomFlightSession {
   std::optional<CraftCondition> retired_condition_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
+  std::optional<PhysicalMoonDescriptor> moon_;
   std::optional<std::filesystem::path> source_save_;
   std::optional<FreedomDockingState> docking_;
   std::optional<OriginWalkerState> actor_;
@@ -316,6 +365,7 @@ class NativeFreedomFlightSession {
   std::optional<PlanetSurfaceWalkerState> surface_walker_;
   std::optional<PlanetSurfaceWalkStatus> surface_walk_blockage_;
   std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
+  std::shared_ptr<MoonSurfaceWalkTerrain> moon_walk_terrain_;
   // Pure derived terrain memoization, never a saved world or actor owner.
   mutable std::shared_ptr<SurfaceLandmarkField> surface_landmark_field_;
   mutable SystemId surface_landmark_system_{};

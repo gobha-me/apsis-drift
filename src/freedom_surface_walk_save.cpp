@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_surface_walk_save.hpp"
+#include "freedom_moon_walk_save_internal.hpp"
 
 #include "apsis_drift/native_flight_session.hpp"
 
@@ -65,6 +66,8 @@ auto vector_value(const Json& j)
 auto validate_freedom_surface_walk_document(
     const FreedomSurfaceWalkSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (recovery_flight(d.voyage.voyage).moon)
+    return detail::validate_moon_walk(d);
   if (d.suit_version != 1)
     return std::unexpected{failure("Unsupported prototype suit policy")};
   if (auto valid = validate_freedom_recovery_document(d.voyage); !valid)
@@ -102,6 +105,7 @@ auto validate_freedom_surface_walk_document(
 auto encode_freedom_surface_walk_document_json(
     const FreedomSurfaceWalkSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
+  if (recovery_flight(d.voyage.voyage).moon) return detail::encode_moon_walk(d);
   if (auto valid = validate_freedom_surface_walk_document(d); !valid)
     return std::unexpected{valid.error()};
   const auto base = encode_freedom_recovery_document_json(d.voyage);
@@ -158,6 +162,8 @@ auto decode_freedom_surface_walk_document_json(std::string_view text)
     if (!root.is_object() || !root.contains("format_version") ||
         !root["format_version"].is_number_unsigned())
       return std::unexpected{failure("Unsigned format required")};
+    if (root["format_version"] == kFreedomMoonSurfaceWalkSaveFormatVersion)
+      return detail::decode_moon_walk(root);
     if (root["format_version"] != kFreedomSurfaceWalkSaveFormatVersion)
       return std::unexpected{SaveSchemaError{
           SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -168,6 +174,9 @@ auto decode_freedom_surface_walk_document_json(std::string_view text)
     auto base = decode_freedom_recovery_document_json(root["voyage"].dump());
     if (!base) return std::unexpected{base.error()};
     FreedomSurfaceWalkSaveDocument d{std::move(*base), 1, {}};
+    if (recovery_flight(d.voyage.voyage).moon)
+      return std::unexpected{
+          failure("Moon walking requires explicit format44")};
     const auto& a = root["actor"];
     if (!a.is_null()) {
       if (!fields(a, {"version", "actor_id", "system", "planet",

@@ -1,5 +1,7 @@
 #include "apsis_drift/freedom_surface_save.hpp"
 
+#include "freedom_moon_surface_save_internal.hpp"
+
 #include <array>
 #include <nlohmann/json.hpp>
 #include <type_traits>
@@ -147,6 +149,9 @@ auto surface_base_flight(const FreedomSurfaceBaseSave& base)
 
 auto validate_freedom_surface_document(const FreedomSurfaceSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (const auto* flight = std::get_if<FreedomFlightSaveDocument>(&d.base);
+      (flight && flight->moon) || d.surface.moon_landed)
+    return detail::validate_moon_surface(d);
   const auto base = encode_base(d.base);
   if (!base) return std::unexpected{base.error()};
   const auto& flight = surface_base_flight(d.base);
@@ -191,6 +196,9 @@ auto validate_freedom_surface_document(const FreedomSurfaceSaveDocument& d)
 
 auto encode_freedom_surface_document_json(const FreedomSurfaceSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
+  if (const auto* flight = std::get_if<FreedomFlightSaveDocument>(&d.base);
+      (flight && flight->moon) || d.surface.moon_landed)
+    return detail::encode_moon_surface(d);
   if (auto valid = validate_freedom_surface_document(d); !valid)
     return std::unexpected{valid.error()};
   const auto base = encode_base(d.base);
@@ -261,6 +269,8 @@ auto decode_freedom_surface_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  if (root["format_version"] == kFreedomMoonSurfaceSaveFormatVersion)
+    return detail::decode_moon_surface(root);
   if (root["format_version"] != kFreedomSurfaceSaveFormatVersion)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::unsupported_format_version,

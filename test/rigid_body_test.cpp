@@ -484,6 +484,191 @@ auto document_contract(const Fixture& fixture) -> void {
   check(decode_rigid_body_state_json(fixture.context, good).has_value(),
         "valid document still hydrates after malformed corpus");
 }
+
+auto moon_contract(const Fixture& fixture) -> void {
+  for (const auto version : {1U, 2U}) {
+    const auto owner = generate_physical_origin_system(Seed{42}, version);
+    check(owner.has_value(), "Physical moon parent fixture generated");
+    if (!owner) return;
+    const auto catalog = generate_secondary_body_catalog(*owner);
+    check(catalog.has_value(), "Authentic secondary catalog generated");
+    if (!catalog) return;
+    const auto moon =
+        generate_physical_moon_descriptor(*catalog, catalog->bodies[0].node.id);
+    check(moon.has_value(), "Authentic physical moon generated");
+    if (!moon) return;
+    const RigidBodyWorldContext context{*moon, &fixture.station};
+    const RigidBodyWorldContext physical{*owner, &fixture.station};
+    auto state = fixture.state();
+    state.frame = {RigidFrameKind::body_relative_inertial,
+                   owner->catalog.id,
+                   {},
+                   {},
+                   moon->body};
+    const auto before = state;
+    check(validate_rigid_body_state(context, state).has_value(),
+          "Exact moon-relative owner accepted");
+    const auto bytes = encode_rigid_body_state_json(context, state);
+    const auto hash = rigid_body_state_checksum(context, state);
+    check(bytes && hash, "Moon-relative projection encodes/checksums");
+    if (!bytes || !hash) return;
+    check(bytes->find("\"version\":4") != std::string::npos &&
+              bytes->find(
+                  "\"body\":{\"version\":1,\"kind\":\"moon\",\"value\":\"" +
+                  std::to_string(moon->body.value) + "\"}") !=
+                  std::string::npos &&
+              bytes->find("\"moon_owner\":{\"family\":\"physical_moon\"") !=
+                  std::string::npos,
+          "Moon v4 includes typed identity and explicit physical recipe owner");
+    const auto loaded = decode_rigid_body_state_json(context, *bytes);
+    check(loaded && same_bits(*loaded, before) &&
+              encode_rigid_body_state_json(context, *loaded) == bytes &&
+              rigid_body_state_checksum(context, *loaded) == hash,
+          "Moon projection resumes every state bit and canonical byte exactly");
+    auto fixed = state;
+    fixed.frame.kind = RigidFrameKind::body_fixed;
+    const auto fixed_bytes = encode_rigid_body_state_json(context, fixed);
+    check(fixed_bytes &&
+              fixed_bytes->find("\"body_fixed\"") != std::string::npos &&
+              rigid_body_state_checksum(context, fixed) != hash,
+          "Moon fixed frame has explicit v4 kind and distinct checksum");
+    if (fixed_bytes) {
+      const auto restored = decode_rigid_body_state_json(context, *fixed_bytes);
+      check(restored && same_bits(*restored, fixed) &&
+                !decode_rigid_body_state_json(physical, *fixed_bytes) &&
+                !decode_rigid_body_state_json(fixture.context, *fixed_bytes),
+            "Moon fixed bytes roundtrip only under explicit moon owner");
+    }
+    auto alias = state;
+    alias.orientation = {-.5, -.5, .5, -.5};
+    const auto canonical = canonicalize_rigid_body_state(context, alias);
+    check(canonical && same_bits(*canonical, state) &&
+              rigid_body_state_checksum(context, *canonical) == hash,
+          "Moon q/-q uses the existing canonical checksum contract");
+    check(!validate_rigid_body_state(physical, state) &&
+              !validate_rigid_body_state(fixture.context, state) &&
+              !decode_rigid_body_state_json(physical, *bytes) &&
+              !decode_rigid_body_state_json(fixture.context, *bytes),
+          "Physical-only and legacy contexts cannot adopt a moon frame");
+    for (const auto kind :
+         {BodyKind::star, BodyKind::planet, BodyKind::minor}) {
+      auto bad = state;
+      bad.frame.body->kind = kind;
+      check(!validate_rigid_body_state(context, bad) &&
+                !encode_rigid_body_state_json(context, bad),
+            "A numeric moon word cannot alias another body kind");
+    }
+    auto bad = state;
+    ++bad.frame.body->value;
+    check(!validate_rigid_body_state(context, bad),
+          "Foreign moon identity refused");
+    bad = state;
+    ++bad.frame.body->version;
+    check(!validate_rigid_body_state(context, bad),
+          "Unknown body identity policy refused");
+    bad = state;
+    bad.frame.body.reset();
+    check(!validate_rigid_body_state(context, bad),
+          "Moon frame requires a typed body");
+    bad = state;
+    bad.frame.planet = owner->catalog.planets.front().descriptor.id;
+    check(!validate_rigid_body_state(context, bad),
+          "Mixed moon/planet frame refused");
+    bad = state;
+    bad.frame.station = fixture.station.id;
+    check(!validate_rigid_body_state(context, bad),
+          "Mixed moon/station frame refused");
+    bad = state;
+    bad.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+    check(!canonicalize_rigid_body_state(context, bad),
+          "Nonfinite moon state refused before serialization");
+    auto forged = *moon;
+    ++forged.radius_metres;
+    check(!validate_rigid_body_state(RigidBodyWorldContext{forged}, state) &&
+              !decode_rigid_body_state_json(RigidBodyWorldContext{forged},
+                                            *bytes),
+          "Tampered physical descriptor cannot authenticate a matching body "
+          "word");
+    const auto foreign_owner =
+        generate_physical_origin_system(Seed{43}, version);
+    if (!foreign_owner) {
+      check(false, "Foreign physical fixture generated");
+      return;
+    }
+    const auto foreign_catalog =
+        generate_secondary_body_catalog(*foreign_owner);
+    if (!foreign_catalog) {
+      check(false, "Foreign secondary fixture generated");
+      return;
+    }
+    const auto foreign = generate_physical_moon_descriptor(
+        *foreign_catalog, foreign_catalog->bodies[0].node.id);
+    if (!foreign) {
+      check(false, "Foreign moon fixture generated");
+      return;
+    }
+    check(
+        !decode_rigid_body_state_json(RigidBodyWorldContext{*foreign}, *bytes),
+        "Foreign authenticated moon owner cannot hydrate saved state");
+    const auto refuse = [&](std::string value) {
+      check(!decode_rigid_body_state_json(context, value),
+            "Malformed/tampered moon projection refused");
+    };
+    refuse(replace_once(*bytes, "\"kind\":\"moon\"", "\"kind\":\"planet\""));
+    refuse(replace_once(
+        *bytes, "\"value\":\"" + std::to_string(moon->body.value) + "\"",
+        "\"value\":\"0\""));
+    refuse(replace_once(*bytes, "\"secondary_catalog\":1",
+                        "\"secondary_catalog\":2"));
+    refuse(replace_once(*bytes, "\"family\":\"physical_moon\"",
+                        "\"family\":\"physical_circular\""));
+    refuse(replace_once(*bytes, "\"version\":4", "\"version\":3"));
+    refuse(replace_once(
+        *bytes, "\"planet\":null",
+        "\"planet\":\"" +
+            std::to_string(owner->catalog.planets.front().descriptor.id.value) +
+            "\""));
+    refuse(replace_once(*bytes, "\"kind\":\"moon\"",
+                        "\"kind\":\"moon\",\"unexpected\":0"));
+    refuse(replace_once(*bytes, "\"kind\":\"moon\"",
+                        "\"kind\":\"moon\",\"kind\":\"moon\""));
+    refuse(replace_once(*bytes, "\"1.25\"", "\"nan\""));
+    refuse(replace_once(*bytes, "\"1.25\"", "\"-0\""));
+    // Selecting a moon context does not change any old planet/system encoding
+    // or checksum domain. Legacy literal goldens are still checked separately.
+    for (const auto kind :
+         {RigidFrameKind::system_inertial, RigidFrameKind::planet_fixed,
+          RigidFrameKind::planet_relative_inertial,
+          RigidFrameKind::station_relative_inertial}) {
+      auto old = fixture.state();
+      old.frame = {kind, owner->catalog.id, {}, {}};
+      if (kind == RigidFrameKind::planet_fixed ||
+          kind == RigidFrameKind::planet_relative_inertial)
+        old.frame.planet = owner->catalog.planets.front().descriptor.id;
+      if (kind == RigidFrameKind::station_relative_inertial)
+        old.frame.station = fixture.station.id;
+      const auto old_bytes = encode_rigid_body_state_json(physical, old);
+      const auto old_hash = rigid_body_state_checksum(physical, old);
+      check(old_bytes && old_hash &&
+                encode_rigid_body_state_json(context, old) == old_bytes &&
+                rigid_body_state_checksum(context, old) == old_hash,
+            "Moon context leaves historical physical frame bytes/checksums "
+            "exact");
+      if (old_bytes) {
+        const auto restored = decode_rigid_body_state_json(context, *old_bytes);
+        check(restored && same_bits(*restored, old),
+              "Moon context reads unchanged historical physical frame");
+      }
+      old.frame.body = moon->body;
+      check(!validate_rigid_body_state(context, old),
+            "Old frame rejects added body identity instead of silently "
+            "ignoring it");
+    }
+    check(same_bits(state, before),
+          "Moon queries leave the authoritative source unchanged");
+  }
+}
+
 } // namespace
 
 auto main() -> int {
@@ -493,6 +678,7 @@ auto main() -> int {
   orientation_contract(fixture);
   document_contract(fixture);
   golden_contract(fixture);
+  moon_contract(fixture);
   std::cout << "Rigid-body state contracts: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }

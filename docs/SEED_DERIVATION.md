@@ -27,6 +27,11 @@ The public domains and their permanent version 1 identifiers are:
 | `mission` | 10 |
 | `jump_alignment` | 11 |
 | `navigation` | 12 |
+| `starter_craft` | 13 |
+| `jump_arrival` | 14 |
+| `surface_landmark` | 15 |
+| `secondary_body` | 16 |
+| `moon_surface` | 17 |
 
 ## Version 1 algorithm
 

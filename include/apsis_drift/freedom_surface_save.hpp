@@ -2,11 +2,13 @@
 
 #include "apsis_drift/freedom_boarding_save.hpp"
 #include "apsis_drift/landed_craft.hpp"
+#include "apsis_drift/moon_landed_craft.hpp"
 
 #include <variant>
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomSurfaceSaveFormatVersion{23};
+inline constexpr std::uint32_t kFreedomMoonSurfaceSaveFormatVersion{43};
 using FreedomSurfaceBaseSave =
     std::variant<FreedomFlightSaveDocument, FreedomDockingSaveDocument,
                  FreedomJourneySaveDocument,
@@ -15,6 +17,7 @@ using FreedomSurfaceBaseSave =
 struct FreedomSurfaceState {
   bool gear_deployed{};
   std::optional<LandedCraftAnchor> landed;
+  std::optional<MoonLandedCraftAnchor> moon_landed{};
   friend auto operator==(const FreedomSurfaceState&, const FreedomSurfaceState&)
       -> bool = default;
 };

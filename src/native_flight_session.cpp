@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/moon_surface_walker.hpp"
 #include "apsis_drift/planet_optics.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
@@ -22,7 +23,10 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
     FreedomFlightSaveDocument document, FreedomFlightHydration hydrated,
     std::optional<std::filesystem::path> source)
     : document_(std::move(document)), system_(std::move(hydrated.system)),
-      rotation_(hydrated.rotation), source_save_(std::move(source)) {
+      rotation_(hydrated.rotation),
+      moon_(hydrated.moon ? std::optional{std::move(hydrated.moon->moon)}
+                          : std::nullopt),
+      source_save_(std::move(source)) {
 }
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
@@ -179,8 +183,9 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
        (travel && travel->phase != FreedomJumpPhase::idle)))
     return std::unexpected{"System flight cannot select contact, outside "
                            "actors, impacts or an active jump yet"};
-  const auto reference =
-      find_local_system_planet(hydrated->system, *relative->frame.planet);
+  const auto reference = find_local_system_planet(
+      hydrated->system, hydrated->moon ? document.origin.recipe.home_planet
+                                       : *relative->frame.planet);
   if (!reference || selected.home_planet != (*reference)->descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};
@@ -206,7 +211,16 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.retired_condition_ = retired_condition;
   result.surface_walk_selected_ = surface_walk_selected;
   result.surface_walker_ = surface_actor;
-  if (surface_actor) {
+  if (surface_actor && result.moon_) {
+    if (!result.surface_ || !result.surface_->moon_landed)
+      return std::unexpected{"Moon walker has no supported craft"};
+    auto terrain = MoonSurfaceWalkTerrain::create(*result.moon_,
+                                                  *result.surface_->moon_landed,
+                                                  result.document_.flight.tick);
+    if (!terrain) return std::unexpected{terrain.error()};
+    result.moon_walk_terrain_ =
+        std::make_shared<MoonSurfaceWalkTerrain>(std::move(*terrain));
+  } else if (surface_actor) {
     auto terrain = PlanetSurfaceWalkTerrain::create(
         result.system_, result.rotation_, *result.surface_->landed,
         result.document_.flight.tick);
@@ -459,7 +473,9 @@ auto NativeFreedomFlightSession::relative_state() const
     -> std::expected<RigidBodyState, std::string> {
   // Admission and committing mutations already validate this private state.
   // Ordinary relative observations retain the existing direct-body path.
-  if (document_.flight.frame.kind == RigidFrameKind::planet_relative_inertial)
+  if (document_.flight.frame.kind == RigidFrameKind::planet_relative_inertial ||
+      (moon_ &&
+       document_.flight.frame.kind == RigidFrameKind::body_relative_inertial))
     return document_.flight;
   // The complete owner was authenticated at open or a committing command.
   // Ordinary ticks use that owner without document-level world rederivation.
@@ -503,6 +519,35 @@ auto NativeFreedomFlightSession::relative_state() const
 
 auto NativeFreedomFlightSession::observe() const
     -> std::expected<NativeFlightObservation, std::string> {
+  if (moon_) {
+    const RigidBodyWorldContext context{*moon_};
+    const auto gravity = evaluate_moon_body_gravity(context, document_.flight);
+    const auto fixed = reframe_rigid_body(
+        context, document_.flight,
+        {{RigidFrameKind::body_fixed, system_.catalog.id, {}, {}, moon_->body},
+         document_.flight.tick},
+        *moon_);
+    if (!gravity || !fixed) return std::unexpected{"Moon observation refused"};
+    const auto rotation = resolve_physical_moon_rotation(
+        *moon_, document_.flight.tick, fixed->position_metres);
+    if (!rotation) return std::unexpected{"Moon illumination refused"};
+    const auto position = document_.flight.position_metres;
+    const auto velocity = document_.flight.linear_velocity_metres_per_second;
+    const double distance = gravity->distance_metres;
+    const double radial = ((position.x * velocity.x + position.y * velocity.y) +
+                           position.z * velocity.z) /
+                          distance;
+    const RigidVector3 tangent{velocity.x - radial * position.x / distance,
+                               velocity.y - radial * position.y / distance,
+                               velocity.z - radial * position.z / distance};
+    return NativeFlightObservation{
+        {},
+        {},
+        NativeMoonFlightObservation{
+            *gravity, *rotation, distance - moon_->radius_metres,
+            std::hypot(velocity.x, velocity.y, velocity.z), radial,
+            std::hypot(tangent.x, tangent.y, tangent.z)}};
+  }
   const RigidBodyWorldContext context{system_};
   VacuumIntent intent;
   intent.assistance = document_.model.assistance;
@@ -521,6 +566,12 @@ auto NativeFreedomFlightSession::observe() const
 
 auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
+  if (moon_) {
+    if (request.version != kOrbitHoldVersion || request.target)
+      return std::unexpected{"Moon orbit hold is unavailable"};
+    document_.model.hold = request;
+    return {};
+  }
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -553,6 +604,7 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
 
 auto NativeFreedomFlightSession::current_orbit_hold_target() const
     -> std::expected<OrbitHoldTarget, std::string> {
+  if (moon_) return std::unexpected{"Moon orbit hold is unavailable"};
   if (recovery_pending())
     return std::unexpected{"Continue the recorded loss before requesting hold"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
@@ -614,6 +666,7 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_ || surface_walker_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  if (moon_) return advance_moon_tick(controls, step);
   if (surface_ && (surface_->gear_deployed || surface_->landed ||
                    surface_maneuver_.kind != NativeSurfaceManeuverKind::off))
     return advance_surface(controls, step);
@@ -718,6 +771,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     *this = std::move(candidate);
     return result;
   }
+  if (moon_) return advance_moon_tick(controls, step);
   const RigidBodyWorldContext context{system_};
   VacuumIntent intent{controls.positive_translation,
                       controls.negative_translation, controls.positive_rotation,
@@ -1066,6 +1120,7 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (moon_) return set_moon_landing_gear(deployed);
   const bool selected =
       document_.model.frame_policy == kFreedomReleaseSystemFramePolicy;
   const bool system_frame =
@@ -1138,6 +1193,7 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
     std::optional<TerrainPadGapSample>* sampled_gap)
     -> std::expected<void, std::string> {
   if (sampled_gap) sampled_gap->reset();
+  if (moon_) return commit_moon_touchdown(expected_source_checksum);
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
     return std::unexpected{
         "System-flight landing/contact is not qualified yet"};
@@ -1181,6 +1237,7 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
 }
 auto NativeFreedomFlightSession::release_surface()
     -> std::expected<void, std::string> {
+  if (moon_) return release_moon_surface();
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};

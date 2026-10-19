@@ -351,7 +351,8 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
       r.ephemeris != flight.model.physical_ephemeris ||
       r.craft_lineage != flight.origin.lineage ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
-      (r.version == kFreedomTravelKnowledgeVersion) != flight.world.has_value())
+      (r.version == kFreedomTravelKnowledgeVersion) !=
+          (flight.world.has_value() || flight.moon.has_value()))
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
   return {};

@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "apsis_drift/atmospheric_flight.hpp"
+#include "apsis_drift/freedom_moon_world.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/orbit_hold.hpp"
 
@@ -59,6 +60,8 @@ struct FreedomFlightSaveDocument {
   RigidBodyState flight;
   FreedomFlightModel model;
   std::optional<FreedomActiveWorldSelection> world{};
+  // Explicit format42; exclusive with the historical planet selection.
+  std::optional<FreedomMoonWorldSelection> moon{};
   friend auto operator==(const FreedomFlightSaveDocument&,
                          const FreedomFlightSaveDocument&) -> bool = default;
 };
@@ -66,6 +69,9 @@ struct FreedomFlightHydration {
   PhysicalLocalSystem system;
   PhysicalPlanetRotationRecipe rotation;
   AtmosphericFlightSample atmosphere;
+  // Present only for the typed moon route. Planet rotation/atmosphere above
+  // are unavailable in that case; consumers must dispatch on this selection.
+  std::optional<FreedomMoonFlightHydration> moon{};
 };
 // Strict same-tick view of the sole canonical body; never changes the source,
 // selects a force body, or recursively hydrates a complete flight.

@@ -45,6 +45,8 @@ auto NativeFreedomFlightSession::surface_landmarks_view() const
     -> std::expected<FreedomSurfaceLandmarksView, std::string> {
   FreedomSurfaceLandmarksView view;
   const bool supported = supports_landmarks(knowledge_);
+  if (moon_)
+    return view; // Planetary site history stays retained on its own body.
   view.selected = supported && knowledge_->surface_landmarks.has_value();
   view.can_enable = supported && !view.selected && !recovery_pending();
   if (!view.selected) return view;

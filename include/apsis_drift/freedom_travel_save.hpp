@@ -2,12 +2,25 @@
 
 #include "apsis_drift/freedom_jump_targeting.hpp"
 #include "apsis_drift/freedom_knowledge_save.hpp"
+#include "apsis_drift/freedom_local_jump.hpp"
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomTravelSaveFormatVersion{27};
 inline constexpr std::uint32_t kFreedomTravelStateVersion{1};
+inline constexpr std::uint32_t kFreedomLocalTravelSaveFormatVersion{45};
+inline constexpr std::uint32_t kFreedomLocalTravelStateVersion{2};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
+struct FreedomLocalTravelState {
+  std::optional<BodyTarget> selected;
+  std::optional<FrozenLocalBodyJumpArrival> committed;
+  std::optional<FreedomResources> commitment_resources;
+  // Original home-to-Moon proof retains the actual home model through return.
+  // Subsequent commitments never overwrite or infer this source profile.
+  std::optional<FrozenLocalBodyJumpArrival> outbound;
+  friend auto operator==(const FreedomLocalTravelState&,
+                         const FreedomLocalTravelState&) -> bool = default;
+};
 struct FreedomTravelState {
   std::uint32_t version{kFreedomTravelStateVersion};
   FreedomJumpPhase phase{FreedomJumpPhase::idle};
@@ -18,6 +31,9 @@ struct FreedomTravelState {
   // transit its request is the immutable source and its point is authoritative.
   std::optional<FrozenFreedomJumpArrival> committed;
   std::optional<FreedomResources> commitment_resources;
+  // Explicit version2 only. Existing intersystem commitment/bill remain prior
+  // history; phase, spool clock and attempt counter own the selected local leg.
+  std::optional<FreedomLocalTravelState> local{};
   friend auto operator==(const FreedomTravelState&, const FreedomTravelState&)
       -> bool = default;
 };

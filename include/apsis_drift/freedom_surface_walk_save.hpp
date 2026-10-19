@@ -5,6 +5,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomSurfaceWalkSaveFormatVersion{30};
+inline constexpr std::uint32_t kFreedomMoonSurfaceWalkSaveFormatVersion{44};
 // Explicit selection of prototype suited walking, with no oxygen timer. The
 // complete unchanged voyage remains the only craft, knowledge and clock owner.
 // A present ground actor supersedes the retained cabin occupancy; flight is

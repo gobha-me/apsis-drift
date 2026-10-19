@@ -1,4 +1,5 @@
 #include "apsis_drift/godot/flight_guidance.hpp"
+#include "apsis_drift/godot/moon_stream_runtime.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/godot/snapshot.hpp"
 #include "apsis_drift/godot/streaming.hpp"
@@ -195,14 +196,36 @@ class FreedomBridge : public godot::RefCounted {
   std::optional<NativeProfileCatalog> profile_catalog;
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
+  std::unique_ptr<MoonStreamRuntime> moon_stream;
+  std::set<MoonStreamKey> moon_exported;
   std::set<StreamKey> exported;
   std::uint64_t stream_generation{};
   auto replace_stream(std::unique_ptr<PlanetStream>&& replacement) -> void {
     if (stream_generation == std::numeric_limits<std::uint64_t>::max())
       throw std::overflow_error("Terrain stream generations exhausted");
     stream = std::move(replacement);
+    moon_stream.reset();
+    moon_exported.clear();
     exported.clear();
     ++stream_generation;
+  }
+  auto replace_moon_stream(std::unique_ptr<MoonStreamRuntime>&& replacement)
+      -> void {
+    if (stream_generation == std::numeric_limits<std::uint64_t>::max())
+      throw std::overflow_error("Terrain stream generations exhausted");
+    moon_stream = std::move(replacement);
+    stream.reset();
+    exported.clear();
+    moon_exported.clear();
+    ++stream_generation;
+  }
+  auto replace_saved_stream(const NativeFreedomFlightSession& session) -> void {
+    if (session.moon()) {
+      auto replacement = std::make_unique<MoonStreamRuntime>(*session.moon());
+      replacement->request(project_saved_moon_flight(session).tangent.origin);
+      replace_moon_stream(std::move(replacement));
+    } else
+      replace_stream(saved_stream(session));
   }
   static auto saved_stream(const NativeFreedomFlightSession& session)
       -> std::unique_ptr<PlanetStream> {
@@ -219,6 +242,7 @@ class FreedomBridge : public godot::RefCounted {
     std::unique_ptr<SavedFlightWorld> flight;
     std::unique_ptr<NativeFreedomStationStart> station;
     std::unique_ptr<PlanetStream> stream;
+    std::unique_ptr<MoonStreamRuntime> moon_stream;
     // Compare the complete selected owner, including consequence/suit wrappers.
     std::optional<NativeSaveDocument> recovery_source;
   };
@@ -256,10 +280,10 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
-      (void)project_saved_flight(*opened);
+      validate_saved_projection(*opened);
       auto candidate = std::make_unique<SavedFlightWorld>(
           SavedFlightWorld{std::move(*opened), {}, {}, 0});
-      replace_stream(saved_stream(candidate->session));
+      replace_saved_stream(candidate->session);
       world.reset();
       native_start.reset();
       saved_flight = std::move(candidate);
@@ -348,6 +372,18 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_jump", "system_id"),
         &FreedomBridge::select_freedom_jump);
+    godot::ClassDB::bind_method(godot::D_METHOD("select_freedom_moon_jump"),
+                                &FreedomBridge::select_freedom_moon_jump);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("select_freedom_home_body_jump"),
+        &FreedomBridge::select_freedom_home_body_jump);
+    godot::ClassDB::bind_method(godot::D_METHOD("request_freedom_moon_stream"),
+                                &FreedomBridge::request_freedom_moon_stream);
+    godot::ClassDB::bind_method(godot::D_METHOD("poll_freedom_moon_stream"),
+                                &FreedomBridge::poll_freedom_moon_stream);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("freedom_moon_stream_transforms", "anchors"),
+        &FreedomBridge::freedom_moon_stream_transforms);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_jump"),
                                 &FreedomBridge::begin_freedom_jump);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_jump"),
@@ -663,16 +699,28 @@ class FreedomBridge : public godot::RefCounted {
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
-      const auto view = project_saved_flight(*opened);
+      validate_saved_projection(*opened);
+      const bool station_available =
+          !opened->moon() && project_saved_flight(*opened).station_available;
       candidate->flight = std::make_unique<SavedFlightWorld>(
           SavedFlightWorld{std::move(*opened), {}, {}, 0});
       if (project_flight_state(*candidate->flight).is_empty() ||
-          (view.station_available &&
-           project_station_geometry(view.station).is_empty()) ||
+          (station_available &&
+           project_station_geometry(
+               generate_origin_station(candidate->flight->session.document()
+                                           .origin.recipe.universe_seed))
+               .is_empty()) ||
           (candidate->flight->session.walker() &&
            project_walk_state(*candidate->flight).is_empty()))
         throw std::runtime_error("Pending Freedom presentation is unavailable");
-      candidate->stream = saved_stream(candidate->flight->session);
+      if (candidate->flight->session.moon()) {
+        candidate->moon_stream = std::make_unique<MoonStreamRuntime>(
+            *candidate->flight->session.moon());
+        candidate->moon_stream->request(
+            project_saved_moon_flight(candidate->flight->session)
+                .tangent.origin);
+      } else
+        candidate->stream = saved_stream(candidate->flight->session);
     } else {
       auto start = prepare_native_freedom_station_start(std::move(selected));
       if (!start) throw std::runtime_error(start.error());
@@ -783,7 +831,8 @@ class FreedomBridge : public godot::RefCounted {
     if (!pending) return {};
     godot::Dictionary result;
     result["candidate_id"] = godot::String{pending->id.c_str()};
-    result["streaming_ready"] = pending->stream != nullptr;
+    result["streaming_ready"] =
+        pending->stream != nullptr || pending->moon_stream != nullptr;
     result["mode"] =
         pending->flight ? (pending->flight->session.walker() ? "freedom_walk"
                                                              : "freedom_flight")
@@ -803,7 +852,9 @@ class FreedomBridge : public godot::RefCounted {
     result["station_geometry"] =
         pending->station
             ? project_station_geometry(pending->station->station)
-            : (project_saved_flight(pending->flight->session).station_available
+            : (!pending->flight->session.moon() &&
+                       project_saved_flight(pending->flight->session)
+                           .station_available
                    ? project_station_geometry(generate_origin_station(
                          pending->flight->session.document()
                              .origin.recipe.universe_seed))
@@ -832,7 +883,10 @@ class FreedomBridge : public godot::RefCounted {
         return false;
       }
     }
-    replace_stream(std::move(pending->stream));
+    if (pending->moon_stream)
+      replace_moon_stream(std::move(pending->moon_stream));
+    else
+      replace_stream(std::move(pending->stream));
     world.reset();
     saved_flight = std::move(pending->flight);
     native_start = std::move(pending->station);
@@ -1066,7 +1120,7 @@ class FreedomBridge : public godot::RefCounted {
           previous_system != candidate->session.system().catalog.id ||
           previous_policy !=
               candidate->session.document().model.terrain_policy) {
-        replace_stream(saved_stream(candidate->session));
+        replace_saved_stream(candidate->session);
       }
       saved_flight = std::move(candidate);
       last_error = godot::String{};
@@ -1129,7 +1183,7 @@ class FreedomBridge : public godot::RefCounted {
       auto candidate = saved_flight->session;
       auto changed = command(candidate);
       if (!changed) throw std::runtime_error(changed.error());
-      (void)project_saved_flight(candidate);
+      validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
       if (reset_actuation) saved_flight->last_step.reset();
       last_error = godot::String{};
@@ -1140,6 +1194,26 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  auto select_freedom_moon_jump() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      if (session.moon()) return std::unexpected{"Already at the Moon"};
+      const auto catalog = generate_secondary_body_catalog(session.system());
+      if (!catalog) return std::unexpected{"Actual Moon catalog unavailable"};
+      return session.select_local_jump(
+          {session.system().catalog.id, catalog->bodies[0].node.id});
+    });
+  }
+  auto select_freedom_home_body_jump() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      if (!session.moon())
+        return std::unexpected{"Return home requires the actual Moon owner"};
+      return session.select_local_jump(
+          {session.system().catalog.id,
+           body_id(session.document().origin.recipe.home_planet)});
+    });
+  }
   auto select_freedom_jump(const godot::String& system_id) -> bool {
     return change_freedom_port([&](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
@@ -1288,7 +1362,7 @@ class FreedomBridge : public godot::RefCounted {
       const OriginWalkControls demand{controls[0], controls[1], controls[2]};
       for (int i = 0; i < scheduled.steps; ++i)
         actuation = require(candidate.advance_surface_walk(demand));
-      (void)project_saved_flight(candidate);
+      validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
       saved_flight->clock = clock;
       saved_flight->last_step = std::move(actuation);
@@ -1301,10 +1375,233 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  static auto project_moon_surface_walk_actor(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto& session = selected.session;
+    if (!session.moon() || !session.surface_walker() || !session.surface() ||
+        !session.surface()->moon_landed)
+      return result;
+    const auto view = project_saved_moon_flight(session);
+    const auto& actor = *session.surface_walker();
+    const auto fixed = require(reframe_rigid_body(
+        RigidBodyWorldContext{*session.moon()}, view.body,
+        {view.fixed_frame, view.body.tick}, *session.moon()));
+    const auto foot = actor.foot_position_metres;
+    const double radius = std::hypot(foot.x, foot.y, foot.z);
+    const RigidVector3 up{foot.x / radius, foot.y / radius, foot.z / radius};
+    auto right = saved_moon_detail::rotate(
+        session.surface()->moon_landed->fixed.orientation, {1, 0, 0});
+    const double vertical = (right.x * up.x + right.y * up.y) + right.z * up.z;
+    right = {right.x - vertical * up.x, right.y - vertical * up.y,
+             right.z - vertical * up.z};
+    const double magnitude = std::hypot(right.x, right.y, right.z);
+    if (!std::isfinite(magnitude) || magnitude < 1e-8)
+      throw std::invalid_argument("Moon walking heading basis unavailable");
+    right = {right.x / magnitude, right.y / magnitude, right.z / magnitude};
+    const RigidVector3 back{right.y * up.z - right.z * up.y,
+                            right.z * up.x - right.x * up.z,
+                            right.x * up.y - right.y * up.x};
+    const auto vector = [&](RigidVector3 v) {
+      const auto local = moon_fixed_vector_to_local(view, v);
+      return godot::Vector3(local.x, local.y, local.z);
+    };
+    const auto point = [&](RigidVector3 v) {
+      return vector({v.x - fixed.position_metres.x,
+                     v.y - fixed.position_metres.y,
+                     v.z - fixed.position_metres.z});
+    };
+    result["version"] = static_cast<std::int64_t>(actor.version);
+    result["heading"] = actor.heading_radians;
+    result["latitude"] = view.pose.latitude_radians;
+    result["longitude"] = view.pose.longitude_radians;
+    result["eye_position"] =
+        point({foot.x + up.x * kOriginWalkerEyeHeightMetres,
+               foot.y + up.y * kOriginWalkerEyeHeightMetres,
+               foot.z + up.z * kOriginWalkerEyeHeightMetres});
+    godot::Basis basis;
+    basis.set_column(0, vector(right));
+    basis.set_column(1, vector(up));
+    basis.set_column(2, vector(back));
+    result["basis"] = basis;
+    godot::Dictionary access;
+    const auto returned = session.surface_return_access();
+    access["available"] = returned.has_value();
+    if (returned) {
+      access["position"] = point(returned->foot_position_metres);
+      access["distance_metres"] = returned->distance_metres;
+      access["within_reach"] = returned->within_reach;
+    }
+    result["return_access"] = access;
+    return result;
+  }
+
+  static auto project_moon_flight_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto& session = selected.session;
+    const auto& document = session.document();
+    const auto& body = document.flight;
+    const auto view = project_saved_moon_flight(session);
+    const auto fixed =
+        require(reframe_rigid_body(RigidBodyWorldContext{view.moon}, body,
+                                   {view.fixed_frame, body.tick}, view.moon));
+    const auto observation = require(session.observe());
+    if (!observation.moon)
+      throw std::invalid_argument("Actual Moon observation missing");
+    const auto coordinates = [](const auto& value) {
+      godot::PackedFloat64Array array;
+      for (double v : {value.x, value.y, value.z})
+        array.append(v);
+      return array;
+    };
+    const auto decimal = [](std::uint64_t v) {
+      return godot::String{std::to_string(v).c_str()};
+    };
+    const auto vector = [](LocalPositionMetres v) {
+      return godot::Vector3(v.east, v.up, -v.north);
+    };
+    godot::Basis basis, system_basis;
+    for (int i = 0; i < 3; ++i) {
+      basis.set_column(i, vector(view.body_axes[static_cast<std::size_t>(i)]));
+      system_basis.set_column(
+          i, vector(view.system_axes[static_cast<std::size_t>(i)]));
+    }
+    result["mode"] = "freedom_flight";
+    result["body_kind"] = "moon";
+    result["body_version"] = static_cast<std::int64_t>(view.moon.body.version);
+    result["body_id"] = decimal(view.moon.body.value);
+    result["body_radius"] = static_cast<double>(view.moon.radius_metres);
+    result["universe_seed"] =
+        decimal(document.origin.recipe.universe_seed.value);
+    result["system_id"] = decimal(body.frame.system.value);
+    result["craft_id"] = decimal(document.origin.state.craft.value);
+    result["frame_id"] = decimal(body.craft.id.value);
+    result["frame_version"] = static_cast<std::int64_t>(body.craft.version);
+    result["tick"] = decimal(body.tick);
+    result["checksum"] = decimal(require(
+        rigid_body_state_checksum(RigidBodyWorldContext{view.moon}, body)));
+    result["continued"] = session.source_save().has_value();
+    result["coordinate_frame"] = "moon_relative_inertial";
+    result["body_basis"] = basis;
+    result["station_basis"] = system_basis;
+    result["station_available"] = false;
+    result["station_id"] = godot::String{};
+    result["air_density"] = 0.0;
+    result["dynamic_pressure"] = 0.0;
+    result["recovery_pending"] = session.recovery_pending();
+
+    result["attached"] = false;
+    result["target_port"] = std::int64_t{0};
+    result["assistance"] = document.model.assistance;
+    result["hold_enabled"] = false;
+    result["latitude"] = view.pose.latitude_radians;
+    result["longitude"] = view.pose.longitude_radians;
+    result["altitude"] = view.pose.altitude_metres;
+    const auto velocity =
+        session.surface_walker()
+            ? session.surface_walker()->velocity_metres_per_second
+            : fixed.linear_velocity_metres_per_second;
+    result["surface_speed"] = std::hypot(velocity.x, velocity.y, velocity.z);
+    result["radial_rate"] =
+        session.surface_walker()
+            ? (velocity.x * view.tangent.up.x +
+               velocity.y * view.tangent.up.y) +
+                  velocity.z * view.tangent.up.z
+            : observation.moon->radial_speed_metres_per_second;
+    result["position_metres"] = coordinates(body.position_metres);
+    result["velocity_metres_per_second"] =
+        coordinates(body.linear_velocity_metres_per_second);
+    result["angular_velocity_body"] =
+        coordinates(body.angular_velocity_radians_per_second);
+    result["dropped_seconds"] = selected.dropped_seconds;
+    result["boarding"] = project_boarding_state(selected);
+    result["surface_walk"] = project_moon_surface_walk_actor(selected);
+    godot::Dictionary surface;
+    surface["gear_deployed"] =
+        session.surface() && session.surface()->gear_deployed;
+    surface["landed"] =
+        session.surface() && session.surface()->moon_landed.has_value();
+    surface["maneuver"] = "off";
+    surface["remaining_seconds"] = 0.0;
+    surface["note"] = godot::String{session.surface_maneuver().note.c_str()};
+    result["surface"] = surface;
+    godot::Dictionary resources;
+    resources["selected"] = session.resources().has_value();
+    if (session.resources()) {
+      const auto reading = require(freedom_resource_reading(
+          *session.resources(),
+          selected.last_step ? selected.last_step->fuel_debit_quanta : 0,
+          selected.last_step && selected.last_step->propulsion_refused));
+      resources["quantity_quanta"] = decimal(reading.quantity_quanta);
+      resources["capacity_quanta"] = decimal(reading.capacity_quanta);
+      resources["last_tick_quanta"] = decimal(reading.last_tick_quanta);
+      resources["fraction"] = reading.fraction;
+      resources["main_equivalent_seconds"] = reading.main_equivalent_seconds;
+      resources["equivalent_newtons"] = reading.equivalent_newtons;
+      resources["jump_charges"] =
+          static_cast<std::int64_t>(reading.jump_charges);
+      resources["reserve"] = reading.reserve;
+      resources["operationally_empty"] = reading.operationally_empty;
+      resources["propulsion_refused"] = reading.propulsion_refused;
+    }
+    result["resources"] = resources;
+    godot::Dictionary jump;
+    const auto& travel = session.travel();
+    const auto available = session.jump_available();
+    jump["available"] = available.has_value();
+    jump["refusal"] =
+        available ? godot::String{} : godot::String{available.error().c_str()};
+    jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle ? "idle"
+                    : travel->phase == FreedomJumpPhase::spool         ? "spool"
+                                                               : "transit";
+    jump["selected"] = travel && travel->local && travel->local->selected
+                           ? decimal(travel->local->selected->body.value)
+                           : godot::String{};
+    jump["remaining_seconds"] =
+        travel && travel->phase == FreedomJumpPhase::spool
+            ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
+        : travel && travel->phase == FreedomJumpPhase::transit &&
+                travel->local && travel->local->committed
+            ? (travel->local->committed->arrival_tick - body.tick) / 120.0
+            : 0.0;
+    result["jump"] = jump;
+    const auto force =
+        selected.last_step && selected.last_step->moon &&
+                !(session.surface() && session.surface()->moon_landed)
+            ? selected.last_step->moon->propulsion
+            : VacuumActuation{};
+    result["positive_force_body"] = coordinates(force.positive_force_newtons);
+    result["negative_force_body"] = coordinates(force.negative_force_newtons);
+    result["positive_torque_body"] =
+        coordinates(force.positive_torque_newton_metres);
+    result["negative_torque_body"] =
+        coordinates(force.negative_torque_newton_metres);
+    result["applied_force_body"] = coordinates(force.applied_force_newtons);
+    const auto frame = require(resolve_craft_frame(body.craft));
+    godot::PackedFloat64Array positive, negative;
+    for (const auto v : frame.properties.positive_force_newtons)
+      positive.append(v);
+    for (const auto v : frame.properties.negative_force_newtons)
+      negative.append(v);
+    result["positive_force_ratings"] = positive;
+    result["negative_force_ratings"] = negative;
+    result["star_direction"] = vector(view.star_direction);
+    const auto& star = session.system().catalog.star;
+    result["star_color"] =
+        godot::Color(star.color.red / 255.0f, star.color.green / 255.0f,
+                     star.color.blue / 255.0f, 1);
+    result["star_angular_radius"] = std::asin(
+        std::min(1.0, static_cast<double>(star.radius_kilometres) * 1000.0 /
+                          view.rotation.observer_star_distance_metres));
+    return result;
+  }
+
   static auto project_surface_walk_actor(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
     const auto& session = selected.session;
+    if (session.moon()) return project_moon_surface_walk_actor(selected);
     if (!session.surface_walker() || !session.surface() ||
         !session.surface()->landed)
       return result;
@@ -1529,7 +1826,7 @@ class FreedomBridge : public godot::RefCounted {
         actuation = candidate.walker()
                         ? require(candidate.advance_walk(demand))
                         : require(candidate.advance(NativeFlightControls{}));
-      (void)project_saved_flight(candidate);
+      validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
       saved_flight->clock = clock;
       saved_flight->last_step = std::move(actuation);
@@ -1864,6 +2161,7 @@ class FreedomBridge : public godot::RefCounted {
     godot::Dictionary result;
     try {
       const auto& session = selected.session;
+      if (session.moon()) return project_moon_flight_state(selected);
       const auto& document = session.document();
       const auto& body = document.flight;
       const auto relative = require(session.relative_state());
@@ -2207,14 +2505,19 @@ class FreedomBridge : public godot::RefCounted {
                       : travel->phase == FreedomJumpPhase::spool ? "spool"
                                                                  : "transit";
       jump["selected"] =
-          travel && travel->selected
+          travel && travel->local && travel->local->selected
+              ? decimal(travel->local->selected->body.value)
+          : travel && travel->selected
               ? godot::String{system_id_string(*travel->selected).c_str()}
               : godot::String{};
       jump["remaining_seconds"] =
           travel && travel->phase == FreedomJumpPhase::spool
               ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
           : travel && travel->phase == FreedomJumpPhase::transit
-              ? (travel->committed->preview.arrival_tick - body.tick) / 120.0
+              ? ((travel->local ? travel->local->committed->arrival_tick
+                                : travel->committed->preview.arrival_tick) -
+                 body.tick) /
+                    120.0
               : 0.0;
       if (const auto preview = session.jump_preview(); preview) {
         jump["distance_light_hours"] =
@@ -2614,7 +2917,7 @@ class FreedomBridge : public godot::RefCounted {
 
   auto get_freedom_station_geometry() const -> godot::Dictionary {
     if (native_start) return project_station_geometry(native_start->station);
-    if (saved_flight &&
+    if (saved_flight && !saved_flight->session.moon() &&
         project_saved_flight(saved_flight->session).station_available)
       return project_station_geometry(generate_origin_station(
           saved_flight->session.document().origin.recipe.universe_seed));
@@ -3169,8 +3472,145 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  auto request_freedom_moon_stream() -> bool {
+    try {
+      if (!saved_flight || !saved_flight->session.moon() || !moon_stream ||
+          moon_stream->owner() != *saved_flight->session.moon())
+        throw std::invalid_argument("Actual Moon stream owner unavailable");
+      moon_stream->request(
+          project_saved_moon_flight(saved_flight->session).tangent.origin);
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = error.what();
+      return false;
+    }
+  }
+  auto poll_freedom_moon_stream() -> godot::Dictionary {
+    godot::Dictionary result;
+    try {
+      if (!saved_flight || !saved_flight->session.moon() || !moon_stream ||
+          moon_stream->owner() != *saved_flight->session.moon())
+        throw std::invalid_argument("Actual Moon stream owner unavailable");
+      auto batch = moon_stream->poll();
+      if (!batch) return result;
+      godot::Array tiles;
+      std::set<MoonStreamKey> next;
+      for (const auto& [key, tile] : batch->tiles) {
+        if (!tile || tile->body != moon_stream->owner().body ||
+            tile->key != key ||
+            tile->terrain_version != kMoonTerrainRecipeVersion ||
+            tile->vertices.size() != 1221 || tile->normals.size() != 1221 ||
+            tile->colors.size() != 1221 || tile->indices.size() != 7680)
+          throw std::invalid_argument("Invalid owned Moon tile dimensions");
+        next.insert(key);
+        godot::Dictionary entry;
+        entry["id"] = godot::String{
+            (std::to_string(key.face) + ":" + std::to_string(key.lod) + ":" +
+             std::to_string(key.x) + ":" + std::to_string(key.y))
+                .c_str()};
+        if (!moon_exported.contains(key)) {
+          godot::PackedFloat64Array anchor;
+          for (const auto v :
+               {tile->anchor.x, tile->anchor.y, tile->anchor.z}) {
+            if (!std::isfinite(v) || std::abs(v) > 1e8)
+              throw std::invalid_argument("Nonfinite Moon tile anchor");
+            anchor.append(v);
+          }
+          godot::PackedVector3Array vertices, normals;
+          godot::PackedColorArray colors;
+          godot::PackedInt32Array indices;
+          for (std::size_t i = 0; i < tile->vertices.size(); ++i) {
+            const auto p = tile->vertices[i], n = tile->normals[i];
+            if (!saved_moon_detail::finite(p) || !saved_moon_detail::finite(n))
+              throw std::invalid_argument("Nonfinite Moon tile attribute");
+            vertices.append({static_cast<godot::real_t>(p.x),
+                             static_cast<godot::real_t>(p.y),
+                             static_cast<godot::real_t>(p.z)});
+            normals.append({static_cast<godot::real_t>(n.x),
+                            static_cast<godot::real_t>(n.y),
+                            static_cast<godot::real_t>(n.z)});
+            const auto c = tile->colors[i];
+            colors.append(godot::Color(c.red / 255.0f, c.green / 255.0f,
+                                       c.blue / 255.0f, 1));
+          }
+          for (const auto i : tile->indices) {
+            if (i < 0 || static_cast<std::size_t>(i) >= tile->vertices.size())
+              throw std::invalid_argument(
+                  "Moon tile index exceeds owned buffer");
+            indices.append(i);
+          }
+          entry["anchor"] = anchor;
+          entry["vertices"] = vertices;
+          entry["normals"] = normals;
+          entry["colors"] = colors;
+          entry["indices"] = indices;
+        }
+        tiles.append(entry);
+      }
+      result["body_kind"] = "moon";
+      result["body_id"] = godot::String{
+          std::to_string(moon_stream->owner().body.value).c_str()};
+      result["tiles"] = tiles;
+      result["generated"] = static_cast<std::int64_t>(batch->generated);
+      result["reused"] = static_cast<std::int64_t>(batch->reused);
+      moon_exported = std::move(next);
+      last_error = godot::String{};
+    } catch (const std::exception& error) {
+      last_error = error.what();
+      result.clear();
+      result["error"] = last_error;
+    }
+    return result;
+  }
+  auto freedom_moon_stream_transforms(godot::PackedFloat64Array anchors)
+      -> godot::Array {
+    godot::Array result;
+    try {
+      if (!saved_flight || !saved_flight->session.moon() || !moon_stream ||
+          moon_stream->owner() != *saved_flight->session.moon() ||
+          anchors.size() % 3 ||
+          anchors.size() >
+              static_cast<std::int64_t>(kMoonStreamMaxTiles) * 2 * 3)
+        throw std::invalid_argument("Invalid Moon tile anchor buffer or owner");
+      for (std::int64_t i = 0; i < anchors.size(); ++i)
+        if (!std::isfinite(anchors[i]) || std::abs(anchors[i]) > 1e8)
+          throw std::invalid_argument("Invalid Moon tile anchor coordinate");
+      const auto view = project_saved_moon_flight(saved_flight->session);
+      const auto craft = require(
+          reframe_rigid_body(RigidBodyWorldContext{view.moon}, view.body,
+                             {view.fixed_frame, view.body.tick}, view.moon));
+      const auto local = [&](RigidVector3 v) {
+        const auto p = moon_fixed_vector_to_local(view, v);
+        return godot::Vector3(p.x, p.y, p.z);
+      };
+      godot::Basis basis;
+      basis.set_column(0, local({1, 0, 0}));
+      basis.set_column(1, local({0, 1, 0}));
+      basis.set_column(2, local({0, 0, 1}));
+      for (std::int64_t i = 0; i < anchors.size(); i += 3) {
+        // Subtract in double precision BEFORE the Godot float conversion. The
+        // observer foot changes the axes, never the ship-centred render origin.
+        const auto p = local({anchors[i] - craft.position_metres.x,
+                              anchors[i + 1] - craft.position_metres.y,
+                              anchors[i + 2] - craft.position_metres.z});
+        result.append(godot::Transform3D(basis, p));
+      }
+      last_error = godot::String{};
+    } catch (const std::exception& error) {
+      last_error = error.what();
+      result.clear();
+    }
+    return result;
+  }
+
   auto enable_streaming() -> bool {
     try {
+      if (saved_flight && saved_flight->session.moon()) {
+        if (!moon_stream) replace_saved_stream(saved_flight->session);
+        last_error = godot::String{};
+        return true;
+      }
       if (saved_flight && saved_flight->session.starting_assembly()) {
         if (!stream)
           throw std::runtime_error(
@@ -3210,14 +3650,31 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
-  auto is_stream_busy() const -> bool { return stream && stream->busy(); }
+  auto is_stream_busy() const -> bool {
+    return (stream && stream->busy()) || (moon_stream && moon_stream->busy());
+  }
 
   auto get_stream_identity() const -> godot::Dictionary {
     godot::Dictionary result;
-    if (!stream) return result;
     const auto decimal = [](std::uint64_t word) {
       return godot::String{std::to_string(word).c_str()};
     };
+    if (moon_stream) {
+      const auto& owner = moon_stream->owner();
+      result["schema_version"] = std::int64_t{1};
+      result["generation"] = decimal(stream_generation);
+      result["kind"] = "owned";
+      result["system_id"] = decimal(owner.catalog.owner.catalog.id.value);
+      result["body_version"] = static_cast<std::int64_t>(owner.body.version);
+      result["body_kind"] = "moon";
+      result["body_id"] = decimal(owner.body.value);
+      result["physical_catalog"] =
+          static_cast<std::int64_t>(owner.catalog.owner.generator_version);
+      result["terrain_recipe"] =
+          static_cast<std::int64_t>(kMoonTerrainRecipeVersion);
+      return result;
+    }
+    if (!stream) return result;
     result["schema_version"] = std::int64_t{1};
     result["generation"] = decimal(stream_generation);
     result["terrain_policy"] =

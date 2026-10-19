@@ -1,0 +1,313 @@
+#include "../moon_contact_fixture.hpp"
+#include "apsis_drift/godot/saved_moon_flight.hpp"
+#include "apsis_drift/moon_surface_walker.hpp"
+
+#include <cmath>
+#include <iostream>
+#include <limits>
+#include <numbers>
+#include <stdexcept>
+#include <string_view>
+
+namespace {
+using namespace apsis_drift;
+using namespace apsis_drift::godot_spike;
+using V = RigidVector3;
+int checks{}, failures{};
+auto check(bool ok, std::string_view text) -> void {
+  ++checks;
+  if (!ok) {
+    ++failures;
+    std::cerr << "FAIL: " << text << '\n';
+  }
+}
+template <class T, class E> auto need(std::expected<T, E> v) -> T {
+  if (!v) throw std::runtime_error("Saved moon projection fixture refused");
+  return std::move(*v);
+}
+template <class F> auto rejects(F operation, std::string_view text) -> void {
+  bool refused{};
+  try {
+    operation();
+  } catch (const std::invalid_argument&) {
+    refused = true;
+  }
+  check(refused, text);
+}
+auto near(double a, double b, double tolerance, std::string_view text) -> void {
+  check(std::isfinite(a) && std::isfinite(b) && std::abs(a - b) <= tolerance,
+        text);
+}
+auto dot(V a, V b) -> long double {
+  return static_cast<long double>(a.x) * b.x +
+         static_cast<long double>(a.y) * b.y +
+         static_cast<long double>(a.z) * b.z;
+}
+auto norm(V a) -> double {
+  return std::hypot(a.x, a.y, a.z);
+}
+auto vector_near(V a, V b, double tolerance, std::string_view text) -> void {
+  near(norm({a.x - b.x, a.y - b.y, a.z - b.z}), 0, tolerance, text);
+}
+// Independent axis-angle source rotation. Recipe1 pole is system+Z, not +Y;
+// no production saved-vector helper is used to establish this oracle.
+auto fixed_from_system(double phase, V v) -> V {
+  const long double c = std::cos(static_cast<long double>(phase)),
+                    s = std::sin(static_cast<long double>(phase));
+  return {static_cast<double>(c * v.x + s * v.y),
+          static_cast<double>(-s * v.x + c * v.y), v.z};
+}
+auto body_axis(RigidOrientation q, std::size_t i) -> V {
+  const long double w = q.w, x = q.x, y = q.y, z = q.z,
+                    n = w * w + x * x + y * y + z * z;
+  const std::array<std::array<long double, 3>, 3> columns{
+      {{{1 - 2 * (y * y + z * z) / n, 2 * (x * y + w * z) / n,
+         2 * (x * z - w * y) / n}},
+       {{2 * (x * y - w * z) / n, 1 - 2 * (x * x + z * z) / n,
+         2 * (y * z + w * x) / n}},
+       {{2 * (x * z + w * y) / n, 2 * (y * z - w * x) / n,
+         1 - 2 * (x * x + y * y) / n}}}};
+  return {static_cast<double>(columns[i][0]),
+          static_cast<double>(columns[i][1]),
+          static_cast<double>(columns[i][2])};
+}
+auto expected_local(const SavedMoonFlightProjection& view, V fixed)
+    -> LocalPositionMetres {
+  const long double lat = view.pose.latitude_radians,
+                    lon = view.pose.longitude_radians;
+  const auto slat = std::sin(lat), clat = std::cos(lat), slon = std::sin(lon),
+             clon = std::cos(lon);
+  return {static_cast<double>(-slon * fixed.x + clon * fixed.y),
+          static_cast<double>(-slat * clon * fixed.x - slat * slon * fixed.y +
+                              clat * fixed.z),
+          static_cast<double>(clat * clon * fixed.x + clat * slon * fixed.y +
+                              slat * fixed.z)};
+}
+auto near_local(LocalPositionMetres a, LocalPositionMetres b,
+                std::string_view text) -> void {
+  near(a.east, b.east, 2e-14, text);
+  near(a.north, b.north, 2e-14, text);
+  near(a.up, b.up, 2e-14, text);
+}
+auto verify(const SavedMoonFlightProjection& view,
+            const PhysicalMoonDescriptor& moon, const RigidBodyState& source)
+    -> void {
+  check(view.version == 1 && view.moon == moon && view.body == source &&
+            view.body.frame.kind == RigidFrameKind::body_relative_inertial,
+        "Projection owns exact recipe/moon and unchanged canonical frame5");
+  check(view.fixed_frame == RigidCoordinateFrame{RigidFrameKind::body_fixed,
+                                                 source.frame.system,
+                                                 {},
+                                                 {},
+                                                 moon.body},
+        "Projection fixed frame retains full typed BodyId without Planet "
+        "carrier");
+  check(view.rotation == need(resolve_physical_moon_rotation(
+                             moon, source.tick,
+                             {view.tangent.origin.x, view.tangent.origin.y,
+                              view.tangent.origin.z})),
+        "Rotation/star geometry resolved at actual observer and authoritative "
+        "tick");
+  const V observer{view.tangent.origin.x, view.tangent.origin.y,
+                   view.tangent.origin.z};
+  const auto radius = norm(observer), h = std::hypot(observer.x, observer.y);
+  near(view.pose.latitude_radians, std::atan2(observer.z, h), 1e-15,
+       "Actual spherical latitude follows system+Z pole");
+  near(view.pose.longitude_radians,
+       h == 0 ? 0 : std::atan2(observer.y, observer.x), 1e-15,
+       "Actual spherical longitude comes from fixed axes");
+  near(view.pose.altitude_metres, radius - moon.radius_metres, 1e-8,
+       "Altitude uses actual moon radius, no planet floor");
+  const auto& t = view.tangent;
+  for (const auto& axis : std::array<V, 3>{t.east, t.north, t.up})
+    near(norm(axis), 1, 5e-15, "Tangent axes unit");
+  near(static_cast<double>(dot(t.east, t.north)), 0, 5e-15,
+       "East and north perpendicular");
+  near(static_cast<double>(dot(t.east, t.up)), 0, 5e-15,
+       "East and up perpendicular");
+  near(static_cast<double>(dot(t.north, t.up)), 0, 5e-15,
+       "North and up perpendicular");
+  vector_near(t.up,
+              {observer.x / radius, observer.y / radius, observer.z / radius},
+              3e-15, "Tangent up is actual observer radial");
+  const std::array<V, 3> axes{{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+  for (std::size_t i = 0; i < 3; ++i) {
+    near_local(
+        view.system_axes[i],
+        expected_local(view,
+                       fixed_from_system(view.rotation.phase_radians, axes[i])),
+        "System axis uses independent +Z inverse spin and ENU projection");
+    const auto actual_body = body_axis(source.orientation, i);
+    near_local(
+        view.body_axes[i],
+        expected_local(
+            view, fixed_from_system(view.rotation.phase_radians, actual_body)),
+        "Full actual quaternion body axes survive projection");
+    const auto mapped = system_vector_to_moon_local(view, axes[i]);
+    vector_near(mapped,
+                {view.system_axes[i].east, view.system_axes[i].up,
+                 -view.system_axes[i].north},
+                3e-15, "Bridge system vector map is east/up/minusnorth");
+  }
+  vector_near(moon_fixed_vector_to_local(view, t.east), {1, 0, 0}, 5e-15,
+              "Fixed east maps Godot+X");
+  vector_near(moon_fixed_vector_to_local(view, t.up), {0, 1, 0}, 5e-15,
+              "Fixed up maps Godot+Y");
+  vector_near(moon_fixed_vector_to_local(view, t.north), {0, 0, -1}, 5e-15,
+              "Fixed north maps Godot-Z");
+  const auto& r = view.rotation;
+  // Finite point-star parallax is evaluated at observer, not moon centre.
+  const V toward{r.star_position_fixed.x - observer.x,
+                 r.star_position_fixed.y - observer.y,
+                 r.star_position_fixed.z - observer.z};
+  const auto distance = norm(toward);
+  near(r.observer_star_distance_metres, distance, 1e-3,
+       "Finite point-star distance binds actual observer");
+  const V unit{toward.x / distance, toward.y / distance, toward.z / distance};
+  near_local(view.star_direction, expected_local(view, unit),
+             "Local illumination uses actual finite point-star direction");
+  near(std::hypot(view.star_direction.east, view.star_direction.north,
+                  view.star_direction.up),
+       1, 5e-15, "Projected star direction remains unit");
+}
+auto run() -> void {
+  const auto fixture = test_fixture::make_moon_contact_fixture();
+  const auto& moon = fixture.moon;
+  const RigidBodyWorldContext context{moon};
+  const auto original =
+      need(encode_rigid_body_state_json(context, fixture.source));
+  const auto source_copy = moon;
+  const auto view = project_saved_moon_flight(moon, fixture.source);
+  verify(view, moon, fixture.source);
+  check(!view.surface_observer, "Seated/free flight observes actual craft COM");
+  const auto expected = fixed_from_system(view.rotation.phase_radians,
+                                          fixture.source.position_metres);
+  vector_near(
+      {view.tangent.origin.x, view.tangent.origin.y, view.tangent.origin.z},
+      expected, 2e-8,
+      "Observer fixed position agrees with independent actual source spin");
+  check(need(encode_rigid_body_state_json(context, fixture.source)) ==
+                original &&
+            moon == source_copy,
+        "Projection does not mutate source or owned source catalog");
+  auto changed = fixture.source;
+  changed.tick += moon.spin_period_ticks / 4;
+  changed = need(canonicalize_rigid_body_state(context, changed));
+  const auto spun = project_saved_moon_flight(moon, changed);
+  verify(spun, moon, changed);
+  check(spun.rotation.phase_radians != view.rotation.phase_radians &&
+            spun.system_axes != view.system_axes,
+        "Actual spin tick changes world basis, not authoritative inertial "
+        "attitude");
+  for (const double sign : {-1., 1.}) {
+    auto fixed = fixture.fixed;
+    fixed.position_metres = {0, 0, sign * (moon.radius_metres + 100)};
+    const auto state =
+        need(reframe_rigid_body(context, fixed,
+                                {{RigidFrameKind::body_relative_inertial,
+                                  context.system.id,
+                                  {},
+                                  {},
+                                  moon.body},
+                                 fixed.tick},
+                                moon));
+    const auto pole = project_saved_moon_flight(moon, state);
+    verify(pole, moon, state);
+    vector_near(pole.tangent.east, {0, 1, 0}, 0,
+                "Exact polar east convention is deterministic");
+    vector_near(pole.tangent.north, {-sign, 0, 0}, 0,
+                "Exact polar north convention preserves handedness");
+  }
+  const auto hash = need(rigid_body_state_checksum(context, fixture.source));
+  const auto anchor =
+      need(prepare_moon_landed_craft(moon, fixture.source, true, hash));
+  auto terrain =
+      need(MoonSurfaceWalkTerrain::create(moon, anchor, fixture.source.tick));
+  const auto actor = need(terrain.entry());
+  const auto outside = project_saved_moon_flight(moon, fixture.source, actor);
+  verify(outside, moon, fixture.source);
+  check(outside.surface_observer &&
+            outside.tangent.origin ==
+                MoonFixedPositionMetres{actor.foot_position_metres.x,
+                                        actor.foot_position_metres.y,
+                                        actor.foot_position_metres.z},
+        "Actual supported walker foot replaces observer once without moving "
+        "craft");
+  check(outside.body == view.body &&
+            outside.tangent.origin != view.tangent.origin,
+        "Outside eye origin does not replace source craft pose/attitude");
+  auto owner = moon;
+  ++owner.radius_metres;
+  rejects([&] { (void)project_saved_moon_flight(owner, fixture.source); },
+          "Tampered owner rejects before projection math");
+  auto bad = fixture.source;
+  bad.frame.body->kind = BodyKind::planet;
+  rejects([&] { (void)project_saved_moon_flight(moon, bad); },
+          "Moon cannot be relabelled as Planet BodyId");
+  bad = fixture.source;
+  ++bad.frame.body->value;
+  rejects([&] { (void)project_saved_moon_flight(moon, bad); },
+          "Foreign moon refuses");
+  bad = fixture.fixed;
+  rejects([&] { (void)project_saved_moon_flight(moon, bad); },
+          "Raw fixed6 cannot pretend canonical saved relative5");
+  bad = fixture.source;
+  bad.position_metres.y = std::numeric_limits<double>::quiet_NaN();
+  rejects([&] { (void)project_saved_moon_flight(moon, bad); },
+          "Nonfinite source refuses");
+  auto bad_actor = actor;
+  ++bad_actor.frame.body->value;
+  rejects(
+      [&] { (void)project_saved_moon_flight(moon, fixture.source, bad_actor); },
+      "Foreign observer actor cannot cross body owners");
+  bad_actor = actor;
+  bad_actor.foot_position_metres = {};
+  rejects(
+      [&] { (void)project_saved_moon_flight(moon, fixture.source, bad_actor); },
+      "Observer at moon centre refuses");
+  bad_actor = actor;
+  bad_actor.foot_position_metres.x = std::numeric_limits<double>::infinity();
+  rejects(
+      [&] { (void)project_saved_moon_flight(moon, fixture.source, bad_actor); },
+      "Nonfinite observer refuses");
+  rejects(
+      [&] {
+        (void)system_vector_to_moon_local(
+            view, {0, std::numeric_limits<double>::infinity(), 0});
+      },
+      "Nonfinite bridge vector refuses");
+  // Actual bare format42 session exercises the public session projection path.
+  FreedomFlightSaveDocument document{
+      make_freedom_new_game_document(Seed{42}), fixture.source, {}};
+  document.origin.state.tick = fixture.source.tick;
+  document.model.physical_catalog = 2;
+  document.model.physical_ephemeris = 2;
+  document.moon = FreedomMoonWorldSelection{1, {context.system.id, moon.body}};
+  auto session = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(NativeSaveDocument{document}))));
+  const auto saved =
+      need(encode_native_save_document_json(need(session.save_document())));
+  const auto actual = project_saved_moon_flight(session);
+  check(actual.body == view.body && actual.moon == view.moon &&
+            actual.rotation == view.rotation && actual.tangent == view.tangent,
+        "Session overload consumes same actual canonical state and owner");
+  check(need(encode_native_save_document_json(need(session.save_document()))) ==
+            saved,
+        "Presentation leaves complete saved session unchanged");
+  const auto planet = need(native_new_game(Seed{42}));
+  const auto legacy = need(NativeFreedomFlightSession::open(planet));
+  rejects([&] { (void)project_saved_moon_flight(legacy); },
+          "Existing planet session cannot be carried by Moon projection");
+}
+} // namespace
+int main() {
+  try {
+    run();
+  } catch (const std::exception& e) {
+    ++failures;
+    std::cerr << e.what() << '\n';
+  }
+  std::cout << checks << " saved moon projection checks, " << failures
+            << " failures\n";
+  return failures ? 1 : 0;
+}

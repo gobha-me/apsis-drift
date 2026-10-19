@@ -135,6 +135,23 @@ enum class CoordinateError : std::uint8_t {
   invalid_tile_coordinate,
 };
 
+// Identity-free cube topology shared by planet and authenticated moon terrain.
+// These functions own no world, radius, elevation or body selection.
+struct CubeSurfaceAddress {
+  CubeFace face{};
+  std::uint8_t lod{};
+  std::uint32_t x{}, y{};
+  double u{}, v{};
+  friend auto operator==(const CubeSurfaceAddress&, const CubeSurfaceAddress&)
+      -> bool = default;
+};
+[[nodiscard]] auto cube_surface_address_from_direction(
+    SystemDirection, std::uint8_t lod) noexcept
+    -> std::expected<CubeSurfaceAddress, CoordinateError>;
+[[nodiscard]] auto direction_from_cube_surface_address(
+    CubeSurfaceAddress) noexcept
+    -> std::expected<SystemDirection, CoordinateError>;
+
 [[nodiscard]] auto planet_fixed_from_geodetic(
     const PlanetDescriptor& planet, GeodeticPosition position) noexcept
     -> std::expected<PlanetFixedPositionMetres, CoordinateError>;

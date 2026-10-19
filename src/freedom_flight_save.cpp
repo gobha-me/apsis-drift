@@ -1,6 +1,8 @@
 #include "apsis_drift/freedom_flight_save.hpp"
 #include "apsis_drift/planet_optics.hpp"
 
+#include "freedom_moon_flight_save_internal.hpp"
+
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
@@ -236,6 +238,15 @@ auto relative_state_for_selected_world(
 auto relative_freedom_flight_state(const FreedomFlightSaveDocument& document,
                                    const PhysicalLocalSystem& system)
     -> std::expected<RigidBodyState, SaveSchemaError> {
+  if (document.moon) {
+    const auto hydrated = hydrate_freedom_moon_flight_document(document);
+    if (!hydrated) return std::unexpected{hydrated.error()};
+    if (hydrated->moon.catalog.owner != system)
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_state, "$.world_owner",
+                  "supplied physical owner differs from the saved moon")};
+    return document.flight;
+  }
   if (auto valid = validate_flight_origin(document); !valid)
     return std::unexpected{valid.error()};
   const auto& model = document.model;
@@ -268,6 +279,13 @@ auto relative_freedom_flight_state(const FreedomFlightSaveDocument& document,
 
 auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
     -> std::expected<FreedomFlightHydration, SaveSchemaError> {
+  if (document.moon) {
+    auto hydrated = hydrate_freedom_moon_flight_document(document);
+    if (!hydrated) return std::unexpected{hydrated.error()};
+    auto system = hydrated->moon.catalog.owner;
+    return FreedomFlightHydration{
+        std::move(system), {}, {}, std::move(*hydrated)};
+  }
   auto system = resolve_world(document.origin, document.model, document.world);
   if (!system) return std::unexpected{system.error()};
   if (auto valid = validate_flight_origin(document); !valid)
@@ -307,6 +325,7 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
 auto encode_freedom_flight_document_json(
     const FreedomFlightSaveDocument& document)
     -> std::expected<std::string, SaveSchemaError> {
+  if (document.moon) return detail::encode_moon_flight(document);
   const auto hydrated = hydrate_freedom_flight_document(document);
   if (!hydrated) return std::unexpected{hydrated.error()};
   auto origin = encode_freedom_save_document_json(document.origin);
@@ -406,6 +425,9 @@ auto decode_flight(std::string_view text, bool system_import)
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
                                    "$.format_version",
                                    "expected unsigned save version")};
+  if (!system_import &&
+      root["format_version"] == kFreedomMoonFlightSaveFormatVersion)
+    return detail::decode_moon_flight(root);
   const bool importing =
       system_import &&
       root["format_version"] == kFreedomSystemFlightImportFormatVersion;

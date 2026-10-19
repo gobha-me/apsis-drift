@@ -1,13 +1,30 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
-  foreach(secondary_case IN ITEMS secondary-bodies secondary-observations)
+  foreach(secondary_case IN ITEMS secondary-bodies secondary-observations physical-moon physical-moon-rotation moon-body-dynamics moon-terrain moon-surface-contact moon-landed-craft moon-surface-walker freedom-moon-flight-save freedom-local-jump moon-terrain-impact moon-retained-state freedom-local-travel-save native-local-jump)
     string(REPLACE "-" "_" secondary_source "${secondary_case}")
     add_executable(apsis-drift-${secondary_case}-tests test/${secondary_source}_test.cpp)
+    target_include_directories(apsis-drift-${secondary_case}-tests PRIVATE src)
     target_link_libraries(apsis-drift-${secondary_case}-tests PRIVATE apsis-drift::core)
     target_compile_options(apsis-drift-${secondary_case}-tests PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
     add_test(NAME ${secondary_case}-contract COMMAND apsis-drift-${secondary_case}-tests)
     set_tests_properties(${secondary_case}-contract PROPERTIES TIMEOUT 120)
   endforeach()
+  target_link_libraries(apsis-drift-freedom-moon-flight-save-tests PRIVATE nlohmann_json::nlohmann_json)
+  target_link_libraries(apsis-drift-moon-retained-state-tests PRIVATE nlohmann_json::nlohmann_json)
+  target_link_libraries(apsis-drift-freedom-local-travel-save-tests PRIVATE nlohmann_json::nlohmann_json)
+  target_link_libraries(apsis-drift-native-local-jump-tests PRIVATE nlohmann_json::nlohmann_json)
+  add_executable(apsis-drift-saved-moon-flight-tests test/godot/saved_moon_flight_test.cpp)
+  target_include_directories(apsis-drift-saved-moon-flight-tests PRIVATE src)
+  target_link_libraries(apsis-drift-saved-moon-flight-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-saved-moon-flight-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME saved-moon-flight-contract COMMAND apsis-drift-saved-moon-flight-tests)
+  add_executable(apsis-drift-moon-streaming-tests test/godot/moon_streaming_test.cpp)
+  target_link_libraries(apsis-drift-moon-streaming-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-moon-streaming-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME moon-streaming-contract COMMAND apsis-drift-moon-streaming-tests)
+
   add_executable(apsis-drift-surface-landmarks-tests test/surface_landmarks_test.cpp)
   target_link_libraries(apsis-drift-surface-landmarks-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-surface-landmarks-tests PRIVATE

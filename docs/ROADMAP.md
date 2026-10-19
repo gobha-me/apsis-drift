@@ -53,7 +53,11 @@ actual lifecycle ([#613](https://github.com/gobha-me/apsis-drift/issues/613)).
 The third increment is [distant optical contacts](DISTANT_CONTACTS.md)
 ([#214](https://github.com/gobha-me/apsis-drift/issues/214)): a separately
 selected moon/minor catalog, true apparent size and phase, and explicit
-close-observation limits. New solid bodies, gravity and landing remain deferred.
+close-observation limits. New solid bodies, gravity and landing were deferred in that optical increment.
+On 2026-10-19 the owner selected **one airless moon: approach, land and walk**
+as the next bounded expansion ([#623](https://github.com/gobha-me/apsis-drift/issues/623)).
+[The integration contract](AIRLESS_MOON.md) preserves its existing identity and
+C++ ownership; scalar/frame providers alone do not complete the playable trip.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

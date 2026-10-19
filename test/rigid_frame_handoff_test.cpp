@@ -273,8 +273,8 @@ auto transforms(const Fixture& fixture) -> void {
 auto validation(const Fixture& fixture) -> void {
   const auto source = fixture.state();
   const RigidFrameHandoffRequest request{fixture.system_frame(), source.tick};
-  for (const auto frame : {fixture.system_frame(), fixture.station_frame(),
-                           fixture.planet_frame()}) {
+  for (const auto& frame : {fixture.system_frame(), fixture.station_frame(),
+                            fixture.planet_frame()}) {
     auto state = source;
     state.frame = frame;
     check(same_bits(required(reframe_rigid_body(fixture.context, state,
@@ -773,6 +773,255 @@ auto rotating_refusals(const Fixture& fixture) -> void {
   expect_error(fixture.context, source, {fixture.system_frame(), source.tick},
                Code::unsupported_frame_pair);
 }
+
+auto moon_handoff_contract(const Fixture& fixture) -> void {
+  for (const auto version : {1U, 2U}) {
+    const auto parent =
+        required(generate_physical_origin_system(Seed{42}, version));
+    const auto catalog = required(generate_secondary_body_catalog(parent));
+    const auto moon = required(
+        generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
+    const RigidBodyWorldContext context{moon, &fixture.station};
+    const RigidBodyWorldContext physical{parent, &fixture.station};
+    const RigidCoordinateFrame relative{RigidFrameKind::body_relative_inertial,
+                                        parent.catalog.id,
+                                        {},
+                                        {},
+                                        moon.body};
+    const RigidCoordinateFrame system{
+        RigidFrameKind::system_inertial, parent.catalog.id, {}, {}};
+    const auto hierarchy = required(make_body_hierarchy(catalog));
+    for (const auto tick : {SimulationTick{0}, SimulationTick{1234567},
+                            std::numeric_limits<SimulationTick>::max() - 1}) {
+      auto source = fixture.state();
+      source.frame = relative;
+      source.tick = tick;
+      // Keep an accepted non-unit residual: translation must never normalize q.
+      source.orientation = {1 + 2e-13, 0, 0, 0};
+      const auto original = source;
+      const auto ephemerides =
+          required(resolve_body_ephemerides(hierarchy, {tick, 0}));
+      const auto found =
+          std::ranges::find(ephemerides, moon.body, &BodyEphemeris::body);
+      if (found == ephemerides.end()) {
+        check(false, "Actual moon ephemeris available");
+        return;
+      }
+      check(found->position != found->relative_position &&
+                found->velocity != found->relative_velocity,
+            "Moon reference includes parent translation and velocity");
+      const auto actual =
+          required(reframe_rigid_body(context, source, {system, tick}));
+      auto expected = source;
+      expected.frame = system;
+      expected.position_metres = {source.position_metres.x + found->position.x,
+                                  source.position_metres.y + found->position.y,
+                                  source.position_metres.z + found->position.z};
+      expected.linear_velocity_metres_per_second = {
+          source.linear_velocity_metres_per_second.x + found->velocity.x,
+          source.linear_velocity_metres_per_second.y + found->velocity.y,
+          source.linear_velocity_metres_per_second.z + found->velocity.z};
+      expected = required(canonicalize_rigid_body_state(context, expected));
+      check(same_bits(actual, expected) && same_bits(source, original),
+            "Moon nonrotating handoff adds full authentic p/v once and "
+            "preserves all other source bits");
+      check(same_bits(
+                required(reframe_rigid_body(context, source, {relative, tick})),
+                source),
+            "Same moon frame is a bit-exact identity");
+      const auto back =
+          required(reframe_rigid_body(context, actual, {relative, tick}));
+      const auto returned_p = components(back.position_metres);
+      const auto original_p = components(source.position_metres);
+      const auto origin_p =
+          components({found->position.x, found->position.y, found->position.z});
+      const auto returned_v =
+          components(back.linear_velocity_metres_per_second);
+      const auto original_v =
+          components(source.linear_velocity_metres_per_second);
+      const auto origin_v =
+          components({found->velocity.x, found->velocity.y, found->velocity.z});
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        check(roundtrip_bound(returned_p[axis], original_p[axis],
+                              origin_p[axis]) &&
+                  roundtrip_bound(returned_v[axis], original_v[axis],
+                                  origin_v[axis]),
+              "Moon roundtrip stays within binary64 parent-scale cancellation "
+              "bound");
+      auto unchanged = back;
+      unchanged.position_metres = source.position_metres;
+      unchanged.linear_velocity_metres_per_second =
+          source.linear_velocity_metres_per_second;
+      check(same_bits(unchanged, source),
+            "Moon roundtrip preserves canonical q, body spin, craft, frame and "
+            "tick exactly");
+      expect_error(context, source, {system, tick + 1}, Code::stale_tick);
+      auto wrong = relative;
+      wrong.body->kind = BodyKind::minor;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      wrong = relative;
+      ++wrong.body->value;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      wrong = relative;
+      wrong.planet = parent.catalog.planets.front().descriptor.id;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      expect_error(physical, source, {system, tick}, Code::invalid_source);
+      expect_error(fixture.context, source, {system, tick},
+                   Code::invalid_source);
+      const RigidCoordinateFrame planet{
+          RigidFrameKind::planet_relative_inertial,
+          parent.catalog.id,
+          parent.catalog.planets.front().descriptor.id,
+          {}};
+      expect_error(context, source, {planet, tick},
+                   Code::unsupported_frame_pair);
+      for (const auto scalar : {std::numeric_limits<double>::quiet_NaN(),
+                                std::numeric_limits<double>::infinity()}) {
+        auto invalid = source;
+        invalid.position_metres.x = scalar;
+        expect_error(context, invalid, {system, tick}, Code::invalid_source);
+      }
+      auto forged = moon;
+      ++forged.spin_period_ticks;
+      expect_error(RigidBodyWorldContext{forged}, source, {system, tick},
+                   Code::invalid_source, RigidBodyError::invalid_world_context);
+      auto excessive = actual;
+      // At least one translated component lies outside the admitted bound.
+      const auto signs =
+          components({found->position.x, found->position.y, found->position.z});
+      excessive.position_metres = {-std::copysign(1e15, signs[0]),
+                                   -std::copysign(1e15, signs[1]),
+                                   -std::copysign(1e15, signs[2])};
+      expect_error(context, excessive, {relative, tick}, Code::invalid_result);
+    }
+  }
+}
+
+auto moon_rotating_contract(const Fixture& fixture) -> void {
+  for (const auto version : {1U, 2U}) {
+    const auto parent =
+        required(generate_physical_origin_system(Seed{42}, version));
+    const auto catalog = required(generate_secondary_body_catalog(parent));
+    const auto moon = required(
+        generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
+    const RigidBodyWorldContext context{moon, &fixture.station};
+    const RigidCoordinateFrame system{
+        RigidFrameKind::system_inertial, parent.catalog.id, {}, {}};
+    const RigidCoordinateFrame relative{RigidFrameKind::body_relative_inertial,
+                                        parent.catalog.id,
+                                        {},
+                                        {},
+                                        moon.body};
+    const RigidCoordinateFrame fixed_frame{
+        RigidFrameKind::body_fixed, parent.catalog.id, {}, {}, moon.body};
+    for (const auto tick : {SimulationTick{0}, SimulationTick{1234567},
+                            std::numeric_limits<SimulationTick>::max() - 1}) {
+      auto fixed = fixture.state();
+      fixed.frame = fixed_frame;
+      fixed.tick = tick;
+      fixed.position_metres = {static_cast<double>(moon.radius_metres), 115.0,
+                               -250.0};
+      const auto source = fixed;
+      const auto geometry =
+          required(resolve_physical_moon_rotation(moon, tick));
+      const auto rotation = matrix(geometry.fixed_to_system);
+      const RigidVector3 centre{geometry.body_position.x,
+                                geometry.body_position.y,
+                                geometry.body_position.z};
+      const RigidVector3 velocity{geometry.body_velocity.x,
+                                  geometry.body_velocity.y,
+                                  geometry.body_velocity.z};
+      const RigidVector3 omega{geometry.angular_velocity_radians_per_second.x,
+                               geometry.angular_velocity_radians_per_second.y,
+                               geometry.angular_velocity_radians_per_second.z};
+      for (const auto& destination : {relative, system}) {
+        const bool local = destination == relative;
+        const auto transformed = required(
+            reframe_rigid_body(context, fixed, {destination, tick}, moon));
+        const auto radius = apply(rotation, fixed.position_metres);
+        const auto expected_p = plus(local ? RigidVector3{} : centre, radius);
+        const auto expected_v =
+            plus(plus(local ? RigidVector3{} : velocity,
+                      apply(rotation, fixed.linear_velocity_metres_per_second)),
+                 cross(omega, radius));
+        const double position_scale = std::max(1.0, max_component(expected_p));
+        check(close(transformed.position_metres, expected_p,
+                    position_scale * 2e-15) &&
+                  close(transformed.linear_velocity_metres_per_second,
+                        expected_v, 1e-9),
+              "Independent matrix/cross-product moon transform includes ground "
+              "velocity and parent translation only for system frame");
+        check(close(matrix(transformed.orientation),
+                    product(rotation, matrix(fixed.orientation)), 3e-14),
+              "Moon handoff composes independent rotation matrices");
+        const auto expected_spin =
+            plus(fixed.angular_velocity_radians_per_second,
+                 apply(transpose(matrix(transformed.orientation)), omega));
+        check(close(transformed.angular_velocity_radians_per_second,
+                    expected_spin, 2e-15),
+              "Moon handoff resolves owning spin along craft body axes");
+        const auto back = required(reframe_rigid_body(
+            context, transformed, {fixed_frame, tick}, moon));
+        check(close(back.position_metres, fixed.position_metres,
+                    position_scale * 4e-15) &&
+                  close(back.linear_velocity_metres_per_second,
+                        fixed.linear_velocity_metres_per_second, 2e-9) &&
+                  close(matrix(back.orientation), matrix(fixed.orientation),
+                        4e-14) &&
+                  close(back.angular_velocity_radians_per_second,
+                        fixed.angular_velocity_radians_per_second, 3e-15) &&
+                  back.craft == fixed.craft && back.tick == fixed.tick,
+              "Moon fixed roundtrip preserves physical pose/velocity within "
+              "bounded floating-point error, craft and tick exactly");
+        check(same_bits(fixed, source),
+              "Moon rotation never mutates authoritative source");
+      }
+      check(same_bits(required(reframe_rigid_body(context, fixed,
+                                                  {fixed_frame, tick}, moon)),
+                      fixed),
+            "Authenticated fixed moon identity preserves every bit");
+      const auto stale =
+          reframe_rigid_body(context, fixed, {relative, tick + 1}, moon);
+      check(!stale && stale.error().code == Code::stale_tick,
+            "Moon rotating handoff rejects stale tick");
+      auto forged = moon;
+      ++forged.epoch_spin_phase_turns;
+      const auto wrong_recipe =
+          reframe_rigid_body(context, fixed, {relative, tick}, forged);
+      check(!wrong_recipe &&
+                wrong_recipe.error().code == Code::invalid_rotation_recipe &&
+                wrong_recipe.error().moon_rotation_error ==
+                    PhysicalMoonRotationError::invalid_owner,
+            "Different supplied moon spin owner refuses without reinterpreting "
+            "context");
+      auto foreign = fixed_frame;
+      foreign.body->kind = BodyKind::planet;
+      const auto mismatch =
+          reframe_rigid_body(context, fixed, {foreign, tick}, moon);
+      check(!mismatch && mismatch.error().code == Code::invalid_destination,
+            "Moon fixed frame cannot alias a planet word");
+      const auto unsupported =
+          reframe_rigid_body(context, fixed, {system, tick});
+      check(!unsupported &&
+                unsupported.error().code == Code::unsupported_frame_pair,
+            "Nonrotating API never ignores required moon rotation");
+      const auto extra_recipe = reframe_rigid_body(
+          context,
+          required(reframe_rigid_body(context, fixed, {relative, tick}, moon)),
+          {system, tick}, moon);
+      check(!extra_recipe &&
+                extra_recipe.error().code == Code::unsupported_frame_pair,
+            "Explicit moon rotation refuses unrelated nonrotating pair");
+      auto invalid = fixed;
+      invalid.position_metres.y = std::numeric_limits<double>::quiet_NaN();
+      const auto nonfinite =
+          reframe_rigid_body(context, invalid, {relative, tick}, moon);
+      check(!nonfinite && nonfinite.error().code == Code::invalid_source,
+            "Moon fixed handoff refuses nonfinite source before transform");
+    }
+  }
+}
+
 } // namespace
 
 auto main() -> int {
@@ -781,6 +1030,8 @@ auto main() -> int {
   validation(fixture);
   rotating_contract(fixture);
   rotating_refusals(fixture);
+  moon_handoff_contract(fixture);
+  moon_rotating_contract(fixture);
   std::cout << "rigid frame handoff: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }
