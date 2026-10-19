@@ -139,10 +139,6 @@ endif ()
 include(cmake/NativeData.cmake)
 
 add_library(apsis_drift_core STATIC
-  "${APSIS_MATERIAL_PREPARED}"
-  "${APSIS_CHECKPOINT_MATERIAL_PREPARED}"
-  "${APSIS_HATCH_SEAL_PREPARED}"
-  "${APSIS_SEPARATION_RING_PREPARED}"
   src/celestial.cpp
   src/coordinates.cpp
   src/craft_frame.cpp
@@ -160,49 +156,6 @@ add_library(apsis_drift_core STATIC
   src/origin_cabin_seam.cpp
   src/origin_lower_cockpit_contact.cpp
   src/origin_stowed_contact_partition.cpp
-  src/origin_cabin_corridor.cpp
-  src/origin_boarding_body.cpp
-  src/origin_boarding_route_body.cpp
-  src/origin_boarding_route_foot_phase.cpp
-  src/origin_boarding_route_intermediate_step.cpp
-  src/origin_boarding_route_intermediate_step02.cpp
-  src/origin_boarding_intermediate_pause_support.cpp
-  src/origin_boarding_intermediate_pause_envelope.cpp
-  src/origin_boarding_intermediate_pause_support02.cpp
-  src/origin_boarding_route_intermediate_load01.cpp
-  src/origin_boarding_route_intermediate_unloaded01.cpp
-  src/origin_boarding_route_intermediate_support01.cpp
-  src/origin_boarding_route_intermediate_support_self01.cpp
-  src/origin_boarding_route_intermediate_root_z01.cpp
-  src/origin_boarding_route_intermediate_hip_diagnostic01.cpp
-  src/origin_boarding_route_intermediate_hip_diagnostic02.cpp
-  src/origin_boarding_intermediate_endpoint01.cpp
-  src/origin_boarding_intermediate_reach_evidence01.cpp
-  src/origin_boarding_intermediate_endpoint02.cpp
-  src/origin_boarding_intermediate_sector_evidence01.cpp
-  src/origin_boarding_intermediate_endpoint03.cpp
-  src/origin_boarding_intermediate_sector_evidence02.cpp
-  src/origin_boarding_intermediate_endpoint04.cpp
-  src/origin_boarding_intermediate_endpoint05.cpp
-  src/origin_boarding_intermediate_endpoint06.cpp
-  src/origin_boarding_knee_compatibility_diagnostic01.cpp
-  src/origin_boarding_hip_joint_plane_method01.cpp
-  src/origin_boarding_initial_material.cpp
-  src/origin_boarding_checkpoint_material_extension.cpp
-  src/origin_boarding_hatch_seal_material.cpp
-  src/origin_boarding_separation_ring_material.cpp
-  src/origin_boarding_route_port_unload.cpp
-  src/origin_boarding_route_checkpoint_unload.cpp
-  src/origin_boarding_route_checkpoint_unload_self02.cpp
-  src/origin_boarding_route_checkpoint_world_material.cpp
-  src/origin_boarding_boot_support.cpp
-  src/origin_boarding_world_checkpoint.cpp
-  src/origin_boarding_source_endpoint_surface_checkpoint.cpp
-  src/origin_boarding_lower_foot_transfer.cpp
-  src/origin_boarding_lower_foot_transfer_surface_sweep.cpp
-  src/origin_boarding_planted_legs.cpp
-  src/origin_boarding_self_model02.cpp
-  src/origin_boarding_self_model03.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -290,6 +243,65 @@ target_include_directories(apsis_drift_core
 )
 target_compile_features(apsis_drift_core PUBLIC cxx_std_23)
 target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
+
+# Deferred anatomical certification remains buildable for its contracts. The
+# playable native bridge depends only on the authoritative runtime core above.
+add_library(apsis_drift_boarding_research STATIC EXCLUDE_FROM_ALL
+  "${APSIS_MATERIAL_PREPARED}"
+  "${APSIS_CHECKPOINT_MATERIAL_PREPARED}"
+  "${APSIS_HATCH_SEAL_PREPARED}"
+  "${APSIS_SEPARATION_RING_PREPARED}"
+  src/origin_cabin_corridor.cpp
+  src/origin_boarding_body.cpp
+  src/origin_boarding_route_body.cpp
+  src/origin_boarding_route_foot_phase.cpp
+  src/origin_boarding_route_intermediate_step.cpp
+  src/origin_boarding_route_intermediate_step02.cpp
+  src/origin_boarding_intermediate_pause_support.cpp
+  src/origin_boarding_intermediate_pause_envelope.cpp
+  src/origin_boarding_intermediate_pause_support02.cpp
+  src/origin_boarding_route_intermediate_load01.cpp
+  src/origin_boarding_route_intermediate_unloaded01.cpp
+  src/origin_boarding_route_intermediate_support01.cpp
+  src/origin_boarding_route_intermediate_support_self01.cpp
+  src/origin_boarding_route_intermediate_root_z01.cpp
+  src/origin_boarding_route_intermediate_hip_diagnostic01.cpp
+  src/origin_boarding_route_intermediate_hip_diagnostic02.cpp
+  src/origin_boarding_intermediate_endpoint01.cpp
+  src/origin_boarding_intermediate_reach_evidence01.cpp
+  src/origin_boarding_intermediate_endpoint02.cpp
+  src/origin_boarding_intermediate_sector_evidence01.cpp
+  src/origin_boarding_intermediate_endpoint03.cpp
+  src/origin_boarding_intermediate_sector_evidence02.cpp
+  src/origin_boarding_intermediate_endpoint04.cpp
+  src/origin_boarding_intermediate_endpoint05.cpp
+  src/origin_boarding_intermediate_endpoint06.cpp
+  src/origin_boarding_knee_compatibility_diagnostic01.cpp
+  src/origin_boarding_hip_joint_plane_method01.cpp
+  src/origin_boarding_initial_material.cpp
+  src/origin_boarding_checkpoint_material_extension.cpp
+  src/origin_boarding_hatch_seal_material.cpp
+  src/origin_boarding_separation_ring_material.cpp
+  src/origin_boarding_route_port_unload.cpp
+  src/origin_boarding_route_checkpoint_unload.cpp
+  src/origin_boarding_route_checkpoint_unload_self02.cpp
+  src/origin_boarding_route_checkpoint_world_material.cpp
+  src/origin_boarding_boot_support.cpp
+  src/origin_boarding_world_checkpoint.cpp
+  src/origin_boarding_source_endpoint_surface_checkpoint.cpp
+  src/origin_boarding_lower_foot_transfer.cpp
+  src/origin_boarding_lower_foot_transfer_surface_sweep.cpp
+  src/origin_boarding_planted_legs.cpp
+  src/origin_boarding_self_model02.cpp
+  src/origin_boarding_self_model03.cpp
+)
+add_library(apsis-drift::boarding-research ALIAS apsis_drift_boarding_research)
+target_include_directories(apsis_drift_boarding_research
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(apsis_drift_boarding_research PUBLIC cxx_std_23)
+target_link_libraries(apsis_drift_boarding_research
+  PUBLIC apsis-drift::core
+  PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.

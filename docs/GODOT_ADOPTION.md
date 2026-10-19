@@ -80,6 +80,9 @@ for the historical research stage and ownership definitions.
 
 `apsis-drift::core` holds authoritative world, flight and save code used by the
 native bridge and headless contracts. It does not include or link TermForge.
+`apsis-drift::boarding-research` retains the deferred anatomical certification
+code separately. Its existing tests still build and run in the complete suite;
+building only `apsis_freedom_bridge` does not compile that research library.
 `apsis-drift::lib` adds the retained terminal presentation, input, audio and
 legacy raster path. To build and test the native/headless targets without
 finding or fetching TermForge:
