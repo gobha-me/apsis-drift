@@ -231,9 +231,11 @@ inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
         const auto top = require(
             select_terrain_sea_surface(surface_policy, sample.elevation_metres,
                                        planet.water_coverage.value > 0));
+        if (top.wet_datum)
+          sample.color = require(
+              sample_planet_water_color(planet, sample.elevation_metres));
         sample.elevation_metres = top.elevation_metres;
         tile->wetness.push_back(top.wet_datum ? 1.0 : 0.0);
-        if (top.wet_datum) sample.color = planet.palette.shallow_water;
       }
       const auto position =
           tile_point(planet, key, u, v, sample.elevation_metres);

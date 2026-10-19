@@ -93,6 +93,80 @@ static auto selected_stream_contract() -> void {
   std::cout << "Selected six-face local-detail cover: worker ms="
             << batch.milliseconds << "; bytes=" << batch.bytes() << '\n';
 }
+static auto within_water_palette(Rgb8 value, Rgb8 first, Rgb8 last) -> bool {
+  return value.red >= std::min(first.red, last.red) &&
+         value.red <= std::max(first.red, last.red) &&
+         value.green >= std::min(first.green, last.green) &&
+         value.green <= std::max(first.green, last.green) &&
+         value.blue >= std::min(first.blue, last.blue) &&
+         value.blue <= std::max(first.blue, last.blue);
+}
+
+static auto water_palette_contract(const PlanetDescriptor& base) -> void {
+  // Oppositely directed channels catch darkening-only or arbitrary-hue logic.
+  // These are pure consumer fixtures, never admitted generated worlds.
+  const PlanetPalette palette{PaletteFamily::volcanic,
+                              {},
+                              {0, 255, 64},
+                              {255, 0, 192},
+                              {255, 0, 255},
+                              {255, 0, 255},
+                              {255, 0, 255}};
+  const PlanetDescriptor fixture{base.seed,
+                                 base.id,
+                                 base.display_name,
+                                 base.radius,
+                                 base.surface_gravity,
+                                 base.atmosphere_class,
+                                 base.atmosphere_pressure,
+                                 TerrainCharacter::volcanic,
+                                 base.water_coverage,
+                                 palette};
+  for (const auto height : {0.0, -0.0, -0.001})
+    check(require(sample_planet_water_color(fixture, height)) ==
+              palette.shallow_water,
+          "datum did not retain the shallow palette endpoint");
+  check(require(sample_planet_water_color(fixture, -3500.0)) ==
+                Rgb8{128, 127, 128} &&
+            require(sample_planet_water_color(fixture, -3500.9)) ==
+                Rgb8{128, 127, 128},
+        "half depth or existing integer/metre quantization changed");
+  for (const auto height :
+       {-7000.0, -14000.0, -std::numeric_limits<double>::max()})
+    check(require(sample_planet_water_color(fixture, height)) ==
+              palette.deep_water,
+          "deep color did not saturate before integer conversion");
+  for (const auto height :
+       {0.001, 1.0, std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()})
+    check(!sample_planet_water_color(fixture, height),
+          "invalid water height accepted");
+  auto previous = palette.shallow_water;
+  for (unsigned depth = 0; depth <= 7000; depth += 70) {
+    const auto color = require(
+        sample_planet_water_color(fixture, -static_cast<double>(depth)));
+    check(within_water_palette(color, palette.shallow_water,
+                               palette.deep_water) &&
+              color.red <= previous.red && color.green >= previous.green &&
+              color.blue <= previous.blue,
+          "water depth escaped or reversed an existing palette channel");
+    previous = color;
+  }
+  const PlanetDescriptor invalid{base.seed,
+                                 base.id,
+                                 base.display_name,
+                                 base.radius,
+                                 base.surface_gravity,
+                                 base.atmosphere_class,
+                                 base.atmosphere_pressure,
+                                 static_cast<TerrainCharacter>(99),
+                                 base.water_coverage,
+                                 palette};
+  check(!sample_planet_water_color(invalid, -1.0),
+        "invalid terrain depth scale accepted");
+}
+
 static auto sea_surface_stream_contract() -> void {
   const auto owner = require(generate_physical_origin_system(Seed{42}, 2));
   const auto& planet =
@@ -100,8 +174,21 @@ static auto sea_surface_stream_contract() -> void {
   const auto body = body_id(planet.id);
   auto cache = require(TerrainTileCache::create(2));
   TileMap cover;
-  std::size_t wet{}, dry{};
+  std::size_t wet{}, dry{}, generator_water_samples{};
+  std::set<std::array<unsigned, 3>> water_colors;
+  water_palette_contract(planet);
   for (unsigned face = 0; face < 6; ++face) {
+    // Independent oracle: existing generator1 integer samples, unchanged by
+    // the presentation helper. Do not mirror the blend formula in the test.
+    const auto generated = require(generate_terrain_tile(
+        planet, {planet.id, static_cast<CubeFace>(face), 0, 0, 0}));
+    for (const auto& sample : generated.samples()) {
+      if (sample.elevation_metres > 0) continue;
+      check(require(sample_planet_water_color(
+                planet, sample.elevation_metres)) == sample.color,
+            "presentation water color differs from unchanged generator1");
+      ++generator_water_samples;
+    }
     const StreamKey key{face, 0, 0, 0};
     const auto raw = build_stream_tile(owner, body, key, 2, cache);
     const auto top = build_stream_tile(owner, body, key, 3, cache);
@@ -117,8 +204,11 @@ static auto sea_surface_stream_contract() -> void {
             "recipe2");
       if (submerged) {
         ++wet;
-        check(top->colors[i] == planet.palette.shallow_water,
+        const auto color = top->colors[i];
+        check(within_water_palette(color, planet.palette.shallow_water,
+                                   planet.palette.deep_water),
               "wet vertex retained a contradictory land color");
+        water_colors.insert({color.red, color.green, color.blue});
       } else {
         ++dry;
         check(top->vertices[i] == raw->vertices[i] &&
@@ -128,8 +218,10 @@ static auto sea_surface_stream_contract() -> void {
     }
     cover.emplace(key, top);
   }
-  check(wet > 0 && dry > 0,
-        "fixed Home sea fixture lost its land/water coverage");
+  check(wet > 0 && dry > 0 && generator_water_samples > 0,
+        "fixed Home sea fixture lost its land/water oracle coverage");
+  check(water_colors.size() > 1,
+        "fixed Home water depths collapsed to one shallow color");
   stream_morph_detail::validate_cover(cover);
   const auto& coarse = *cover.at({0, 0, 0, 0});
   const auto fine = build_stream_tile(owner, body, {0, 1, 0, 0}, 3, cache);
