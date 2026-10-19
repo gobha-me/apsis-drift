@@ -21,6 +21,8 @@ struct MoonBodyGravity {
   double gravitational_parameter_metres_cubed_per_second_squared{};
   double distance_metres{};
   RigidVector3 acceleration_metres_per_second_squared;
+  friend auto operator==(const MoonBodyGravity&, const MoonBodyGravity&)
+      -> bool = default;
 };
 struct MoonBodyActuation {
   VacuumActuation propulsion;

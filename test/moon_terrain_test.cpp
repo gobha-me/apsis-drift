@@ -160,6 +160,8 @@ int main() {
   } catch (const std::exception& error) {
     check(false, error.what());
   }
+  check(fingerprint == 7852221693078128334ULL,
+        "Moon terrain recipe1 retains its height/color golden fingerprint");
   std::cout << "Moon terrain fingerprint " << fingerprint << '\n';
   std::cout << checks << " moon terrain checks, " << failures << " failures\n";
   return failures == 0 ? 0 : 1;

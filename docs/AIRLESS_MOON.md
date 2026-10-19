@@ -57,14 +57,36 @@ projection arithmetic is shared with existing planet geometry. Typed moon tile
 keys retain the real BodyId; the global planet radius and gravity admission
 rules remain unchanged. Tile fills stage their complete result before writing
 caller buffers. The sampler exposes the same height for surface position and
-clearance; actual top-triangle contact/landing still needs integration.
+clearance. Actual contact uses the explicit top-facet provider below.
 
-Then connect the C++ force, terrain, contact, landed anchor and surface walker
-through that same body. Native presentation consumes their state. A bounded
+`moon_surface_contact.hpp` builds the same32-interval top triangles needed by
+presentation, and certifies pads and hull through the existing bounded geometry
+kernels. Authenticated negative moon relief is dry bedrock. The landed anchor
+retains the supported fixed pose; idle resolution applies the actual spin at the
+shared tick. Liftoff release checks actual local GM/r² and adds no impulse.
+`moon_surface_walker.hpp` consumes those top facets through the same movement,
+slope, step, obstruction and return-access kernel as planet walking.
+
+Native presentation and travel still need to consume those providers in a whole
+journey. A bounded
 local jump branch can reuse the existing charge commitment and recovery
 semantics; it must retain explicit body ownership and preserve the old
 intersystem route validators. No opaque relocation or initialized landed demo
 can substitute for the actual trip.
+
+The explicit moon flight codec uses format42 and a separate optional moon world
+selection on the shared flight document. It cannot coexist with a planet world
+selection. Source identity is regenerated from the retained origin seed and
+physical catalog2; the target is the genuine typed origin moon. Closed moon
+physical/rotation/dynamics/terrain versions are distinct from historical planet
+model fields. Old planet formats retain their paths and bytes. Save hydration
+exposes an explicit moon result; planet atmosphere/rotation outputs are
+unavailable for that selection. Moon surface format43 retains gear and an
+optional genuine supported moon anchor, while the resource envelope keeps the
+same craft and clock. Historical surface23 cannot reinterpret a moon anchor.
+Native free-flight consumes the same RK4 and gross fuel transaction. Landing,
+walking, travel and presentation dispatch still need the whole-route integration
+before the moon is playable.
 
 Suit oxygen/exposure, economy, missions, a wider fleet and multi-body gravity
 are separate scopes. The existing local central-body approximation remains a

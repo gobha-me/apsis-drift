@@ -90,7 +90,7 @@ auto certify_patch_impl(const RigidBodyWorldContext& context,
 } // namespace
 
 namespace detail {
-auto nominal_contact_rectangle(const PlanetDescriptor& planet,
+auto nominal_contact_rectangle(double reference_radius_metres,
                                const RigidBodyState& state,
                                const CraftFrameProperties& craft,
                                unsigned support_index)
@@ -118,7 +118,7 @@ auto nominal_contact_rectangle(const PlanetDescriptor& planet,
              {0, 0, static_cast<double>(support.half_length_mm) / 1000.0});
   const V up = rotate(state.orientation, {0, 1, 0});
   const auto radial = length(center);
-  const auto radius = static_cast<double>(planet.radius.value) * 1000.0;
+  const auto radius = reference_radius_metres;
   if (!finite(center) || !finite(width) || !finite(depth) || !finite(up) ||
       !std::isfinite(radial) || radial <= 0 ||
       std::abs(radial - radius) > kContactPatchMaximumDatumAltitudeMetres)
@@ -126,17 +126,24 @@ auto nominal_contact_rectangle(const PlanetDescriptor& planet,
 
   return NominalContactRectangle{center, width, depth, up};
 }
-auto certify_contact_rectangle(const RigidBodyState& state,
-                               unsigned support_index,
-                               const NominalContactRectangle& rectangle,
-                               const ContactTriangle& triangle)
-    -> std::expected<ContactPatch, ContactPatchError> {
+auto nominal_contact_rectangle(const PlanetDescriptor& planet,
+                               const RigidBodyState& state,
+                               const CraftFrameProperties& craft,
+                               unsigned support_index)
+    -> std::expected<NominalContactRectangle, ContactPatchError> {
+  return nominal_contact_rectangle(static_cast<double>(planet.radius.value) *
+                                       1000.0,
+                                   state, craft, support_index);
+}
+auto certify_contact_rectangle_geometry(
+    const NominalContactRectangle& rectangle,
+    const std::array<PlanetFixedPositionMetres, 3>& vertices,
+    PlanetFixedDirection normal)
+    -> std::expected<ContactRectangleCertificate, ContactPatchError> {
   const auto& center = rectangle.center;
   const auto& width = rectangle.width;
   const auto& depth = rectangle.depth;
   const auto& up = rectangle.up;
-  const auto& vertices = triangle.vertices;
-  const auto normal = triangle.outward_normal;
   const V n{normal.x, normal.y, normal.z};
   const V relative = subtract(center, vertices[0]);
   if (!finite(relative) || length(relative) > 200000.0)
@@ -157,15 +164,7 @@ auto certify_contact_rectangle(const RigidBodyState& state,
   if (std::abs(dot(up, n)) <= 1e-6)
     return std::unexpected{ContactPatchError::degenerate_projection};
 
-  ContactPatch result;
-  result.craft = state.craft;
-  result.frame = state.frame;
-  result.tick = state.tick;
-  result.support_index = static_cast<std::uint8_t>(support_index);
-  result.triangle = triangle;
-  result.pad_center = center;
-  result.half_width = direction(width);
-  result.half_length = direction(depth);
+  ContactRectangleCertificate result;
   for (unsigned i = 0; i < 3; ++i) {
     V inward = cross(n, edges[i]);
     const auto magnitude = length(inward);
@@ -193,6 +192,28 @@ auto certify_contact_rectangle(const RigidBodyState& state,
     return std::unexpected{ContactPatchError::ill_conditioned_geometry};
   return result;
 }
+auto certify_contact_rectangle(const RigidBodyState& state,
+                               unsigned support_index,
+                               const NominalContactRectangle& rectangle,
+                               const ContactTriangle& triangle)
+    -> std::expected<ContactPatch, ContactPatchError> {
+  const auto certificate = certify_contact_rectangle_geometry(
+      rectangle, triangle.vertices, triangle.outward_normal);
+  if (!certificate) return std::unexpected{certificate.error()};
+  return ContactPatch{kExperimentalContactPatchVersion,
+                      state.craft,
+                      state.frame,
+                      state.tick,
+                      static_cast<std::uint8_t>(support_index),
+                      triangle,
+                      rectangle.center,
+                      direction(rectangle.width),
+                      direction(rectangle.depth),
+                      certificate->minimum_gap_metres,
+                      certificate->maximum_gap_metres,
+                      certificate->minimum_edge_distances_metres};
+}
+
 } // namespace detail
 
 auto certify_contact_patch(const RigidBodyWorldContext& context,

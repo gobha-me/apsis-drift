@@ -286,6 +286,8 @@ int main() {
   } catch (const std::exception& error) {
     check(false, error.what());
   }
+  check(fingerprint == 9590516388413047147ULL,
+        "Physical moon recipe1 retains its scalar golden fingerprint");
   std::cout << "Physical moon fingerprint " << fingerprint << '\n';
   std::cout << checks << " physical moon checks, " << failures << " failures\n";
   return failures == 0 ? 0 : 1;

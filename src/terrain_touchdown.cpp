@@ -37,6 +37,58 @@ auto rectangle_minimum(V inward, V center, V width, V depth) -> double {
 } // namespace
 
 namespace detail {
+auto certify_contact_first_surface(
+    const std::array<PlanetFixedPositionMetres, 3>& vertices,
+    const godot_spike::detail::NominalContactRectangle& rectangle,
+    PlanetFixedDirection outward_normal)
+    -> std::expected<void, TerrainSupportError> {
+  using namespace godot_spike;
+  const auto n = vector(outward_normal);
+  const auto center = vector(rectangle.center);
+  const auto width = vector(rectangle.width);
+  const auto depth = vector(rectangle.depth);
+  const auto anchor = vector(vertices[0]);
+  const auto plane_distance = dot(n, anchor);
+  if (!std::isfinite(plane_distance) || plane_distance <= 0)
+    return std::unexpected{TerrainSupportError::invalid_geometry};
+
+  const auto gap = dot(n, subtract(center, anchor));
+  const auto projected_center = subtract(center, scale(n, gap));
+  const auto projected_width = subtract(width, scale(n, dot(n, width)));
+  const auto projected_depth = subtract(depth, scale(n, dot(n, depth)));
+  for (unsigned edge = 0; edge < 3; ++edge) {
+    const auto a = vector(vertices[edge]);
+    const auto b = vector(vertices[(edge + 1) % 3]);
+    const auto opposite = vector(vertices[(edge + 2) % 3]);
+    const auto delta = subtract(b, a);
+    const auto edge_length = length(delta);
+    if (!std::isfinite(edge_length) || edge_length < 1 || edge_length > 10000 ||
+        std::abs(dot(n, delta)) > kContactPatchAllowanceMetres)
+      return std::unexpected{TerrainSupportError::invalid_geometry};
+    // Edge difference avoids subtracting two huge, nearly equal cross
+    // products. Cone planes pass through the planet origin, not the facet.
+    auto inward = cross(a, delta);
+    const auto magnitude = length(inward);
+    if (!std::isfinite(magnitude) || magnitude <= 0)
+      return std::unexpected{TerrainSupportError::invalid_geometry};
+    inward = scale(inward, 1 / magnitude);
+    const auto orientation = dot(inward, subtract(opposite, a));
+    if (!std::isfinite(orientation) ||
+        std::abs(orientation) <= kContactPatchAllowanceMetres)
+      return std::unexpected{TerrainSupportError::invalid_geometry};
+    if (orientation < 0) inward = scale(inward, -1);
+    const auto pad_minimum = rectangle_minimum(inward, center, width, depth);
+    const auto surface_minimum = rectangle_minimum(
+        inward, projected_center, projected_width, projected_depth);
+    if (!std::isfinite(pad_minimum) || !std::isfinite(surface_minimum))
+      return std::unexpected{TerrainSupportError::invalid_geometry};
+    if (pad_minimum <= kContactPatchAllowanceMetres ||
+        surface_minimum <= kContactPatchAllowanceMetres)
+      return std::unexpected{TerrainSupportError::first_surface_not_certified};
+  }
+
+  return {};
+}
 auto terrain_pad_observation(const PlanetDescriptor& planet,
                              const godot_spike::ContactPatch& patch)
     -> std::expected<TouchdownPadObservation, TerrainSupportError> {
@@ -67,45 +119,15 @@ auto terrain_pad_observation(const PlanetDescriptor& planet,
   for (const auto p : triangle.vertices)
     if (!finite(vector(p)))
       return std::unexpected{TerrainSupportError::invalid_geometry};
+  const godot_spike::detail::NominalContactRectangle rectangle{
+      patch.pad_center,
+      {width.x, width.y, width.z},
+      {depth.x, depth.y, depth.z},
+      {}};
+  const auto first = certify_contact_first_surface(triangle.vertices, rectangle,
+                                                   triangle.outward_normal);
+  if (!first) return std::unexpected{first.error()};
   const auto anchor = vector(triangle.vertices[0]);
-  const auto plane_distance = dot(n, anchor);
-  if (!std::isfinite(plane_distance) || plane_distance <= 0)
-    return std::unexpected{TerrainSupportError::invalid_geometry};
-
-  const auto gap = dot(n, subtract(center, anchor));
-  const auto projected_center = subtract(center, scale(n, gap));
-  const auto projected_width = subtract(width, scale(n, dot(n, width)));
-  const auto projected_depth = subtract(depth, scale(n, dot(n, depth)));
-  for (unsigned edge = 0; edge < 3; ++edge) {
-    const auto a = vector(triangle.vertices[edge]);
-    const auto b = vector(triangle.vertices[(edge + 1) % 3]);
-    const auto opposite = vector(triangle.vertices[(edge + 2) % 3]);
-    const auto delta = subtract(b, a);
-    const auto edge_length = length(delta);
-    if (!std::isfinite(edge_length) || edge_length < 1 || edge_length > 10000 ||
-        std::abs(dot(n, delta)) > kContactPatchAllowanceMetres)
-      return std::unexpected{TerrainSupportError::invalid_geometry};
-    // Edge difference avoids subtracting two huge, nearly equal cross
-    // products. Cone planes pass through the planet origin, not the facet.
-    auto inward = cross(a, delta);
-    const auto magnitude = length(inward);
-    if (!std::isfinite(magnitude) || magnitude <= 0)
-      return std::unexpected{TerrainSupportError::invalid_geometry};
-    inward = scale(inward, 1 / magnitude);
-    const auto orientation = dot(inward, subtract(opposite, a));
-    if (!std::isfinite(orientation) ||
-        std::abs(orientation) <= kContactPatchAllowanceMetres)
-      return std::unexpected{TerrainSupportError::invalid_geometry};
-    if (orientation < 0) inward = scale(inward, -1);
-    const auto pad_minimum = rectangle_minimum(inward, center, width, depth);
-    const auto surface_minimum = rectangle_minimum(
-        inward, projected_center, projected_width, projected_depth);
-    if (!std::isfinite(pad_minimum) || !std::isfinite(surface_minimum))
-      return std::unexpected{TerrainSupportError::invalid_geometry};
-    if (pad_minimum <= kContactPatchAllowanceMetres ||
-        surface_minimum <= kContactPatchAllowanceMetres)
-      return std::unexpected{TerrainSupportError::first_surface_not_certified};
-  }
 
   // Entire facet above sea datum: projection onto the anchor radial unit
   // vector lower-bounds norm throughout the facet. Below datum: convexity

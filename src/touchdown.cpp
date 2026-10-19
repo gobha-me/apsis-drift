@@ -1,4 +1,5 @@
 #include "apsis_drift/touchdown.hpp"
+#include "touchdown_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -59,20 +60,12 @@ auto positive_zero(double value) -> double {
 }
 } // namespace
 
-auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
-                               const RigidBodyState& state,
-                               const TouchdownObservations& observations)
+namespace detail {
+auto assess_touchdown_geometry(
+    const RigidBodyState& state, std::uint8_t support_count,
+    const std::array<TouchdownPadObservation, 4>& supports, bool gear_deployed,
+    double gravity, double pressure_millibars)
     -> std::expected<TouchdownAssessment, TouchdownError> {
-  if (!validate_rigid_body_state(context, state)) {
-    return std::unexpected(TouchdownError::invalid_state);
-  }
-  if (state.frame.kind != RigidFrameKind::planet_fixed) {
-    return std::unexpected(TouchdownError::unsupported_frame);
-  }
-  if (observations.planet != *state.frame.planet ||
-      observations.tick != state.tick) {
-    return std::unexpected(TouchdownError::observation_identity_mismatch);
-  }
   const auto frame = resolve_craft_frame(state.craft);
   if (!frame ||
       !supports_operation(frame->properties, CraftOperation::terrain_contact) ||
@@ -80,15 +73,15 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
     return std::unexpected(TouchdownError::invalid_craft_frame);
   }
   const auto& craft = frame->properties;
-  if (observations.support_count != craft.support_count ||
-      observations.support_count < 3 || observations.support_count > 4) {
+  if (support_count != craft.support_count || support_count < 3 ||
+      support_count > 4) {
     return std::unexpected(TouchdownError::invalid_support_count);
   }
   // Validate the complete bounded observation before assessing any margin.
   std::array<V, 4> normals{};
-  for (std::size_t index = 0; index < observations.supports.size(); ++index) {
-    const auto& pad = observations.supports[index];
-    if (index >= observations.support_count) {
+  for (std::size_t index = 0; index < supports.size(); ++index) {
+    const auto& pad = supports[index];
+    if (index >= support_count) {
       if (pad != TouchdownPadObservation{}) {
         return std::unexpected(TouchdownError::invalid_observation);
       }
@@ -129,26 +122,11 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
   if (!finite(radial_up) || !finite(body_up)) {
     return std::unexpected(TouchdownError::unsafe_arithmetic);
   }
-  for (std::size_t index = 0; index < observations.support_count; ++index) {
+  for (std::size_t index = 0; index < support_count; ++index) {
     if (dot(normals[index], radial_up) <= 0.0) {
       return std::unexpected(TouchdownError::invalid_normal);
     }
   }
-  const auto* planet = [&]() -> const LocalSystemPlanet* {
-    if (const auto* owner = context.physical_owner()) {
-      const auto found = find_local_system_planet(*owner, observations.planet);
-      return found ? *found : nullptr;
-    }
-    const auto found =
-        find_local_system_planet(context.system, observations.planet);
-    return found ? *found : nullptr;
-  }();
-  if (!planet) {
-    return std::unexpected(TouchdownError::invalid_state);
-  }
-  const auto& descriptor = planet->descriptor;
-  const double gravity = static_cast<double>(descriptor.surface_gravity.value) *
-                         kStandardGravityMetresPerSecondSquared / 1000.0;
   const double weight = static_cast<double>(craft.dry_mass_kg) * gravity;
   const double angular_limit =
       static_cast<double>(craft.max_touchdown_angular_milliradians_per_second) /
@@ -159,9 +137,9 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
       static_cast<double>(craft.max_touchdown_horizontal_mm_per_second) /
       1000.0;
   TouchdownAssessment result;
-  result.support_count = observations.support_count;
+  result.support_count = support_count;
   mark(result.failed_margins, TouchdownMargin::gear_not_deployed,
-       !observations.gear_deployed);
+       !gear_deployed);
   mark(result.failed_margins, TouchdownMargin::not_upright,
        dot(body_up, radial_up) <= 0.0);
   mark(result.failed_margins, TouchdownMargin::angular_speed_exceeded,
@@ -172,10 +150,10 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
        gravity > static_cast<double>(craft.max_surface_gravity_mm_per_second2) /
                      1000.0);
   mark(result.failed_margins, TouchdownMargin::pressure_rating_exceeded,
-       descriptor.atmosphere_pressure.value > craft.max_pressure_millibars);
+       pressure_millibars > craft.max_pressure_millibars);
   bool any_contact = false;
-  for (std::size_t index = 0; index < observations.support_count; ++index) {
-    const auto& observed = observations.supports[index];
+  for (std::size_t index = 0; index < support_count; ++index) {
+    const auto& observed = supports[index];
     const auto& support = craft.supports[index];
     const V normal = normals[index];
     auto& assessed = result.supports[index];
@@ -236,6 +214,43 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
                                 : TouchdownClass::pad_contact_unsafe;
   }
   return result;
+}
+
+} // namespace detail
+
+auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
+                               const RigidBodyState& state,
+                               const TouchdownObservations& observations)
+    -> std::expected<TouchdownAssessment, TouchdownError> {
+  if (!validate_rigid_body_state(context, state)) {
+    return std::unexpected(TouchdownError::invalid_state);
+  }
+  if (state.frame.kind != RigidFrameKind::planet_fixed) {
+    return std::unexpected(TouchdownError::unsupported_frame);
+  }
+  if (observations.planet != *state.frame.planet ||
+      observations.tick != state.tick) {
+    return std::unexpected(TouchdownError::observation_identity_mismatch);
+  }
+  const auto* planet = [&]() -> const LocalSystemPlanet* {
+    if (const auto* owner = context.physical_owner()) {
+      const auto found = find_local_system_planet(*owner, observations.planet);
+      return found ? *found : nullptr;
+    }
+    const auto found =
+        find_local_system_planet(context.system, observations.planet);
+    return found ? *found : nullptr;
+  }();
+  if (!planet) {
+    return std::unexpected(TouchdownError::invalid_state);
+  }
+  const auto& descriptor = planet->descriptor;
+  const double gravity = static_cast<double>(descriptor.surface_gravity.value) *
+                         kStandardGravityMetresPerSecondSquared / 1000.0;
+  return detail::assess_touchdown_geometry(
+      state, observations.support_count, observations.supports,
+      observations.gear_deployed, gravity,
+      descriptor.atmosphere_pressure.value);
 }
 
 } // namespace apsis_drift

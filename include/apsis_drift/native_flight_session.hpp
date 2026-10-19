@@ -9,9 +9,18 @@ struct NativeFlightControls {
   RigidVector3 positive_translation, negative_translation;
   RigidVector3 positive_rotation, negative_rotation;
 };
+struct NativeMoonFlightObservation {
+  MoonBodyGravity gravity;
+  PhysicalMoonRotationGeometry rotation;
+  double altitude_metres{}, speed_metres_per_second{};
+  double radial_speed_metres_per_second{}, tangential_speed_metres_per_second{};
+  friend auto operator==(const NativeMoonFlightObservation&,
+                         const NativeMoonFlightObservation&) -> bool = default;
+};
 struct NativeFlightObservation {
   AtmosphericFlightSample atmosphere;
   OrbitalTelemetry orbit;
+  std::optional<NativeMoonFlightObservation> moon{};
   friend auto operator==(const NativeFlightObservation&,
                          const NativeFlightObservation&) -> bool = default;
 };
@@ -22,6 +31,7 @@ struct NativeFlightStep {
   std::uint64_t fuel_debit_quanta{};
   bool propulsion_refused{};
   bool jump_committed{}, jump_arrived{};
+  std::optional<MoonBodyActuation> moon{};
 };
 
 // Transient player command, never part of the save/world recipe. The aid only
@@ -119,6 +129,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
+  }
+  [[nodiscard]] auto moon() const
+      -> const std::optional<PhysicalMoonDescriptor>& {
+    return moon_;
   }
   [[nodiscard]] auto rotation() const -> const PhysicalPlanetRotationRecipe& {
     return rotation_;
@@ -277,6 +291,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_moon_tick(const NativeFlightControls&,
+                                       SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto advance_impact_tick(const NativeFlightControls&,
                                          SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
@@ -301,6 +318,7 @@ class NativeFreedomFlightSession {
   std::optional<CraftCondition> retired_condition_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
+  std::optional<PhysicalMoonDescriptor> moon_;
   std::optional<std::filesystem::path> source_save_;
   std::optional<FreedomDockingState> docking_;
   std::optional<OriginWalkerState> actor_;
