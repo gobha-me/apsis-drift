@@ -29,6 +29,7 @@ func run() -> void:
 	check_initial_controller()
 	check_foot_keyboard_look()
 	check_foot_controller_look()
+	check_surface_interaction()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -375,4 +376,59 @@ func check_foot_controller_look() -> void:
 	check(controls.foot_controller_look(controls.device) == Vector2.ZERO and controls.needs_neutral and not controls.enabled and controls.bindings == bindings, "Read-only stick look armed input or changed mappings")
 	joy_axis(JOY_AXIS_RIGHT_X, 0.0, 7)
 	joy_axis(JOY_AXIS_RIGHT_Y, 0.0, 7)
+	controls.free()
+
+
+func check_surface_interaction() -> void:
+	var controls := Controls.new()
+	controls.persist = false
+	controls.initial_device = 19
+	root.add_child(controls)
+	controls.available_pads = {19: true, 9: true}
+	var calls := [0, 0]
+	controls.surface_interaction_requested.connect(func(): calls[0] += 1)
+	controls.camera_requested.connect(func(): calls[1] += 1)
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_E
+	event.pressed = true
+	controls._input(event)
+	check(calls == [0, 0], "Flight unexpectedly acquired the fixed on-foot action")
+	check(controls.rebind("strafe_right", "key", {"kind": "key", "code": KEY_T}) and controls.rebind("camera", "key", {"kind": "key", "code": KEY_E}), "Context precedence fixture could not install valid remaps")
+	controls.surface_interaction_enabled = true
+	controls._input(event)
+	check(calls == [1, 0], "Foot interaction lost priority to a remapped flight camera")
+	event.echo = true
+	controls._input(event)
+	check(calls == [1, 0], "Repeated key echo triggered foot interaction")
+	event.echo = false
+	for device in [9, 19]:
+		var pad := InputEventJoypadButton.new()
+		pad.device = device
+		pad.button_index = JOY_BUTTON_A
+		pad.pressed = true
+		controls._input(pad)
+	check(calls == [2, 0], "Foot interaction admitted a foreign controller or refused its selected owner")
+	controls.available_pads[19] = false
+	var disconnected := InputEventJoypadButton.new()
+	disconnected.device = 19
+	disconnected.button_index = JOY_BUTTON_A
+	disconnected.pressed = true
+	controls._input(disconnected)
+	check(calls == [2, 0], "Disconnected selected controller retained foot interaction")
+	controls.available_pads[19] = true
+	controls.set_enabled(false)
+	controls._input(event)
+	check(calls == [2, 0], "Paused controls requested a foot interaction")
+	controls.set_enabled(true)
+	controls.focused = false
+	controls._input(event)
+	check(calls == [2, 0], "Unfocused controls requested a foot interaction")
+	controls.focused = true
+	controls.waiting_action = "camera"
+	controls.waiting_family = "key"
+	controls._input(event)
+	check(calls == [2, 0] and controls.waiting_action.is_empty(), "Remapping triggered a foot interaction")
+	controls.surface_interaction_enabled = false
+	controls._input(event)
+	check(calls == [2, 1], "Leaving foot mode failed to restore the remapped flight camera")
 	controls.free()

@@ -6,6 +6,7 @@ signal recenter_requested
 signal safety_pause(reason: String)
 signal bindings_changed
 signal assist_requested(enabled: bool)
+signal surface_interaction_requested
 
 const MAX_REMAP_NEUTRAL_EVENTS := 128
 const SETTINGS_PATH := "user://freedom-controls-v4.json"
@@ -31,6 +32,7 @@ var status := ""
 var persist := true
 var settings_path := SETTINGS_PATH
 var assistance_request_only := false
+var surface_interaction_enabled := false
 var looking := false
 var look_axes_needs_neutral := false
 var remap_neutral_events: Array[InputEvent] = []
@@ -327,7 +329,11 @@ func _input(event: InputEvent) -> void:
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
 	elif enabled and pressed:
-		if event.is_action_pressed("pilot_camera"):
+		# Fixed on-foot interaction has priority over remapped flight actions.
+		if surface_interaction_enabled and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
+			if not pad or available_pads.get(device, false): surface_interaction_requested.emit()
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("pilot_camera"):
 			camera_requested.emit()
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("pilot_recenter"):

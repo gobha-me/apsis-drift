@@ -16,12 +16,18 @@ does not advance ship time, consume resources or grant sensor facts.
 
 On foot, the compact card identifies only the nearest nearby exposure. It does
 not list distant generated sites. Approach within eight metres of its centre
-on supported ground, pause, then choose **Inspect exposure**. The existing
-paused surface-reference reader shows its label and description. The first
+on supported ground and use **E**, captured **left click**, or the selected
+controller's **A/Cross** while walking and look controls are neutral. The compact
+action offers inspection nearby; a reachable ground return takes priority.
+Inspection pauses and the existing surface-reference reader shows the label
+and description. The first
 inspection records it; repeating the action reopens the description without
 adding history. Back returns to paused controls, and Resume retains the normal
-focus and neutral-input gate. Inspecting is a zero-time metadata action and
-does not require releasing held movement controls first.
+focus and neutral-input gate. **Inspect exposure** remains in paused Controls;
+that paused action still permits held movement. Both paths are zero-time
+metadata actions, preserve the personal marker and use the same C++ proximity
+and support checks. The direct on-foot E action does not fire its flight strafe
+binding or bypass the separate neutral gate before resuming seated flight.
 
 Command results and refusals retain priority. Exposure prompts do not replace
 RETURN, SHIP, HOME or the optional MARK cue. A personal marker remains a separate

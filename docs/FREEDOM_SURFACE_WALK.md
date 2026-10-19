@@ -5,6 +5,11 @@ first-person ground walking. Release controls and resume explicitly. WASD and
 the left stick walk; ordinary mouse movement, arrow keys and the right stick look. Pause and focus loss release the mouse; Resume captures it again. **Return through hatch**
 works within 3.5 metres of the original ground access point. Reboarding pauses
 again, after which the ordinary flight controls and thruster liftoff resume.
+With walking and look controls released, **E**, captured **left click**, or the
+selected controller's **A/Cross** uses that reachable hatch. Otherwise the same
+action inspects a nearby [geological exposure](FREEDOM_SURFACE_LANDMARKS.md),
+when one is in reach. Inspection opens a paused reader; Back keeps controls
+paused until an explicit Resume. Both actions also remain in paused Controls.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
 with a recorded pending loss, or without the supported native starter state.
 
@@ -130,7 +135,7 @@ WASD/E keep their walking/boarding meaning if a flight look binding conflicts.
 Menus retain arrow navigation while paused; release look keys before Resume,
 including opposing keys held together. Right-stick look uses the same saved
 speed and vertical inversion, retaining its default1.8 rad/s rate and per-axis
-shaping. Mouse look retains its fixed rate.
+shaping. Mouse look uses the saved look speed and vertical inversion too.
 
 The suited convention has **no oxygen timer**. Pack attachment, exposure damage,
 instantaneous weather and a saved outside-operation hazard policy remain open

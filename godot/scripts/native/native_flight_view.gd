@@ -658,6 +658,9 @@ func build_ui() -> void:
 	context_action.clip_text = true
 	context_action.focus_mode = Control.FOCUS_NONE
 	context_action.pressed.connect(func():
+		if surface_walking():
+			request_surface_interaction()
+			return
 		if context_source != null and not context_source.disabled:
 			context_source.pressed.emit()
 			update_compact_hud())
@@ -806,7 +809,8 @@ func update_compact_hud() -> void:
 			primary_status.tooltip_text += "\n" + marker_text
 	var exposure := SurfaceLandmarks.nearest_nearby(state)
 	if error.is_empty() and not exposure.is_empty():
-		var exposure_text := "Nearby exposure · %s · %.1f m\n%s" % [exposure.label, exposure.distance_metres, "Controls → Inspect exposure" if exposure.can_inspect else "Move within 8 m to inspect"]
+		var direct_inspection: bool = exposure.can_inspect and not state.get("surface_walk", {}).get("return_access", {}).get("within_reach", false)
+		var exposure_text := "Nearby exposure · %s · %.1f m\n%s" % [exposure.label, exposure.distance_metres, surface_interaction_binding() + " · Inspect exposure" if direct_inspection else "Controls → Inspect exposure" if exposure.can_inspect else "Move within 8 m to inspect"]
 		primary_status.text += "\n" + exposure_text
 		primary_status.tooltip_text += "\n" + exposure_text
 	var contact := DistantContacts.selected_contact(state, selected_contact_id)
@@ -815,7 +819,8 @@ func update_compact_hud() -> void:
 		primary_status.text += "\n" + contact_text
 		primary_status.tooltip_text += "\n" + contact_text + "\nDistant optical observation only; no supported approach or landing."
 	context_source = null
-	if surface_walking(): context_source = surface_walk_button
+	if surface_walking():
+		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
 	elif state.get("attached", false): context_source = release_button
 	elif capture_button != null and not capture_button.disabled and capture_button.visible: context_source = capture_button
@@ -826,6 +831,7 @@ func update_compact_hud() -> void:
 	context_action.visible = not detailed and context_source != null
 	if context_source != null:
 		context_action.text = context_source.text
+		if surface_walking(): context_action.text += " · " + surface_interaction_binding()
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
 
@@ -837,6 +843,7 @@ func setup_controls() -> void:
 	player_input.settings_path = control_settings_path
 	player_input.thrust_mode = true
 	player_input.assistance_request_only = true
+	player_input.surface_interaction_enabled = surface_walking()
 	player_input.assist = state.assistance
 	add_child(player_input)
 	player_input.set_enabled(false)
@@ -878,6 +885,7 @@ func setup_controls() -> void:
 	player_input.assist_requested.connect(request_assistance)
 	player_input.camera_requested.connect(change_camera)
 	player_input.recenter_requested.connect(recenter_camera)
+	player_input.surface_interaction_requested.connect(request_surface_interaction)
 	controls_menu.resumed.connect(toggle_pause)
 	controls_menu.save_requested.connect(open_save_dialog)
 	controls_menu.catalog_save_requested.connect(func(save_as: bool):
@@ -966,6 +974,51 @@ func inspect_surface_landmark() -> void:
 	var notice := "Exposure inspection already recorded." if site.inspected else "Exposure inspected and recorded."
 	report_action_status(notice)
 	controls_menu.show_surface_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button)
+
+
+func surface_interaction_binding() -> String:
+	var result := "E / left click"
+	if player_input != null and player_input.available_pads.get(player_input.device, false):
+		result += " / " + ("Cross" if player_input.playstation() else "A")
+	return result
+
+
+func surface_interaction_neutral() -> bool:
+	# E can be held to interact even though it is a mapped flight strafe key.
+	# Other flight-only controls do not move a surface walker. Resume retains
+	# its separate, unchanged all-flight neutral gate.
+	if not player_input.foot_keyboard_look_neutral() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): return false
+	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
+		if Input.is_physical_key_pressed(key): return false
+	if player_input.available_pads.get(player_input.device, false):
+		for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+			var value := Input.get_joy_axis(player_input.device, axis)
+			if not is_finite(value) or PlayerInput.shape(value, player_input.settings.deadzone, player_input.settings.curve) != 0.0: return false
+	return true
+
+
+func request_surface_interaction() -> void:
+	if not activated or not focused or paused or not surface_walking() or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not player_input.waiting_action.is_empty(): return
+	if not controls_armed or not surface_interaction_neutral():
+		report_action_status("Release walking and look controls to interact.")
+		return
+	if state.surface_walk.return_access.get("within_reach", false):
+		# The normal paused menu still uses port_command and its full neutral
+		# gate. This direct foot action already checked the relevant controls.
+		if not bridge.return_from_freedom_surface_walk():
+			report_action_status(str(bridge.get_last_error()))
+			return
+		state = bridge.get_freedom_flight_state()
+		look_offset = Vector2.ZERO
+		pause_controls("Back in the seat. Release controls, then resume to fly.")
+		update_view(0.0)
+		return
+	var site := SurfaceLandmarks.nearest_nearby(state)
+	if site.is_empty() or not site.can_inspect:
+		report_action_status("Approach RETURN or move within 8 m of an exposure to interact.")
+		return
+	pause_controls("Inspecting local exposure.")
+	inspect_surface_landmark()
 
 
 func refresh_surface_landmarks() -> void:
@@ -1366,7 +1419,10 @@ func _exit_tree() -> void:
 
 func _input(event: InputEvent) -> void:
 	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and surface_walking() and mouse_look.active:
+		request_surface_interaction()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		sync_mouse_look()
 	elif event is InputEventMouseMotion and (surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)):
 		look_offset += MouseLook.motion_delta(event.relative, player_input.settings)
@@ -1579,6 +1635,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		camera_relation = Transform3D(Basis.IDENTITY, state.body_basis * (look_basis * Vector3(17.0, height, 28.0))).looking_at(Vector3.ZERO, state.body_basis.y)
 	if not apply_camera_depth(camera_relation, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if player_input != null:
+		player_input.surface_interaction_enabled = surface_walking()
 		player_input.assist = state.assistance
 		assist_button.set_pressed_no_signal(state.assistance)
 		controls_menu.sync_saved_state(state, false)

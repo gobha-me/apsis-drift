@@ -435,6 +435,153 @@ func check_surface_landmarks(source: String, assets: String, output: String) -> 
 	check(owner.save_freedom_as(repeat_path + ".continued.json") and FileAccess.get_file_as_bytes(repeat_path + ".continued.json") == repeat_bytes, "Inspected exposure Continue rewrote its complete save")
 	shell.free()
 
+func surface_context_event(view: Control, event: InputEvent) -> void:
+	# Deliver real events while the fixture's disabled shell prevents automatic
+	# clock advancement. Only this event delivery temporarily processes input.
+	var view_mode := view.process_mode
+	var input_mode: int = view.player_input.process_mode
+	var was_processing: bool = view.is_processing()
+	view.set_process(false)
+	view.process_mode = Node.PROCESS_MODE_ALWAYS
+	view.player_input.process_mode = Node.PROCESS_MODE_ALWAYS
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	view.player_input.process_mode = input_mode
+	view.process_mode = view_mode
+	view.set_process(was_processing)
+
+
+func surface_context_key(view: Control, pressed: bool, echo := false) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_E
+	event.keycode = KEY_E
+	event.pressed = pressed
+	event.echo = echo
+	surface_context_event(view, event)
+
+
+func surface_context_pad(view: Control, device: int) -> void:
+	for pressed in [true, false]:
+		var event := InputEventJoypadButton.new()
+		event.device = device
+		event.button_index = JOY_BUTTON_A
+		event.pressed = pressed
+		surface_context_event(view, event)
+
+
+func check_surface_context(source: String, assets: String, output: String) -> void:
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("surface_landmark_outside.json"), "assets": assets}), "Context exposure fixture did not Continue"):
+		shell.free()
+		return
+	var view: Control = shell.current_view
+	var original: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	var site := Landmarks.nearest_nearby(original)
+	# The existing near-exposure fixture can still be within hatch reach. Walk
+	# toward its actual site until the two contextual actions are unambiguous.
+	for step in 240:
+		original = owner.get_freedom_flight_state()
+		site = Landmarks.nearest_nearby(original)
+		if site.is_empty() or not site.can_inspect or not original.surface_walk.return_access.within_reach: break
+		var walking: Dictionary = original.surface_walk
+		var direction: Vector3 = walking.basis.inverse() * (site.position - walking.eye_position)
+		var planar := Vector2(direction.x, -direction.z).normalized()
+		if not check(owner.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([planar.y, planar.x, 0.0]), false), "Actual context-fixture approach refused"):
+			shell.free()
+			return
+	original = owner.get_freedom_flight_state()
+	site = Landmarks.nearest_nearby(original)
+	records = owner.get_freedom_observations()
+	view.state = original
+	view.update_view(0.0)
+	if not check(not site.is_empty() and site.can_inspect and not original.surface_walk.return_access.within_reach, "Context fixture lacks a reachable exposure away from the hatch"):
+		shell.free()
+		return
+	check(view.context_source == view.landmark_inspect_button and "E / left click" in view.context_action.text, "Nearby exposure lacks the direct compact action")
+	# Presentation-only priority probe; no physical observation/command is forged.
+	view.state = original.duplicate(true)
+	view.state.surface_walk.return_access.within_reach = true
+	view.update_compact_hud()
+	check(view.context_source == view.surface_walk_button and owner.get_freedom_flight_state() == original, "Reachable hatch failed to take priority over inspection")
+	view.state = original
+	view.update_view(0.0)
+	if not resume(view): shell.free(); return
+	for gate in ["movement", "look", "focus", "modal", "echo"]:
+		if gate == "movement": key(KEY_W, true)
+		elif gate == "look": key(KEY_RIGHT, true)
+		elif gate == "focus":
+			view.focused = false
+			view.player_input.focused = false
+		elif gate == "modal": view.journey_dialog_open = true
+		surface_context_key(view, true, gate == "echo")
+		surface_context_key(view, false)
+		if gate == "movement": key(KEY_W, false)
+		elif gate == "look": key(KEY_RIGHT, false)
+		elif gate == "focus":
+			view.focused = true
+			view.player_input.focused = true
+		elif gate == "modal": view.journey_dialog_open = false
+		check(owner.get_freedom_flight_state() == original and not view.controls_menu.surface_reference_view.visible and not view.paused, "Refused direct inspection changed state or opened UI: " + gate)
+	surface_context_key(view, true)
+	surface_context_key(view, false)
+	var inspected: Dictionary = owner.get_freedom_flight_state()
+	var reference: Control = view.controls_menu.surface_reference_view
+	check(view.paused and reference.visible and site.description in reference.body.text and inspected.surface_landmarks.inspection_count == 1, "E did not pause and inspect the actual nearby exposure")
+	check(landmark_state_without_metadata(inspected) == landmark_state_without_metadata(original) and owner.get_freedom_observations() == records, "Direct inspection changed clock, fuel, actor or observation provenance")
+	var path := output.path_join("context-first-inspection.json")
+	check(owner.save_freedom_as(path), "Direct inspection Save refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	surface_context_key(view, true)
+	surface_context_key(view, false)
+	check(owner.get_freedom_flight_state() == inspected and reference.visible, "Paused repeat E changed the inspection or reader")
+	view.controls_menu.close_surface_reference()
+	view.player_input.device = 19
+	view.player_input.available_pads = {19: true, 9: true}
+	view.player_input.install()
+	if not resume(view): shell.free(); return
+	surface_context_pad(view, 9)
+	view.player_input.available_pads[19] = false
+	surface_context_pad(view, 19)
+	view.player_input.available_pads[19] = true
+	check(not view.paused and not reference.visible and owner.get_freedom_flight_state() == inspected, "Foreign/disconnected pad gained direct inspection")
+	surface_context_pad(view, 19)
+	check(view.paused and reference.visible and "already recorded" in reference.body.text, "Selected controller failed to reopen the existing exposure")
+	view.controls_menu.close_surface_reference()
+	if not resume(view): shell.free(); return
+	view.sync_mouse_look()
+	for pressed in [true, false]:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = pressed
+		surface_context_event(view, click)
+	check(view.paused and reference.visible and owner.save_freedom_as(path + ".repeat.json") and FileAccess.get_file_as_bytes(path + ".repeat.json") == bytes, "Captured click failed to inspect or repeated actions changed full Save bytes")
+	view.controls_menu.close_surface_reference()
+	check(view.paused, "Direct exposure Back resumed walking")
+	key(KEY_W, true)
+	view.toggle_pause()
+	key(KEY_W, false)
+	check(view.paused, "Direct exposure Back weakened the neutral Resume gate")
+	# The existing outside-at-hatch Save tests E against its ordinary flight
+	# strafe binding, comparing the complete result with the direct C++ command.
+	check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Context return fixture did not Continue")
+	view = shell.current_view
+	var before_return := output.path_join("context-return-before.json")
+	check(view.state.surface_walk.return_access.within_reach and owner.save_freedom_as(before_return), "Context return lacks real within-reach access")
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	check(peer.stage_freedom_continue(before_return) and peer.commit_pending_freedom_start(peer.get_pending_freedom_start().candidate_id) and peer.return_from_freedom_surface_walk(), "Direct C++ context-return reference refused")
+	if resume(view):
+		surface_context_key(view, true)
+		surface_context_key(view, false)
+	check(view.paused and not view.surface_walking() and not view.player_input.surface_interaction_enabled, "E failed to return through the actual hatch and pause seated input")
+	check(owner.save_freedom_as(before_return + ".actual.json") and peer.save_freedom_as(before_return + ".expected.json") and FileAccess.get_file_as_bytes(before_return + ".actual.json") == FileAccess.get_file_as_bytes(before_return + ".expected.json"), "Direct foot return differs from the exact C++ command result")
+	shell.free()
+
+
 func check_suit_lamp(view: Control, owner: Variant, output: String) -> void:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var path := output.path_join("lamp-before.json")
@@ -746,6 +893,8 @@ func run() -> void:
 	await check_personal_surface_marker(args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	await check_surface_landmarks(args[0], args[1], args[2])
+	if failed: shell.free(); quit(1); return
+	check_surface_context(args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	if not check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
 	check_ground_pause_heading(shell, owner, args[0], args[1], args[2])
