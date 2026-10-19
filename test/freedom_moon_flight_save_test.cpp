@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <utility>
+#include <type_traits>
 
 namespace {
 using namespace apsis_drift;
@@ -23,7 +24,7 @@ auto check(bool value, std::string_view message) -> void {
 }
 template <class T, class E> auto need(std::expected<T, E> value) -> T {
   if (!value) throw std::runtime_error("Moon flight save fixture refused");
-  return std::move(*value);
+  if constexpr (!std::is_void_v<T>) return std::move(*value);
 }
 auto fixture() -> FreedomFlightSaveDocument {
   auto origin = make_freedom_new_game_document(Seed{42});
