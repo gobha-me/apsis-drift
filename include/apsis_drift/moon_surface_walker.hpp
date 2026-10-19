@@ -32,7 +32,7 @@ class MoonSurfaceWalkTerrain {
  private:
   MoonSurfaceWalkTerrain(MoonTerrainSampler terrain,
                          MoonLandedCraftAnchor anchor)
-      : terrain_(std::move(terrain)), anchor_(std::move(anchor)) {}
+      : terrain_(std::move(terrain)), anchor_(anchor) {}
   [[nodiscard]] auto ground(RigidVector3)
       -> std::expected<RigidVector3, PlanetSurfaceWalkStatus>;
   MoonTerrainSampler terrain_;

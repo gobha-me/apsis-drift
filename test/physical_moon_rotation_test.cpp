@@ -43,6 +43,8 @@ auto contract(std::uint32_t version) -> void {
   const auto catalog = required(generate_secondary_body_catalog(system));
   const auto moon = required(
       generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
+  // Keep an independent pre-call value to detect provider mutation.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
   const auto before = moon;
   const auto hierarchy = required(make_body_hierarchy(catalog));
   const RigidVector3 observer{static_cast<double>(moon.radius_metres), 25.0,

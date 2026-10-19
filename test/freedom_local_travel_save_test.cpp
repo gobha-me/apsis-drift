@@ -38,6 +38,8 @@ auto flight_of(const FreedomTravelSaveDocument& d)
   return surface_base_flight(d.voyage.voyage.voyage.base);
 }
 auto roundtrip(const FreedomTravelSaveDocument& d) -> void {
+  // Keep an independent pre-call value to detect provider mutation.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
   const auto before = d;
   const auto encoded = need(encode_freedom_travel_document_json(d));
   const auto decoded = need(decode_freedom_travel_document_json(encoded));

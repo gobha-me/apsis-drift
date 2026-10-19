@@ -66,6 +66,8 @@ auto fixture() -> FreedomLocalBodyJumpRequest {
 }
 auto valid_contract() -> void {
   const auto request = fixture();
+  // Keep an independent pre-call value to detect provider mutation.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
   const auto original = request;
   const auto moon_arrival = need(freeze_local_body_jump_arrival(request));
   check(request == original && moon_arrival.request == request &&

@@ -104,6 +104,8 @@ auto scalars(const PhysicalMoonProperties& value) -> void {
 }
 auto fixture(const PhysicalLocalSystem& owner) -> PhysicalMoonProperties {
   const auto catalog = need(generate_secondary_body_catalog(owner));
+  // Keep an independent pre-call value to detect provider mutation.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
   const auto source_before = catalog;
   const auto hierarchy_before = need(make_body_hierarchy(catalog));
   const auto ephemerides_before =

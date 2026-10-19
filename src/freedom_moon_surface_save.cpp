@@ -103,7 +103,7 @@ auto decode_moon_surface(const Json& root)
       return std::unexpected{failure("Invalid moon anchor fixed state")};
     surface.moon_landed = MoonLandedCraftAnchor{1, 1, 1, *fixed};
   }
-  FreedomSurfaceSaveDocument document{std::move(*flight), std::move(surface)};
+  FreedomSurfaceSaveDocument document{std::move(*flight), surface};
   if (const auto valid = validate_moon_surface(document); !valid)
     return std::unexpected{valid.error()};
   return document;

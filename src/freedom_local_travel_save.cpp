@@ -411,7 +411,7 @@ auto decode_local_travel(const Json& root)
         root["seated_pilot"].dump(),
         surface_base_flight(d.voyage.voyage.voyage.base).flight.tick);
     if (!value) return std::unexpected{value.error()};
-    d.seated_pilot = std::move(*value);
+    d.seated_pilot = *value;
   }
   if (const auto v = validate_local_travel(d); !v)
     return std::unexpected{v.error()};
