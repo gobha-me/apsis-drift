@@ -490,12 +490,13 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	view.player_input.device = 0
 	view.player_input.available_pads[0] = true
 	view.player_input.install()
+	var replace_records: Dictionary = owner.get_freedom_observations()
 	await activate_marker(view, view.surface_marker_button, true)
 	view.player_input.available_pads.erase(0)
 	view.player_input.device = -2
 	view.player_input.install()
 	var replaced: Dictionary = owner.get_freedom_flight_state()
-	check(replaced.surface_marker.tick == replaced.tick and replaced.surface_marker.tick != point.tick and replaced.surface_marker.distance_metres < 0.000001 and marker_state_only(replaced) == marker_state_only(moved) and owner.get_freedom_observations() == records, "Selected-pad Moon Replace changed more than the actual foot metadata")
+	check(replaced.surface_marker.tick == replaced.tick and replaced.surface_marker.tick != point.tick and replaced.surface_marker.distance_metres < 0.000001 and marker_state_only(replaced) == marker_state_only(moved) and owner.get_freedom_observations() == replace_records, "Selected-pad Moon Replace changed more than the actual foot metadata")
 	var path := output.path_join("moon-personal-marker.json")
 	var saved := save_bytes(owner, path)
 	for repeat in 3: view.update_view(0.0)
