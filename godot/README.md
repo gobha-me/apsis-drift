@@ -39,7 +39,8 @@ with `--headless-validate`. Wayland/Vulkan display support requires separate
 interactive qualification; headless correctness checks and software Xvfb
 captures do not establish it. This option does not change the project renderer.
 
-New Game starts on Origin Station. WASD or the left stick walks; ordinary mouse
+New Game starts on Origin Station. Walking keys (WASD by default, configurable in
+Settings / Controls) or the left stick move; ordinary mouse
 movement, arrow keys or the right stick look. Escape releases the pointer and
 opens pause controls. Near the D1 ladder, release movement and use the contextual
 E/left-click/controller action to board. In cockpit/chase, hold right mouse to

@@ -195,6 +195,12 @@ func run() -> void:
 		check("Fuel accounting and jump travel are not implemented" not in complete and "three separate jump charges" in complete and "committed transit cannot be canceled" in complete and "Standard replacement" in complete, "Reference denies or misstates shipped Freedom operations")
 		check("Current observations" in complete and "Fuel 25.0%" in complete and "Jumps 1/3" in complete and snapshot == original, "Current reference invented resources or edited observations")
 		check(("Return through hatch" in complete) == wayfarer and ("This historical craft has no supported Wayfarer landing" in complete) == not wayfarer, "Reference manufactured supported surface actions for the historical craft")
+		var original_keys: Dictionary = controls.settings.duplicate(true)
+		controls.settings.merge({"walk_forward": KEY_T, "walk_backward": KEY_G, "walk_left": KEY_F, "walk_right": KEY_H}, true)
+		for page_index in [9, 11]:
+			var walking_help := Basics.saved_page_text(page_index, controls, true)
+			check("T/F/G/H / left stick" in walking_help and "Settings / Controls" in walking_help and not "fixed WASD" in walking_help and not "Ground keys are fixed" in walking_help, "Walking reference ignored configured keys or denied remapping")
+		controls.settings = original_keys
 		var ports := Basics.saved_page_text(4, controls, wayfarer)
 		check(("Target D1 / D2" in ports) == wayfarer and ("no supported Wayfarer" in ports) == not wayfarer, "Historical profile manufactured port support")
 		controls.waiting_action = "forward"

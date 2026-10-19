@@ -62,6 +62,7 @@ func _initialize() -> void:
 	variant.surface = {"landed": true}
 	check("Landed" in Status.summary(variant), "Actual anchor lost")
 	variant.surface_walk = {"eye_position": Vector3(0, 2, 30)}
+	check("T/F/G/H / left stick walk" in Status.summary(variant, "T/F/G/H") and not "WASD" in Status.summary(variant, "T/F/G/H"), "On-foot primary HUD ignored configured walking keys")
 	check("On foot" in Status.summary(variant) and not "Reference altitude" in Status.summary(variant) and not "Jump target" in Status.summary(variant), "Ground view retained ship motion or navigation")
 	for row in [["terrain_unresolved", "Ground support unavailable"], ["water", "Water or shoreline"], ["slope", "Ground too steep"], ["step", "Step or drop too large"], ["craft_obstruction", "Wayfarer hull"]]:
 		variant.surface_walk.movement_blockage = row[0]

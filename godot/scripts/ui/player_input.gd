@@ -9,8 +9,10 @@ signal assist_requested(enabled: bool)
 signal surface_interaction_requested
 
 const MAX_REMAP_NEUTRAL_EVENTS := 128
+const MAX_FOOT_REMAP_KEYS := 16
+const WALK_FIELDS := ["walk_forward", "walk_backward", "walk_left", "walk_right"]
 const SETTINGS_PATH := "user://freedom-controls-v4.json"
-const DEFAULT_SETTINGS := {"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}
+const DEFAULT_SETTINGS := {"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0, "walk_forward": KEY_W, "walk_backward": KEY_S, "walk_left": KEY_A, "walk_right": KEY_D}
 const ACTIONS := ["forward", "backward", "turn_left", "turn_right", "strafe_left", "strafe_right", "rise", "fall", "look_left", "look_right", "look_up", "look_down", "camera", "recenter", "look_hold", "pitch_up", "pitch_down", "roll_left", "roll_right", "assist"]
 const TITLES := ["Main thrust", "Retro thrust", "Yaw left", "Yaw right", "Strafe left", "Strafe right", "Rise", "Fall", "Look left (modifier)", "Look right (modifier)", "Look up (modifier)", "Look down (modifier)", "Cockpit / chase", "Recenter head", "Hold to look", "Pitch up", "Pitch down", "Roll left", "Roll right", "Toggle flight assist"]
 const KEYS := [KEY_W, KEY_S, KEY_A, KEY_D, KEY_Q, KEY_E, KEY_SPACE, KEY_CTRL, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_C, KEY_HOME, KEY_ALT, KEY_I, KEY_K, KEY_Z, KEY_X, KEY_F]
@@ -37,6 +39,7 @@ var looking := false
 var look_axes_needs_neutral := false
 var remap_neutral_events: Array[InputEvent] = []
 var remap_neutral_overflow := false
+var foot_remap_keys: Array[int] = []
 var assist := true
 var thrust_mode := false
 
@@ -79,6 +82,20 @@ static func valid_binding(value: Variant, family: String) -> bool:
 	var direction: Variant = value.get("sign")
 	return value.kind == "axis" and code >= 0 and code < 6 and (direction is int or direction is float) and (direction == -1 or direction == 1) and (code < 4 or direction == 1)
 
+static func valid_walk_key(code: Variant) -> bool:
+	# Fixed pause/debug/interaction and UI activation must never move the actor.
+	if not valid_binding({"kind": "key", "code": code}, "key") or int(code) in [KEY_E, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]: return false
+	var label := OS.get_keycode_string(int(code))
+	return not label.is_empty() and OS.find_keycode_from_string(label) == int(code)
+
+static func valid_walk_settings(value: Dictionary) -> bool:
+	var used := {}
+	for field in WALK_FIELDS:
+		var code: Variant = value.get(field, DEFAULT_SETTINGS[field])
+		if not valid_walk_key(code) or used.has(int(code)): return false
+		used[int(code)] = true
+	return true
+
 static func valid_document(value: Variant) -> bool:
 	if not value is Dictionary or value.get("version") != 4 or not value.get("settings") is Dictionary or not value.get("bindings") is Dictionary:
 		return false
@@ -87,7 +104,7 @@ static func valid_document(value: Variant) -> bool:
 		var n: Variant = s.get(pair[0])
 		if not (n is float or n is int) or not is_finite(float(n)) or n < pair[1] or n > pair[2]:
 			return false
-	if s.prompts != int(s.prompts) or not s.get("invert_look") is bool:
+	if s.prompts != int(s.prompts) or not s.get("invert_look") is bool or not valid_walk_settings(s):
 		return false
 	for family in ["key", "pad"]:
 		var used := {}
@@ -134,12 +151,18 @@ func load_settings(path: String = "") -> void:
 	var value: Variant = document.data
 	source_document = value.duplicate(true)
 	settings = value.settings.duplicate(true)
+	for field in WALK_FIELDS:
+		if not settings.has(field): settings[field] = DEFAULT_SETTINGS[field]
 	bindings = value.bindings.duplicate(true)
 
 func apply_preferences(candidate: Dictionary, path: String = "") -> bool:
-	# This provider owns the five scalar settings. Bindings/extensions survive.
+	# Own scalar/walking settings only. Legacy scalar-only candidates retain keys;
+	# bindings and unknown file extensions survive.
 	var pending := settings.duplicate(true)
+	for field in WALK_FIELDS:
+		if not pending.has(field): pending[field] = DEFAULT_SETTINGS[field]
 	for key in DEFAULT_SETTINGS:
+		if not candidate.has(key) and key in WALK_FIELDS: continue
 		if not candidate.has(key):
 			status = "Controls settings are incomplete."
 			return false
@@ -152,7 +175,17 @@ func apply_preferences(candidate: Dictionary, path: String = "") -> bool:
 	if persist and not preferences_writable:
 		status = "Existing controls file cannot be safely replaced. Inspect or move it before applying settings."
 		return false
+	# Prepare the bounded old-key release barrier before any durable write.
+	var retained: Array[int] = []
+	for code in foot_remap_keys + foot_key_codes():
+		if Input.is_physical_key_pressed(code) and code not in retained:
+			if retained.size() >= MAX_FOOT_REMAP_KEYS:
+				status = "Release walking keys before applying more bindings."
+				return false
+			retained.append(code)
 	if not write_preferences(document, path): return false
+	foot_remap_keys = retained
+	needs_neutral = true
 	settings = pending
 	source_document = document
 	status = "Controls saved." if persist else "Controls applied for this session only."
@@ -333,6 +366,9 @@ func _input(event: InputEvent) -> void:
 		if surface_interaction_enabled and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
 			if not pad or available_pads.get(device, false): surface_interaction_requested.emit()
 			get_viewport().set_input_as_handled()
+		elif surface_interaction_enabled and event is InputEventKey and event.physical_keycode in foot_key_codes():
+			# On-foot movement is polled; overlapping flight actions must not fire.
+			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("pilot_camera"):
 			camera_requested.emit()
 			get_viewport().set_input_as_handled()
@@ -354,6 +390,31 @@ static func shape(value: float, deadzone: float, curve: float) -> float:
 func strength(action: String) -> float:
 	return Input.get_action_raw_strength("pilot_" + action)
 
+func foot_key_codes() -> Array[int]:
+	var codes: Array[int] = []
+	for field in WALK_FIELDS: codes.append(int(settings.get(field, DEFAULT_SETTINGS[field])))
+	return codes
+
+func foot_keyboard_label() -> String:
+	if foot_key_codes() == [KEY_W, KEY_S, KEY_A, KEY_D]: return "WASD"
+	var labels := PackedStringArray()
+	for field in ["walk_forward", "walk_left", "walk_backward", "walk_right"]:
+		labels.append(OS.get_keycode_string(int(settings[field])))
+	return "/".join(labels)
+
+func foot_keyboard_move() -> Vector2:
+	var codes := foot_key_codes()
+	return Vector2(float(Input.is_physical_key_pressed(codes[3])) - float(Input.is_physical_key_pressed(codes[2])), float(Input.is_physical_key_pressed(codes[0])) - float(Input.is_physical_key_pressed(codes[1])))
+
+func foot_keyboard_move_neutral() -> bool:
+	var neutral := true
+	for i in range(foot_remap_keys.size() - 1, -1, -1):
+		if Input.is_physical_key_pressed(foot_remap_keys[i]): neutral = false
+		else: foot_remap_keys.remove_at(i)
+	for code in foot_key_codes():
+		if Input.is_physical_key_pressed(code): neutral = false
+	return neutral
+
 # Callers own pause/focus/boarding gates. The station's read-only provider is
 # intentionally disabled, so these helpers read physical keys without arming it.
 func foot_keyboard_look() -> Vector2:
@@ -361,8 +422,8 @@ func foot_keyboard_look() -> Vector2:
 	var actions := ["look_left", "look_right", "look_up", "look_down"]
 	for i in 4:
 		var key: int = int(bindings[actions[i]].key.code)
-		# Fixed walking and boarding retain their on-foot meaning after remaps.
-		if key not in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_E] and Input.is_physical_key_pressed(key): held[i] = 1.0
+		# Configured movement and fixed interaction keep priority over look.
+		if key not in foot_key_codes() and key != KEY_E and Input.is_physical_key_pressed(key): held[i] = 1.0
 	var look := Vector2(held.y - held.x, held.w - held.z)
 	look = look.normalized() * shape(look.length(), settings.deadzone, settings.curve) * settings.look_speed
 	if settings.invert_look: look.y *= -1
@@ -382,7 +443,7 @@ func foot_controller_look(selected_device: int) -> Vector2:
 func foot_keyboard_look_neutral() -> bool:
 	for action in ["look_left", "look_right", "look_up", "look_down"]:
 		var key: int = int(bindings[action].key.code)
-		if key not in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_E] and Input.is_physical_key_pressed(key): return false
+		if key not in foot_key_codes() and key != KEY_E and Input.is_physical_key_pressed(key): return false
 	return true
 
 

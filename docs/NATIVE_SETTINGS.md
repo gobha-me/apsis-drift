@@ -8,12 +8,17 @@ version-4 controls provider and
 user://freedom-controls-v4.json; preferences stay outside C++ world/save state.
 
 The screen offers stick/trigger dead zone, response curve, look speed, vertical
-look inversion and automatic/Xbox/PlayStation text prompts. Look speed and
+look inversion, automatic/Xbox/PlayStation text prompts and four keyboard
+walking choices. Walking defaults to WASD; the choices apply on the station
+and outside a landed craft. Look speed and
 inversion apply to flight look and to on-foot look keys/right stick, both on the
 station and outside the craft. Walking retains its default stick rate; speed
 scales it. Walking stick movement and look keep per-axis dead zone/curve shaping.
-Mouse look keeps its fixed rate. Ground movement keys remain fixed; flight
-remapping remains in the paused flight controls.
+Mouse look uses the same speed and vertical inversion. Walking keys are
+separate from flight remapping in paused controls. Current keys appear in the
+walking HUD and reference. Select a walking-key button and press its replacement;
+Escape cancels that capture while keeping Settings open. Reserved and duplicate
+keys refuse. Capturing a key does not activate gameplay or menu actions.
 
 Edits and **Restore Defaults (pending)** change the pending choices only.
 **Apply** validates and writes before adopting them, preserves supported unknown
@@ -35,6 +40,12 @@ gameplay, the screen retains pending edits through a focus/device safety pause
 and discards them when the session/menu is explicitly hidden. Preference edits
 advance no C++ ticks and do not change the committed save.
 
+Older version-4 files without walking fields keep WASD defaults. Updating only
+the five original scalar preferences retains existing walking choices. Keys
+held across Apply must be released before Resume; opposed keys cannot cancel
+into a neutral state. Configured walking keys retain priority over overlapping
+on-foot look and flight actions.
+
 Missing files use defaults. An unreadable, oversized, malformed or unsupported
 version uses in-memory defaults with a diagnostic and disables this screen's
 Apply; inspect or move the source file before restarting to use a fresh file.
@@ -44,7 +55,7 @@ symlink-ownership guarantee is claimed.
 
 Video quality, audio device selection, calibration and future-provider fields
 are absent. Optional ship audio retains its existing paused-flight controls.
-Station walking retains fixed movement keys and explicit controller selection;
+Station walking retains explicit controller selection;
 its preference provider is disabled as a gameplay input source. Active-slot/catalog
 Save and the wider pause program remain #136 work. This screen does not claim that composed program or
 physical-controller qualification.

@@ -248,7 +248,7 @@ static func gear_clearance_text(value: Dictionary) -> String:
 	if sample.minimum_gap_metres > sample.maximum_gap_metres or sample.age_seconds < 0.0: return UNAVAILABLE
 	return "Last gear gap %.2f m · %.1f s ago" % [sample.minimum_gap_metres, sample.age_seconds]
 
-static func summary(value: Dictionary) -> String:
+static func summary(value: Dictionary, walking_keys: String = "WASD") -> String:
 	for field in ["altitude", "surface_speed", "radial_rate", "air_density"]:
 		if not finite_number(value.get(field)): return "Flight observations unavailable"
 	if not value.get("attached") is bool: return "Flight observations unavailable"
@@ -283,7 +283,7 @@ static func summary(value: Dictionary) -> String:
 			lines.append("RETURN · %.1f m · %s" % [access.distance_metres, "Within reach · Return through hatch" if access.within_reach else "Approach ground access"])
 		else:
 			lines.append("RETURN · Return access unavailable")
-		lines.append("WASD / left stick walk · Right-drag / right stick look")
+		lines.append("%s / left stick walk · Mouse / look keys / right stick look" % walking_keys)
 	else:
 		lines.append("Reference altitude %.2f km" % (value.altitude / 1000.0))
 		if surface.get("gear_deployed", false) and not surface.get("landed", false) and not value.attached:

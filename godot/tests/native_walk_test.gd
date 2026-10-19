@@ -878,9 +878,45 @@ func run() -> void:
 	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 	check(view.paused and view.focused, "Focus return resumed time without player action")
 	view.set_paused(false)
+	# Configured keyboard input feeds the existing independent C++ trace.
+	var provider: Node = view.preferences_provider
+	var old_settings: Dictionary = provider.settings.duplicate(true)
+	var old_persist: bool = provider.persist
+	provider.persist = false
+	view.set_paused(true)
+	physical_key(KEY_W, true)
+	var custom := old_settings.duplicate(true)
+	custom.merge({"walk_forward": KEY_T, "walk_backward": KEY_G, "walk_left": KEY_F, "walk_right": KEY_H}, true)
+	check(provider.apply_preferences(custom), "Custom station walking keys refused")
+	view.resume_requested()
+	check(view.paused and not view.current_controls_neutral(), "Changing keys while old W was held bypassed station Resume")
+	physical_key(KEY_W, false)
+	physical_key(KEY_T, true)
+	physical_key(KEY_G, true)
+	view.resume_requested()
+	check(view.paused and not view.current_controls_neutral(), "Opposed configured walking keys bypassed station Resume")
+	physical_key(KEY_T, false)
+	physical_key(KEY_G, false)
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == originals[0], "Walking settings changed complete station voyage")
+	view.resume_requested()
+	view.refresh_hud()
+	check(not view.paused and "T/F/G/H" in view.active_status.text and "T/F/G/H" in view.hud_hint.text, "Station help failed to show configured walking keys")
+	physical_key(KEY_W, true)
+	check(view.input_controls(0.0)[0] == 0.0, "Removed W continued moving station actor")
+	physical_key(KEY_W, false)
+	# The independent long trace requests heading zero from its first tick.
+	# Match that input demand; New Game itself starts facing PI/2.
+	view.requested_heading = 0.0
 	for axis in [-1.0, 1.0]:
+		var movement_key := KEY_F if axis < 0 else KEY_H
+		physical_key(movement_key, true)
+		var commands: PackedFloat64Array = view.input_controls(0.0)
+		check(commands == PackedFloat64Array([0.0, axis, 0.0]), "Configured station key lost movement direction")
 		for n in 960:
-			check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, axis, 0.0])), "Supported walking trace refused")
+			check(owner.advance_freedom_walk(1.0 / 120.0, commands), "Supported walking trace refused")
+		physical_key(movement_key, false)
+	check(provider.apply_preferences(old_settings), "Station walking settings restore refused")
+	provider.persist = old_persist
 	view.update_view()
 	var final: Dictionary = owner.get_freedom_walk_state()
 	check_sky(view, owner.get_freedom_flight_state(), "Advanced walking")
