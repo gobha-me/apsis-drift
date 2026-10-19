@@ -248,6 +248,33 @@ auto moon_marker_branch(NativeFreedomFlightSession session) -> void {
   moon_marker_projection(
       session, std::get<FreedomMoonSurfaceMarkerPoint>(*marked->point));
   need(session.release_surface());
+  // The existing jump provider excludes the whole Moon relief envelope plus
+  // the craft hull. Releasing gear support alone is not departure clearance.
+  const auto ascent_tick = session.document().flight.tick;
+  const auto ascent_fuel = session.resources()->flight_quanta;
+  const auto ascent_charges = session.resources()->jump_charges;
+  const double departure_radius =
+      session.moon()->radius_metres + kMoonTerrainMaximumReliefMetres + 100;
+  NativeFlightControls ascent;
+  ascent.positive_translation.y = .5;
+  bool clear{};
+  for (unsigned i = 0; i < 18000; ++i) {
+    const auto& position = session.document().flight.position_metres;
+    if (std::hypot(position.x, position.y, position.z) > departure_radius) {
+      clear = true;
+      break;
+    }
+    const auto step = need(session.advance(ascent));
+    check(!step.propulsion_refused && !session.surface()->moon_landed,
+          "Actual marker ascent retains paid thrust and leaves support");
+  }
+  check(clear && session.document().flight.tick > ascent_tick &&
+            session.resources()->flight_quanta < ascent_fuel &&
+            session.resources()->jump_charges == ascent_charges &&
+            session.knowledge()->surface_marker == marked,
+        "Bounded actual Moon ascent reaches the unchanged departure envelope "
+        "with its own clock/fuel and the exact retained marker");
+  session = continued(session);
   need(session.select_local_jump(
       {session.system().catalog.id,
        body_id(session.document().origin.recipe.home_planet)}));
