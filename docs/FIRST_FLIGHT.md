@@ -15,9 +15,13 @@ tools/run_godot_native.sh --new-game=42
 ```
 
 The current native path is Linux x86_64. Keyboard/mouse work directly; a controller is optional.
-New Game starts a first-person actor on Origin Station's hub floor. WASD or the
+New Game starts a first-person actor on Origin Station's hub floor. WASD by default or the
 left stick walks; ordinary mouse movement, arrow keys or the right stick look. **Esc / Start · Controls**
-opens paused controls. The start screen also offers control Settings and
+opens paused controls. **Settings / Controls** lets you change each walking key
+for both station and surface movement. Choices stay pending until Apply; Cancel
+keeps the previous keys. The walking hint shows the current choices. Release
+held movement keys before resuming, including keys held while changing them.
+The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md). Look speed and vertical inversion apply to
 on-foot keys and the right stick as well as flight look. Walking keeps its
 default stick rate; the speed setting scales it. Mouse look uses the same speed

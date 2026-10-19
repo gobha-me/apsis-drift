@@ -863,7 +863,30 @@ func check_walk_feedback(shell: Control, owner: Variant, source: String, assets:
 	var pending: Dictionary = continued.get_pending_freedom_start()
 	if not check(not pending.is_empty() and continued.commit_pending_freedom_start(pending.candidate_id), "Blocked-walk reference commit refused: " + str(continued.get_last_error())): return
 	if not check(continued.get_freedom_flight_state().surface_walk.movement_blockage == null and continued.save_freedom_as(output.path_join("walk-blocked-continued.json")) and FileAccess.get_file_as_bytes(output.path_join("walk-blocked-continued.json")) == bytes, "Continue invented prior feedback or changed complete save"): return
-	walk(view, KEY_S, 15)
+	var original_settings: Dictionary = view.player_input.settings.duplicate(true)
+	var original_persist: bool = view.player_input.persist
+	view.player_input.persist = false
+	var custom := original_settings.duplicate(true)
+	custom.merge({"walk_forward": KEY_T, "walk_backward": KEY_G, "walk_left": KEY_F, "walk_right": KEY_H}, true)
+	check(view.player_input.apply_preferences(custom), "Custom surface walking keys refused")
+	key(KEY_T, true)
+	key(KEY_G, true)
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed and not view.surface_interaction_neutral(), "Opposed configured surface keys bypassed Resume/interaction")
+	key(KEY_T, false)
+	key(KEY_G, false)
+	check(owner.save_freedom_as(saved) and FileAccess.get_file_as_bytes(saved) == bytes, "Walking settings changed complete surface save")
+	if resume(view):
+		check("T/F/G/H" in view.hint.text, "Surface help failed to show configured walking keys")
+		key(KEY_S, true)
+		check(view.surface_controls(0.0)[0] == 0.0, "Removed S continued moving surface actor")
+		key(KEY_S, false)
+		key(KEY_G, true)
+		check(view.surface_controls(0.0) == PackedFloat64Array([-1, 0, 0]), "Custom backward key failed to reach surface controls")
+		view._process(0.125)
+		key(KEY_G, false)
+	check(view.player_input.apply_preferences(original_settings), "Surface walking settings restore refused")
+	view.player_input.persist = original_persist
 	check(view.error.is_empty() and not view.paused and view.state.surface_walk.movement_blockage == null and not "Last step blocked" in view.primary_status.text, "Supported movement retained a misleading obstacle warning")
 	check(continued.advance_freedom_surface_walk(0.125, PackedFloat64Array([-1, 0, 0]), false) and continued.save_freedom_as(output.path_join("walk-feedback-reference.json")) and owner.save_freedom_as(output.path_join("walk-feedback-after.json")) and FileAccess.get_file_as_bytes(output.path_join("walk-feedback-reference.json")) == FileAccess.get_file_as_bytes(output.path_join("walk-feedback-after.json")), "Feedback changed actual walk/clock/resources compared with independent Continue")
 	# Reset this short real-input probe before the inherited canonical trace.

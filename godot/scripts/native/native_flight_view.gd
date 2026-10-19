@@ -988,8 +988,7 @@ func surface_interaction_neutral() -> bool:
 	# Other flight-only controls do not move a surface walker. Resume retains
 	# its separate, unchanged all-flight neutral gate.
 	if not player_input.foot_keyboard_look_neutral() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): return false
-	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
-		if Input.is_physical_key_pressed(key): return false
+	if not player_input.foot_keyboard_move_neutral(): return false
 	if player_input.available_pads.get(player_input.device, false):
 		for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
 			var value := Input.get_joy_axis(player_input.device, axis)
@@ -1135,7 +1134,7 @@ func refresh_control_hint() -> void:
 	if player_input == null:
 		return
 	if surface_walking():
-		hint.text = "WASD / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse · Return near the aft ground access to reboard"
+		hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse · Return near the aft ground access to reboard" % player_input.foot_keyboard_label()
 		return
 	var family := "pad" if player_input.last_device == "pad" else "key"
 	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nHold right mouse to look · %s recenter head\nFlight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family), player_input.binding_label("recenter", family)]
@@ -1369,6 +1368,7 @@ func toggle_pause() -> void:
 	player_input.enabled = true
 	player_input.look_axes_needs_neutral = false
 	controls_menu.hide_menu()
+	refresh_control_hint()
 	pause_button.text = "Pause walking" if surface_walking() else "Pause flight"
 	save_status.text = "Walking. Save As pauses the session." if surface_walking() else "Flight running. Save As pauses the session."
 	update_compact_hud()
@@ -1380,8 +1380,7 @@ func observe_neutral_controls() -> void:
 	var neutral: bool = player_input.observe_neutral()
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): neutral = false
 	if surface_walking():
-		for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
-			if Input.is_physical_key_pressed(key): neutral = false
+		if not player_input.foot_keyboard_move_neutral(): neutral = false
 		if player_input.device >= 0:
 			for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
 				if absf(Input.get_joy_axis(player_input.device, axis)) > float(player_input.settings.deadzone): neutral = false
@@ -1392,8 +1391,9 @@ func observe_neutral_controls() -> void:
 func surface_controls(delta: float) -> PackedFloat64Array:
 	if paused or not focused or not controls_armed or save_dialog.visible:
 		return PackedFloat64Array([0.0, 0.0, float(state.surface_walk.heading)])
-	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
-	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
+	var keyboard_move: Vector2 = player_input.foot_keyboard_move()
+	var forward := keyboard_move.y
+	var right := keyboard_move.x
 	look_offset += player_input.foot_keyboard_look() * delta
 	if player_input.device >= 0:
 		var deadzone: float = player_input.settings.deadzone

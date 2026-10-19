@@ -1,7 +1,7 @@
 # Landed surface walking prototype
 
 After a supported, stable Wayfarer landing, **Leave Wayfarer · suit** selects
-first-person ground walking. Release controls and resume explicitly. WASD and
+first-person ground walking. Release controls and resume explicitly. Configured walking keys (WASD by default) and
 the left stick walk; ordinary mouse movement, arrow keys and the right stick look. Pause and focus loss release the mouse; Resume captures it again. **Return through hatch**
 works within 3.5 metres of the original ground access point. Reboarding pauses
 again, after which the ordinary flight controls and thruster liftoff resume.
@@ -126,12 +126,14 @@ Exit and return currently transfer instantly to/from supported ground behind
 the registered aft hull, derived from the exact craft orientation and anchor.
 The authored roof-hatch animation and a visible transfer route remain unfinished.
 This is a useful ground walking prototype, not proof of a continuous climb
-through the hatch. Ground keys are currently fixed WASD; stick shaping consumes
-the existing device/deadzone/curve settings. Flight binding remapping does not
-yet remap those ground keys. On foot, the existing keyboard look bindings
+through the hatch. The four walking keys have separate choices in Settings / Controls, shared
+with station walking. Apply saves them outside the world; Cancel keeps the
+previous choices. Older controls files retain WASD defaults. E remains the
+interaction key. Stick shaping consumes the existing device/deadzone/curve
+settings; controller walking still uses the left stick. On foot, the existing keyboard look bindings
 (default arrows) work without the flight look modifier and use the saved look
-speed and vertical inversion. These bindings also apply on the station. Fixed
-WASD/E keep their walking/boarding meaning if a flight look binding conflicts.
+speed and vertical inversion. These bindings also apply on the station. Configured walking keys and E keep their walking/boarding meaning if a
+flight look binding conflicts.
 Menus retain arrow navigation while paused; release look keys before Resume,
 including opposing keys held together. Right-stick look uses the same saved
 speed and vertical inversion, retaining its default1.8 rad/s rate and per-axis

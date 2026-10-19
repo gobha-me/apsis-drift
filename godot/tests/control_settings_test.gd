@@ -37,6 +37,141 @@ func write(path: String, value: String) -> void:
 	check(file != null, "Could not create isolated controls fixture")
 	if file != null: file.store_string(value); file.close()
 
+func physical(code: Key, down: bool, echo := false) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.keycode = code
+	event.pressed = down
+	event.echo = echo
+	Input.parse_input_event(event)
+	await process_frame
+
+func walking_settings(title: Control, controls: Node, view: Control, path: String) -> void:
+	var before: Dictionary = controls.settings.duplicate(true)
+	var source: Dictionary = controls.source_document.duplicate(true)
+	var original := FileAccess.get_file_as_bytes(path)
+	for bad in [KEY_S, KEY_ESCAPE, KEY_V, KEY_F3, KEY_E, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, 0, -1, 0x800000, 65.5, NAN, INF, true, "T"]:
+		var invalid := before.duplicate(true)
+		invalid.walk_forward = bad
+		check(not controls.apply_preferences(invalid) and controls.settings == before and controls.source_document == source and FileAccess.get_file_as_bytes(path) == original, "Invalid/duplicate walking key changed live/file: " + str(bad))
+	var custom := before.duplicate(true)
+	custom.merge({"walk_forward": KEY_T, "walk_backward": KEY_G, "walk_left": KEY_F, "walk_right": KEY_H}, true)
+	check(not controls.apply_preferences(custom, "user://missing-parent/walk.json") and controls.settings == before and controls.source_document == source and controls.foot_remap_keys.is_empty(), "Failed walking write adopted candidate/barrier")
+	check(not controls.apply_preferences(custom, "user://rename-target") and controls.settings == before and controls.source_document == source, "Failed walking rename adopted live candidate")
+
+	# Real UI capture is pending only and cannot route reserved actions or UI
+	# activation, echoes, pointer or pad events into a background provider.
+	view.refresh_fields()
+	var pause_calls := [0]
+	var on_pause := func(): pause_calls[0] += 1
+	controls.pause_requested.connect(on_pause)
+	view.fields.walk_forward.control.pressed.emit()
+	check(view.capturing_walk_field == "walk_forward" and not controls.is_processing_input(), "Walking capture did not own input")
+	await physical(KEY_T, true, true)
+	await physical(KEY_T, false)
+	await pad(JOY_BUTTON_A)
+	var mouse := InputEventMouseButton.new()
+	mouse.button_index = MOUSE_BUTTON_LEFT
+	mouse.pressed = true
+	Input.parse_input_event(mouse)
+	await process_frame
+	mouse.pressed = false
+	Input.parse_input_event(mouse)
+	await process_frame
+	check(view.capturing_walk_field == "walk_forward" and view.pending == before and controls.settings == before, "Echo/pad/mouse changed capture")
+	for reserved in [KEY_V, KEY_F3, KEY_E, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_S]:
+		await key(reserved)
+		check(view.capturing_walk_field == "walk_forward" and view.pending == before and pause_calls[0] == 0 and view.visible, "Reserved/duplicate capture escaped into UI/background")
+	await key(KEY_ESCAPE)
+	check(view.capturing_walk_field.is_empty() and view.visible and view.pending == before and controls.is_processing_input() and pause_calls[0] == 0, "Esc cancelled Settings/applied instead of cancelling capture")
+	for item in [["walk_forward", KEY_T], ["walk_backward", KEY_G], ["walk_left", KEY_F], ["walk_right", KEY_H]]:
+		view.fields[item[0]].control.pressed.emit()
+		await key(item[1])
+		check(view.capturing_walk_field.is_empty() and view.pending[item[0]] == item[1], "Physical key capture did not change pending field")
+	check(controls.settings == before and FileAccess.get_file_as_bytes(path) == original, "Key capture adopted/wrote before Apply")
+	view.cancel()
+	check(controls.settings == before and FileAccess.get_file_as_bytes(path) == original, "Cancelled walking edits changed live/file")
+	title.open_settings()
+	view.begin_walk_capture("walk_forward")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await key(KEY_T)
+	check(view.capturing_walk_field.is_empty() and view.pending == before and controls.settings == before and view.visible, "Focus loss retained capture or remapped in background")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	controls.pause_requested.disconnect(on_pause)
+	view.pending = custom.duplicate(true)
+	view.refresh_fields()
+	# Both the previously mapped W and newly mapped T are held at Apply.
+	await physical(KEY_W, true)
+	await physical(KEY_T, true)
+	view.apply_pending()
+	check(controls.settings == custom and controls.foot_keyboard_label() == "T/F/G/H" and not controls.enabled and controls.needs_neutral, "Apply failed custom walking keys or armed live input")
+	check(controls.foot_keyboard_move() == Vector2(0, 1) and not controls.foot_keyboard_move_neutral() and KEY_W in controls.foot_remap_keys, "New movement/old held-key barrier missing")
+	await physical(KEY_T, false)
+	check(controls.foot_keyboard_move() == Vector2.ZERO and not controls.foot_keyboard_move_neutral(), "Old held key disappeared across Apply")
+	await physical(KEY_W, false)
+	check(controls.foot_keyboard_move_neutral() and controls.foot_remap_keys.is_empty(), "Walking release barrier did not recover")
+	var applied: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	check(applied.extension == source.extension and applied.settings.extension == source.settings.extension and applied.bindings == source.bindings, "Walking Apply dropped unknown extensions/bindings")
+	var reader := Controls.new()
+	reader.defaults()
+	reader.settings_path = path
+	reader.load_settings()
+	check(reader.foot_key_codes() == controls.foot_key_codes(), "Custom walking keys did not survive reload")
+	reader.free()
+	var scalar_only := custom.duplicate(true)
+	for field in Controls.WALK_FIELDS: scalar_only.erase(field)
+	scalar_only.look_speed = 2.0
+	check(controls.apply_preferences(scalar_only) and controls.foot_key_codes() == [KEY_T, KEY_G, KEY_F, KEY_H], "Historical five-scalar candidate reset custom movement")
+	view.pending = controls.settings.duplicate(true)
+	view.restore_defaults()
+	check(view.pending.walk_forward == KEY_W and controls.settings.walk_forward == KEY_T, "Restore walking defaults applied before Apply")
+	view.cancel()
+	# Configured movement overrides flight camera/recenter/assist and look.
+	var overlaps: Dictionary = controls.settings.duplicate(true)
+	overlaps.merge({"walk_left": KEY_C, "walk_right": KEY_HOME}, true)
+	check(controls.apply_preferences(overlaps), "Valid flight-overlapping movement key rejected")
+	controls.install()
+	controls.surface_interaction_enabled = true
+	controls.set_enabled(true)
+	controls.needs_neutral = false
+	var actions := [0, 0, 0]
+	var on_camera := func(): actions[0] += 1
+	var on_recenter := func(): actions[1] += 1
+	var on_assist := func(_value: bool): actions[2] += 1
+	controls.camera_requested.connect(on_camera)
+	controls.recenter_requested.connect(on_recenter)
+	controls.assist_requested.connect(on_assist)
+	for code in [KEY_C, KEY_HOME]:
+		await physical(code, true)
+		check(controls.foot_keyboard_move().x == (-1.0 if code == KEY_C else 1.0), "Flight-overlap key failed actual movement polling")
+		await physical(code, false)
+	# F is flight assist, and now walking-left again.
+	overlaps.walk_left = KEY_F
+	check(controls.apply_preferences(overlaps), "Valid assist-overlapping movement rejected")
+	controls.install()
+	controls.needs_neutral = false
+	await physical(KEY_F, true)
+	await physical(KEY_F, false)
+	check(actions == [0, 0, 0], "Walking key fired flight camera/recenter/assist")
+	controls.camera_requested.disconnect(on_camera)
+	controls.recenter_requested.disconnect(on_recenter)
+	controls.assist_requested.disconnect(on_assist)
+	var look_bindings: Dictionary = controls.bindings.duplicate(true)
+	controls.bindings.look_left.key.code = KEY_T
+	await physical(KEY_T, true)
+	check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral() and not controls.foot_keyboard_move_neutral(), "Configured movement also activated on-foot look")
+	await physical(KEY_T, false)
+	controls.bindings.look_left.key.code = KEY_W
+	await physical(KEY_W, true)
+	check(controls.foot_keyboard_look().x < 0 and not controls.foot_keyboard_look_neutral() and controls.foot_keyboard_move() == Vector2.ZERO, "Old default W stayed excluded after movement remap")
+	await physical(KEY_W, false)
+	controls.bindings = look_bindings
+	controls.surface_interaction_enabled = false
+	controls.set_enabled(false)
+	check(controls.apply_preferences(before), "Walking test did not restore default settings")
+	controls.install()
+	title.open_settings()
+
 func run() -> void:
 	if DisplayServer.get_name() != "headless" or AudioServer.get_driver_name() != "Dummy": quit(1); return
 	var title := Title.new()
@@ -52,11 +187,14 @@ func run() -> void:
 	document.settings.extension = {"meaning": "unowned", "value": [1, 2]}
 	document.bindings.future_action = {"payload": false}
 	document.bindings.forward.extension = "keep"
+	# Historical v4 files contain only the original scalar settings.
+	for field in Controls.WALK_FIELDS: document.settings.erase(field)
 	write(path, JSON.stringify(document))
 	document = JSON.parse_string(FileAccess.get_file_as_string(path))
 	controls.settings_path = path
 	controls.persist = true
 	controls.load_settings()
+	check(controls.foot_key_codes() == [KEY_W, KEY_S, KEY_A, KEY_D] and controls.foot_keyboard_label() == "WASD", "Historical v4 omission did not default to WASD")
 	var original := FileAccess.get_file_as_bytes(path)
 	var before: Dictionary = controls.settings.duplicate(true)
 	for bad in [NAN, INF, -1.0, 0.46, "0.2", true]:
@@ -102,6 +240,7 @@ func run() -> void:
 	view.apply_pending()
 	applied = JSON.parse_string(FileAccess.get_file_as_string(path))
 	check(controls.settings.deadzone == defaults.deadzone and applied.extension == document.extension and applied.settings.extension == document.settings.extension and applied.bindings == document.bindings, "Applied defaults erased extensions/bindings")
+	await walking_settings(title, controls, view, path)
 	controls.device = 0
 	controls.install()
 	await pad(JOY_BUTTON_B)

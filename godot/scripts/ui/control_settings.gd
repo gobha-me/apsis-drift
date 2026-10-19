@@ -16,6 +16,8 @@ var defaults_button: Button
 var focused := true
 var readable_scale := -1.0
 var focus_scroll_frames := 0
+var capturing_walk_field := ""
+var capture_provider_input := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -42,7 +44,7 @@ func _ready() -> void:
 	heading.text = "SETTINGS / CONTROLS"
 	column.add_child(heading)
 	var note := Label.new()
-	note.text = "Changes stay pending until Apply. Cancel leaves your controls unchanged.\nFlight bindings can be remapped in the paused flight controls.\nOn foot, look keys (arrows by default) use speed and inversion without a modifier. WASD/E retain walking/boarding priority.\nWalking sticks use dead zone and curve; right-stick and mouse look use speed and inversion."
+	note.text = "Changes stay pending until Apply. Cancel leaves your controls unchanged.\nFlight bindings can be remapped in the paused flight controls.\nOn foot, look keys (arrows by default) use speed and inversion without a modifier. Configured walking keys and E retain movement/interaction priority.\nWalking sticks use dead zone and curve; right-stick and mouse look use speed and inversion."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
 	for item in [["deadzone", "Stick / trigger dead zone", 0.05, 0.45, 0.01], ["curve", "Response curve", 1.0, 3.0, 0.1], ["look_speed", "Look speed (flight / on-foot)", 0.3, 4.0, 0.1]]:
@@ -73,6 +75,10 @@ func _ready() -> void:
 	prompts.item_selected.connect(func(value: int):
 		pending.prompts = value
 		refresh_status())
+	for item in [["walk_forward", "Walk forward"], ["walk_backward", "Walk backward"], ["walk_left", "Walk left"], ["walk_right", "Walk right"]]:
+		var field: String = item[0]
+		var button := add_button(item[1], func(): begin_walk_capture(field))
+		fields[field] = {"control": button, "title": item[1]}
 	defaults_button = add_button("Restore Defaults (pending)", restore_defaults)
 	apply_button = add_button("Apply", apply_pending)
 	cancel_button = add_button("Cancel / Back", cancel)
@@ -90,6 +96,7 @@ func add_button(text: String, action: Callable) -> Button:
 	return button
 
 func open() -> void:
+	end_walk_capture()
 	pending = controls.settings.duplicate(true)
 	show()
 	refresh_fields()
@@ -104,6 +111,8 @@ func refresh_fields() -> void:
 		fields[key].label.text = "%s: %.2f" % [fields[key].title, pending[key]]
 	fields.invert_look.control.set_pressed_no_signal(pending.invert_look)
 	fields.prompts.control.select(int(pending.prompts))
+	for field in Controls.WALK_FIELDS:
+		fields[field].control.text = "%s: %s" % [fields[field].title, OS.get_keycode_string(int(pending[field]))]
 
 func refresh_status() -> void:
 	var dirty := false
@@ -118,12 +127,13 @@ func refresh_status() -> void:
 
 func restore_defaults() -> void:
 	if not focused or not controls.focused: return
+	end_walk_capture()
 	for key in Controls.DEFAULT_SETTINGS: pending[key] = Controls.DEFAULT_SETTINGS[key]
 	refresh_fields()
 	refresh_status()
 
 func apply_pending() -> void:
-	if not focused or not controls.focused: return
+	if not focused or not controls.focused or not capturing_walk_field.is_empty(): return
 	if not controls.apply_preferences(pending):
 		status.text = controls.status + " Pending changes retained."
 		return
@@ -135,6 +145,7 @@ func apply_pending() -> void:
 
 func cancel() -> void:
 	if not focused or not controls.focused: return
+	end_walk_capture()
 	pending.clear()
 	hide()
 	back_requested.emit()
@@ -164,8 +175,56 @@ func _process(_delta: float) -> void:
 			if is_instance_valid(target) and column.is_ancestor_of(target):
 				scroll.ensure_control_visible(target)
 
-func _input(_event: InputEvent) -> void:
-	if visible and (not focused or not controls.focused): get_viewport().set_input_as_handled()
+func begin_walk_capture(field: String) -> void:
+	if not visible or not focused or not controls.focused or field not in Controls.WALK_FIELDS: return
+	end_walk_capture()
+	capturing_walk_field = field
+	capture_provider_input = controls.is_processing_input()
+	controls.set_process_input(false)
+	status.text = "Press a physical key for %s. Esc cancels. Pause, E, debug and menu activation keys are reserved." % fields[field].title.to_lower()
+
+func end_walk_capture() -> void:
+	if capturing_walk_field.is_empty(): return
+	capturing_walk_field = ""
+	if is_instance_valid(controls): controls.set_process_input(capture_provider_input)
+
+func _exit_tree() -> void:
+	end_walk_capture()
+
+func keyboard_capture_active() -> bool:
+	return visible and not capturing_walk_field.is_empty()
+
+func handle_keyboard_capture(event: InputEvent) -> bool:
+	if not keyboard_capture_active(): return false
+	# Parents may forward here after their own focus/device gates, before their
+	# fixed Escape/Start handling. Capture never sends input to gameplay.
+	get_viewport().set_input_as_handled()
+	if not focused or not controls.focused:
+		end_walk_capture()
+		return true
+	if not event is InputEventKey or not event.pressed or event.echo: return true
+	if event.physical_keycode == KEY_ESCAPE:
+		end_walk_capture()
+		refresh_status()
+		return true
+	var candidate := pending.duplicate(true)
+	candidate[capturing_walk_field] = event.physical_keycode
+	if not Controls.valid_walk_settings(candidate):
+		status.text = "Reserved, duplicate or unsupported key. Choose another key, or Esc to cancel."
+		return true
+	pending = candidate
+	end_walk_capture()
+	refresh_fields()
+	refresh_status()
+	return true
+
+func _input(event: InputEvent) -> void:
+	if not visible: return
+	if not focused or not controls.focused:
+		end_walk_capture()
+		get_viewport().set_input_as_handled()
+		return
+	handle_keyboard_capture(event)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("ui_cancel"):
@@ -175,6 +234,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
+		end_walk_capture()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
 	else: return

@@ -298,7 +298,7 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	var hint := hud_text()
 	hud_hint = hint
-	hint.text = "WASD / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer"
+	hint.text = "Walking keys / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer"
 	column.add_child(hint)
 	board_button = Button.new()
 	board_button.text = "Board Wayfarer · E / A"
@@ -453,7 +453,8 @@ func refresh_hud() -> void:
 	var nested := settings_open() or observations_open()
 	hud_scroll.visible = paused and not nested
 	active_card.visible = not paused and not nested and not journey_dialog_open and save_dialog != null and not save_dialog.visible and error.is_empty()
-	var text := telemetry.text + "\nEsc / Start: controls" if boarding_transition() else "Origin Station · D1\nWASD / left stick: walk\nMouse / look keys / right stick: look\nEsc / Start: controls"
+	hud_hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer" % preferences_provider.foot_keyboard_label()
+	var text := telemetry.text + "\nEsc / Start: controls" if boarding_transition() else "Origin Station · D1\n%s / left stick: walk\nMouse / look keys / right stick: look\nEsc / Start: controls" % preferences_provider.foot_keyboard_label()
 	if active_status.text != text:
 		active_status.text = text
 		active_card.reset_size()
@@ -521,11 +522,8 @@ func resume_requested() -> void:
 
 
 func current_controls_neutral() -> bool:
-	if preferences_provider != null and not preferences_provider.foot_keyboard_look_neutral():
+	if preferences_provider != null and (not preferences_provider.foot_keyboard_look_neutral() or not preferences_provider.foot_keyboard_move_neutral()):
 		return false
-	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
-		if Input.is_physical_key_pressed(key):
-			return false
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		return false
 	if available_pads.get(selected_pad, false):
@@ -610,6 +608,7 @@ func close_settings() -> void:
 	stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
 	controls_armed = false
 	hud_scroll.show()
+	refresh_hud()
 	settings_button.grab_focus()
 	settings_return_frames = 2
 
@@ -632,8 +631,9 @@ func stick(value: float) -> float:
 func input_controls(delta: float) -> PackedFloat64Array:
 	if paused or not focused or not error.is_empty() or save_dialog.visible:
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
-	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
-	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
+	var keyboard_move: Vector2 = preferences_provider.foot_keyboard_move()
+	var forward := keyboard_move.y
+	var right := keyboard_move.x
 	var keyboard_look: Vector2 = preferences_provider.foot_keyboard_look()
 	apply_look_rate(keyboard_look, delta)
 	if available_pads.get(selected_pad, false):
@@ -857,6 +857,7 @@ func _input(event: InputEvent) -> void:
 	if not focused or save_dialog == null or save_dialog.visible:
 		if observations_open(): get_viewport().set_input_as_handled()
 		return
+	if settings_open() and settings_view.handle_keyboard_capture(event): return
 	var pressed := event.is_pressed() and not event.is_echo()
 	var key: int = event.physical_keycode if event is InputEventKey else KEY_NONE
 	var button: int = event.button_index if event is InputEventJoypadButton else -1
