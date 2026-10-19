@@ -665,7 +665,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME lower-cockpit-contact-contract COMMAND apsis-drift-lower-cockpit-contact-tests)
   set_tests_properties(lower-cockpit-contact-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-stowed-lower-cockpit-contact-tests test/origin_stowed_lower_cockpit_contact_test.cpp)
-  target_link_libraries(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  # This runtime-contact regression also invokes the deferred corridor certifier.
+  target_link_libraries(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE apsis-drift::boarding-research nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE
     APSIS_LOWER_CONTACT_FIXTURE="${APSIS_LOWER_CONTACT_DATA}"
     APSIS_LOWER_CONTACT_POLICY_FIXTURE="${APSIS_LOWER_CONTACT_POLICY}"
