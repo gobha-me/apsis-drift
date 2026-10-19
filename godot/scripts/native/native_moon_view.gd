@@ -79,7 +79,6 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	local_light.light_cull_mask = 2
 	local_light.shadow_enabled = true
 	scene.add_child(local_light)
-	var environment_node := WorldEnvironment.new()
 	planet_environment = Environment.new()
 	planet_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	planet_environment.ambient_light_color = Color(0.17, 0.18, 0.21)
@@ -95,6 +94,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	sky.sky_material = sky_material
 	planet_environment.sky = sky
 	planet_environment.background_mode = Environment.BG_SKY
+	var environment_node := WorldEnvironment.new()
 	environment_node.environment = planet_environment
 	scene.add_child(environment_node)
 	near_environment = planet_environment.duplicate()
