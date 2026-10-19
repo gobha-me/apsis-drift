@@ -1,3 +1,4 @@
+#include "apsis_drift/moon_terrain_impact.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 
 #include <utility>
@@ -10,6 +11,8 @@ auto NativeFreedomFlightSession::advance_moon_tick(
     return std::unexpected{"Moon flight requires its selected physical owner"};
   if ((docking_ && docking_->attached) || port_approach_.active)
     return std::unexpected{"Moon flight cannot own an Origin port attachment"};
+  if (surface_ && surface_->moon_landed)
+    return advance_moon_supported_tick(controls, step);
   const RigidBodyWorldContext context{*moon_};
   const VacuumIntent intent{
       controls.positive_translation, controls.negative_translation,
@@ -57,9 +60,30 @@ auto NativeFreedomFlightSession::advance_moon_tick(
   result.moon = *actuation;
   // Planet observations/hold remain unavailable on this explicit owner. The
   // same gross propulsion and resource transaction above own the actual tick.
-  document_ = std::move(candidate);
-  resources_ = ledger;
-  if (condition_) condition_->tick = document_.flight.tick;
+  auto next = *this;
+  next.document_ = std::move(candidate);
+  next.resources_ = ledger;
+  if (next.condition_) next.condition_->tick = next.document_.flight.tick;
+  next.try_moon_surface_contact();
+  if (!next.surface_ || !next.surface_->moon_landed) {
+    const auto sweep = assess_moon_terrain_impact(
+        *moon_, document_.flight, next.document_.flight,
+        surface_ && surface_->gear_deployed, document_.moon->terrain_recipe);
+    if (!sweep) return std::unexpected{sweep.error()};
+    if (sweep->classification == MoonTerrainImpactClass::unknown)
+      return std::unexpected{
+          "Moon terrain sweep unresolved; flight tick retained"};
+    if (sweep->witness && sweep->witness->closing_speed_metres_per_second > 0) {
+      const auto response = respond_moon_terrain_impact(
+          *moon_, document_.flight, next.document_.flight, *sweep->witness);
+      if (!response) return std::unexpected{response.error()};
+      next.document_.flight = *response;
+      next.cancel_surface_maneuver();
+      next.surface_maneuver_.note =
+          "Moon terrain contact: inward motion stopped";
+    }
+  }
+  *this = std::move(next);
   return result;
 }
 } // namespace apsis_drift

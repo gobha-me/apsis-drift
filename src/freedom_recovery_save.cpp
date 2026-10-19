@@ -198,7 +198,10 @@ auto freedom_recovery_source_checksum(const FreedomRecoveryVoyage& v)
   const auto& flight = recovery_flight(v);
   auto hydrated = hydrate_freedom_flight_document(flight);
   if (!hydrated) return std::unexpected{hydrated.error()};
-  auto checksum = rigid_body_state_checksum({hydrated->system}, flight.flight);
+  const RigidBodyWorldContext context =
+      hydrated->moon ? RigidBodyWorldContext{hydrated->moon->moon}
+                     : RigidBodyWorldContext{hydrated->system};
+  auto checksum = rigid_body_state_checksum(context, flight.flight);
   if (!checksum) return std::unexpected{failure("invalid loss source physics")};
   return *checksum;
 }

@@ -170,6 +170,7 @@ add_library(apsis_drift_core STATIC
   src/physical_moon.cpp
   src/physical_moon_rotation.cpp
   src/moon_terrain.cpp
+  src/moon_terrain_impact.cpp
   src/moon_surface_contact.cpp
   src/moon_landed_craft.cpp
   src/moon_surface_walker.cpp
@@ -193,6 +194,8 @@ add_library(apsis_drift_core STATIC
   src/freedom_resources.cpp
   src/freedom_resource_save.cpp
   src/freedom_surface_save.cpp
+  src/freedom_moon_walk_save.cpp
+  src/freedom_local_jump.cpp
   src/freedom_moon_surface_save.cpp
   src/godot/contact_surface.cpp
   src/godot/contact_patch.cpp
@@ -204,6 +207,8 @@ add_library(apsis_drift_core STATIC
   src/mission_board.cpp
   src/native_startup.cpp
   src/native_flight_session.cpp
+  src/native_moon_surface.cpp
+  src/native_moon_walk.cpp
   src/native_moon_flight.cpp
   src/native_first_jump.cpp
   src/native_recovery.cpp
@@ -314,7 +319,7 @@ target_link_libraries(apsis_drift_boarding_research
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/physical_moon_rotation.cpp src/moon_terrain.cpp src/moon_surface_contact.cpp src/moon_landed_craft.cpp src/moon_surface_walker.cpp src/native_moon_flight.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/physical_moon_rotation.cpp src/moon_terrain.cpp src/moon_surface_contact.cpp src/moon_landed_craft.cpp src/moon_surface_walker.cpp src/moon_terrain_impact.cpp src/native_moon_surface.cpp src/native_moon_walk.cpp src/freedom_local_jump.cpp src/native_moon_flight.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)

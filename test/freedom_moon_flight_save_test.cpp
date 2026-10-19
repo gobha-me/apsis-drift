@@ -198,7 +198,7 @@ auto surface_saves() -> void {
   const FreedomResourceSaveDocument resource{surface, ledger};
   const auto native_bytes =
       need(encode_native_save_document_json(NativeSaveDocument{resource}));
-  const auto session =
+  auto session =
       need(NativeFreedomFlightSession::open(need(native_select_save_document(
           need(decode_native_save_document_json(native_bytes))))));
   check(session.moon() && session.surface() &&
@@ -208,6 +208,35 @@ auto surface_saves() -> void {
   check(need(encode_native_save_document_json(need(session.save_document()))) ==
             native_bytes,
         "Native moon landed Save reproduces complete Continue bytes");
+  const auto before = session.document();
+  NativeFlightControls thrust{};
+  thrust.positive_translation.y = 1;
+  check(!session.advance(thrust) && session.document() == before &&
+            session.resources() == ledger,
+        "Supported moon craft refuses propulsion without spending a tick");
+  need(session.advance({}));
+  check(session.document().flight.tick == before.flight.tick + 1 &&
+            session.resources()->tick == ledger.tick + 1 &&
+            session.resources()->flight_quanta == ledger.flight_quanta &&
+            session.surface()->moon_landed == anchor,
+        "Landed Moon craft and resource ledger advance one shared supported "
+        "tick");
+  const auto supported = need(session.save_document());
+  const auto continued = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(need(decode_native_save_document_json(
+          need(encode_native_save_document_json(supported))))))));
+  check(continued.document() == session.document() &&
+            continued.resources() == session.resources(),
+        "Supported native tick can Continue at the same Moon anchor");
+  need(session.release_surface());
+  check(!session.surface()->moon_landed &&
+            session.document().flight ==
+                need(release_moon_landed_craft(contact.moon, anchor,
+                                               session.document().flight.tick)),
+        "Moon liftoff removes support without a synthetic launch impulse");
+  need(session.set_landing_gear(false));
+  check(!session.surface()->gear_deployed,
+        "Moon gear commands dispatch to actual Moon owner");
 }
 } // namespace
 int main() {

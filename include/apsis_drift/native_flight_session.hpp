@@ -5,6 +5,7 @@
 #include "apsis_drift/native_startup.hpp"
 
 namespace apsis_drift {
+class MoonSurfaceWalkTerrain;
 struct NativeFlightControls {
   RigidVector3 positive_translation, negative_translation;
   RigidVector3 positive_rotation, negative_rotation;
@@ -274,6 +275,24 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto set_moon_landing_gear(bool)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto commit_moon_touchdown(std::uint64_t)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto release_moon_surface() -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_moon_supported_tick(const NativeFlightControls&,
+                                                 SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  auto try_moon_surface_contact() -> void;
+  [[nodiscard]] auto begin_moon_surface_walk()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto moon_surface_return_access() const
+      -> std::expected<PlanetSurfaceReturnAccess, std::string>;
+  [[nodiscard]] auto return_from_moon_surface_walk()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_moon_surface_walk(const OriginWalkControls&,
+                                               SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto store_surface_marker(bool replace)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_jump(const NativeFlightControls&,
@@ -334,6 +353,7 @@ class NativeFreedomFlightSession {
   std::optional<PlanetSurfaceWalkerState> surface_walker_;
   std::optional<PlanetSurfaceWalkStatus> surface_walk_blockage_;
   std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
+  std::shared_ptr<MoonSurfaceWalkTerrain> moon_walk_terrain_;
   // Pure derived terrain memoization, never a saved world or actor owner.
   mutable std::shared_ptr<SurfaceLandmarkField> surface_landmark_field_;
   mutable SystemId surface_landmark_system_{};

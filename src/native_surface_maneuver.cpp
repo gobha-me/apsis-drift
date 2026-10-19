@@ -57,6 +57,12 @@ auto NativeFreedomFlightSession::request_landing()
   if (auto gear = candidate.set_landing_gear(true); !gear) return gear;
   candidate.cancel_port_approach();
   candidate.cancel_surface_maneuver();
+  if (moon_) {
+    candidate.surface_maneuver_.note =
+        "Moon gear deployed; descend gently onto dry terrain";
+    *this = std::move(candidate);
+    return {};
+  }
   if (document_.model.assistance) {
     if (document_.model.hold.target)
       return std::unexpected{"Disable orbit hold before assisted landing"};

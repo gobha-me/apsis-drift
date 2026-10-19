@@ -80,7 +80,8 @@ auto decode_voyage(const Json& j)
     if (!d) return std::unexpected(d.error());
     return FreedomConditionVoyage{std::move(*d)};
   }
-  if (j["format_version"] == kFreedomSurfaceWalkSaveFormatVersion) {
+  if (j["format_version"] == kFreedomSurfaceWalkSaveFormatVersion ||
+      j["format_version"] == kFreedomMoonSurfaceWalkSaveFormatVersion) {
     auto d = decode_freedom_surface_walk_document_json(text);
     if (!d) return std::unexpected(d.error());
     return FreedomConditionVoyage{std::move(*d)};

@@ -220,7 +220,10 @@ auto validate_craft_condition(const CraftCondition& c,
     const auto& w = c.latest->witness;
     const auto ids =
         generate_first_intersystem_identities(d.origin.recipe.universe_seed);
-    if (w.terrain_policy != d.model.terrain_policy ||
+    // An actual Moon has its own terrain recipe. A retained planetary receipt
+    // continues to name its original, independently authenticated planet below;
+    // the Moon's unused planetary model default does not reinterpret it.
+    if ((!d.moon && w.terrain_policy != d.model.terrain_policy) ||
         (w.system != ids.origin_system && w.system != ids.target_system))
       return std::unexpected(
           "Impact receipt has an unknown physical owner or terrain selection");

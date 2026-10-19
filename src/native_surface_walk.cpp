@@ -150,6 +150,7 @@ auto NativeFreedomFlightSession::surface_walk_document() const
 }
 auto NativeFreedomFlightSession::begin_surface_walk()
     -> std::expected<void, std::string> {
+  if (moon_) return begin_moon_surface_walk();
   if (recovery_pending() ||
       (travel_ && travel_->phase != FreedomJumpPhase::idle) || actor_ ||
       surface_walker_ || !starting_assembly_ || !boarding_ ||
@@ -180,6 +181,7 @@ auto NativeFreedomFlightSession::begin_surface_walk()
 }
 auto NativeFreedomFlightSession::surface_return_access() const
     -> std::expected<PlanetSurfaceReturnAccess, std::string> {
+  if (moon_) return moon_surface_return_access();
   if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_ ||
       !surface_ || !surface_->landed ||
       surface_walk_terrain_->anchor() != *surface_->landed)
@@ -188,6 +190,7 @@ auto NativeFreedomFlightSession::surface_return_access() const
 }
 auto NativeFreedomFlightSession::return_from_surface_walk()
     -> std::expected<void, std::string> {
+  if (moon_) return return_from_moon_surface_walk();
   if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_)
     return std::unexpected{"Return requires an active surface actor"};
   const auto near = surface_walk_terrain_->near_entry(*surface_walker_);
@@ -203,6 +206,7 @@ auto NativeFreedomFlightSession::return_from_surface_walk()
 auto NativeFreedomFlightSession::advance_surface_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (moon_) return advance_moon_surface_walk(controls, step);
   if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_ ||
       !surface_ || !surface_->landed ||
       surface_walk_terrain_->anchor() != *surface_->landed)

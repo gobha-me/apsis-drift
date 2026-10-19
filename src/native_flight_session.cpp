@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/moon_surface_walker.hpp"
 #include "apsis_drift/planet_optics.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
@@ -210,7 +211,16 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.retired_condition_ = retired_condition;
   result.surface_walk_selected_ = surface_walk_selected;
   result.surface_walker_ = surface_actor;
-  if (surface_actor) {
+  if (surface_actor && result.moon_) {
+    if (!result.surface_ || !result.surface_->moon_landed)
+      return std::unexpected{"Moon walker has no supported craft"};
+    auto terrain = MoonSurfaceWalkTerrain::create(*result.moon_,
+                                                  *result.surface_->moon_landed,
+                                                  result.document_.flight.tick);
+    if (!terrain) return std::unexpected{terrain.error()};
+    result.moon_walk_terrain_ =
+        std::make_shared<MoonSurfaceWalkTerrain>(std::move(*terrain));
+  } else if (surface_actor) {
     auto terrain = PlanetSurfaceWalkTerrain::create(
         result.system_, result.rotation_, *result.surface_->landed,
         result.document_.flight.tick);
@@ -656,6 +666,7 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_ || surface_walker_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  if (moon_) return advance_moon_tick(controls, step);
   if (surface_ && (surface_->gear_deployed || surface_->landed ||
                    surface_maneuver_.kind != NativeSurfaceManeuverKind::off))
     return advance_surface(controls, step);
@@ -1109,6 +1120,7 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (moon_) return set_moon_landing_gear(deployed);
   const bool selected =
       document_.model.frame_policy == kFreedomReleaseSystemFramePolicy;
   const bool system_frame =
@@ -1181,6 +1193,7 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
     std::optional<TerrainPadGapSample>* sampled_gap)
     -> std::expected<void, std::string> {
   if (sampled_gap) sampled_gap->reset();
+  if (moon_) return commit_moon_touchdown(expected_source_checksum);
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
     return std::unexpected{
         "System-flight landing/contact is not qualified yet"};
@@ -1224,6 +1237,7 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
 }
 auto NativeFreedomFlightSession::release_surface()
     -> std::expected<void, std::string> {
+  if (moon_) return release_moon_surface();
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
