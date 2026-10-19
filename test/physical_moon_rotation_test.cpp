@@ -66,7 +66,13 @@ auto contract(std::uint32_t version) -> void {
           "real system star");
     const auto optical =
         required(observe_secondary_bodies(catalog, {}, {tick, 0.0}));
-    check(geometry.phase_radians == optical[0].spin_radians &&
+    // Optical contacts are distance sorted, not source-catalog ordered.
+    const auto observed =
+        std::ranges::find(optical, moon.body, &SecondaryBodyObservation::id);
+    check(observed != optical.end(),
+          "Optical query retains the actual moon identity");
+    if (observed == optical.end()) return;
+    check(geometry.phase_radians == observed->spin_radians &&
               geometry.cycle_tick == tick % moon.spin_period_ticks &&
               geometry.tick == tick,
           "Physical and optical moon retain original full-turn epoch word and "
