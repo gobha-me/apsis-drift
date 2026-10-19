@@ -315,6 +315,17 @@ auto surface_marker_metadata() -> void {
     const auto entries = legacy.entries;
     const auto recipe = legacy.recipe;
     const auto encoded = need(encode_freedom_knowledge_json(legacy, 7));
+    auto expected = Json::parse(text);
+    expected["surface_marker"] = {
+        {"version", 1U},
+        {"point",
+         {{"system", point.system.value},
+          {"planet", point.planet.value},
+          {"body_fixed_metres",
+           Json::array({point.position.x, point.position.y, point.position.z})},
+          {"tick", point.tick}}}};
+    check(encoded == expected.dump(2) + '\n',
+          "Original selected planetary marker retains exact ordered bytes");
     check(need(decode_freedom_knowledge_json(encoded, 7)) == legacy &&
               legacy.entries == entries && legacy.recipe == recipe,
           "Selected marker roundtrips point and tick without changing facts "
@@ -330,7 +341,7 @@ auto surface_marker_metadata() -> void {
   marked.surface_marker = FreedomSurfaceMarkerState{1, point};
   for (unsigned fault = 0; fault < 10; ++fault) {
     auto bad = marked;
-    auto& m = *bad.surface_marker->point;
+    auto& m = std::get<FreedomSurfaceMarkerPoint>(*bad.surface_marker->point);
     switch (fault) {
       case 0: bad.surface_marker->version = 2; break;
       case 1: m.system = {}; break;
@@ -383,6 +394,175 @@ auto surface_marker_metadata() -> void {
             !decode_freedom_knowledge_json(
                 encoded + std::string(kMaximumFreedomKnowledgeBytes, ' '), 7),
         "Marker metadata cannot bypass duplicate-key or bounded input limits");
+}
+
+auto moon_surface_marker_metadata() -> void {
+  const Seed seed{42};
+  const auto system = need(generate_physical_origin_system(seed, 2));
+  const auto catalog = need(generate_secondary_body_catalog(system));
+  const auto moon = need(generate_physical_moon_descriptor(
+      catalog, catalog.bodies.front().node.id));
+  const auto foreign_system =
+      need(generate_physical_origin_system(Seed{43}, 2));
+  const auto foreign_catalog =
+      need(generate_secondary_body_catalog(foreign_system));
+  const FreedomMoonSurfaceMarkerPoint point{
+      system.catalog.id,
+      moon.body,
+      {static_cast<double>(moon.radius_metres) - 123.5, -0.0, 0},
+      7};
+  check(point.body.kind == BodyKind::moon &&
+            std::hypot(point.position.x, point.position.y, point.position.z) <
+                moon.radius_metres,
+        "Moon marker fixture uses genuine typed owner and below-datum dry "
+        "navigation metadata, not a renewed terrain certificate");
+  for (const auto version :
+       {kFreedomObservedKnowledgeVersion, kFreedomTravelKnowledgeVersion}) {
+    auto selected = need(make_freedom_starting_knowledge(seed, version));
+    const auto baseline = need(encode_freedom_knowledge_json(selected, 7));
+    selected.surface_marker =
+        FreedomSurfaceMarkerState{kFreedomMoonSurfaceMarkerVersion, point};
+    const auto encoded = need(encode_freedom_knowledge_json(selected, 7));
+    const auto decoded = need(decode_freedom_knowledge_json(encoded, 7));
+    auto root = Json::parse(encoded);
+    check(decoded == selected && root["surface_marker"]["version"] == 2U &&
+              root["surface_marker"]["point"].size() == 3 &&
+              root["surface_marker"]["point"]["target"] ==
+                  Json::parse(
+                      need(encode_body_target({point.system, point.body}))) &&
+              std::signbit(std::get<FreedomMoonSurfaceMarkerPoint>(
+                               *decoded.surface_marker->point)
+                               .position.y),
+          "Nested version2 Moon point roundtrips canonical BodyTarget and "
+          "signed coordinates through unchanged outer knowledge recipe");
+    root.erase("surface_marker");
+    check(root.dump(2) + '\n' == baseline,
+          "Recording Moon navigation metadata grants no facts or recipe "
+          "changes");
+    selected.surface_marker->point.reset();
+    const auto cleared = need(encode_freedom_knowledge_json(selected, 7));
+    check(Json::parse(cleared)["surface_marker"] ==
+                  Json{{"version", 2U}, {"point", nullptr}} &&
+              need(decode_freedom_knowledge_json(cleared, 7)) == selected,
+          "Clearing Moon marker preserves selected nested version2");
+    // Only explicit replacement changes the component's selected body/version.
+    const auto& planet = system.catalog.planets.front().descriptor;
+    selected.surface_marker = FreedomSurfaceMarkerState{
+        kFreedomSurfaceMarkerVersion,
+        FreedomSurfaceMarkerPoint{
+            system.catalog.id,
+            planet.id,
+            {static_cast<double>(planet.radius.value) * 1000 + 123.5, 0, 0},
+            7}};
+    const auto replaced = need(encode_freedom_knowledge_json(selected, 7));
+    check(Json::parse(replaced)["surface_marker"]["version"] == 1U &&
+              !Json::parse(replaced)["surface_marker"]["point"].contains(
+                  "target") &&
+              need(decode_freedom_knowledge_json(replaced, 7)) == selected,
+          "Explicit replacement back onto planet uses original version1 "
+          "point encoding");
+  }
+  auto selected = need(
+      make_freedom_starting_knowledge(seed, kFreedomTravelKnowledgeVersion));
+  selected.surface_marker =
+      FreedomSurfaceMarkerState{kFreedomMoonSurfaceMarkerVersion, point};
+  const auto encoded = need(encode_freedom_knowledge_json(selected, 7));
+  for (unsigned fault = 0; fault < 17; ++fault) {
+    auto bad = selected;
+    auto& m =
+        std::get<FreedomMoonSurfaceMarkerPoint>(*bad.surface_marker->point);
+    switch (fault) {
+      case 0: bad.surface_marker->version = 1; break;
+      case 1: bad.surface_marker->version = 3; break;
+      case 2: m.system = {}; break;
+      case 3: m.system = foreign_system.catalog.id; break;
+      case 4: m.body.value = 0; break;
+      case 5: m.body.version = 2; break;
+      case 6: m.body.kind = BodyKind::planet; break;
+      case 7: m.body = catalog.bodies.back().node.id; break;
+      case 8: m.body = foreign_catalog.bodies.front().node.id; break;
+      case 9: m.tick = 8; break;
+      case 10: m.position.x = std::numeric_limits<double>::quiet_NaN(); break;
+      case 11: m.position.y = std::numeric_limits<double>::infinity(); break;
+      case 12: m.position = {}; break;
+      case 13: m.position = {1, 0, 0}; break;
+      case 14: m.position = {1e8 + 1, 0, 0}; break;
+      case 15: bad.surface_marker->point = FreedomSurfaceMarkerPoint{}; break;
+      case 16: bad.recipe.version = kFreedomKnowledgeVersion; break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 7) &&
+              !encode_freedom_knowledge_json(bad, 7),
+          "Moon marker refuses mismatched component/variant, owner/kind, "
+          "tick and finite radial envelope before encoding");
+  }
+  // A genuine neighbor Moon is still outside the currently selected origin-
+  // Moon physical domain; matching an arbitrary catalog label is insufficient.
+  const auto ids = generate_first_intersystem_identities(seed);
+  const auto neighbor =
+      need(generate_physical_local_system(ids.target_system_seed, 2));
+  const auto neighbor_catalog = need(generate_secondary_body_catalog(neighbor));
+  auto wrong_domain = selected;
+  auto& neighbor_point = std::get<FreedomMoonSurfaceMarkerPoint>(
+      *wrong_domain.surface_marker->point);
+  neighbor_point.system = neighbor.catalog.id;
+  neighbor_point.body = neighbor_catalog.bodies.front().node.id;
+  check(
+      !validate_freedom_knowledge(wrong_domain, 7),
+      "Current Moon marker cannot silently enroll a neighboring physical Moon");
+  for (const double radius : {std::nextafter(1.0, 2.0), 1e8}) {
+    auto boundary = selected;
+    std::get<FreedomMoonSurfaceMarkerPoint>(*boundary.surface_marker->point)
+        .position = {radius, 0, 0};
+    check(validate_freedom_knowledge(boundary, 7).has_value(),
+          "Moon navigation coordinate envelope keeps exact supported walker "
+          "radial bounds without claiming support");
+  }
+  for (unsigned fault = 0; fault < 22; ++fault) {
+    auto root = Json::parse(encoded);
+    auto& marker = root["surface_marker"];
+    auto& m = marker["point"];
+    switch (fault) {
+      case 0: marker["version"] = 3U; break;
+      case 1: marker["version"] = 2.0; break;
+      case 2: marker["version"] = 1U; break;
+      case 3: marker["extra"] = 0; break;
+      case 4: marker.erase("point"); break;
+      case 5: m["planet"] = 1U; break;
+      case 6: m.erase("target"); break;
+      case 7: m["target"] = nullptr; break;
+      case 8: m["target"]["version"] = 2U; break;
+      case 9: m["target"]["version"] = 1.0; break;
+      case 10: m["target"]["kind"] = "planet"; break;
+      case 11: m["target"]["kind"] = "minor"; break;
+      case 12: m["target"]["identity"] = "0"; break;
+      case 13:
+        m["target"]["identity"] = "0" + std::to_string(moon.body.value);
+        break;
+      case 14: m["target"]["system"] = point.system.value; break;
+      case 15: m["target"]["extra"] = 0; break;
+      case 16: m["tick"] = 8U; break;
+      case 17: m["tick"] = 7.0; break;
+      case 18: m["body_fixed_metres"] = Json::array({0, 0}); break;
+      case 19: m["body_fixed_metres"][0] = "0"; break;
+      case 20: m["body_fixed_metres"][0] = 1e100; break;
+      case 21: root["recipe"]["version"] = 1U; break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(root.dump(), 7),
+          "Moon marker decoder enforces exact closed component/target shape, "
+          "types and source identity");
+  }
+  auto duplicate = encoded;
+  const auto at = duplicate.find("\"target\": {");
+  check(at != std::string::npos, "Canonical Moon marker includes typed target");
+  duplicate.insert(at, "\"target\": null, ");
+  check(!decode_freedom_knowledge_json(duplicate, 7) &&
+            !decode_freedom_knowledge_json(
+                encoded + std::string(kMaximumFreedomKnowledgeBytes, ' '), 7) &&
+            need(encode_freedom_knowledge_json(selected, 7)) == encoded,
+        "Moon metadata retains duplicate/byte limits and leaves accepted "
+        "source unchanged after all refusals");
 }
 
 auto surface_landmark_metadata() -> void {
@@ -644,6 +824,7 @@ auto main() -> int {
       fixture(seed);
     invalid_inputs();
     surface_marker_metadata();
+    moon_surface_marker_metadata();
     surface_landmark_metadata();
     native_saves(dir);
     check(fingerprint == 2913154867708375063ULL,

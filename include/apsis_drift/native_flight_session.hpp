@@ -57,9 +57,9 @@ struct NativeSurfaceManeuver {
 
 struct FreedomSurfaceMarkerView {
   bool selected{};
-  std::optional<FreedomSurfaceMarkerPoint> point;
+  std::optional<FreedomSurfaceMarkerLocation> point;
   bool current_body{};
-  // Craft-centred, current planet-inertial axes, for the existing native view.
+  // Craft-centred, current owning body's inertial axes, for the native view.
   std::optional<RigidVector3> target_craft_relative_metres;
   // Straight chord from the outside foot, or from the craft while inside.
   std::optional<double> straight_line_distance_metres;
@@ -299,6 +299,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_moon_surface_walk(const OriginWalkControls&,
                                                SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto store_moon_surface_marker(bool replace)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto moon_surface_marker_view(FreedomSurfaceMarkerView) const
+      -> std::expected<FreedomSurfaceMarkerView, std::string>;
   [[nodiscard]] auto local_jump_available() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_local_jump() -> std::expected<void, std::string>;

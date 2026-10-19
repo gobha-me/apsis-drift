@@ -105,6 +105,19 @@ to the hatch, board, release surface support and apply up thrust to lift off.
 using the retained home model and actual station ephemeris. Local jumps are
 unavailable while outside, landed or attached to a port.
 
+Paused Controls also offer **Mark this spot**, **Replace marker**, **Clear
+marker** and **Show personal marker** during lunar walks. The point records
+only the actual supported foot position and its original ship time. There is
+one personal marker per journey, so replacing it on another body is explicit.
+MARK shows a direction and straight-line range from your feet or craft centre,
+not a terrain route or landing certificate. With MARK off, RETURN points toward
+the hatch; its distance remains in the HUD while MARK is shown. Continue starts
+with the normal return cue. The saved lunar point survives boarding, ascent and
+travel home, where it is listed as being on another body without a local
+bearing. These metadata actions do not spend fuel, advance time or grant sensor
+facts. The Moon name remains unresolved rather than being borrowed from a
+planetary identity.
+
 This first local branch connects the origin home body and its selected moon.
 It does not add arbitrary local-body selection, landable asteroids, a new
 intersystem risk policy or seamless gravity transitions. The existing
@@ -127,6 +140,14 @@ outbound commitment and current local leg. Charges, attempt numbers, clocks,
 origin ephemeris and home model survive Save/Continue; historical intersystem
 format27/version1 is not reinterpreted. Native free flight consumes the same RK4
 and gross fuel transaction.
+
+Lunar personal points explicitly select nested `surface_marker` version2 with
+the canonical typed body target, moon-fixed metres and recorded tick. Clearing
+retains that version with a null point; replacing it on a planet selects the
+existing version1 planetary point. The absent/v1 marker encoding and outer
+voyage formats remain unchanged. Source validation regenerates the actual
+origin Moon from its seed, including dry ground below the reference radius;
+retained metadata does not claim renewed terrain support.
 
 ## Presentation and checks
 

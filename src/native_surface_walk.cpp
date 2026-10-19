@@ -25,6 +25,7 @@ auto NativeFreedomFlightSession::replace_surface_marker()
 }
 auto NativeFreedomFlightSession::store_surface_marker(bool replace)
     -> std::expected<void, std::string> {
+  if (moon_) return store_moon_surface_marker(replace);
   if (recovery_pending() || !knowledge_ || !surface_walker_ ||
       !surface_walk_terrain_ || !surface_ || !surface_->landed ||
       surface_walk_terrain_->anchor() != *surface_->landed)
@@ -86,7 +87,9 @@ auto NativeFreedomFlightSession::surface_marker_view() const
   view.selected = true;
   view.point = knowledge_->surface_marker->point;
   if (!view.point) return view;
-  const auto& point = *view.point;
+  if (std::holds_alternative<FreedomMoonSurfaceMarkerPoint>(*view.point))
+    return moon_surface_marker_view(std::move(view));
+  const auto& point = std::get<FreedomSurfaceMarkerPoint>(*view.point);
   const auto name = [&](KnowledgeSubject subject)
       -> std::expected<std::optional<std::string>, std::string> {
     const auto known = query_freedom_knowledge(

@@ -115,6 +115,13 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	return error.is_empty()
 
 func build_ui() -> void:
+	# The same direction cue used on planets; targets remain C++ observations.
+	home_marker = HomeNavigation.new()
+	home_marker.visible = false
+	add_child(home_marker)
+	ship_marker = HomeNavigation.new()
+	ship_marker.visible = false
+	add_child(ship_marker)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	for side in ["left", "top", "right", "bottom"]: margin.add_theme_constant_override("margin_" + side, 18)
@@ -213,6 +220,10 @@ func setup_controls() -> void:
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Select jump home", select_home)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Begin / cancel local spool", jump_requested)
 	controls_menu.add_button(controls_menu.save_button.get_parent(), "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
+	var marker_column: Node = controls_menu.save_button.get_parent()
+	surface_marker_button = controls_menu.add_button(marker_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
+	clear_surface_marker_button = controls_menu.add_button(marker_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
+	show_surface_marker_button = controls_menu.add_button(marker_column, "Show personal marker: Off", toggle_surface_marker)
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func(): pause_controls("Controls changed. Release controls, then resume."))
@@ -278,6 +289,14 @@ func update_compact_hud() -> void:
 	var resources: Dictionary = state.get("resources", {})
 	primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
 	primary_status.text += "\n" + MoonState.gear_clearance_text(state)
+	var marker: Dictionary = state.surface_marker
+	if marker.get("present", false):
+		if show_personal_marker and marker.current_body:
+			primary_status.text += "\nMARK · %.1f m · straight-line distance" % marker.distance_metres
+		elif not marker.current_body:
+			primary_status.text += "\nMARK retained · %s / %s · another body" % [marker.system_name, SurfaceMarker.body_name(marker)]
+	if surface_walking() and state.surface_walk.return_access.get("available", false):
+		primary_status.text += "\nHatch · %.1f m" % state.surface_walk.return_access.distance_metres
 	primary_status.tooltip_text = "Signed terrain-normal gaps beneath all deployed gear pads. Negative values indicate gear-stroke overlap. This does not certify hull clearance or a safe landing; it is not radar altitude."
 	var landed: bool = state.get("surface", {}).get("landed", false)
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
@@ -338,6 +357,13 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	sky_material.set_shader_parameter("sun_angular_radius", state.get("star_angular_radius", 0.00465))
 	suit_lamp.visible = surface_walking() and suit_lamp_enabled
 	if exhaust != null: exhaust.update_applied(state, delta, paused or surface_walking())
+	home_marker.visible = false
+	ship_marker.visible = surface_walking()
+	if ship_marker.visible:
+		var access: Dictionary = state.surface_walk.return_access
+		ship_marker.label_text = "RETURN" if access.available else "SHIP"
+		ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
+	refresh_surface_marker()
 	refresh_control_hint()
 	update_compact_hud()
 

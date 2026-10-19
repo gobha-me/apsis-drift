@@ -1517,6 +1517,8 @@ class FreedomBridge : public godot::RefCounted {
     result["dropped_seconds"] = selected.dropped_seconds;
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = project_moon_surface_walk_actor(selected);
+    result["surface_marker"] =
+        project_surface_marker(selected, view.system_axes);
     godot::Dictionary surface;
     surface["gear_deployed"] =
         session.surface() && session.surface()->gear_deployed;
@@ -1966,9 +1968,9 @@ class FreedomBridge : public godot::RefCounted {
                         : godot::Dictionary{};
   }
 
-  static auto project_surface_marker(const SavedFlightWorld& selected,
-                                     const SavedFlightProjection& view)
-      -> godot::Dictionary {
+  static auto project_surface_marker(
+      const SavedFlightWorld& selected,
+      const std::array<LocalPositionMetres, 3>& axes) -> godot::Dictionary {
     const auto& session = selected.session;
     const auto marker = require(session.surface_marker_view());
     const auto& knowledge = session.knowledge();
@@ -1977,7 +1979,10 @@ class FreedomBridge : public godot::RefCounted {
         (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
          knowledge->recipe.version == kFreedomTravelKnowledgeVersion);
     godot::Dictionary result;
-    result["version"] = 1;
+    const auto version = knowledge && knowledge->surface_marker
+                             ? knowledge->surface_marker->version
+                             : kFreedomSurfaceMarkerVersion;
+    result["version"] = static_cast<std::int64_t>(version);
     result["selected"] = marker.selected;
     result["present"] = marker.point.has_value();
     result["current_body"] = marker.current_body;
@@ -1987,15 +1992,32 @@ class FreedomBridge : public godot::RefCounted {
         marker.point.has_value() && !session.recovery_pending();
     result["system_name"] = godot::String{
         marker.known_system_name.value_or("Unresolved system").c_str()};
-    result["planet_name"] = godot::String{
-        marker.known_body_name.value_or("Unresolved planet").c_str()};
+    const bool lunar = version == kFreedomMoonSurfaceMarkerVersion;
+    result[lunar ? "body_name" : "planet_name"] = godot::String{
+        marker.known_body_name
+            .value_or(lunar ? "Unresolved moon" : "Unresolved planet")
+            .c_str()};
     if (marker.point) {
       const auto decimal = [](std::uint64_t value) {
         return godot::String{std::to_string(value).c_str()};
       };
-      result["system_id"] = decimal(marker.point->system.value);
-      result["planet_id"] = decimal(marker.point->planet.value);
-      result["tick"] = decimal(marker.point->tick);
+      std::visit(
+          [&](const auto& point) {
+            result["system_id"] = decimal(point.system.value);
+            result["tick"] = decimal(point.tick);
+          },
+          *marker.point);
+      if (const auto* point =
+              std::get_if<FreedomSurfaceMarkerPoint>(&*marker.point)) {
+        result["planet_id"] = decimal(point->planet.value);
+      } else {
+        const auto& moon_point =
+            std::get<FreedomMoonSurfaceMarkerPoint>(*marker.point);
+        result["body_kind"] = "moon";
+        result["body_version"] =
+            static_cast<std::int64_t>(moon_point.body.version);
+        result["body_id"] = decimal(moon_point.body.value);
+      }
     }
     if (marker.current_body) {
       if (!marker.target_craft_relative_metres ||
@@ -2004,7 +2026,7 @@ class FreedomBridge : public godot::RefCounted {
           *marker.straight_line_distance_metres < 0)
         throw std::runtime_error("Surface marker projection is unavailable");
       const auto& v = *marker.target_craft_relative_metres;
-      const auto& a = view.system_axes;
+      const auto& a = axes;
       const godot::Vector3 position{
           static_cast<godot::real_t>(a[0].east * v.x + a[1].east * v.y +
                                      a[2].east * v.z),
@@ -2227,7 +2249,8 @@ class FreedomBridge : public godot::RefCounted {
       result["terrain_policy"] =
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
-      result["surface_marker"] = project_surface_marker(selected, view);
+      result["surface_marker"] =
+          project_surface_marker(selected, view.system_axes);
       result["surface_landmarks"] = project_surface_landmarks(selected, view);
       result["distant_contacts"] = project_distant_contacts(selected, view);
       result["station_available"] = view.station_available;

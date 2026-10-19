@@ -1,6 +1,7 @@
 extends RefCounted
 ## Validate the explicit lunar presentation owner. No planetary identity aliases.
 const Hopper = preload("res://scripts/characters/hopper_presentation.gd")
+const SurfaceMarker = preload("res://scripts/native/native_surface_marker.gd")
 
 static func decimal(value: Variant) -> bool:
 	if not value is String or value.is_empty() or value.length() > 20: return false
@@ -70,7 +71,7 @@ static func valid(value: Dictionary) -> bool:
 	if color.a != 1 or not value.get("star_angular_radius") is float or not is_finite(value.star_angular_radius) or value.star_angular_radius <= 0 or value.star_angular_radius > PI / 2: return false
 	var surface: Dictionary = value.surface
 	if not surface.get("landed") is bool or not surface.get("gear_deployed") is bool: return false
-	if not valid_gear_clearance(value): return false
+	if not valid_gear_clearance(value) or not value.has("surface_marker") or not SurfaceMarker.valid(value): return false
 	var walk: Dictionary = value.surface_walk
 	if not walk.is_empty():
 		if walk.get("version") != 1 or not walk.get("eye_position") is Vector3 or not walk.eye_position.is_finite() or not rigid(walk.get("basis")): return false

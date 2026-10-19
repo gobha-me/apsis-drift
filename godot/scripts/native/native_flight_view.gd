@@ -14,6 +14,7 @@ const StationPresentation = preload("res://scripts/native/native_station_view.gd
 const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8"
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
+const SurfaceMarker = preload("res://scripts/native/native_surface_marker.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
 var mouse_look := MouseLook.new()
@@ -216,21 +217,7 @@ static func valid_state(value: Dictionary) -> bool:
 
 
 static func valid_surface_marker(value: Dictionary) -> bool:
-	if not value.has("surface_marker"): return true
-	var marker: Variant = value.surface_marker
-	if not marker is Dictionary or typeof(marker.get("version")) != TYPE_INT or marker.version != 1: return false
-	for field in ["selected", "present", "current_body", "can_mark", "can_clear"]:
-		if typeof(marker.get(field)) != TYPE_BOOL: return false
-	for field in ["system_name", "planet_name"]:
-		if not marker.get(field) is String or marker[field].length() > 256: return false
-	if (marker.current_body and not marker.present) or (marker.present and not marker.selected) or (marker.can_clear and not marker.present): return false
-	if not marker.present:
-		return not marker.has("position") and not marker.has("distance_metres")
-	for field in ["system_id", "planet_id", "tick"]:
-		if not NativeEnvironment.decimal(marker.get(field)): return false
-	if not NativeEnvironment.decimal(value.get("tick")) or marker.tick.length() > value.tick.length() or (marker.tick.length() == value.tick.length() and marker.tick > value.tick): return false
-	if not marker.current_body: return not marker.has("position") and not marker.has("distance_metres")
-	return marker.system_id == value.get("system_id") and marker.planet_id == value.get("planet_id") and marker.get("position") is Vector3 and marker.position.is_finite() and marker.get("distance_metres") is float and is_finite(marker.distance_metres) and marker.distance_metres >= 0.0
+	return SurfaceMarker.valid(value)
 
 
 static func valid_hold(value: Dictionary) -> bool:
@@ -811,7 +798,7 @@ func update_compact_hud() -> void:
 		if show_personal_marker and personal.current_body:
 			marker_text = "MARK · %.1f m · straight-line distance" % personal.distance_metres
 		elif not personal.current_body:
-			marker_text = "MARK retained · %s / %s · another body" % [personal.system_name, personal.planet_name]
+			marker_text = "MARK retained · %s / %s · another body" % [personal.system_name, SurfaceMarker.body_name(personal)]
 		if not marker_text.is_empty():
 			primary_status.text += "\n" + marker_text
 			primary_status.tooltip_text += "\n" + marker_text
@@ -1119,7 +1106,7 @@ func refresh_surface_marker() -> void:
 		show_surface_marker_button.visible = present
 		show_surface_marker_button.disabled = not current
 		show_surface_marker_button.text = "Show personal marker: " + ("On" if show_personal_marker else "Off") if current else "Marker retained on another body"
-		show_surface_marker_button.tooltip_text = "%s / %s · recorded ship time %.1f s\nDirection and straight-line distance only; no route or landing clearance." % [marker.system_name, marker.planet_name, marker.tick.to_float() / 120.0] if present else ""
+		show_surface_marker_button.tooltip_text = "%s / %s · recorded ship time %.1f s\nDirection and straight-line distance only; no route or landing clearance." % [marker.system_name, SurfaceMarker.body_name(marker), marker.tick.to_float() / 120.0] if present else ""
 	if not show_personal_marker: return
 	if surface_walking():
 		ship_marker.label_text = "MARK"
@@ -1128,7 +1115,7 @@ func refresh_surface_marker() -> void:
 		home_marker.visible = true
 		home_marker.label_text = "MARK"
 		home_marker.update_cue(camera, marker.position, false)
-		home_cue.visible = false
+		if home_cue != null: home_cue.visible = false
 
 
 func refresh_suit_lamp() -> void:

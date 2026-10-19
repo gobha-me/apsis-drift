@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/freedom_navigation.hpp"
+#include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/planet_ambient.hpp"
 #include "apsis_drift/surface_landmarks.hpp"
 
@@ -12,6 +13,7 @@ inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
+inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
 inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
@@ -80,7 +82,8 @@ struct FreedomKnowledgeRecipe {
                          const FreedomKnowledgeRecipe&) -> bool = default;
 };
 // Personal navigation metadata, separate from generated truth and sensor facts.
-// The point is planet-fixed; neither craft replacement nor travel moves it.
+// Each point stays fixed to its typed body; craft replacement/travel cannot
+// move it. Keep the original planetary type and version1 encoding unchanged.
 struct FreedomSurfaceMarkerPoint {
   SystemId system;
   PlanetId planet;
@@ -89,9 +92,20 @@ struct FreedomSurfaceMarkerPoint {
   friend auto operator==(const FreedomSurfaceMarkerPoint&,
                          const FreedomSurfaceMarkerPoint&) -> bool = default;
 };
+struct FreedomMoonSurfaceMarkerPoint {
+  SystemId system;
+  BodyId body;
+  MoonFixedPositionMetres position;
+  SimulationTick tick{};
+  friend auto operator==(const FreedomMoonSurfaceMarkerPoint&,
+                         const FreedomMoonSurfaceMarkerPoint&)
+      -> bool = default;
+};
+using FreedomSurfaceMarkerLocation =
+    std::variant<FreedomSurfaceMarkerPoint, FreedomMoonSurfaceMarkerPoint>;
 struct FreedomSurfaceMarkerState {
   std::uint32_t version{kFreedomSurfaceMarkerVersion};
-  std::optional<FreedomSurfaceMarkerPoint> point;
+  std::optional<FreedomSurfaceMarkerLocation> point;
   friend auto operator==(const FreedomSurfaceMarkerState&,
                          const FreedomSurfaceMarkerState&) -> bool = default;
 };
