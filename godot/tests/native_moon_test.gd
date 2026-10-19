@@ -5,6 +5,7 @@ const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const MoonView = preload("res://scripts/native/native_moon_view.gd")
 const MoonState = preload("res://scripts/native/native_moon_state.gd")
 const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
+const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -62,6 +63,68 @@ func check_state_refusals(state: Dictionary) -> void:
 			"planet_alias": bad.planet_id = state.body_id
 			"body_version": bad.body_version = 999
 		check(not MoonState.valid(bad), "Malformed Moon packet accepted before staging: " + damage)
+
+func check_clearance_refusals(state: Dictionary, binding: Dictionary) -> void:
+	# Damage only copies of the genuine near-pad packet. These pure admission
+	# checks run before any staged model/viewport allocation or bridge command.
+	for damage in ["missing", "null", "unavailable_extra", "unavailable_type", "available_short", "version", "version_type", "terrain_version", "body_version", "frame_version", "body_id", "system_id", "craft_id", "frame_id", "tick", "source_checksum", "min_nan", "min_inf", "max_nan", "max_inf", "reversed", "min_type", "max_type", "extra"]:
+		var bad := state.duplicate(true)
+		var clearance: Dictionary = bad.surface.gear_clearance
+		match damage:
+			"missing": bad.surface.erase("gear_clearance")
+			"null": bad.surface.gear_clearance = null
+			"unavailable_extra": bad.surface.gear_clearance = {"available": false, "minimum_gap_metres": 0.0}
+			"unavailable_type": bad.surface.gear_clearance = {"available": 0}
+			"available_short": bad.surface.gear_clearance = {"available": true}
+			"version": clearance.version = 2
+			"version_type": clearance.version = 1.0
+			"terrain_version": clearance.terrain_version = 2
+			"body_version": clearance.body_version = state.body_version + 1
+			"frame_version": clearance.frame_version = state.frame_version + 1
+			"body_id", "system_id", "craft_id", "frame_id", "tick": clearance[damage] = "0" if state[damage] != "0" else "1"
+			"source_checksum": clearance.source_checksum = "0" if state.checksum != "0" else "1"
+			"min_nan": clearance.minimum_gap_metres = NAN
+			"min_inf": clearance.minimum_gap_metres = INF
+			"max_nan": clearance.maximum_gap_metres = NAN
+			"max_inf": clearance.maximum_gap_metres = -INF
+			"reversed": clearance.minimum_gap_metres = clearance.maximum_gap_metres + 1.0
+			"min_type": clearance.minimum_gap_metres = 0
+			"max_type": clearance.maximum_gap_metres = "0.0"
+			"extra": clearance.extra = true
+		var pending := {"candidate_id": "1", "mode": "freedom_flight", "craft_binding": binding, "walk_state": {}, "flight_state": bad, "station_state": {}, "station_geometry": {}, "streaming_ready": true}
+		check(not MoonState.valid(bad) and not Shell.valid_pending(pending) and not CockpitDisplays.valid_state(bad), "Malformed Moon gear clearance passed a presentation admission gate: " + damage)
+
+func check_gear_clearance(view: Control, owner: Variant, output: String, label: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	if not check(before.surface.get("gear_clearance") is Dictionary, "Actual Moon phase has no explicit gear-clearance packet: " + label): return
+	var camera_before: Transform3D = view.camera.transform
+	var look_before: Vector2 = view.look_offset
+	var cockpit_before: bool = view.cockpit
+	var clearance: Dictionary = before.surface.gear_clearance
+	var frozen := save_bytes(owner, output.path_join(label + "-clearance-before.json"))
+	if not check(not frozen.is_empty(), "Moon clearance baseline Save unavailable: " + label): return
+	if label == "touchdown-source":
+		if not check(clearance.get("available") == true and before.surface.gear_deployed and not before.surface.landed and before.surface_walk.is_empty() and before.jump.phase == "idle", "Actual durable near-pad source did not expose its seated free-Moon clearance"): return
+		check(clearance.size() == 13 and clearance.version == 1 and clearance.terrain_version == 1, "Actual Moon gear clearance lost its closed recipe/version shape")
+		for field in ["body_id", "body_version", "system_id", "craft_id", "frame_id", "frame_version", "tick"]:
+			check(clearance[field] == before[field], "Actual Moon clearance differs from its live owner/clock: " + field)
+		check(clearance.source_checksum == before.checksum, "Actual Moon clearance is not bound to current canonical source physics")
+		check(clearance.minimum_gap_metres is float and clearance.maximum_gap_metres is float and is_finite(clearance.minimum_gap_metres) and is_finite(clearance.maximum_gap_metres) and clearance.minimum_gap_metres <= clearance.maximum_gap_metres, "Actual normal-plane gear gap is nonfinite or reversed")
+		var span := "%.3f…%.3f m" % [clearance.minimum_gap_metres, clearance.maximum_gap_metres]
+		view.update_view(0.0)
+		check(view.error.is_empty() and "Gear clearance" in view.primary_status.text and span in view.primary_status.text, "Near-pad Moon HUD omitted actual min/max gear gaps")
+		check(view.cockpit_displays.refresh(before, 0.0, true), "Actual Moon cockpit clearance refresh refused")
+		var instruments := ""
+		for page in view.cockpit_displays.presented_rows: instruments += "\n".join(page) + "\n"
+		check("Gear clearance" in instruments and span in instruments, "Moon cockpit instrument omitted the actual gear-gap span")
+		check_clearance_refusals(before, owner.get_freedom_craft_binding())
+	elif label in ["arrival", "landed", "outside"]:
+		check(clearance == {"available": false}, "Moon gear-off/supported/outside phase invented or retained a clearance witness: " + label)
+	for repeat in 3:
+		check(owner.get_freedom_flight_state() == before, "Reading Moon clearance changed live source state: " + label)
+		view.update_view(0.0)
+		check(view.cockpit_displays.refresh(before, 0.0, true), "Quiet Moon clearance cockpit refresh failed: " + label)
+	check(view.paused and view.error.is_empty() and view.camera.transform == camera_before and view.look_offset == look_before and view.cockpit == cockpit_before and owner.get_freedom_flight_state() == before and save_bytes(owner, output.path_join(label + "-clearance-after.json")) == frozen, "Moon clearance projection/readouts changed pause, camera/look, clock, resources, physics or complete Save: " + label)
 
 func check_rollback(shell: Control, owner: Variant) -> void:
 	var previous: Control = shell.current_view
@@ -190,6 +253,9 @@ func check_home(shell: Control, owner: Variant, assets: String, output: String) 
 	neutral.resize(12)
 	for tick in 600:
 		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual Moon-to-home travel tick refused"): return
+		if tick == 360:
+			var transit: Dictionary = owner.get_freedom_flight_state()
+			check(MoonState.valid(transit) and transit.jump.phase == "transit" and transit.surface.gear_clearance == {"available": false}, "Actual committed Moon transit exposed a terrain gear-clearance witness")
 	var home: Dictionary = owner.get_freedom_flight_state()
 	if not check(home.get("body_kind") != "moon" and home.get("station_available", false) and home.jump.phase == "idle" and home.resources.jump_charges == charges - 1, "Charged return lost the real home planet/station/one-charge bill"): return
 	view._process(0.0)
@@ -292,6 +358,7 @@ func run() -> void:
 		var phase_shell := shell_for(restored, phases.path_join(label + ".json"), assets)
 		if phase_shell == null: continue
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
+		check_gear_clearance(phase_shell.current_view, restored, output, label)
 		phase_shell.free()
 		await process_frame
 	await check_outside(phases, assets, output)

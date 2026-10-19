@@ -1525,6 +1525,36 @@ class FreedomBridge : public godot::RefCounted {
     surface["maneuver"] = "off";
     surface["remaining_seconds"] = 0.0;
     surface["note"] = godot::String{session.surface_maneuver().note.c_str()};
+    godot::Dictionary clearance;
+    clearance["available"] = false;
+    // One current observation; never query contact from per-tile transforms.
+    if (session.boarding() &&
+        session.boarding()->phase == FreedomBoardingPhase::seated &&
+        !session.surface_walker() && !session.recovery_pending() &&
+        session.surface() && !session.surface()->moon_landed &&
+        (!session.travel() ||
+         session.travel()->phase == FreedomJumpPhase::idle)) {
+      if (const auto reading = project_moon_gear_clearance(
+              view.moon, body, session.surface()->gear_deployed)) {
+        clearance["available"] = true;
+        clearance["version"] = static_cast<std::int64_t>(reading->version);
+        clearance["terrain_version"] =
+            static_cast<std::int64_t>(reading->terrain_version);
+        clearance["body_id"] = decimal(reading->body.value);
+        clearance["body_version"] =
+            static_cast<std::int64_t>(reading->body.version);
+        clearance["system_id"] = decimal(reading->frame.system.value);
+        clearance["craft_id"] = result["craft_id"];
+        clearance["frame_id"] = decimal(reading->craft.id.value);
+        clearance["frame_version"] =
+            static_cast<std::int64_t>(reading->craft.version);
+        clearance["tick"] = decimal(reading->tick);
+        clearance["source_checksum"] = decimal(reading->source_checksum);
+        clearance["minimum_gap_metres"] = reading->minimum_gap_metres;
+        clearance["maximum_gap_metres"] = reading->maximum_gap_metres;
+      }
+    }
+    surface["gear_clearance"] = clearance;
     result["surface"] = surface;
     godot::Dictionary resources;
     resources["selected"] = session.resources().has_value();

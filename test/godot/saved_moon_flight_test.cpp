@@ -170,8 +170,160 @@ auto verify(const SavedMoonFlightProjection& view,
                   view.star_direction.up),
        1, 5e-15, "Projected star direction remains unit");
 }
+auto gear_clearance(const test_fixture::MoonContactFixture& fixture) -> void {
+  const auto& moon = fixture.moon;
+  const RigidBodyWorldContext context{moon};
+  const auto original =
+      need(encode_rigid_body_state_json(context, fixture.source));
+  const auto owner = moon;
+  const auto inspect = [&](const RigidBodyState& source) {
+    const auto sample = project_moon_gear_clearance(moon, source, true);
+    check(sample.has_value(), "All three genuine certified pad planes produce "
+                              "a complete gear reading");
+    if (!sample)
+      throw std::runtime_error("Expected actual Moon gear gap reading");
+    check(sample->version == 1 && sample->terrain_version == 1 &&
+              sample->frame == source.frame && sample->body == moon.body &&
+              sample->craft == source.craft && sample->tick == source.tick &&
+              sample->source_checksum ==
+                  need(rigid_body_state_checksum(context, source)),
+          "Gear reading retains exact typed owner/frame/recipe/current source "
+          "clock and checksum");
+    const auto query =
+        need(MoonContactSnapshot::create(moon, source, true)).query();
+    double minimum = std::numeric_limits<double>::infinity(),
+           maximum = -minimum;
+    for (unsigned i = 0; i < 3; ++i) {
+      check(query.supports[i].geometry &&
+                query.supports[i].geometry->has_value() &&
+                query.supports[i].support &&
+                query.supports[i].support->has_value(),
+            "Reading uses complete geometry and genuine first-surface support "
+            "for every pad");
+      const auto& patch = **query.supports[i].geometry;
+      minimum = std::min(minimum, patch.minimum_gap_metres);
+      maximum = std::max(maximum, patch.maximum_gap_metres);
+      // Independent long-double plane distances of the real stored rectangle
+      // corners corroborate enclosures; do not repeat the production extent
+      // formula or reinterpret a centre sample as whole-footprint clearance.
+      const auto& a = patch.triangle.vertices[0];
+      const auto n = patch.triangle.outward_normal;
+      for (long double sx : {-1.L, 1.L})
+        for (long double sz : {-1.L, 1.L}) {
+          const long double x = static_cast<long double>(patch.pad_center.x) -
+                                a.x + sx * patch.half_width.x +
+                                sz * patch.half_length.x;
+          const long double y = static_cast<long double>(patch.pad_center.y) -
+                                a.y + sx * patch.half_width.y +
+                                sz * patch.half_length.y;
+          const long double z = static_cast<long double>(patch.pad_center.z) -
+                                a.z + sx * patch.half_width.z +
+                                sz * patch.half_length.z;
+          const long double gap = x * n.x + y * n.y + z * n.z;
+          check(static_cast<long double>(sample->minimum_gap_metres) <= gap &&
+                    gap <= static_cast<long double>(sample->maximum_gap_metres),
+                "Aggregate signed gap encloses every independently evaluated "
+                "actual pad corner");
+        }
+    }
+    check(sample->minimum_gap_metres == minimum &&
+              sample->maximum_gap_metres == maximum,
+          "Reading preserves min/max across all three pad certificates without "
+          "averaging");
+    check(project_moon_gear_clearance(moon, source, true) == sample,
+          "Same source yields identical reading without saved/transient state");
+    return *sample;
+  };
+  const auto compressed = inspect(fixture.source);
+  check(compressed.minimum_gap_metres < compressed.maximum_gap_metres &&
+            compressed.maximum_gap_metres < 0,
+        "Actual compressed pads retain signed negative gaps rather than "
+        "zero-clamping");
+  const auto to_source = [&](RigidBodyState fixed) {
+    fixed = need(canonicalize_rigid_body_state(context, fixed));
+    return need(reframe_rigid_body(context, fixed,
+                                   {fixture.source.frame, fixed.tick}, moon));
+  };
+  const auto n = fixture.triangle.outward_normal;
+  auto raised = fixture.fixed;
+  raised.position_metres = {raised.position_metres.x + .25 * n.x,
+                            raised.position_metres.y + .25 * n.y,
+                            raised.position_metres.z + .25 * n.z};
+  const auto separated = inspect(to_source(raised));
+  check(separated.minimum_gap_metres > 0 &&
+            separated.maximum_gap_metres > separated.minimum_gap_metres,
+        "Actual airborne separated pads show positive plane gaps without "
+        "requiring landing readiness");
+  auto fast = fixture.fixed;
+  fast.linear_velocity_metres_per_second = {-3 * n.x, -3 * n.y, -3 * n.z};
+  const auto fast_source = to_source(fast);
+  const auto unsafe =
+      need(MoonContactSnapshot::create(moon, fast_source, true)).query();
+  check(unsafe.assessment && unsafe.assessment->failed_margins != 0 &&
+            project_moon_gear_clearance(moon, fast_source, true).has_value(),
+        "Certified plane measurement remains distinct from an unsafe touchdown "
+        "envelope");
+  const auto baseline =
+      need(MoonContactSnapshot::create(moon, fixture.source, true)).query();
+  const auto& front = **baseline.supports[0].geometry;
+  const auto& corner = front.triangle.vertices[0];
+  auto edge = baseline.provenance.fixed_query_state;
+  edge.position_metres = {
+      edge.position_metres.x + corner.x - front.pad_center.x - .05 * n.x,
+      edge.position_metres.y + corner.y - front.pad_center.y - .05 * n.y,
+      edge.position_metres.z + corner.z - front.pad_center.z - .05 * n.z};
+  const auto edge_source = to_source(edge);
+  const auto unresolved =
+      need(MoonContactSnapshot::create(moon, edge_source, true)).query();
+  bool missing{};
+  for (unsigned i = 0; i < 3; ++i)
+    missing |= !unresolved.supports[i].geometry ||
+               !unresolved.supports[i].geometry->has_value() ||
+               !unresolved.supports[i].support ||
+               !unresolved.supports[i].support->has_value();
+  check(missing && !project_moon_gear_clearance(moon, edge_source, true),
+        "Footprint on a genuine facet edge returns unavailable, never "
+        "partial/zero aggregate");
+  auto far = fixture.fixed;
+  const auto radius = norm(far.position_metres),
+             scale = (moon.radius_metres + 200000.) / radius;
+  far.position_metres = {far.position_metres.x * scale,
+                         far.position_metres.y * scale,
+                         far.position_metres.z * scale};
+  check(!project_moon_gear_clearance(moon, to_source(far), true),
+        "Valid far flight outside the existing100km pad query range remains "
+        "unavailable");
+  check(!project_moon_gear_clearance(moon, fixture.source, false),
+        "Stowed gear gives no observation");
+  check(!project_moon_gear_clearance(moon, fixture.source, true, 99),
+        "Unknown terrain recipe gives no observation");
+  auto forged = moon;
+  ++forged.spin_period_ticks;
+  check(!project_moon_gear_clearance(forged, fixture.source, true),
+        "Forged source owner refuses before any pad observation");
+  auto bad = fixture.source;
+  ++bad.frame.body->value;
+  check(!project_moon_gear_clearance(moon, bad, true),
+        "Foreign body cannot reuse a finite reading");
+  bad = fixture.source;
+  bad.frame.body->kind = BodyKind::planet;
+  check(!project_moon_gear_clearance(moon, bad, true),
+        "Planet alias cannot enter Moon readout");
+  bad = fixture.source;
+  bad.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+  check(!project_moon_gear_clearance(moon, bad, true),
+        "Nonfinite source gives unavailable");
+  check(!project_moon_gear_clearance(moon, fixture.fixed, true),
+        "Raw fixed6 cannot masquerade as saved frame5");
+  check(need(encode_rigid_body_state_json(context, fixture.source)) ==
+                original &&
+            moon == owner,
+        "All observations and refusals preserve complete source state and "
+        "physical owner");
+}
 auto run() -> void {
   const auto fixture = test_fixture::make_moon_contact_fixture();
+  gear_clearance(fixture);
   const auto& moon = fixture.moon;
   const RigidBodyWorldContext context{moon};
   const auto original =

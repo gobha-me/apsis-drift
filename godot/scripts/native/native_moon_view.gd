@@ -261,6 +261,8 @@ func update_compact_hud() -> void:
 	if primary_status == null: return
 	var resources: Dictionary = state.get("resources", {})
 	primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
+	primary_status.text += "\n" + MoonState.gear_clearance_text(state)
+	primary_status.tooltip_text = "Signed terrain-normal gaps beneath all deployed gear pads. Negative values indicate gear-stroke overlap. This does not certify hull clearance or a safe landing; it is not radar altitude."
 	var landed: bool = state.get("surface", {}).get("landed", false)
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	assist_button.set_pressed_no_signal(state.assistance)

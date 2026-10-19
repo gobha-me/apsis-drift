@@ -82,6 +82,13 @@ onto suitable ground. Flight assistance controls rotation; it does not hover or
 cancel lunar gravity. The landing-aid autopilot and atmospheric controls do not
 apply here. Keep flight fuel for braking and ascent. The lunar altitude readout is above
 the reference radius, not radar clearance; dry terrain can lie below that datum.
+The HUD and cockpit also show **Gear clearance**: the current signed minimum
+and maximum terrain-normal gaps across all three deployed pad footprints.
+Negative values indicate overlap within the gear stroke. This reading requires
+complete existing contact certificates for every pad; stowed gear, incomplete
+terrain support, landed/outside modes and active travel show **unavailable**.
+It is an observation, not radar altitude, hull clearance or landing permission.
+Reading it does not advance time, alter a save or change the landing envelope.
 Only suitably slow,
 supported three-pad contact with certified hull clearance creates a landed
 anchor. The first pad may compress its existing rated gear stroke only while
