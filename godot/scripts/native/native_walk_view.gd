@@ -290,6 +290,8 @@ func build_ui() -> void:
 	active_card.add_theme_stylebox_override("panel", active_card_style)
 	active_status = hud_text()
 	active_card.add_child(active_status)
+	# Wrapping resolves after the container assigns the label's actual width.
+	active_status.minimum_size_changed.connect(active_card.reset_size)
 	add_child(active_card)
 	active_card.hide()
 	telemetry = hud_text()

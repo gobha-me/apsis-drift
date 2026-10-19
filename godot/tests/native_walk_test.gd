@@ -251,7 +251,7 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(not view.paused and view.active_card.visible and not view.hud_scroll.visible and not view.save_button.is_visible_in_tree() and view.mouse_look.active, "Running station retained full actions or lost compact help/pointer ownership")
 		for frame in 3:
 			await process_frame
-		check(bounds.encloses(view.active_card.get_rect()) and view.active_card.size.y * pixels.y / view.size.y <= 180.0, "Active station card is not compact or escaped the resized viewport " + str(pixels))
+		check(bounds.encloses(view.active_card.get_rect()) and view.active_card.size.y * pixels.y / view.size.y <= 180.0, "Active station card is not compact or escaped the resized viewport %s: window=%s view=%s card=%s minimum=%s text=%s window_scale=%s" % [pixels, view.get_window().size, view.size, view.active_card.get_rect(), view.active_card.get_combined_minimum_size(), view.active_status.get_rect(), Vector2(view.size.x / pixels.x, view.size.y / pixels.y)])
 		check(view.active_card.get_global_rect().encloses(view.active_status.get_global_rect()) and view.active_status.size.y >= view.active_status.get_minimum_size().y, "Active station help is clipped")
 		font_pixels = view.active_status.get_theme_font_size("font_size") * pixels.x / view.size.x
 		check(font_pixels >= 17.5 and font_pixels <= 20.5 and "WASD" in view.active_status.text and "look" in view.active_status.text and "Esc / Start" in view.active_status.text, "Compact station help became unreadable or lost essential controls")
