@@ -523,6 +523,18 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	view.state = owner.get_freedom_flight_state()
 	view.update_view(0.0)
 	check(view.state.surface_marker.current_body and view.state.surface_marker.tick == replaced.surface_marker.tick and not view.state.surface.landed, "Ascent lost the fixed lunar point")
+	var low := save_bytes(owner, output.path_join("marker-low-ascent.json"))
+	check(not owner.select_freedom_home_body_jump() and save_bytes(owner, output.path_join("marker-low-refused.json")) == low, "Low lunar ascent bypassed the existing conservative jump-clearance rule")
+	# Fly beyond the existing global relief/hull envelope before selecting home.
+	# This is a bounded authored climb using actual thrusters, not a pose edit.
+	up[1] = 1.0
+	var climb_ticks := 0
+	while view.state.altitude < 5000.0 and climb_ticks < 7200:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, up, false), "Marked Moon clearance climb refused"): shell.free(); return
+		view.state = owner.get_freedom_flight_state()
+		climb_ticks += 1
+	if not check(view.state.altitude >= 5000.0 and view.state.surface_marker.tick == replaced.surface_marker.tick and view.state.resources.fraction > 0.0, "Bounded actual ascent did not reach clear local departure with its retained marker"): shell.free(); return
+	view.update_view(0.0)
 	await check_home(shell, owner, assets, output.path_join("marker"))
 	view = shell.current_view
 	var home: Dictionary = owner.get_freedom_flight_state()

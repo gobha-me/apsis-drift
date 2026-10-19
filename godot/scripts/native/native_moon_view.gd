@@ -357,13 +357,16 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	sky_material.set_shader_parameter("sun_angular_radius", state.get("star_angular_radius", 0.00465))
 	suit_lamp.visible = surface_walking() and suit_lamp_enabled
 	if exhaust != null: exhaust.update_applied(state, delta, paused or surface_walking())
-	home_marker.visible = false
-	ship_marker.visible = surface_walking()
-	if ship_marker.visible:
-		var access: Dictionary = state.surface_walk.return_access
-		ship_marker.label_text = "RETURN" if access.available else "SHIP"
-		ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
-	refresh_surface_marker()
+	# Staging builds this view detached; window/camera projections begin only
+	# after activation attaches it to the scene tree.
+	if is_inside_tree():
+		home_marker.visible = false
+		ship_marker.visible = surface_walking()
+		if ship_marker.visible:
+			var access: Dictionary = state.surface_walk.return_access
+			ship_marker.label_text = "RETURN" if access.available else "SHIP"
+			ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
+		refresh_surface_marker()
 	refresh_control_hint()
 	update_compact_hud()
 
