@@ -90,7 +90,11 @@ auto triangles(const MoonTerrainSampler& sampler) -> void {
       }
     }
   for (const auto& direction : std::array<MoonFixedDirection, 5>{
-           {{0, 0, 0}, {NAN, 1, 0}, {1, INF, 0}, {1e10, 0, 0}, {1e-13, 0, 0}}})
+           {{0, 0, 0},
+            {NAN, 1, 0},
+            {1, std::numeric_limits<double>::infinity(), 0},
+            {1e10, 0, 0},
+            {1e-13, 0, 0}}})
     check(!query_moon_contact_surface(sampler, direction),
           "Malformed/out-of-domain radial direction refuses");
   auto id =

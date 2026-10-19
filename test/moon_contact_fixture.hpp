@@ -2,6 +2,7 @@
 
 #include "apsis_drift/moon_landed_craft.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
+#include "godot/contact_geometry_internal.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -73,6 +74,54 @@ inline auto make_moon_contact_fixture() -> MoonContactFixture {
   fixed.position_metres = {center.x - .05 * n.x - rotated.x,
                            center.y - .05 * n.y - rotated.y,
                            center.z - .05 * n.z - rotated.z};
+  // The rear-starboard footprint crosses its selected facet's first edge at
+  // the front-pad centroid placement. Translate the whole craft within the
+  // ORIGINAL front-pad plane, just far enough to leave 5cm of footprint edge
+  // clearance. This is one geometric placement, not a terrain/location search;
+  // the seed, facets, orientation, pad sizes and production tolerances stay
+  // put.
+  const auto rear =
+      require_moon_contact(godot_spike::detail::nominal_contact_rectangle(
+          moon.radius_metres, fixed, craft.properties, 2));
+  const auto rear_id = require_moon_contact(locate_moon_contact_triangle(
+      sampler, {rear.center.x, rear.center.y, rear.center.z}));
+  const auto rear_triangle =
+      require_moon_contact(build_moon_contact_triangle(sampler, rear_id));
+  const auto& edge_a = rear_triangle.vertices[0];
+  const auto& edge_b = rear_triangle.vertices[1];
+  const auto& opposite = rear_triangle.vertices[2];
+  const RigidVector3 edge{edge_b.x - edge_a.x, edge_b.y - edge_a.y,
+                          edge_b.z - edge_a.z};
+  const auto rn = rear_triangle.outward_normal;
+  RigidVector3 inward{rn.y * edge.z - rn.z * edge.y,
+                      rn.z * edge.x - rn.x * edge.z,
+                      rn.x * edge.y - rn.y * edge.x};
+  const auto dot = [](const auto& lhs, const auto& rhs) {
+    return (lhs.x * rhs.x + lhs.y * rhs.y) + lhs.z * rhs.z;
+  };
+  const RigidVector3 toward{opposite.x - edge_a.x, opposite.y - edge_a.y,
+                            opposite.z - edge_a.z};
+  const auto inward_length = std::hypot(inward.x, inward.y, inward.z);
+  const auto inward_scale =
+      (dot(inward, toward) < 0 ? -1.0 : 1.0) / inward_length;
+  inward = {inward.x * inward_scale, inward.y * inward_scale,
+            inward.z * inward_scale};
+  const RigidVector3 rear_relative{rear.center.x - edge_a.x,
+                                   rear.center.y - edge_a.y,
+                                   rear.center.z - edge_a.z};
+  const auto minimum = dot(inward, rear_relative) -
+                       std::abs(dot(inward, rear.width)) -
+                       std::abs(dot(inward, rear.depth));
+  const auto normal_component = dot(inward, n);
+  const RigidVector3 tangent{inward.x - normal_component * n.x,
+                             inward.y - normal_component * n.y,
+                             inward.z - normal_component * n.z};
+  const auto shift = (.05 - minimum) / dot(inward, tangent);
+  if (!std::isfinite(shift) || shift <= 0 || shift >= 1)
+    throw std::runtime_error("Fixed moon footprint translation is invalid");
+  fixed.position_metres = {fixed.position_metres.x + shift * tangent.x,
+                           fixed.position_metres.y + shift * tangent.y,
+                           fixed.position_metres.z + shift * tangent.z};
   const RigidBodyWorldContext context{moon};
   fixed = require_moon_contact(canonicalize_rigid_body_state(context, fixed));
   const auto source = require_moon_contact(
