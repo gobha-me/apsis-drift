@@ -237,7 +237,8 @@ func check_boarding_look(walk: Control, bridge: Variant, label: String) -> void:
 	var commands: PackedFloat64Array = walk.input_controls(0.1)
 	physical_key(key, false)
 	physical_key(KEY_W, false)
-	check(walk.boarding_look.x > accepted.x and commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": key look steered the route or failed")
+	check(walk.boarding_look.x > accepted.x, label + ": key look failed; before=%s after=%s key=%s paused=%s" % [accepted, walk.boarding_look, key, walk.paused])
+	check(commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": key look steered the route; commands=%s heading=%s" % [commands, heading])
 	accepted = walk.boarding_look
 	joy_axis(JOY_AXIS_RIGHT_X, 0.8, 9)
 	walk.input_controls(0.1)
@@ -248,7 +249,8 @@ func check_boarding_look(walk: Control, bridge: Variant, label: String) -> void:
 	commands = walk.input_controls(0.1)
 	joy_axis(JOY_AXIS_RIGHT_X, 0.0, 19)
 	joy_axis(JOY_AXIS_LEFT_Y, 0.0, 19)
-	check(walk.boarding_look.x > accepted.x and commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": selected stick look steered the route or failed")
+	check(walk.boarding_look.x > accepted.x, label + ": selected stick look failed; before=%s after=%s paused=%s" % [accepted, walk.boarding_look, walk.paused])
+	check(commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": stick look steered the route; commands=%s heading=%s" % [commands, heading])
 	walk.update_view()
 	check(walk.camera.position == actor.actor_eye_position and walk.requested_heading == heading and walk.pitch == 0.0, label + ": look displaced the authoritative eye/heading")
 	accepted = walk.boarding_look
