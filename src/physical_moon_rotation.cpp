@@ -58,7 +58,8 @@ auto resolve_physical_moon_rotation(const PhysicalMoonDescriptor& owner,
   const double turns =
       static_cast<double>(cycle) / owner.spin_period_ticks +
       static_cast<double>(owner.epoch_spin_phase_turns) / 4294967296.0;
-  const double phase = zero(std::remainder(turns * tau, tau));
+  // Preserve the optical source's left-associated multiplication order.
+  const double phase = zero(std::remainder(turns * 2 * std::numbers::pi, tau));
   const auto q = normalize_rigid_orientation(
       {std::cos(phase * .5), 0, 0, std::sin(phase * .5)});
   if (!q) return std::unexpected{Error::unsafe_arithmetic};
