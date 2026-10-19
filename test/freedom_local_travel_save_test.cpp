@@ -6,6 +6,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <source_location>
 
 namespace {
 using namespace apsis_drift;
@@ -13,8 +14,10 @@ using Json = nlohmann::ordered_json;
 auto check(bool good, const char* message) -> void {
   if (!good) throw std::runtime_error(message);
 }
-template <class T, class E> auto need(std::expected<T, E> value) -> T {
+template <class T, class E> auto need(std::expected<T, E> value,
+    std::source_location location = std::source_location::current()) -> T {
   if (!value) {
+    std::cerr << location.file_name() << ':' << location.line() << ' ';
     if constexpr (requires { value.error().detail; })
       std::cerr << value.error().detail << '\n';
     throw std::runtime_error("Local travel codec fixture refused");
@@ -232,6 +235,7 @@ auto run() -> void {
   auto request = bad.travel.local->committed->request;
   request.home_model.terrain_policy = 1;
   request.home_model.optics = 0;
+  request.home_model.companions = 0;
   bad.travel.local->committed = need(freeze_local_body_jump_arrival(request));
   check(!validate_freedom_travel_document(bad),
         "Even a valid alternative return solution cannot rewrite retained home "

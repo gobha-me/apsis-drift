@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/moon_terrain.hpp"
+#include "apsis_drift/rigid_body.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <queue>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -16,6 +18,7 @@ namespace apsis_drift::godot_spike {
 inline constexpr unsigned kMoonStreamIntervals{32};
 inline constexpr unsigned kMoonStreamMaxTiles{384};
 inline constexpr unsigned kMoonStreamMaxLod{13};
+inline constexpr double kMoonStreamContactNeighborhoodMetres{32.0};
 struct MoonStreamKey {
   unsigned face{}, lod{}, x{}, y{};
   auto operator<=>(const MoonStreamKey&) const = default;
@@ -88,13 +91,105 @@ inline auto point(const MoonTerrainSampler& sampler, MoonStreamKey key,
   const auto p = require(sampler.surface_position({d.x, d.y, d.z}));
   return {p.x, p.y, p.z};
 }
+// Cover the entire local32m AABB, including every face whose dominance cone
+// intersects it. Interval chart ratios overapproximate the clipped box; this
+// deliberately includes edge/corner touches rather than choosing one face.
+inline auto contact_branches(const PhysicalMoonDescriptor& owner, V observer)
+    -> std::set<MoonStreamKey> {
+  const double radial = length(observer);
+  if (radial < owner.radius_metres - kMoonTerrainMaximumReliefMetres -
+                   kMoonStreamContactNeighborhoodMetres)
+    throw std::invalid_argument(
+        "Moon contact observer is below bounded near field");
+  struct Chart {
+    unsigned primary, u, v;
+    double ps, us, vs;
+  };
+  constexpr std::array<Chart, 6> charts{{{0, 1, 2, 1, 1, 1},
+                                         {0, 1, 2, -1, -1, 1},
+                                         {1, 0, 2, 1, -1, 1},
+                                         {1, 0, 2, -1, 1, 1},
+                                         {2, 1, 0, 1, 1, -1},
+                                         {2, 1, 0, -1, 1, 1}}};
+  constexpr double count = 1U << kMoonStreamMaxLod;
+  const std::array components{observer.x, observer.y, observer.z};
+  const auto bounds = [&](unsigned index, double sign) {
+    const double c = components[index] * sign;
+    return std::array{std::nextafter(c - kMoonStreamContactNeighborhoodMetres,
+                                     -std::numeric_limits<double>::infinity()),
+                      std::nextafter(c + kMoonStreamContactNeighborhoodMetres,
+                                     std::numeric_limits<double>::infinity())};
+  };
+  const auto min_abs = [](const auto& interval) {
+    return interval[0] <= 0 && interval[1] >= 0
+               ? 0.
+               : std::min(std::abs(interval[0]), std::abs(interval[1]));
+  };
+  const auto range = [&](const auto& numerator, const auto& denominator) {
+    const std::array ratios{
+        numerator[0] / denominator[0], numerator[0] / denominator[1],
+        numerator[1] / denominator[0], numerator[1] / denominator[1]};
+    const auto [lo, hi] = std::minmax_element(ratios.begin(), ratios.end());
+    const double low = std::clamp(
+        std::nextafter(*lo, -std::numeric_limits<double>::infinity()), -1., 1.);
+    const double high = std::clamp(
+        std::nextafter(*hi, std::numeric_limits<double>::infinity()), -1., 1.);
+    // Expand after coordinate arithmetic too: a closed boundary must retain
+    // the tile on either side even when an endpoint lands exactly on a grid.
+    const double first = std::nextafter(
+        (low + 1) * .5 * count, -std::numeric_limits<double>::infinity());
+    const double last = std::nextafter((high + 1) * .5 * count,
+                                       std::numeric_limits<double>::infinity());
+    return std::array{
+        static_cast<unsigned>(std::floor(std::clamp(first, 0., count - 1))),
+        static_cast<unsigned>(std::floor(std::clamp(last, 0., count - 1)))};
+  };
+  std::set<MoonStreamKey> branches;
+  unsigned faces{};
+  for (unsigned face = 0; face < charts.size(); ++face) {
+    const auto& chart = charts[face];
+    const auto primary = bounds(chart.primary, chart.ps),
+               u = bounds(chart.u, chart.us), v = bounds(chart.v, chart.vs);
+    if (primary[1] <= 0 || primary[1] < min_abs(u) || primary[1] < min_abs(v))
+      continue;
+    if (primary[0] <= 0 || ++faces > 3)
+      throw std::invalid_argument("Unsafe moon contact face coverage");
+    const auto x = range(u, primary), y = range(v, primary);
+    if (x[1] - x[0] >= 3 || y[1] - y[0] >= 3)
+      throw std::invalid_argument(
+          "Moon contact chart exceeds bounded3x3 footprint");
+    for (unsigned tx = x[0]; tx <= x[1]; ++tx)
+      for (unsigned ty = y[0]; ty <= y[1]; ++ty) {
+        MoonStreamKey key{face, kMoonStreamMaxLod, tx, ty};
+        while (key.lod) {
+          --key.lod;
+          key.x /= 2;
+          key.y /= 2;
+          if (!branches.contains(key) && branches.size() == 60)
+            throw std::invalid_argument(
+                "Moon contact refinement exceeds finite bound");
+          branches.insert(key);
+        }
+        // AtR>=600km each chart spans<2 fine cells: <=3x3 targets per face.
+        // Interior: <=49 internal splits; two seams: <=54; corner: <=48.
+        // Keep a conservative60-split ceiling BEFORE adding further records.
+      }
+  }
+  if (branches.empty())
+    throw std::invalid_argument("Moon contact coverage is empty");
+  return branches;
+}
 } // namespace moon_stream_detail
 
 // Complete six-face partition; subdivisions replace one leaf by all4 children.
 // Same bounded best-first score/buffer as the existing stream planner. On small
 // moons that buffer can consume the budget before contact LOD: prioritize the
-// observer's branch to13 within4km actual clearance, then spend the remainder
-// best-first. Budgets below45 may retain a coarser but complete cover.
+// whole32m contact neighbourhood to13 within4km actual clearance, including
+// adjacent tiles and cube faces, then spend the remainder best-first. At most
+// 60 mandatory internal splits need186 complete leaves, within default384.
+// Smaller budgets may retain a coarser but complete cover; no contact-fidelity
+// guarantee is made there. A far retained craft is only a distant visual proxy
+// when the actual observer walks beyond this current contact neighbourhood.
 inline auto plan_moon_tiles(const PhysicalMoonDescriptor& owner,
                             MoonFixedPositionMetres observer,
                             unsigned budget = kMoonStreamMaxTiles)
@@ -113,10 +208,10 @@ inline auto plan_moon_tiles(const PhysicalMoonDescriptor& owner,
       planner_radius > 1e10)
     throw std::invalid_argument("Unsafe moon stream clearance radius");
   const V planner_observer = mul(actual, planner_radius / radial);
-  const auto target = require(cube_surface_address_from_direction(
-      {actual.x, actual.y, actual.z}, kMoonStreamMaxLod));
   const bool near =
       radial - owner.radius_metres - sample.elevation_metres <= 4000;
+  const auto mandatory =
+      near ? contact_branches(owner, actual) : std::set<MoonStreamKey>{};
   struct Candidate {
     double score;
     MoonStreamKey key;
@@ -136,9 +231,7 @@ inline auto plan_moon_tiles(const PhysicalMoonDescriptor& owner,
     const double distance = std::max(
         80., length(sub(planner_observer, center)) - width * .85 - 4000.);
     double score = width / distance;
-    const unsigned shift = kMoonStreamMaxLod - key.lod;
-    if (near && key.face == static_cast<unsigned>(target.face) &&
-        key.x == (target.x >> shift) && key.y == (target.y >> shift))
+    if (mandatory.contains(key))
       score = std::numeric_limits<double>::infinity();
     leaves.emplace(key, true);
     if (key.lod < kMoonStreamMaxLod) queue.push({score, key});
