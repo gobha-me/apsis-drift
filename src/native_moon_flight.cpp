@@ -4,6 +4,41 @@
 #include <utility>
 
 namespace apsis_drift {
+namespace {
+auto compressible_gear_contact(const PhysicalMoonDescriptor& moon,
+                               const RigidBodyState& before,
+                               const RigidBodyState& candidate,
+                               const MoonTerrainImpactWitness& witness,
+                               std::uint32_t terrain) -> bool {
+  if (witness.region != MoonCraftImpactRegion::landing_structure) return false;
+  const auto snapshot =
+      MoonContactSnapshot::create(moon, candidate, true, terrain);
+  if (!snapshot) return false;
+  const auto contact = snapshot->query();
+  // Partial contact may use existing rated stroke; all other margins remain.
+  if (!contact.assessment ||
+      contact.assessment->failed_margins !=
+          static_cast<std::uint32_t>(TouchdownMargin::separated_support) ||
+      witness.support_index >= contact.support_count)
+    return false;
+  for (std::uint8_t index = 0; index < contact.support_count; ++index) {
+    const auto& pad = contact.supports[index];
+    if (!pad.geometry || !pad.geometry->has_value() || !pad.support ||
+        !pad.support->has_value())
+      return false;
+  }
+  const auto& struck = contact.supports[witness.support_index];
+  if (!struck.triangle || struck.triangle->id != witness.triangle) return false;
+  const auto hull = snapshot->hull_clearance();
+  if (!hull || !hull->certified) return false;
+  // The first gear contact must not conceal a later hull hit in this tick.
+  const auto swept_hull =
+      assess_moon_terrain_impact(moon, before, candidate, false, terrain);
+  return swept_hull &&
+         (swept_hull->classification == MoonTerrainImpactClass::clear ||
+          swept_hull->classification == MoonTerrainImpactClass::near);
+}
+} // namespace
 auto NativeFreedomFlightSession::advance_moon_tick(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
@@ -73,7 +108,14 @@ auto NativeFreedomFlightSession::advance_moon_tick(
     if (sweep->classification == MoonTerrainImpactClass::unknown)
       return std::unexpected{
           "Moon terrain sweep unresolved; flight tick retained"};
-    if (sweep->witness && sweep->witness->closing_speed_metres_per_second > 0) {
+    const bool compressing =
+        sweep->witness && surface_ && surface_->gear_deployed &&
+        (!condition_ || condition_allows_landing(*condition_)) &&
+        compressible_gear_contact(*moon_, document_.flight,
+                                  next.document_.flight, *sweep->witness,
+                                  document_.moon->terrain_recipe);
+    if (sweep->witness && sweep->witness->closing_speed_metres_per_second > 0 &&
+        !compressing) {
       const auto response = respond_moon_terrain_impact(
           *moon_, document_.flight, next.document_.flight, *sweep->witness);
       if (!response) return std::unexpected{response.error()};

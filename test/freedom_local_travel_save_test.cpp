@@ -5,8 +5,8 @@
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
-#include <stdexcept>
 #include <source_location>
+#include <stdexcept>
 
 namespace {
 using namespace apsis_drift;
@@ -14,8 +14,10 @@ using Json = nlohmann::ordered_json;
 auto check(bool good, const char* message) -> void {
   if (!good) throw std::runtime_error(message);
 }
-template <class T, class E> auto need(std::expected<T, E> value,
-    std::source_location location = std::source_location::current()) -> T {
+template <class T, class E>
+auto need(std::expected<T, E> value,
+          std::source_location location = std::source_location::current())
+    -> T {
   if (!value) {
     std::cerr << location.file_name() << ':' << location.line() << ' ';
     if constexpr (requires { value.error().detail; })

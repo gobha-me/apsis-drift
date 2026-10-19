@@ -5,6 +5,7 @@ const StationView = preload("res://scripts/native/native_station_view.gd")
 const HostSky = preload("res://shaders/native_host_sky.gdshader")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
+const MoonView = preload("res://scripts/native/native_moon_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const NativeAudio = preload("res://scripts/audio/native_ship_audio.gd")
 const ProfileBrowser = preload("res://scripts/ui/profile_browser.gd")
@@ -257,7 +258,10 @@ static func log_selection(pending: Dictionary, verb: String, candidate: Control 
 		print("Freedom native walking shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s actor=%s" % [verb, walking.universe_seed, walking.tick, walking.system_id, walking.planet_id, walking.station_id, walking.craft_id, walking.actor_id])
 	elif pending.mode == "freedom_flight":
 		var flight: Dictionary = pending.flight_state
-		print("Freedom native flight shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [verb, flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
+		if flight.get("body_kind") == "moon":
+			print("Freedom native lunar shell %s: seed=%s tick=%s system=%s moon=%s craft=%s checksum=%s" % [verb, flight.universe_seed, flight.tick, flight.system_id, flight.body_id, flight.craft_id, flight.checksum])
+		else:
+			print("Freedom native flight shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [verb, flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
 	else:
 		var start: Dictionary = pending.station_state
 		var geometry := dock_geometry(start)
@@ -279,7 +283,7 @@ func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
 	if pending.mode == "freedom_walk":
 		candidate = WalkView.new()
 	elif pending.mode == "freedom_flight":
-		candidate = FlightView.new()
+		candidate = MoonView.new() if pending.flight_state.get("body_kind") == "moon" else FlightView.new()
 	else:
 		candidate = load("res://scripts/native/native_start_shell.gd").new()
 		candidate.presentation_only = true
@@ -662,7 +666,9 @@ func switch_journey_view() -> void:
 	if bridge == null or current_view == null: return
 	var walk: Dictionary = bridge.get_freedom_walk_state()
 	var wants_walk := not walk.is_empty()
-	if (wants_walk and current_view is WalkView) or (not wants_walk and current_view is FlightView): return
+	var flight: Dictionary = bridge.get_freedom_flight_state()
+	var wants_moon: bool = flight.get("body_kind") == "moon"
+	if (wants_walk and current_view is WalkView) or (wants_moon and current_view is MoonView) or (not wants_walk and not wants_moon and current_view is FlightView and not current_view is MoonView): return
 	var previous := current_view
 	var model: Node3D = previous.staged_model
 	if not is_instance_valid(model) or not model.valid_current_pose() or model.selected_binding != bridge.get_freedom_craft_binding():
@@ -671,9 +677,9 @@ func switch_journey_view() -> void:
 		return
 	var parent := model.get_parent()
 	parent.remove_child(model)
-	var candidate: Control = WalkView.new() if wants_walk else FlightView.new()
+	var candidate: Control = WalkView.new() if wants_walk else MoonView.new() if wants_moon else FlightView.new()
 	inherit_controller(previous, candidate)
-	var pending := {"walk_state": walk, "flight_state": bridge.get_freedom_flight_state(), "station_geometry": bridge.get_freedom_station_geometry()}
+	var pending := {"walk_state": walk, "flight_state": flight, "station_geometry": bridge.get_freedom_station_geometry()}
 	if not candidate.stage(bridge, assets_root, pending, model, true) or not candidate.ready_to_commit():
 		error = candidate.error if not candidate.error.is_empty() else "Wayfarer view handoff failed"
 		if model.get_parent() != null: model.get_parent().remove_child(model)

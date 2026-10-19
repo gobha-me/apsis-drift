@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/godot/saved_moon_flight.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/planet_optics.hpp"
@@ -37,7 +38,12 @@ struct SavedFlightProjection {
 };
 inline auto project_saved_flight(const NativeFreedomFlightSession& session)
     -> SavedFlightProjection {
+  if (session.moon())
+    throw std::invalid_argument("Planet projection cannot carry a Moon owner");
   const auto body = require(session.relative_state());
+  if (!body.frame.planet)
+    throw std::invalid_argument(
+        "Planet projection requires its selected owner");
   const auto& system = session.system();
   const auto planet =
       require(find_local_system_planet(system, *body.frame.planet))->descriptor;
@@ -116,6 +122,14 @@ inline auto rated_rise_margin(const NativeFreedomFlightSession& session,
   return std::isfinite(margin) ? std::optional{margin} : std::nullopt;
 }
 
+inline auto validate_saved_projection(const NativeFreedomFlightSession& session)
+    -> void {
+  if (session.moon())
+    (void)project_saved_moon_flight(session);
+  else
+    (void)project_saved_flight(session);
+}
+
 struct SavedFlightWorld {
   NativeFreedomFlightSession session;
   FixedStepClock clock;
@@ -159,7 +173,7 @@ struct SavedFlightWorld {
     }
     // Qualify the projected selected owner before committing this whole batch.
     // Rendering never supplies pose, rotation or a substitute world recipe.
-    (void)project_saved_flight(candidate);
+    validate_saved_projection(candidate);
     session = std::move(candidate);
     clock = candidate_clock;
     last_step = actuation;

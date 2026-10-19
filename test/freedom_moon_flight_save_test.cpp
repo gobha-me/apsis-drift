@@ -155,6 +155,31 @@ auto malformed(std::string_view bytes) -> void {
   check(!decode_freedom_system_flight_import_json(bytes),
         "Old system-import decoder cannot admit moon format42");
 }
+auto suspension_landing() -> void {
+  const auto contact = test_fixture::make_moon_contact_fixture();
+  auto fixed = contact.fixed;
+  const auto n = contact.triangle.outward_normal;
+  fixed.position_metres.x += .12 * n.x;
+  fixed.position_metres.y += .12 * n.y;
+  fixed.position_metres.z += .12 * n.z;
+  fixed.linear_velocity_metres_per_second = {-.1 * n.x, -.1 * n.y, -.1 * n.z};
+  auto flight = fixture();
+  flight.flight = need(
+      reframe_rigid_body(RigidBodyWorldContext{contact.moon}, fixed,
+                         {contact.source.frame, fixed.tick}, contact.moon));
+  flight.origin.state.tick = fixed.tick;
+  const FreedomSurfaceSaveDocument surface{flight, {true, {}, {}}};
+  auto session = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(NativeSaveDocument{surface}))));
+  for (unsigned tick = 0; tick < 600 && !session.surface()->moon_landed; ++tick)
+    need(session.advance({}));
+  check(session.surface()->moon_landed.has_value(),
+        "Gentle real descent compresses rated gear until all genuine pads "
+        "engage");
+  check(session.document().flight.tick > flight.flight.tick,
+        "Suspension landing requires actual flight ticks, never a pose snap "
+        "into support");
+}
 auto surface_saves() -> void {
   const auto contact = test_fixture::make_moon_contact_fixture();
   const RigidBodyWorldContext context{contact.moon};
@@ -301,6 +326,7 @@ int main() {
               resumed.moon() == session.moon(),
           "Native Save/Continue retains actual moon state and selected owner");
     surface_saves();
+    suspension_landing();
     invalid_documents(document);
     malformed(encoded);
     std::uint64_t hash{14695981039346656037ULL};

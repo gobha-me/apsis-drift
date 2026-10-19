@@ -1,6 +1,6 @@
+#include "apsis_drift/craft_frame.hpp"
 #include "apsis_drift/godot/moon_streaming.hpp"
 #include "apsis_drift/moon_surface_contact.hpp"
-#include "apsis_drift/craft_frame.hpp"
 
 #include <iostream>
 #include <limits>
@@ -177,38 +177,67 @@ auto contacts(const MoonTerrainSampler& sampler, const MoonMeshTile& tile)
 // Independent finite probes at a fixed tile edge, face seam and triple
 // corner exercise the interval guard. These are visibility/topology checks,
 // not claims that a craft is actually supported at these authored locations.
-auto contact_footprints(const PhysicalMoonDescriptor& owner,const MoonTerrainSampler& sampler)->void{
-  const auto edge=need(direction_from_cube_surface_address({CubeFace::positive_y,13,4096,4096,0,.5}));
-  const std::array<MoonFixedDirection,3> directions{{{edge.x,edge.y,edge.z},{1,1,.2},{1,1,1}}};
-  const auto craft=need(resolve_craft_frame({kWayfarerFrameId,kWayfarerFrameVersion})).properties;
-  for(const auto& direction:directions){
-    const auto observer=need(sampler.surface_position(direction));
-    for(unsigned budget:{186U,384U}){
-      const auto plan=plan_moon_tiles(owner,observer,budget);cover(plan,budget);
-      const std::set<MoonStreamKey> leaves(plan.begin(),plan.end());
-      const auto covered=[&](double dx,double dy,double dz){
-        const MoonFixedDirection probe{observer.x+dx,observer.y+dy,observer.z+dz};
-        const auto actual=need(locate_moon_contact_triangle(sampler,probe));
-        check(actual.body==owner.body&&leaves.contains({static_cast<unsigned>(actual.face),13,actual.tile_x,actual.tile_y}),"Every actual local contact probe has resident LOD13 across tile/face/corner boundaries");
+auto contact_footprints(const PhysicalMoonDescriptor& owner,
+                        const MoonTerrainSampler& sampler) -> void {
+  const auto edge = need(direction_from_cube_surface_address(
+      {CubeFace::positive_y, 13, 4096, 4096, 0, .5}));
+  const std::array<MoonFixedDirection, 3> directions{
+      {{edge.x, edge.y, edge.z}, {1, 1, .2}, {1, 1, 1}}};
+  const auto craft =
+      need(resolve_craft_frame({kWayfarerFrameId, kWayfarerFrameVersion}))
+          .properties;
+  for (const auto& direction : directions) {
+    const auto observer = need(sampler.surface_position(direction));
+    for (unsigned budget : {186U, 384U}) {
+      const auto plan = plan_moon_tiles(owner, observer, budget);
+      cover(plan, budget);
+      const std::set<MoonStreamKey> leaves(plan.begin(), plan.end());
+      const auto covered = [&](double dx, double dy, double dz) {
+        const MoonFixedDirection probe{observer.x + dx, observer.y + dy,
+                                       observer.z + dz};
+        const auto actual = need(locate_moon_contact_triangle(sampler, probe));
+        check(actual.body == owner.body &&
+                  leaves.contains({static_cast<unsigned>(actual.face), 13,
+                                   actual.tile_x, actual.tile_y}),
+              "Every actual local contact probe has resident LOD13 across "
+              "tile/face/corner boundaries");
       };
-      for(double x:{-32.,-16.,0.,16.,32.})for(double y:{-32.,-16.,0.,16.,32.})for(double z:{-32.,-16.,0.,16.,32.})covered(x,y,z);
-      for(unsigned bits=0;bits<8;++bits){
-        std::array<double,3> offset;
-        for(unsigned axis=0;axis<3;++axis)
-          offset[axis]=(static_cast<double>((bits&(1U<<axis))?craft.hull_max_mm[axis]:craft.hull_min_mm[axis])-craft.center_of_mass_mm[axis])/1000.;
-        covered(offset[0],offset[1],offset[2]);
+      for (double x : {-32., -16., 0., 16., 32.})
+        for (double y : {-32., -16., 0., 16., 32.})
+          for (double z : {-32., -16., 0., 16., 32.})
+            covered(x, y, z);
+      for (unsigned bits = 0; bits < 8; ++bits) {
+        std::array<double, 3> offset;
+        for (unsigned axis = 0; axis < 3; ++axis)
+          offset[axis] = (static_cast<double>((bits & (1U << axis))
+                                                  ? craft.hull_max_mm[axis]
+                                                  : craft.hull_min_mm[axis]) -
+                          craft.center_of_mass_mm[axis]) /
+                         1000.;
+        covered(offset[0], offset[1], offset[2]);
       }
-      for(unsigned i=0;i<craft.support_count;++i){
-        const auto& pad=craft.supports[i];
-        for(double sx:{-1.,1.})for(double sz:{-1.,1.})
-          covered((static_cast<double>(pad.contact_mm[0])-craft.center_of_mass_mm[0]+sx*pad.half_width_mm)/1000.,
-                  (static_cast<double>(pad.contact_mm[1])-craft.center_of_mass_mm[1])/1000.,
-                  (static_cast<double>(pad.contact_mm[2])-craft.center_of_mass_mm[2]+sz*pad.half_length_mm)/1000.);
+      for (unsigned i = 0; i < craft.support_count; ++i) {
+        const auto& pad = craft.supports[i];
+        for (double sx : {-1., 1.})
+          for (double sz : {-1., 1.})
+            covered((static_cast<double>(pad.contact_mm[0]) -
+                     craft.center_of_mass_mm[0] + sx * pad.half_width_mm) /
+                        1000.,
+                    (static_cast<double>(pad.contact_mm[1]) -
+                     craft.center_of_mass_mm[1]) /
+                        1000.,
+                    (static_cast<double>(pad.contact_mm[2]) -
+                     craft.center_of_mass_mm[2] + sz * pad.half_length_mm) /
+                        1000.);
       }
-      for(double x:{-.32,.32})for(double y:{0.,1.93})for(double z:{-.32,.32})covered(x,y,z);
+      for (double x : {-.32, .32})
+        for (double y : {0., 1.93})
+          for (double z : {-.32, .32})
+            covered(x, y, z);
     }
   }
-  rejects([&]{(void)plan_moon_tiles(owner,{1,0,0});},"Deep interior cannot manufacture an unbounded fine-contact cover");
+  rejects([&] { (void)plan_moon_tiles(owner, {1, 0, 0}); },
+          "Deep interior cannot manufacture an unbounded fine-contact cover");
 }
 auto run() -> void {
   const auto system = need(generate_physical_origin_system(Seed{42}, 2));
@@ -217,9 +246,10 @@ auto run() -> void {
       generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
   const auto snapshot = owner;
   const auto sampler = need(MoonTerrainSampler::create(owner));
-  contact_footprints(owner,sampler);
+  contact_footprints(owner, sampler);
   for (unsigned budget : {6U, 12U, 45U, 384U}) {
-    const MoonFixedPositionMetres observer{static_cast<double>(owner.radius_metres) + 10, 0, 0};
+    const MoonFixedPositionMetres observer{
+        static_cast<double>(owner.radius_metres) + 10, 0, 0};
     const auto plan = plan_moon_tiles(owner, observer, budget);
     cover(plan, budget);
     check(plan == plan_moon_tiles(owner, observer, budget),
@@ -290,7 +320,8 @@ auto run() -> void {
   for (unsigned budget : {0U, 5U, 385U, std::numeric_limits<unsigned>::max()})
     rejects(
         [&] {
-          (void)plan_moon_tiles(owner, {static_cast<double>(owner.radius_metres), 0, 0}, budget);
+          (void)plan_moon_tiles(
+              owner, {static_cast<double>(owner.radius_metres), 0, 0}, budget);
         },
         "Invalid budgets refuse before generating cover");
   for (const auto& point : std::array<MoonFixedPositionMetres, 4>{
@@ -302,8 +333,12 @@ auto run() -> void {
             "Invalid observer dimensions refuse");
   auto forged = owner;
   ++forged.radius_metres;
-  rejects([&] { (void)plan_moon_tiles(forged, {static_cast<double>(owner.radius_metres), 0, 0}); },
-          "Forged source cannot select mesh plan");
+  rejects(
+      [&] {
+        (void)plan_moon_tiles(forged,
+                              {static_cast<double>(owner.radius_metres), 0, 0});
+      },
+      "Forged source cannot select mesh plan");
   for (const auto& key : std::array<MoonStreamKey, 6>{{{6, 0, 0, 0},
                                                        {0, 14, 0, 0},
                                                        {0, 32, 0, 0},
