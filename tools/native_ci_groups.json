@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "groups": {
+    "1": [
+      "native_surface_loop",
+      "native_first_flight_continuation"
+    ],
+    "2": [
+      "recorded_observations",
+      "native_shell",
+      "native_save",
+      "saved_flight",
+      "native_environment",
+      "native_audio",
+      "native_title",
+      "native_planetary",
+      "native_voyage",
+      "home_navigation",
+      "native_surface_walk",
+      "recorded_audio_shutdown"
+    ],
+    "3": [
+      "input",
+      "control_settings",
+      "freedom_start",
+      "native_asset_import",
+      "native_station_view",
+      "wayfarer_frame",
+      "native_moon",
+      "native_recovery",
+      "native_port",
+      "native_roundtrip_pilot_aligned",
+      "native_roundtrip_pilot_offset",
+      "native_status",
+      "native_surface",
+      "native_surface_walk_detail",
+      "native_system_release"
+    ],
+    "4": [
+      "first_jump",
+      "native_walk",
+      "native_assembly",
+      "native_start_staging",
+      "native_profile",
+      "native_roundtrip",
+      "native_roundtrip_pilot",
+      "native_selected_terrain",
+      "native_surface_detail",
+      "native_impact",
+      "native_frame_import",
+      "wayfarer_operating"
+    ]
+  }
+}

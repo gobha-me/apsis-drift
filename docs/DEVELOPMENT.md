@@ -90,6 +90,7 @@ python3 tools/test_godot_native.py \
 python3 tools/test_godot_native.py \
   --godot "$GODOT_BIN" --build-dir build-native --test native_shell
 python3 test/native_runner_test.py
+python3 test/native_ci_test.py
 ```
 
 Set `GODOT_BIN` to the actual executable for these explicit commands. `--test`
@@ -103,6 +104,17 @@ diagnosis. This never cleans earlier runs, source studies or compiler caches.
 The runner does not build or synchronize with concurrent builds.
 A crash, timeout, script error or missing completion marker
 fails even when other output looks successful.
+
+CI runs the same 41 contracts in four isolated hosted groups listed in
+[`native_ci_groups.json`](../tools/native_ci_groups.json). One producer verifies
+Godot and builds the native executables; every group verifies their hashes
+and the checked-out source before starting the unchanged runner. The protected
+**Godot 4.7.2 / saved Freedom start** check requires all four reports, successful
+dependencies, matching provenance, full case coverage and the software sky
+checks. A missing, failed, skipped or cancelled group prevents success. Raw group
+reports and saved proofs remain available in the runtime artifacts. Keep the
+surface-loop/first-flight-continuation and planetary/voyage pairs together when
+changing the groups; local subset commands above remain available.
 
 The selected-frame nineteen-phase surface route is an explicit opt-in contract:
 
