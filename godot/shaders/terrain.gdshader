@@ -60,6 +60,8 @@ void vertex() {
 }
 
 void fragment() {
+	// C++ optical cover composites the complete lit surface, including specular.
+	FOG = vec4(0.0);
 	vec3 p = mineral_position;
 	// Fine surface slopes must fade spatially, not switch at a mesh LOD edge.
 	// VERTEX is view-space here, so this remains stable across floating-origin
@@ -149,8 +151,7 @@ void fragment() {
 		float distance_to_surface = length(path);
 		if (distance_to_surface > 0.0001) {
 			vec4 cover = optical_ray(eye, path / distance_to_surface, distance_to_surface);
-			ALBEDO *= 1.0 - cover.a;
-			EMISSION = cover.rgb * cover.a;
+			FOG = cover;
 		}
 	}
 }

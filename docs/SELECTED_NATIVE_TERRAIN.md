@@ -95,7 +95,14 @@ same morph correspondence as geometry. Invalid base attributes and morph weights
 refuse before upload. Material blending across a mixed facet grants no support
 or survey knowledge, and pale terrain remains styling rather than physical ice.
 
-The bounded software comparison holds one existing wet patch at an initialized
+Wet vertex colors use pre-clamp depth with the existing C++ shallow/deep palette
+and terrain-character depth scale. The presentation helper reuses the generator's
+integer/metre color calculation; it does not change generated terrain samples.
+This intentionally updates transient policy3 colors, including existing saves,
+while historical policies1/2 retain their colors. Geometry, contact, recipes and
+save bytes are unchanged.
+
+The original bounded software comparison holds one existing wet patch at an initialized
 external viewpoint, with the same pose, clock and actual daylight. The sea top
 rises about 301 m above the prior basin there, and both full saves round-trip
 exactly. The volcanic palette makes the sea almost uniformly brown: it does not

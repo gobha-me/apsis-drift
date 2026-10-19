@@ -195,6 +195,95 @@ func joy_axis(axis: int, value: float, device: int) -> void:
 	Input.flush_buffered_events()
 
 
+func physical_key(code: int, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func boarding_reference(bridge: Variant, label: String) -> Variant:
+	var path := ProjectSettings.globalize_path("user://" + label + "-look-source.json")
+	if not bridge.save_freedom_as(path):
+		check(false, label + ": look reference Save refused")
+		return null
+	var reference: Variant = ClassDB.instantiate("FreedomBridge")
+	if not reference.stage_freedom_continue(path) or not reference.commit_pending_freedom_start(reference.get_pending_freedom_start().candidate_id):
+		check(false, label + ": look reference Continue refused")
+		return null
+	return reference
+
+
+func check_boarding_look(walk: Control, bridge: Variant, label: String) -> void:
+	var actor: Dictionary = bridge.get_freedom_walk_state()
+	var flight: Dictionary = bridge.get_freedom_flight_state()
+	var heading: float = walk.requested_heading
+	walk.sync_mouse_look()
+	check(walk.boarding_transition() and walk.mouse_look.active, label + ": transition disabled ordinary mouse look")
+	var motion := InputEventMouseMotion.new()
+	motion.relative = Vector2(40, -20)
+	Input.parse_input_event(motion)
+	Input.flush_buffered_events()
+	check(walk.boarding_look.x > 0.0 and walk.boarding_look.y < 0.0, label + ": mouse did not look around")
+	var accepted: Vector2 = walk.boarding_look
+	motion.relative = Vector2(NAN, INF)
+	walk._input(motion)
+	check(walk.boarding_look == accepted, label + ": invalid mouse motion contaminated the transition")
+	# Exercise each input source away from the previous source's camera limit.
+	walk.boarding_look = Vector2.ZERO
+	accepted = walk.boarding_look
+	var key: int = walk.preferences_provider.bindings.look_right.key.code
+	physical_key(KEY_W, true)
+	physical_key(key, true)
+	var commands: PackedFloat64Array = walk.input_controls(0.1)
+	physical_key(key, false)
+	physical_key(KEY_W, false)
+	check(walk.boarding_look.x > accepted.x, label + ": key look failed; before=%s after=%s key=%s paused=%s" % [accepted, walk.boarding_look, key, walk.paused])
+	check(commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": key look steered the route; commands=%s heading=%s" % [commands, heading])
+	walk.boarding_look = Vector2.ZERO
+	accepted = walk.boarding_look
+	joy_axis(JOY_AXIS_RIGHT_X, 0.8, 9)
+	walk.input_controls(0.1)
+	check(walk.boarding_look == accepted, label + ": foreign stick moved the transition camera")
+	joy_axis(JOY_AXIS_RIGHT_X, 0.0, 9)
+	joy_axis(JOY_AXIS_RIGHT_X, 0.8, 19)
+	joy_axis(JOY_AXIS_LEFT_Y, 0.8, 19)
+	commands = walk.input_controls(0.1)
+	joy_axis(JOY_AXIS_RIGHT_X, 0.0, 19)
+	joy_axis(JOY_AXIS_LEFT_Y, 0.0, 19)
+	check(walk.boarding_look.x > accepted.x, label + ": selected stick look failed; before=%s after=%s paused=%s" % [accepted, walk.boarding_look, walk.paused])
+	check(commands == PackedFloat64Array([0.0, 0.0, heading]), label + ": stick look steered the route; commands=%s heading=%s" % [commands, heading])
+	walk.update_view()
+	check(walk.camera.position == actor.actor_eye_position and walk.requested_heading == heading and walk.pitch == 0.0, label + ": look displaced the authoritative eye/heading")
+	accepted = walk.boarding_look
+	for gate in ["pause", "focus", "modal"]:
+		if gate == "focus": walk._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		else: walk.pause_controls("Boarding look gate")
+		if gate == "modal": walk.journey_dialog_open = true
+		check(not walk.mouse_look.active, label + ": " + gate + " retained pointer capture")
+		motion.relative = Vector2(20, 20)
+		walk._input(motion)
+		walk.input_controls(0.1)
+		check(walk.boarding_look == accepted, label + ": " + gate + " allowed look")
+		walk.journey_dialog_open = false
+		if gate == "focus": walk._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+		walk.resume_requested()
+		check(not walk.paused and walk.mouse_look.active, label + ": neutral Resume lost transition look")
+	check(bridge.get_freedom_walk_state() == actor and bridge.get_freedom_flight_state() == flight, label + ": camera input changed C++ state/clock")
+	for progress in [NAN, INF, -0.01, 1.01]:
+		check(WalkView.boarding_look_weight(progress) == 0.0, label + ": invalid camera progress accepted")
+	check(WalkView.boarding_look_weight(0.5) == 1.0 and is_equal_approx(WalkView.boarding_look_weight(23.0 / 24.0), 0.5) and WalkView.boarding_look_weight(1.0) == 0.0, label + ": camera did not settle at the route end")
+
+
+func check_boarding_save(bridge: Variant, reference: Variant, label: String) -> void:
+	if reference == null: return
+	var actual := ProjectSettings.globalize_path("user://" + label + "-look-actual.json")
+	var expected := ProjectSettings.globalize_path("user://" + label + "-look-reference.json")
+	check(bridge.save_freedom_as(actual) and reference.save_freedom_as(expected) and FileAccess.get_file_as_bytes(actual) == FileAccess.get_file_as_bytes(expected), label + ": looking changed the complete route Save")
+
+
 func check_distant_tracking(flight: Control, bridge: Variant, path: String) -> void:
 	var before: Dictionary = bridge.get_freedom_flight_state()
 	var contacts: Array = before.get("distant_contacts", {}).get("contacts", [])
@@ -276,6 +365,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	board_key.pressed = true
 	Input.parse_input_event(board_key)
 	Input.flush_buffered_events()
+	board_key = board_key.duplicate()
 	board_key.pressed = false
 	Input.parse_input_event(board_key)
 	Input.flush_buffered_events()
@@ -291,11 +381,18 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(bridge.get_freedom_boarding_state() == boarding and bridge.get_freedom_flight_state().tick == paused_tick, "Focus loss advanced boarding")
 	walk._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 	walk.resume_requested()
+	var look_reference: Variant = boarding_reference(bridge, "boarding")
+	check_boarding_look(walk, bridge, "boarding")
 	# Present at 30 Hz while C++ still consumes every authoritative 120-Hz tick.
 	for frame in 360:
+		if look_reference != null: check(look_reference.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])), "No-look boarding reference refused")
 		if not walk.advance_requested(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])):
 			check(false, "Boarding advance refused")
 			return
+		if frame == 120:
+			check(not walk.camera.basis.is_equal_approx(walk.state.station_basis * Basis(Vector3.UP, walk.state.heading_radians)) and walk.camera.position == walk.state.actor_eye_position, "Boarding look was reset or displaced the eye")
+		if frame in [120, 330, 345, 359]: check_boarding_save(bridge, look_reference, "boarding")
+	check(walk.boarding_look == Vector2.ZERO, "Seating retained a stale transition look")
 	var seat_camera: Transform3D = walk.camera.transform
 	var seat_light: Basis = walk.light.basis
 	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-before.json")), "Controller pre-board export failed")
@@ -457,10 +554,17 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(walk.light.basis.is_equal_approx(return_light) and walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Disembarking changed stellar direction at the view handoff")
 	walk.set_process(false)
 	if walk.paused: walk.resume_requested()
+	look_reference = boarding_reference(bridge, "disembarking")
+	check_boarding_look(walk, bridge, "disembarking")
 	for frame in 360:
+		if look_reference != null: check(look_reference.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])), "No-look disembarking reference refused")
 		if not walk.advance_requested(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])):
 			check(false, "Unboarding advance refused")
 			return
+		if frame == 120:
+			check(not walk.camera.basis.is_equal_approx(walk.state.station_basis * Basis(Vector3.UP, walk.state.heading_radians)) and walk.camera.position == walk.state.actor_eye_position, "Disembarking look was reset or displaced the eye")
+		if frame in [120, 330, 345, 359]: check_boarding_save(bridge, look_reference, "disembarking")
+	check(walk.boarding_look == Vector2.ZERO and walk.camera.basis.is_equal_approx(walk.state.station_basis * Basis(Vector3.UP, walk.state.heading_radians)), "Station return retained a stale camera offset")
 	var restored: Dictionary = bridge.get_freedom_walk_state()
 	check(restored.foot_position_metres == entry.foot_position_metres and restored.heading_radians == entry.heading_radians, "Unboard did not restore the exact entry actor")
 	check(bridge.get_freedom_boarding_state().state == "station" and model.valid_current_pose(), "Unboard lost completed station/hardware state")

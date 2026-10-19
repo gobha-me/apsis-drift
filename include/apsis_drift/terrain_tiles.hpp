@@ -191,6 +191,14 @@ class TerrainSurfaceSampler {
   const TerrainTile* m_last_tile{};
 };
 
+// Presentation-only sea-top color from pre-clamp depth. Reuses the generator's
+// terrain-character depth scale and integer/metre color quantization without
+// changing generated samples, world recipes or support. Only finite heights
+// at/below the datum are accepted; bounded deep water saturates its palette.
+[[nodiscard]] auto sample_planet_water_color(const PlanetDescriptor& planet,
+                                             double raw_height) noexcept
+    -> std::expected<Rgb8, TerrainTileError>;
+
 // Presentation-only sampling resolves one planet-fixed direction through the
 // versioned tile generator and performs quantized bilinear interpolation
 // inside the addressed tile. It does not change generator compatibility data.

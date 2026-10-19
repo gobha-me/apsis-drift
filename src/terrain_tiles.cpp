@@ -552,4 +552,19 @@ auto sample_planet_surface(const PlanetDescriptor& planet,
   return sample_tile_address(**tile, *address);
 }
 
+auto sample_planet_water_color(const PlanetDescriptor& planet,
+                               double raw_height) noexcept
+    -> std::expected<Rgb8, TerrainTileError> {
+  if (!valid_planet(planet))
+    return std::unexpected{TerrainTileError::invalid_planet};
+  if (!std::isfinite(raw_height) || raw_height > 0.0)
+    return std::unexpected{TerrainTileError::invalid_sample_coordinate};
+  const auto parameters = terrain_parameters(planet.terrain_character);
+  // Clamp before integer conversion, including finite extreme input. Existing
+  // generator1 colors use integer elevations, not a new hydrology recipe.
+  const auto elevation = static_cast<std::int32_t>(std::clamp(
+      raw_height, -static_cast<double>(parameters.amplitude_metres), 0.0));
+  return sample_color(planet, parameters, elevation);
+}
+
 } // namespace apsis_drift
