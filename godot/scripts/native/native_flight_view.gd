@@ -1426,7 +1426,12 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 		look_offset += player_input.foot_controller_look(player_input.device) * delta
 	look_offset.x = wrapf(look_offset.x, -PI, PI)
 	look_offset.y = clampf(look_offset.y, -1.3, 1.3)
-	var heading := wrapf(-look_offset.x, -PI, PI)
+	# The camera vector is float32; a neutral tick must preserve the saved
+	# float64 heading. Apply only the change from its rounded display baseline.
+	var heading := float(state.surface_walk.heading)
+	var baseline := Vector2(-heading, 0.0).x
+	if look_offset.x != baseline:
+		heading = wrapf(heading - wrapf(look_offset.x - baseline, -PI, PI), -PI, PI)
 	# Recentered yaw has one canonical save representation, including signed zero.
 	if heading == 0.0: heading = 0.0
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), heading])
