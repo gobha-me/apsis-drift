@@ -271,13 +271,15 @@ jobs:
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
 
+      # The complete surface round trip has passed at 569 seconds. Allow bounded
+      # shared-runner headroom without dropping its final disembark/save checks.
       - name: Check saved-start bridge, native shell and audio shutdown in Godot
         run: >-
           python3 tools/test_godot_native.py
           --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
           --build-dir build-native
           --output-parent build-native-contracts
-          --timeout 600
+          --timeout 900
           --test input --test control_settings --test recorded_observations --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight --test native_environment --test native_audio --test first_jump --test native_recovery
