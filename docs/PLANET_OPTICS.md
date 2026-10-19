@@ -40,6 +40,9 @@ Scattering uses the actual C++ star direction and color. This is a bounded
 rendering approximation, not photometric or meteorological accuracy.
 
 The terrain path ends at the actual rendered surface, including LOD morphs.
+Its cover composites the complete lit surface through the shader's custom fog,
+attenuating specular highlights and reflected sky as well as diffuse color.
+Zero cover leaves the clear surface unchanged.
 The sky path uses its existing atmosphere/ground bounds. Density is not tied to
 screen coordinates, frame cadence or a shader clock. Terrain heights, normals,
 collision and accepted tile ownership remain untouched. Each live/pending world
