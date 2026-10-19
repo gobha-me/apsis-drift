@@ -934,7 +934,7 @@ auto moon_rotating_contract(const Fixture& fixture) -> void {
       const RigidVector3 omega{geometry.angular_velocity_radians_per_second.x,
                                geometry.angular_velocity_radians_per_second.y,
                                geometry.angular_velocity_radians_per_second.z};
-      for (const auto destination : {relative, system}) {
+      for (const auto& destination : {relative, system}) {
         const bool local = destination == relative;
         const auto transformed = required(
             reframe_rigid_body(context, fixed, {destination, tick}, moon));
