@@ -487,6 +487,7 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	check(moved.surface_marker.tick == point.tick and moved.surface_marker.distance_metres > 0.5 and "straight-line distance" in view.primary_status.text and "Hatch" in view.primary_status.text, "Walking moved the saved Moon marker or lost hatch/range information")
 	var expected := Navigation.project(view.camera, moved.surface_marker.position, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
 	check(view.ship_marker.cue == expected, "Lunar MARK differs from the C++ current-body projection")
+	check(not save_bytes(owner, output.path_join("moon-marker-walked.json")).is_empty(), "Actual marked walking phase Save unavailable")
 	view.player_input.device = 0
 	view.player_input.available_pads[0] = true
 	view.player_input.install()
