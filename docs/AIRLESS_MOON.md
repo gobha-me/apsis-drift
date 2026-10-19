@@ -104,6 +104,10 @@ to the hatch, board, release surface support and apply up thrust to lift off.
 **Select jump home** and the normal jump command return to the real home body,
 using the retained home model and actual station ephemeris. Local jumps are
 unavailable while outside, landed or attached to a port.
+Climb clear of the Moon's full terrain-and-hull envelope before selecting
+home; releasing landing support alone is not enough. For the Wayfarer, about
+5 km above the reference radius clears the Moon's conservative relief envelope.
+This is a departure-volume rule, separate from the local signed gear gaps.
 
 Paused Controls also offer **Mark this spot**, **Replace marker**, **Clear
 marker** and **Show personal marker** during lunar walks. The point records
