@@ -86,8 +86,14 @@ auto run() -> void {
       make_freedom_starting_knowledge(seed, kFreedomTravelKnowledgeVersion));
   const auto fact_bytes =
       need(encode_freedom_knowledge_json(knowledge, flight.flight.tick));
-  const FreedomKnowledgeSaveDocument retained{{{flight, {}}, resources},
-                                              knowledge};
+  FreedomSurfaceSaveDocument surface;
+  surface.base = flight;
+  FreedomResourceSaveDocument resource;
+  resource.voyage = std::move(surface);
+  resource.resources = resources;
+  FreedomKnowledgeSaveDocument retained;
+  retained.voyage = std::move(resource);
+  retained.knowledge = knowledge;
   const auto encoded = need(encode_freedom_knowledge_document_json(retained));
   const auto continued = need(decode_freedom_knowledge_document_json(encoded));
   check(
