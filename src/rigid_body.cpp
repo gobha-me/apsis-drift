@@ -112,10 +112,12 @@ auto validate_frame(const RigidBodyWorldContext& context,
     return std::unexpected{RigidBodyError::invalid_world_context};
   if (frame.system != context.system.id)
     return std::unexpected{RigidBodyError::unknown_system};
-  if (frame.kind != RigidFrameKind::body_relative_inertial && frame.body)
+  if (frame.kind != RigidFrameKind::body_relative_inertial &&
+      frame.kind != RigidFrameKind::body_fixed && frame.body)
     return std::unexpected{RigidBodyError::invalid_coordinate_frame};
   switch (frame.kind) {
     case RigidFrameKind::body_relative_inertial:
+    case RigidFrameKind::body_fixed:
       if (!moon || !frame.body || frame.planet || frame.station ||
           *frame.body != moon->body || frame.body->kind != BodyKind::moon)
         return std::unexpected{RigidBodyError::invalid_coordinate_frame};
@@ -186,11 +188,13 @@ auto frame_kind_name(RigidFrameKind kind) -> std::string_view {
       return "planet_relative_inertial";
     case RigidFrameKind::body_relative_inertial:
       return "body_relative_inertial";
+    case RigidFrameKind::body_fixed: return "body_fixed";
   }
   throw RigidBodyError::invalid_coordinate_frame;
 }
 auto physical_projection_version(RigidFrameKind kind) -> std::uint32_t {
-  if (kind == RigidFrameKind::body_relative_inertial)
+  if (kind == RigidFrameKind::body_relative_inertial ||
+      kind == RigidFrameKind::body_fixed)
     return kMoonRelativeRigidBodyStateVersion;
   return kind == RigidFrameKind::planet_relative_inertial
              ? kPlanetRelativeRigidBodyStateVersion
@@ -398,7 +402,8 @@ auto rigid_body_state_checksum(const RigidBodyWorldContext& context,
   };
   const auto* physical = context.physical_owner();
   const bool moon_frame =
-      state.frame.kind == RigidFrameKind::body_relative_inertial;
+      state.frame.kind == RigidFrameKind::body_relative_inertial ||
+      state.frame.kind == RigidFrameKind::body_fixed;
   const std::string_view domain =
       moon_frame ? "apsis-physical-rigid-body-v4"
       : physical ? (state.frame.kind == RigidFrameKind::planet_relative_inertial
@@ -485,7 +490,8 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
         {"angular_velocity_radians_per_second",
          vector_json(state.angular_velocity_radians_per_second)}};
     if (physical) result["owner"] = physical_owner_json(*physical);
-    if (state.frame.kind == RigidFrameKind::body_relative_inertial) {
+    if (state.frame.kind == RigidFrameKind::body_relative_inertial ||
+        state.frame.kind == RigidFrameKind::body_fixed) {
       result["frame"]["body"] = moon_body_json(*state.frame.body);
       result["moon_owner"] = moon_owner_json(*context.physical_moon_owner());
     }
@@ -584,6 +590,8 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
       candidate.frame.kind = RigidFrameKind::station_relative_inertial;
     else if (moon_projection && kind == "body_relative_inertial")
       candidate.frame.kind = RigidFrameKind::body_relative_inertial;
+    else if (moon_projection && kind == "body_fixed")
+      candidate.frame.kind = RigidFrameKind::body_fixed;
     else if (physical &&
              read_version(data.at("version")) ==
                  kPlanetRelativeRigidBodyStateVersion &&

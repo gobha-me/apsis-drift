@@ -3,6 +3,7 @@
 #include <expected>
 #include <optional>
 
+#include "apsis_drift/physical_moon_rotation.hpp"
 #include "apsis_drift/planet_rotation.hpp"
 #include "apsis_drift/rigid_body.hpp"
 
@@ -31,6 +32,7 @@ struct RigidFrameHandoffError {
   std::optional<PlanetRotationError> rotation_error{};
   std::optional<PhysicalLocalSystemError> physical_ephemeris_error{};
   std::optional<BodyEphemerisError> body_ephemeris_error{};
+  std::optional<PhysicalMoonRotationError> moon_rotation_error{};
   friend auto operator==(const RigidFrameHandoffError&,
                          const RigidFrameHandoffError&) -> bool = default;
 };
@@ -72,6 +74,15 @@ struct RigidFrameHandoffError {
     const RigidBodyWorldContext& context, const RigidBodyState& source,
     const RigidFrameHandoffRequest& request,
     const PhysicalPlanetRotationRecipe& rotation_recipe)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError>;
+
+// Explicit moon-only rotation owner. Supports body_fixed <-> system or the
+// same moon's body_relative_inertial, and authenticated body_fixed identity.
+// Other pairs refuse rather than ignoring the supplied physical owner.
+[[nodiscard]] auto reframe_rigid_body(
+    const RigidBodyWorldContext& context, const RigidBodyState& source,
+    const RigidFrameHandoffRequest& request,
+    const PhysicalMoonDescriptor& moon_rotation_owner)
     -> std::expected<RigidBodyState, RigidFrameHandoffError>;
 
 } // namespace apsis_drift

@@ -27,16 +27,37 @@ constant in place must not reinterpret saved worlds.
 GM and reference-surface gravity from that one radius/density source. It adds
 no independent force integrator. Terrain seed derivation uses the new
 `moon_surface` domain17, preserving every existing stream and source catalog.
-The seed is a future terrain input; a scalar property result is not generated
-surface geometry, a contact certificate or a saved journey.
+The selected moon terrain uses that seed. Scalar properties and sampled terrain
+are not contact certificates or a saved journey.
 
 ## Integration sequence
 
-The next concrete boundary is a moon-relative inertial frame with the actual
-same-tick parent-translated moon ephemeris. Its typed ownership and standalone
-encoding must coexist with unchanged historical planet/system/station frames.
-Surface rotation must retain the source's exact epoch-turn phase rather than
-rounding it into the planet-only phase-tick recipe.
+The explicit moon-relative inertial and moon-fixed frames retain the actual
+same-tick parent-translated ephemeris. Standalone rigid state version4 encodes
+full typed moon ownership; historical rigid versions1–3 retain their bytes.
+`physical_moon_rotation.hpp` retains the exact epoch-turn phase and original
+spin period, with the recipe1 system +Z pole. Fixed-frame handoffs include
+surface spin velocity and body-resolved angular velocity exactly once.
+
+`moon_body_dynamics.hpp` authenticates the actual moon GM and uses the existing
+120Hz RK4 implementation. Gravity remains separate from gross propulsion
+and its fuel accounting; rotation assistance does not cancel orbital motion.
+There is no moon atmosphere, parent-planet atmosphere or extra force integrator.
+
+`moon_terrain.hpp` owns the authenticated physical moon and terrain recipe1.
+Its continuous dry field reuses the planet recipe2 smooth lattice arithmetic
+with six spacing/amplitude bands, respectively in metres:
+131072/3200, 32768/1000, 8192/300, 2048/32, 768/10 and 320/3.
+The absolute relief bound is4545m. Each octave derives its own terrain stream
+from the moon surface seed. Tint-derived rock color is quantized from height;
+negative elevation remains dry bedrock, with no sea-datum clamp.
+
+Output LOD changes mesh sample locations rather than terrain heights. Cube
+projection arithmetic is shared with existing planet geometry. Typed moon tile
+keys retain the real BodyId; the global planet radius and gravity admission
+rules remain unchanged. Tile fills stage their complete result before writing
+caller buffers. The sampler exposes the same height for surface position and
+clearance; actual top-triangle contact/landing still needs integration.
 
 Then connect the C++ force, terrain, contact, landed anchor and surface walker
 through that same body. Native presentation consumes their state. A bounded

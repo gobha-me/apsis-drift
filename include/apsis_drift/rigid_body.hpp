@@ -51,6 +51,8 @@ enum class RigidFrameKind : std::uint8_t {
   planet_relative_inertial = 4,
   // Explicit physical moon owner; translated with the moon, system-aligned.
   body_relative_inertial = 5,
+  // Same authenticated moon, with axes rotating at its original spin phase.
+  body_fixed = 6,
 };
 
 struct RigidCoordinateFrame {

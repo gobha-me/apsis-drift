@@ -179,6 +179,55 @@ struct TileAxisAddress {
 
 } // namespace
 
+auto cube_surface_address_from_direction(SystemDirection value,
+                                         std::uint8_t lod) noexcept
+    -> std::expected<CubeSurfaceAddress, CoordinateError> {
+  const PlanetFixedDirection direction{value.x, value.y, value.z};
+  if (!finite(direction))
+    return std::unexpected{CoordinateError::non_finite_input};
+  if (lod > kMaxTerrainLod)
+    return std::unexpected{CoordinateError::invalid_lod};
+  if (direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0)
+    return std::unexpected{CoordinateError::planet_center};
+  const auto face = canonical_face(direction);
+  const auto basis = face_basis(face);
+  const auto denominator = dot(direction, basis.normal);
+  const auto face_u =
+      std::clamp(dot(direction, basis.u) / denominator, -1.0, 1.0);
+  const auto face_v =
+      std::clamp(dot(direction, basis.v) / denominator, -1.0, 1.0);
+  const auto count = tiles_per_axis(lod);
+  const auto x = tile_axis_address((face_u + 1.0) / 2.0, count);
+  const auto y = tile_axis_address((face_v + 1.0) / 2.0, count);
+  return CubeSurfaceAddress{face, lod, x.index, y.index, x.within, y.within};
+}
+
+auto direction_from_cube_surface_address(CubeSurfaceAddress address) noexcept
+    -> std::expected<SystemDirection, CoordinateError> {
+  if (!valid_face(address.face))
+    return std::unexpected{CoordinateError::invalid_cube_face};
+  if (address.lod > kMaxTerrainLod)
+    return std::unexpected{CoordinateError::invalid_lod};
+  const auto count = static_cast<double>(tiles_per_axis(address.lod));
+  if (address.x >= tiles_per_axis(address.lod) ||
+      address.y >= tiles_per_axis(address.lod))
+    return std::unexpected{CoordinateError::invalid_tile_index};
+  if (!finite(address.u) || !finite(address.v))
+    return std::unexpected{CoordinateError::non_finite_input};
+  if (address.u < 0 || address.u > 1 || address.v < 0 || address.v > 1)
+    return std::unexpected{CoordinateError::invalid_tile_coordinate};
+  const auto face_u =
+      2.0 * (static_cast<double>(address.x) + address.u) / count - 1.0;
+  const auto face_v =
+      2.0 * (static_cast<double>(address.y) + address.v) / count - 1.0;
+  const auto basis = face_basis(address.face);
+  const auto unit =
+      normalized({basis.normal.x + face_u * basis.u.x + face_v * basis.v.x,
+                  basis.normal.y + face_u * basis.u.y + face_v * basis.v.y,
+                  basis.normal.z + face_u * basis.u.z + face_v * basis.v.z});
+  return SystemDirection{unit.x, unit.y, unit.z};
+}
+
 auto planet_fixed_from_geodetic(const PlanetDescriptor& planet,
                                 GeodeticPosition position) noexcept
     -> std::expected<PlanetFixedPositionMetres, CoordinateError> {
@@ -365,18 +414,13 @@ auto terrain_address_from_planet_direction(const PlanetDescriptor& planet,
     return std::unexpected{CoordinateError::planet_center};
   }
 
-  const auto face = canonical_face(direction);
-  const auto basis = face_basis(face);
-  const auto denominator = dot(direction, basis.normal);
-  const auto face_u =
-      std::clamp(dot(direction, basis.u) / denominator, -1.0, 1.0);
-  const auto face_v =
-      std::clamp(dot(direction, basis.v) / denominator, -1.0, 1.0);
-  const auto count = tiles_per_axis(lod);
-  const auto x = tile_axis_address((face_u + 1.0) / 2.0, count);
-  const auto y = tile_axis_address((face_v + 1.0) / 2.0, count);
+  const auto address = cube_surface_address_from_direction(
+      {direction.x, direction.y, direction.z}, lod);
+  if (!address) return std::unexpected{address.error()};
   return TerrainTileAddress{
-      {planet.id, face, lod, x.index, y.index}, x.within, y.within};
+      {planet.id, address->face, address->lod, address->x, address->y},
+      address->u,
+      address->v};
 }
 
 auto planet_fixed_from_terrain_address(const PlanetDescriptor& planet,
@@ -397,16 +441,11 @@ auto planet_fixed_from_terrain_address(const PlanetDescriptor& planet,
     return std::unexpected{CoordinateError::wrong_planet};
   }
 
-  const auto count = static_cast<double>(tiles_per_axis(address.tile.lod));
-  const auto face_u =
-      2.0 * (static_cast<double>(address.tile.x) + address.u) / count - 1.0;
-  const auto face_v =
-      2.0 * (static_cast<double>(address.tile.y) + address.v) / count - 1.0;
-  const auto basis = face_basis(address.tile.face);
-  const auto unit =
-      normalized({basis.normal.x + face_u * basis.u.x + face_v * basis.v.x,
-                  basis.normal.y + face_u * basis.u.y + face_v * basis.v.y,
-                  basis.normal.z + face_u * basis.u.z + face_v * basis.v.z});
+  const auto direction = direction_from_cube_surface_address(
+      {address.tile.face, address.tile.lod, address.tile.x, address.tile.y,
+       address.u, address.v});
+  if (!direction) return std::unexpected{direction.error()};
+  const auto unit = *direction;
   const auto radial_distance = *radius + altitude_metres;
   if (!finite(radial_distance)) {
     return std::unexpected{CoordinateError::non_finite_input};

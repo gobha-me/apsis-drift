@@ -525,6 +525,20 @@ auto moon_contract(const Fixture& fixture) -> void {
               encode_rigid_body_state_json(context, *loaded) == bytes &&
               rigid_body_state_checksum(context, *loaded) == hash,
           "Moon projection resumes every state bit and canonical byte exactly");
+    auto fixed = state;
+    fixed.frame.kind = RigidFrameKind::body_fixed;
+    const auto fixed_bytes = encode_rigid_body_state_json(context, fixed);
+    check(fixed_bytes &&
+              fixed_bytes->find("\"body_fixed\"") != std::string::npos &&
+              rigid_body_state_checksum(context, fixed) != hash,
+          "Moon fixed frame has explicit v4 kind and distinct checksum");
+    if (fixed_bytes) {
+      const auto restored = decode_rigid_body_state_json(context, *fixed_bytes);
+      check(restored && same_bits(*restored, fixed) &&
+                !decode_rigid_body_state_json(physical, *fixed_bytes) &&
+                !decode_rigid_body_state_json(fixture.context, *fixed_bytes),
+            "Moon fixed bytes roundtrip only under explicit moon owner");
+    }
     auto alias = state;
     alias.orientation = {-.5, -.5, .5, -.5};
     const auto canonical = canonicalize_rigid_body_state(context, alias);

@@ -2,6 +2,7 @@
 
 #include "apsis_drift/atmospheric_flight.hpp"
 #include "apsis_drift/central_body_dynamics.hpp"
+#include "apsis_drift/moon_body_dynamics.hpp"
 
 #include <algorithm>
 #include <array>
@@ -164,8 +165,14 @@ auto valid_attitude(Q q, V omega) -> bool {
 
 // This is the bounded central-body composition, not a general force registry.
 struct GravityParameters {
-  PlanetId planet;
   double radius, surface_gravity, mu;
+  RigidFrameKind frame{RigidFrameKind::planet_relative_inertial};
+};
+struct PlanetGravityParameters : GravityParameters {
+  PlanetId planet;
+};
+struct MoonGravityParameters : GravityParameters {
+  BodyId body;
 };
 auto gravity_acceleration(const GravityParameters& gravity, V position)
     -> std::expected<V, CentralBodyError> {
@@ -190,7 +197,7 @@ auto gravity_acceleration(const GravityParameters& gravity, V position)
 auto gravity_parameters(const RigidBodyWorldContext& context,
                         const RigidBodyState& state,
                         CentralBodyDynamicsRecipe recipe)
-    -> std::expected<GravityParameters, CentralBodyError> {
+    -> std::expected<PlanetGravityParameters, CentralBodyError> {
   using Code = CentralBodyErrorCode;
   if (recipe.version != kCentralBodyDynamicsVersion)
     return std::unexpected{CentralBodyError{Code::unsupported_version, {}}};
@@ -213,10 +220,10 @@ auto gravity_parameters(const RigidBodyWorldContext& context,
   const double mu = (surface * radius) * radius;
   if (!std::isfinite(mu) || mu <= 0)
     return std::unexpected{CentralBodyError{Code::unsafe_arithmetic, {}}};
-  return GravityParameters{descriptor.id, radius, surface, mu};
+  return PlanetGravityParameters{{radius, surface, mu}, descriptor.id};
 }
 
-auto gravity_sample(const GravityParameters& parameters, V position)
+auto gravity_sample(const PlanetGravityParameters& parameters, V position)
     -> std::expected<CentralBodyGravity, CentralBodyError> {
   const auto acceleration = gravity_acceleration(parameters, position);
   if (!acceleration) return std::unexpected{acceleration.error()};
@@ -226,6 +233,46 @@ auto gravity_sample(const GravityParameters& parameters, V position)
   return CentralBodyGravity{
       parameters.planet, parameters.radius, parameters.surface_gravity,
       parameters.mu,     distance,          *acceleration};
+}
+
+auto moon_gravity_parameters(const RigidBodyWorldContext& context,
+                             const RigidBodyState& state,
+                             MoonBodyDynamicsRecipe recipe)
+    -> std::expected<MoonGravityParameters, MoonBodyError> {
+  using Code = CentralBodyErrorCode;
+  if (recipe.version != kMoonBodyDynamicsVersion)
+    return std::unexpected{MoonBodyError{Code::unsupported_version, {}}};
+  const auto* moon = context.physical_moon_owner();
+  if (moon == nullptr || !validate_physical_moon_descriptor(*moon))
+    return std::unexpected{MoonBodyError{Code::invalid_owner, {}}};
+  if (state.frame.kind != RigidFrameKind::body_relative_inertial)
+    return std::unexpected{
+        MoonBodyError{Code::unsupported_coordinate_frame, {}}};
+  if (!state.frame.body || *state.frame.body != moon->body)
+    return std::unexpected{MoonBodyError{Code::invalid_body, {}}};
+  if (!validate_rigid_body_state(context, state))
+    return std::unexpected{MoonBodyError{Code::invalid_state, {}}};
+  const auto physical = resolve_physical_moon_properties(*moon);
+  if (!physical)
+    return std::unexpected{MoonBodyError{Code::unsafe_arithmetic, {}}};
+  return MoonGravityParameters{
+      {static_cast<double>(moon->radius_metres),
+       physical->surface_gravity_metres_per_second_squared,
+       physical->gravitational_parameter_metres_cubed_per_second_squared,
+       RigidFrameKind::body_relative_inertial},
+      moon->body};
+}
+
+auto moon_gravity_sample(const MoonGravityParameters& parameters, V position)
+    -> std::expected<MoonBodyGravity, MoonBodyError> {
+  const auto acceleration = gravity_acceleration(parameters, position);
+  if (!acceleration) return std::unexpected{acceleration.error()};
+  const double distance =
+      std::sqrt((position.x * position.x + position.y * position.y) +
+                position.z * position.z);
+  return MoonBodyGravity{
+      parameters.body, parameters.radius, parameters.surface_gravity,
+      parameters.mu,   distance,          *acceleration};
 }
 
 // Fixed bounded atmosphere, not a pluggable force registry. All constants and
@@ -654,7 +701,8 @@ auto advance_vacuum_dynamics_impl(
     const GravityParameters* gravity = nullptr,
     CentralBodyActuation* central_report = nullptr,
     const AtmosphereParameters* atmosphere = nullptr,
-    AtmosphericFlightActuation* atmospheric_report = nullptr)
+    AtmosphericFlightActuation* atmospheric_report = nullptr,
+    MoonBodyActuation* moon_report = nullptr)
     -> std::expected<VacuumActuation, VacuumDynamicsError> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{VacuumDynamicsError::invalid_step};
@@ -666,9 +714,8 @@ auto advance_vacuum_dynamics_impl(
     return std::unexpected{VacuumDynamicsError::invalid_craft_frame};
   if (!validate_rigid_body_state(context, state))
     return std::unexpected{VacuumDynamicsError::invalid_state};
-  if (state.frame.kind != (gravity == nullptr
-                               ? RigidFrameKind::system_inertial
-                               : RigidFrameKind::planet_relative_inertial))
+  if (state.frame.kind !=
+      (gravity == nullptr ? RigidFrameKind::system_inertial : gravity->frame))
     return std::unexpected{VacuumDynamicsError::unsupported_coordinate_frame};
   if (!valid_fraction(intent.positive_translation) ||
       !valid_fraction(intent.negative_translation) ||
@@ -754,6 +801,11 @@ auto advance_vacuum_dynamics_impl(
     central_report->total_linear_impulse_newton_seconds =
         integrated->total_linear_impulse;
   }
+  if (moon_report != nullptr) {
+    moon_report->gravity_impulse_newton_seconds = integrated->gravity_impulse;
+    moon_report->total_linear_impulse_newton_seconds =
+        integrated->total_linear_impulse;
+  }
   if (atmospheric_report != nullptr) {
     atmospheric_report->aerodynamic_linear_impulse_newton_seconds =
         integrated->aerodynamic_impulse;
@@ -811,6 +863,38 @@ auto advance_central_body_dynamics(const RigidBodyWorldContext& context,
   if (!propulsion)
     return std::unexpected{CentralBodyError{
         CentralBodyErrorCode::dynamics_failure, propulsion.error()}};
+  result.propulsion = *propulsion;
+  return result;
+}
+
+auto evaluate_moon_body_gravity(const RigidBodyWorldContext& context,
+                                const RigidBodyState& state,
+                                MoonBodyDynamicsRecipe recipe)
+    -> std::expected<MoonBodyGravity, MoonBodyError> {
+  const auto parameters = moon_gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  return moon_gravity_sample(*parameters, state.position_metres);
+}
+
+auto advance_moon_body_dynamics(const RigidBodyWorldContext& context,
+                                RigidBodyState& state,
+                                const VacuumIntent& intent,
+                                MoonBodyDynamicsRecipe recipe,
+                                SimulationSeconds step)
+    -> std::expected<MoonBodyActuation, MoonBodyError> {
+  const auto parameters = moon_gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  const auto initial_gravity =
+      moon_gravity_sample(*parameters, state.position_metres);
+  if (!initial_gravity) return std::unexpected{initial_gravity.error()};
+  MoonBodyActuation result;
+  result.initial_gravity = *initial_gravity;
+  const auto propulsion = advance_vacuum_dynamics_impl(
+      context, state, intent, false, step, &*parameters, nullptr, nullptr,
+      nullptr, &result);
+  if (!propulsion)
+    return std::unexpected{MoonBodyError{CentralBodyErrorCode::dynamics_failure,
+                                         propulsion.error()}};
   result.propulsion = *propulsion;
   return result;
 }

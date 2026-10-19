@@ -150,6 +150,64 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
 }
 
 namespace {
+auto reframe_rotating_geometry(const RigidBodyWorldContext& context,
+                               const RigidBodyState& source,
+                               const RigidFrameHandoffRequest& request,
+                               bool relative_pair, bool to_system,
+                               RigidOrientation rotation,
+                               SystemPositionMetres position,
+                               SystemVelocityMetresPerSecond linear_velocity,
+                               SystemDirection angular_velocity)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError> {
+  using Code = RigidFrameHandoffErrorCode;
+  auto candidate = source;
+  candidate.frame = request.destination;
+  const auto inverse = conjugate(rotation);
+  const RigidVector3 origin =
+      relative_pair ? RigidVector3{}
+                    : RigidVector3{position.x, position.y, position.z};
+  const RigidVector3 velocity =
+      relative_pair ? RigidVector3{}
+                    : RigidVector3{linear_velocity.x, linear_velocity.y,
+                                   linear_velocity.z};
+  const RigidVector3 omega{angular_velocity.x, angular_velocity.y,
+                           angular_velocity.z};
+  const auto attitude = normalize_rigid_orientation(
+      multiply(to_system ? rotation : inverse, source.orientation));
+  if (!attitude)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_result, attitude.error(), {}}};
+  candidate.orientation = *attitude;
+  if (to_system) {
+    const auto radius = rotate(rotation, source.position_metres);
+    candidate.position_metres = add(origin, radius);
+    candidate.linear_velocity_metres_per_second =
+        add(add(velocity,
+                rotate(rotation, source.linear_velocity_metres_per_second)),
+            cross(omega, radius));
+    // Angular velocities are body-resolved on both sides. Only the owning
+    // frame's spin is added; rotating the body's input components is wrong.
+    const auto body_spin = rotate(conjugate(candidate.orientation), omega);
+    candidate.angular_velocity_radians_per_second =
+        add(source.angular_velocity_radians_per_second, body_spin);
+  } else {
+    const auto radius = subtract(source.position_metres, origin);
+    candidate.position_metres = rotate(inverse, radius);
+    candidate.linear_velocity_metres_per_second = rotate(
+        inverse,
+        subtract(subtract(source.linear_velocity_metres_per_second, velocity),
+                 cross(omega, radius)));
+    const auto body_spin = rotate(conjugate(source.orientation), omega);
+    candidate.angular_velocity_radians_per_second =
+        subtract(source.angular_velocity_radians_per_second, body_spin);
+  }
+  const auto result = canonicalize_rigid_body_state(context, candidate);
+  if (!result)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_result, result.error(), {}}};
+  return *result;
+}
+
 template <typename Recipe>
 auto reframe_rotating(const RigidBodyWorldContext& context,
                       const RigidBodyState& source,
@@ -222,55 +280,10 @@ auto reframe_rotating(const RigidBodyWorldContext& context,
         Code::invalid_rotation_recipe, {}, {}, geometry.error()}};
   if (identity) return source;
 
-  const auto rotation = geometry->fixed_to_system;
-  const auto inverse = conjugate(rotation);
-  const RigidVector3 origin = relative_pair
-                                  ? RigidVector3{}
-                                  : RigidVector3{geometry->planet_position.x,
-                                                 geometry->planet_position.y,
-                                                 geometry->planet_position.z};
-  const RigidVector3 velocity = relative_pair
-                                    ? RigidVector3{}
-                                    : RigidVector3{geometry->planet_velocity.x,
-                                                   geometry->planet_velocity.y,
-                                                   geometry->planet_velocity.z};
-  const RigidVector3 omega{geometry->angular_velocity_radians_per_second.x,
-                           geometry->angular_velocity_radians_per_second.y,
-                           geometry->angular_velocity_radians_per_second.z};
-  const auto attitude = normalize_rigid_orientation(
-      multiply(to_system ? rotation : inverse, source.orientation));
-  if (!attitude)
-    return std::unexpected{
-        RigidFrameHandoffError{Code::invalid_result, attitude.error(), {}}};
-  candidate.orientation = *attitude;
-  if (to_system) {
-    const auto radius = rotate(rotation, source.position_metres);
-    candidate.position_metres = add(origin, radius);
-    candidate.linear_velocity_metres_per_second =
-        add(add(velocity,
-                rotate(rotation, source.linear_velocity_metres_per_second)),
-            cross(omega, radius));
-    // Angular velocities are body-resolved on both sides. Only the owning
-    // frame's spin is added; rotating the body's input components is wrong.
-    const auto body_spin = rotate(conjugate(candidate.orientation), omega);
-    candidate.angular_velocity_radians_per_second =
-        add(source.angular_velocity_radians_per_second, body_spin);
-  } else {
-    const auto radius = subtract(source.position_metres, origin);
-    candidate.position_metres = rotate(inverse, radius);
-    candidate.linear_velocity_metres_per_second = rotate(
-        inverse,
-        subtract(subtract(source.linear_velocity_metres_per_second, velocity),
-                 cross(omega, radius)));
-    const auto body_spin = rotate(conjugate(source.orientation), omega);
-    candidate.angular_velocity_radians_per_second =
-        subtract(source.angular_velocity_radians_per_second, body_spin);
-  }
-  const auto result = canonicalize_rigid_body_state(context, candidate);
-  if (!result)
-    return std::unexpected{
-        RigidFrameHandoffError{Code::invalid_result, result.error(), {}}};
-  return *result;
+  return reframe_rotating_geometry(
+      context, source, request, relative_pair, to_system,
+      geometry->fixed_to_system, geometry->planet_position,
+      geometry->planet_velocity, geometry->angular_velocity_radians_per_second);
 }
 
 } // namespace
@@ -289,6 +302,61 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
                         const PhysicalPlanetRotationRecipe& rotation_recipe)
     -> std::expected<RigidBodyState, RigidFrameHandoffError> {
   return reframe_rotating(context, source, request, rotation_recipe);
+}
+
+auto reframe_rigid_body(const RigidBodyWorldContext& context,
+                        const RigidBodyState& source,
+                        const RigidFrameHandoffRequest& request,
+                        const PhysicalMoonDescriptor& moon)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError> {
+  using Code = RigidFrameHandoffErrorCode;
+  if (const auto valid = validate_rigid_body_state(context, source); !valid)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_source, valid.error(), {}}};
+  if (request.tick != source.tick)
+    return std::unexpected{RigidFrameHandoffError{Code::stale_tick, {}, {}}};
+  auto candidate = source;
+  candidate.frame = request.destination;
+  if (const auto valid = validate_rigid_body_state(context, candidate); !valid)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_destination, valid.error(), {}}};
+  const bool relative_pair =
+      (source.frame.kind == RigidFrameKind::body_fixed &&
+       request.destination.kind == RigidFrameKind::body_relative_inertial) ||
+      (source.frame.kind == RigidFrameKind::body_relative_inertial &&
+       request.destination.kind == RigidFrameKind::body_fixed);
+  const bool same_body = source.frame.body == request.destination.body;
+  const bool to_system =
+      source.frame.kind == RigidFrameKind::body_fixed &&
+      (request.destination.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_body));
+  const bool to_fixed =
+      request.destination.kind == RigidFrameKind::body_fixed &&
+      (source.frame.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_body));
+  const bool identity = source.frame.kind == RigidFrameKind::body_fixed &&
+                        source.frame == request.destination;
+  if (!to_system && !to_fixed && !identity)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::unsupported_frame_pair, {}, {}}};
+  if (!context.physical_moon_owner() || *context.physical_moon_owner() != moon)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_rotation_recipe,
+                               {},
+                               {},
+                               {},
+                               {},
+                               {},
+                               PhysicalMoonRotationError::invalid_owner}};
+  const auto geometry = resolve_physical_moon_rotation(moon, source.tick);
+  if (!geometry)
+    return std::unexpected{RigidFrameHandoffError{
+        Code::invalid_rotation_recipe, {}, {}, {}, {}, {}, geometry.error()}};
+  if (identity) return source;
+  return reframe_rotating_geometry(
+      context, source, request, relative_pair, to_system,
+      geometry->fixed_to_system, geometry->body_position,
+      geometry->body_velocity, geometry->angular_velocity_radians_per_second);
 }
 
 } // namespace apsis_drift
