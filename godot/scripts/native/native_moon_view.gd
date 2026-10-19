@@ -243,19 +243,35 @@ func select_home() -> void:
 	report_action_status("Home selected. One charge commits after spooling.")
 	update_view(0.0)
 
+func landed_hatch_available() -> bool:
+	return state.get("body_kind") == "moon" and state.get("surface", {}).get("landed", false) and not surface_walking() and state.get("boarding", {}).get("seated", false) and state.get("jump", {}).get("phase", "") == "idle" and not state.get("recovery_pending", true)
+
 func request_surface_interaction() -> void:
 	if surface_walking():
 		# Share the existing foot-only neutral/modal gates: E is also a flight key.
 		super.request_surface_interaction()
 		return
-	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not player_input.waiting_action.is_empty(): return
-	port_command("begin_freedom_surface_walk")
+	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty() or not landed_hatch_available(): return
+	if not controls_armed or not player_input.landed_hatch_neutral() or not surface_interaction_neutral():
+		report_action_status("Release flight and look controls to use the hatch.")
+		return
+	# The ordinary port-command gate treats the held E interaction as strafe.
+	# This landed-only gate checked every other flight demand independently.
+	if not bridge.begin_freedom_surface_walk():
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	look_offset = Vector2.ZERO
+	pause_controls("On the surface. Release controls, then resume to walk.")
+	update_view(0.0)
 
 func surface_action_reference_warning(_command: String) -> String:
 	return ""
 
 func refresh_control_hint() -> void:
-	if player_input != null: player_input.surface_interaction_enabled = surface_walking()
+	if player_input != null:
+		player_input.surface_interaction_enabled = surface_walking()
+		player_input.landed_hatch_enabled = landed_hatch_available()
 
 func update_compact_hud() -> void:
 	if primary_status == null: return
@@ -268,7 +284,11 @@ func update_compact_hud() -> void:
 	assist_button.set_pressed_no_signal(state.assistance)
 	assist_button.disabled = surface_walking() or jumping
 	context_action.visible = landed or surface_walking()
-	context_action.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit"
+	var hatch_binding := "E"
+	if player_input != null and player_input.available_pads.get(player_input.device, false):
+		hatch_binding += " / " + ("Cross" if player_input.playstation() else "A")
+	context_action.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit · " + hatch_binding
+	if landed_hatch_available(): primary_status.text += "\n" + hatch_binding + ": leave Wayfarer · suit"
 	context_action.disabled = surface_walking() and not state.surface_walk.get("return_access", {}).get("within_reach", false)
 	landing_button.disabled = landed or surface_walking() or jumping
 	stow_gear_button.disabled = landed or surface_walking() or jumping or not state.get("surface", {}).get("gear_deployed", false)

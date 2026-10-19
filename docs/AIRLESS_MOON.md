@@ -95,7 +95,10 @@ anchor. The first pad may compress its existing rated gear stroke only while
 all pad geometry is valid and the swept hull is clear; a hull strike or unknown
 contact is not a landing.
 
-Use the contextual hatch action to walk outside. The same walking controls,
+After landing, release controls and resume, then use **E** or the selected
+controller's **A/Cross** to leave through the hatch. The HUD shows the current
+action; the paused Controls action remains available. Every other flight/look
+demand must be neutral. The same walking controls,
 slope/step limits and return-access checks apply as on the home planet. Return
 to the hatch, board, release surface support and apply up thrust to lift off.
 **Select jump home** and the normal jump command return to the real home body,

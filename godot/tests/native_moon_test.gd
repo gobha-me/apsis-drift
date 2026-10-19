@@ -26,13 +26,25 @@ func check(value: bool, message: String) -> bool:
 func _initialize() -> void:
 	call_deferred("run")
 
-func key(code: int, down: bool) -> void:
+func key(code: int, down: bool) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.keycode = code
 	event.physical_keycode = code
 	event.pressed = down
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+	return event
+
+func hatch_pad(view: Control, device: int, down: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = JOY_BUTTON_A
+	event.pressed = down
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	# Headless GUI focus may consume the event before ordinary dispatch.
+	# Still exercise the actual provider's selected-device and context gates.
+	if down and not view.surface_walking(): view.player_input._input(event)
 
 func save_bytes(owner: Variant, path: String) -> PackedByteArray:
 	if not check(owner.save_freedom_as(path), "Actual Moon Save failed: " + str(owner.get_last_error())): return PackedByteArray()
@@ -319,6 +331,76 @@ func check_outside(phases: String, assets: String, output: String) -> void:
 	shell.free()
 	await process_frame
 
+func check_landed_hatch(view: Control, owner: Variant, output: String, label: String, controller: bool) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var prefix := output.path_join(label + "-context-hatch")
+	var frozen := save_bytes(owner, prefix + "-before.json")
+	if not check(view.paused and view.landed_hatch_available() and not view.surface_walking() and not frozen.is_empty(), "Actual supported seated Moon source lacks its contextual hatch: " + label): return
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(peer.stage_freedom_continue(prefix + "-before.json"), "Direct landed Moon hatch peer staging refused"): return
+	var pending: Dictionary = peer.get_pending_freedom_start()
+	if not check(peer.commit_pending_freedom_start(pending.candidate_id) and peer.begin_freedom_surface_walk(), "Direct actual Moon departure refused"): return
+	var expected := save_bytes(peer, prefix + "-direct.json")
+	# Every refusal observes the same real landed source; only presentation gates
+	# change. No synthetic recovery, actor placement, tick or saved state is used.
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-paused.json") == frozen, "Paused contextual Moon hatch changed the complete Save")
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Landed Moon hatch could not explicitly resume after neutral"): return
+	check(view.player_input.landed_hatch_enabled and not view.player_input.surface_interaction_enabled, "Landed hatch context reused the on-foot movement mode")
+	view.controls_armed = false
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-unarmed.json") == frozen, "Unarmed contextual Moon hatch changed the complete Save")
+	view.observe_neutral_controls()
+	key(KEY_W, true)
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-held.json") == frozen and not view.surface_walking(), "Held W bypassed landed Moon hatch neutrality")
+	key(KEY_W, false)
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.request_surface_interaction()
+	check(view.paused and save_bytes(owner, prefix + "-focus.json") == frozen, "Unfocused contextual Moon hatch changed the complete Save")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Focus return auto-resumed or prevented explicit Moon hatch rearm"): return
+	view.save_dialog.show()
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-save-modal.json") == frozen, "Save modal allowed contextual Moon departure")
+	view.save_dialog.hide()
+	view.journey_dialog_open = true
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-journey-modal.json") == frozen, "Journey modal allowed contextual Moon departure")
+	view.journey_dialog_open = false
+	view.recovery_notified = true
+	view.request_surface_interaction()
+	check(save_bytes(owner, prefix + "-recovery-gate.json") == frozen, "Recovery presentation gate allowed contextual Moon departure")
+	view.recovery_notified = false
+	view.refresh_control_hint()
+	if controller:
+		# Connection notifications plus real button events simulate software pad
+		# ownership, as in the existing input cases; this is not hardware testing.
+		Input.joy_connection_changed.emit(0, true)
+		Input.joy_connection_changed.emit(7, true)
+		view.observe_neutral_controls()
+		if view.paused: view.toggle_pause()
+		if not check(view.player_input.device == 0 and not view.paused and view.controls_armed, "Selected controller could not explicitly resume landed Moon context"): return
+		hatch_pad(view, 7, true)
+		hatch_pad(view, 7, false)
+		check(view.player_input.device == 0 and not view.surface_walking() and save_bytes(owner, prefix + "-foreign-pad.json") == frozen, "Foreign pad stole selection or opened the Moon hatch")
+		hatch_pad(view, 0, true)
+		hatch_pad(view, 0, false)
+		Input.joy_connection_changed.emit(7, false)
+		Input.joy_connection_changed.emit(0, false)
+	else:
+		var event := key(KEY_E, true)
+		check(Input.is_physical_key_pressed(KEY_E), "Contextual Moon departure did not hold actual physical E")
+		if not view.surface_walking(): view.player_input._input(event)
+		key(KEY_E, false)
+	var actual: Dictionary = owner.get_freedom_flight_state()
+	check(view.surface_walking() and view.paused and view.error.is_empty() and view.look_offset == Vector2(-float(actual.surface_walk.get("heading", 0.0)), 0.0), "Contextual Moon departure failed fresh outside/pause/look handoff: " + label)
+	check(actual.tick == before.tick and actual.resources == before.resources and save_bytes(owner, prefix + "-after.json") == expected, "Contextual Moon hatch differs from the same zero-tick direct C++ departure: " + label)
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -359,6 +441,8 @@ func run() -> void:
 		if phase_shell == null: continue
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
 		check_gear_clearance(phase_shell.current_view, restored, output, label)
+		if label in ["landed", "returned"]:
+			check_landed_hatch(phase_shell.current_view, restored, output, label, label == "returned")
 		phase_shell.free()
 		await process_frame
 	await check_outside(phases, assets, output)

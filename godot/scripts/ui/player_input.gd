@@ -35,6 +35,7 @@ var persist := true
 var settings_path := SETTINGS_PATH
 var assistance_request_only := false
 var surface_interaction_enabled := false
+var landed_hatch_enabled := false
 var looking := false
 var look_axes_needs_neutral := false
 var remap_neutral_events: Array[InputEvent] = []
@@ -362,8 +363,8 @@ func _input(event: InputEvent) -> void:
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
 	elif enabled and pressed:
-		# Fixed on-foot interaction has priority over remapped flight actions.
-		if surface_interaction_enabled and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
+		# Contextual interaction has priority over remapped flight actions.
+		if (surface_interaction_enabled or landed_hatch_enabled) and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
 			if not pad or available_pads.get(device, false): surface_interaction_requested.emit()
 			get_viewport().set_input_as_handled()
 		elif surface_interaction_enabled and event is InputEventKey and event.physical_keycode in foot_key_codes():
@@ -444,6 +445,36 @@ func foot_keyboard_look_neutral() -> bool:
 	for action in ["look_left", "look_right", "look_up", "look_down"]:
 		var key: int = int(bindings[action].key.code)
 		if key not in foot_key_codes() and key != KEY_E and Input.is_physical_key_pressed(key): return false
+	return true
+
+
+# Only a genuinely landed, seated caller may use this contextual exception.
+# It observes current controls without clearing any ordinary neutral/remap latch.
+func landed_hatch_neutral() -> bool:
+	if not enabled or not focused or needs_neutral or not waiting_action.is_empty() or remap_neutral_overflow: return false
+	for event in remap_neutral_events:
+		if event_held(event): return false
+	for code in foot_remap_keys:
+		if Input.is_physical_key_pressed(code): return false
+	for code in foot_key_codes():
+		if Input.is_physical_key_pressed(code): return false
+	var interaction_held := Input.is_physical_key_pressed(KEY_E)
+	if device >= 0 and not available_pads.get(device, false): return false
+	for action in ACTIONS:
+		var key: int = int(bindings[action].key.code)
+		var exempt_key: bool = interaction_held and key == KEY_E
+		var demand := strength(action)
+		if not is_finite(demand) or (not exempt_key and demand > float(settings.deadzone)): return false
+		if not exempt_key and Input.is_physical_key_pressed(key): return false
+		# Even the E-bound action retains its independent pad demand. Opposing
+		# engines/axes never disappear through a signed or key/pad cancellation.
+		if device >= 0:
+			var binding: Dictionary = bindings[action].pad
+			if binding.kind == "axis":
+				var value := Input.get_joy_axis(device, int(binding.code))
+				if not is_finite(value) or value * float(binding.sign) > float(settings.deadzone): return false
+			elif binding.kind == "button" and Input.is_joy_button_pressed(device, int(binding.code)):
+				return false
 	return true
 
 
