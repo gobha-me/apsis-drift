@@ -273,8 +273,8 @@ auto transforms(const Fixture& fixture) -> void {
 auto validation(const Fixture& fixture) -> void {
   const auto source = fixture.state();
   const RigidFrameHandoffRequest request{fixture.system_frame(), source.tick};
-  for (const auto frame : {fixture.system_frame(), fixture.station_frame(),
-                           fixture.planet_frame()}) {
+  for (const auto& frame : {fixture.system_frame(), fixture.station_frame(),
+                            fixture.planet_frame()}) {
     auto state = source;
     state.frame = frame;
     check(same_bits(required(reframe_rigid_body(fixture.context, state,
