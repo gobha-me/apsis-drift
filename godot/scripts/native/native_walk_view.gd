@@ -57,6 +57,9 @@ var hud_column: VBoxContainer
 var hud_theme: Theme
 var hud_scroll_style: StyleBox
 var hud_hint: Label
+var active_card: PanelContainer
+var active_status: Label
+var active_card_style: StyleBox
 var paused := false
 var focused := true
 var controls_armed := false
@@ -280,6 +283,15 @@ func build_ui() -> void:
 	hud_scroll.add_child(column)
 	hud_theme = Theme.new()
 	column.theme = hud_theme
+	active_card = PanelContainer.new()
+	active_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	active_card.theme = hud_theme
+	active_card_style = backing.duplicate()
+	active_card.add_theme_stylebox_override("panel", active_card_style)
+	active_status = hud_text()
+	active_card.add_child(active_status)
+	add_child(active_card)
+	active_card.hide()
 	telemetry = hud_text()
 	column.add_child(telemetry)
 	var hint := hud_text()
@@ -422,10 +434,27 @@ func layout_hud() -> void:
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
 	# so follow-focus cannot round a bottom action past the clipping edge.
 	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y).floor()
+	active_card.position = Vector2.ONE * margin
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		active_card_style.set_content_margin(side, 10 * scale)
+	active_card.custom_minimum_size.x = minf(340 * scale, usable.x)
+	active_card.size.x = active_card.custom_minimum_size.x
+	active_card.reset_size()
 	if boarding_prompt != null:
 		boarding_prompt.position = Vector2(margin, size.y - margin - 70 * scale)
 		boarding_prompt.size = Vector2(usable.x, 64 * scale)
 		boarding_prompt.add_theme_font_size_override("font_size", roundi(22 * scale))
+
+
+func refresh_hud() -> void:
+	if hud_scroll == null or active_card == null: return
+	var nested := settings_open() or observations_open()
+	hud_scroll.visible = paused and not nested
+	active_card.visible = not paused and not nested and not journey_dialog_open and save_dialog != null and not save_dialog.visible and error.is_empty()
+	var text := telemetry.text + "\nEsc / Start: controls" if boarding_transition() else "Origin Station · D1\nWASD / left stick: walk\nMouse / look keys / right stick: look\nEsc / Start: controls"
+	if active_status.text != text:
+		active_status.text = text
+		active_card.reset_size()
 
 
 func set_paused(value: bool) -> void:
@@ -437,6 +466,7 @@ func set_paused(value: bool) -> void:
 
 func pause_controls(reason: String) -> void:
 	paused = true
+	refresh_hud()
 	mouse_look.set_active(false)
 	controls_armed = false
 	refresh_profile_actions()
@@ -485,6 +515,7 @@ func resume_requested() -> void:
 	var current := get_viewport().gui_get_focus_owner()
 	if current != null: current.release_focus()
 	save_status.text = "Walking. Save As pauses the journey."
+	refresh_hud()
 
 
 func current_controls_neutral() -> bool:
@@ -762,6 +793,7 @@ func update_view(delta: float = 0.0) -> void:
 		telemetry.text = "%s · %d%%\n%s\nLook around · view settles near the end" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
 	else:
 		telemetry.text = "Origin Station · D1 workshop\nWalk to the Wayfarer ladder to board.%s" % ("\n" + error if not error.is_empty() else "")
+	refresh_hud()
 
 
 func _process(delta: float) -> void:

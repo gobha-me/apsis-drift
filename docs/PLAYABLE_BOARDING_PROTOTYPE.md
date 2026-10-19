@@ -82,3 +82,10 @@ seating and ordinary station walking resume without a camera snap. Pause, focus
 loss and dialogs release the pointer and suppress look input; Continue starts
 paused with a centred view. This does not widen the route or guarantee
 clipping-free views inside the provisional mesh.
+
+Active station walking and boarding now show a small status/help card beside the
+existing contextual ladder prompt. The full scrollable actions return on Pause;
+settings, recorded observations and save dialogs retain their existing ownership
+and neutral-resume rules. This reduces the sidebar covering the boarding view,
+without changing the authored eye, route, physical state or saves. Text still
+wraps in small windows; cramped ingress and rough mesh joins remain unfinished.

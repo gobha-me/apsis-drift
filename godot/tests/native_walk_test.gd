@@ -154,6 +154,8 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		joy_button(JOY_BUTTON_START, false, 19)
 		device = view.selected_pad
 	check(view.available_pads.get(device, false) and view.paused, "Station layout fixture has no explicitly selected paused pad")
+	check(view.hud_scroll.visible and not view.active_card.visible, "Paused station did not retain the full controls sidebar")
+	check(view.active_card.mouse_filter == Control.MOUSE_FILTER_IGNORE and view.active_status.mouse_filter == Control.MOUSE_FILTER_IGNORE and view.active_card.focus_mode == Control.FOCUS_NONE, "Compact station card intercepts gameplay input")
 	var backing: StyleBox = view.hud_scroll.get_theme_stylebox("panel")
 	check(backing is StyleBoxFlat and backing.bg_color.a >= 0.9 and maxf(backing.bg_color.r, maxf(backing.bg_color.g, backing.bg_color.b)) <= 0.05, "Station HUD lacks adequate dark backing")
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
@@ -242,6 +244,23 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		view.save_dialog.hide()
 		view.save_dialog.canceled.emit()
 		paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "HUD resize/scroll/navigation")
+		# Let containers lay out the active card without scheduling walking ticks.
+		var processing: bool = view.is_processing()
+		view.set_process(false)
+		view.resume_requested()
+		check(not view.paused and view.active_card.visible and not view.hud_scroll.visible and not view.save_button.is_visible_in_tree() and view.mouse_look.active, "Running station retained full actions or lost compact help/pointer ownership")
+		for frame in 3:
+			await process_frame
+		check(bounds.encloses(view.active_card.get_rect()) and view.active_card.size.y * pixels.y / view.size.y <= 180.0, "Active station card is not compact or escaped the resized viewport " + str(pixels))
+		check(view.active_card.get_global_rect().encloses(view.active_status.get_global_rect()) and view.active_status.size.y >= view.active_status.get_minimum_size().y, "Active station help is clipped")
+		font_pixels = view.active_status.get_theme_font_size("font_size") * pixels.x / view.size.x
+		check(font_pixels >= 17.5 and font_pixels <= 20.5 and "WASD" in view.active_status.text and "look" in view.active_status.text and "Esc / Start" in view.active_status.text, "Compact station help became unreadable or lost essential controls")
+		check(root.gui_get_focus_owner() == null and owner.get_freedom_walk_state() == walk and owner.get_freedom_flight_state() == flight and view.camera.transform == pose and view.requested_heading == heading and view.pitch == pitch, "HUD mode switch changed focus, camera or authoritative state")
+		check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Compact station mode changed complete Save bytes")
+		view.pause_controls("Station full controls restored")
+		check(view.hud_scroll.visible and not view.active_card.visible and root.gui_get_focus_owner() == view.pause_button, "Pause failed to restore full visible controls and Resume focus")
+		view.set_process(processing)
+		paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "Compact/full HUD switch")
 	if temporary_pad:
 		Input.joy_connection_changed.emit(19, false)
 	view.hud_hint.text = hint
@@ -268,7 +287,7 @@ func check_station_archive(view: Control, owner: Variant, path: String, bytes: P
 	physical_key(KEY_ENTER, true)
 	physical_key(KEY_ENTER, false)
 	for frame in 3: await process_frame
-	check(view.observations_open() and not view.hud_scroll.visible and view.observations_view.readings == records, "Station archive did not open the actual retained ledger")
+	check(view.observations_open() and not view.hud_scroll.visible and not view.active_card.visible and view.observations_view.readings == records, "Station archive did not open the actual retained ledger without gameplay HUD")
 	check(view.paused and view.observations_view._paused.text.begins_with("PAUSED"), "Station archive lost pause or claims active flight")
 	var reader: Control = view.observations_view
 	if records.subjects.size() > 1:
@@ -670,7 +689,7 @@ func check_station_settings(view: Control, owner: Variant, path: String, bytes: 
 	view.settings_button.grab_focus()
 	physical_key(KEY_ENTER, true)
 	physical_key(KEY_ENTER, false)
-	check(view.settings_open() and not view.hud_scroll.visible and view.paused and not provider.enabled, "Station Settings failed to open with gameplay provider disabled")
+	check(view.settings_open() and not view.hud_scroll.visible and not view.active_card.visible and view.paused and not provider.enabled, "Station Settings failed to open with gameplay provider disabled and compact HUD hidden")
 	view.settings_view.pending.deadzone = 0.31
 	check(provider.settings == original_settings and not FileAccess.file_exists(config_path), "Pending station settings adopted or wrote before Apply")
 	view.resume_requested()
