@@ -602,12 +602,12 @@ func input_controls(delta: float) -> PackedFloat64Array:
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
 	var keyboard_look: Vector2 = preferences_provider.foot_keyboard_look()
-	apply_look(keyboard_look * delta)
+	apply_look_rate(keyboard_look, delta)
 	if available_pads.get(selected_pad, false):
 		forward -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_Y))
 		right += stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_X))
 		var controller_look: Vector2 = preferences_provider.foot_controller_look(selected_pad)
-		apply_look(controller_look * delta)
+		apply_look_rate(controller_look, delta)
 	if boarding_transition():
 		# Looking around never steers the authored C++ actor route.
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
@@ -623,6 +623,16 @@ func apply_look(motion: Vector2) -> void:
 	else:
 		requested_heading = wrapf(requested_heading - motion.x, -PI, PI)
 		pitch = clampf(pitch - motion.y, -1.3, 1.3)
+
+
+func apply_look_rate(rate: Vector2, delta: float) -> void:
+	if boarding_transition():
+		apply_look(rate * delta)
+	else:
+		# Keep the existing scalar arithmetic and single final heading wrap.
+		# Multiplying a Vector2 first would round its components to float32.
+		requested_heading -= rate.x * delta
+		pitch = clampf(pitch - rate.y * delta, -1.3, 1.3)
 
 
 static func boarding_look_weight(progress: float) -> float:
