@@ -28,7 +28,7 @@ auto assess_terrain_hull_clearance(const PhysicalLocalSystem& owner,
   if (!craft) return std::unexpected{TerrainHullError::invalid_source};
   const auto& properties = craft->properties;
   const auto radius = static_cast<double>(prepared->planet.radius.value) * 1000;
-  const auto coverage = detail::hull_numeric::bound_cells(
+  const auto coverage = apsis_drift::detail::hull_numeric::bound_cells(
       state, properties, radius, prepared->original_state_checksum,
       terrain_policy, [&](RigidVector3 p) {
         return godot_spike::detail::locate_selected_contact_triangle(
