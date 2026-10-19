@@ -1,5 +1,5 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
-  foreach(secondary_case IN ITEMS secondary-bodies secondary-observations)
+  foreach(secondary_case IN ITEMS secondary-bodies secondary-observations physical-moon)
     string(REPLACE "-" "_" secondary_source "${secondary_case}")
     add_executable(apsis-drift-${secondary_case}-tests test/${secondary_source}_test.cpp)
     target_link_libraries(apsis-drift-${secondary_case}-tests PRIVATE apsis-drift::core)

@@ -51,7 +51,8 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
 
   const auto relative_kind = [](RigidFrameKind kind) {
     return kind == RigidFrameKind::station_relative_inertial ||
-           kind == RigidFrameKind::planet_relative_inertial;
+           kind == RigidFrameKind::planet_relative_inertial ||
+           kind == RigidFrameKind::body_relative_inertial;
   };
   const bool to_system =
       relative_kind(source.frame.kind) &&
@@ -87,6 +88,29 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
         return std::unexpected{RigidFrameHandoffError{
             Code::ephemeris_failure, {}, resolved.error()}};
       return Origin{resolved->position, resolved->velocity};
+    }
+    if (relative.kind == RigidFrameKind::body_relative_inertial) {
+      // Frame validation authenticated the descriptor and exact moon identity.
+      const auto hierarchy =
+          make_body_hierarchy(context.physical_moon_owner()->catalog);
+      if (!hierarchy)
+        return std::unexpected{RigidFrameHandoffError{
+            Code::ephemeris_failure, {}, {}, {}, {}, hierarchy.error()}};
+      const auto resolved =
+          resolve_body_ephemerides(*hierarchy, {source.tick, 0.0});
+      if (!resolved)
+        return std::unexpected{RigidFrameHandoffError{
+            Code::ephemeris_failure, {}, {}, {}, {}, resolved.error()}};
+      for (const auto& body : *resolved)
+        if (body.body == *relative.body)
+          return Origin{body.position, body.velocity};
+      return std::unexpected{
+          RigidFrameHandoffError{Code::ephemeris_failure,
+                                 {},
+                                 {},
+                                 {},
+                                 {},
+                                 BodyEphemerisError::invalid_target}};
     }
     const auto* physical = context.physical_owner();
     if (physical == nullptr)

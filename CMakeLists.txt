@@ -166,6 +166,7 @@ add_library(apsis_drift_core STATIC
   src/physical_local_system.cpp
   src/body_ephemeris.cpp
   src/secondary_bodies.cpp
+  src/physical_moon.cpp
   src/secondary_observations.cpp
   src/orbital_telemetry.cpp
   src/orbit_hold.cpp
@@ -305,7 +306,7 @@ target_link_libraries(apsis_drift_boarding_research
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/secondary_bodies.cpp src/secondary_observations.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)

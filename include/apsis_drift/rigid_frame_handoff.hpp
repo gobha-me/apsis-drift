@@ -30,6 +30,7 @@ struct RigidFrameHandoffError {
   std::optional<LocalSystemError> ephemeris_error;
   std::optional<PlanetRotationError> rotation_error{};
   std::optional<PhysicalLocalSystemError> physical_ephemeris_error{};
+  std::optional<BodyEphemerisError> body_ephemeris_error{};
   friend auto operator==(const RigidFrameHandoffError&,
                          const RigidFrameHandoffError&) -> bool = default;
 };
@@ -38,6 +39,8 @@ struct RigidFrameHandoffError {
 // force provider. Supports system_inertial <-> station_relative_inertial using
 // the explicitly selected catalog family's origin station ephemeris.
 // Physical contexts also support system <-> named planet_relative_inertial.
+// An explicit physical moon context also supports system <-> its moon-relative
+// frame using the full parent-inclusive body hierarchy ephemeris.
 // Their axes are identical: craft,
 // tick, quaternion and body angular velocity retain every bit. A validated
 // same-frame request is an exact identity, including planet_fixed. All other

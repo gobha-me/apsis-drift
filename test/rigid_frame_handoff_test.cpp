@@ -773,6 +773,130 @@ auto rotating_refusals(const Fixture& fixture) -> void {
   expect_error(fixture.context, source, {fixture.system_frame(), source.tick},
                Code::unsupported_frame_pair);
 }
+
+auto moon_handoff_contract(const Fixture& fixture) -> void {
+  for (const auto version : {1U, 2U}) {
+    const auto parent =
+        required(generate_physical_origin_system(Seed{42}, version));
+    const auto catalog = required(generate_secondary_body_catalog(parent));
+    const auto moon = required(
+        generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
+    const RigidBodyWorldContext context{moon, &fixture.station};
+    const RigidBodyWorldContext physical{parent, &fixture.station};
+    const RigidCoordinateFrame relative{RigidFrameKind::body_relative_inertial,
+                                        parent.catalog.id,
+                                        {},
+                                        {},
+                                        moon.body};
+    const RigidCoordinateFrame system{
+        RigidFrameKind::system_inertial, parent.catalog.id, {}, {}};
+    const auto hierarchy = required(make_body_hierarchy(catalog));
+    for (const auto tick : {SimulationTick{0}, SimulationTick{1234567},
+                            std::numeric_limits<SimulationTick>::max() - 1}) {
+      auto source = fixture.state();
+      source.frame = relative;
+      source.tick = tick;
+      // Keep an accepted non-unit residual: translation must never normalize q.
+      source.orientation = {1 + 2e-13, 0, 0, 0};
+      const auto original = source;
+      const auto ephemerides =
+          required(resolve_body_ephemerides(hierarchy, {tick, 0}));
+      const auto found =
+          std::ranges::find(ephemerides, moon.body, &BodyEphemeris::body);
+      if (found == ephemerides.end()) {
+        check(false, "Actual moon ephemeris available");
+        return;
+      }
+      check(found->position != found->relative_position &&
+                found->velocity != found->relative_velocity,
+            "Moon reference includes parent translation and velocity");
+      const auto actual =
+          required(reframe_rigid_body(context, source, {system, tick}));
+      auto expected = source;
+      expected.frame = system;
+      expected.position_metres = {source.position_metres.x + found->position.x,
+                                  source.position_metres.y + found->position.y,
+                                  source.position_metres.z + found->position.z};
+      expected.linear_velocity_metres_per_second = {
+          source.linear_velocity_metres_per_second.x + found->velocity.x,
+          source.linear_velocity_metres_per_second.y + found->velocity.y,
+          source.linear_velocity_metres_per_second.z + found->velocity.z};
+      expected = required(canonicalize_rigid_body_state(context, expected));
+      check(same_bits(actual, expected) && same_bits(source, original),
+            "Moon nonrotating handoff adds full authentic p/v once and "
+            "preserves all other source bits");
+      check(same_bits(
+                required(reframe_rigid_body(context, source, {relative, tick})),
+                source),
+            "Same moon frame is a bit-exact identity");
+      const auto back =
+          required(reframe_rigid_body(context, actual, {relative, tick}));
+      const auto returned_p = components(back.position_metres);
+      const auto original_p = components(source.position_metres);
+      const auto origin_p =
+          components({found->position.x, found->position.y, found->position.z});
+      const auto returned_v =
+          components(back.linear_velocity_metres_per_second);
+      const auto original_v =
+          components(source.linear_velocity_metres_per_second);
+      const auto origin_v =
+          components({found->velocity.x, found->velocity.y, found->velocity.z});
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        check(roundtrip_bound(returned_p[axis], original_p[axis],
+                              origin_p[axis]) &&
+                  roundtrip_bound(returned_v[axis], original_v[axis],
+                                  origin_v[axis]),
+              "Moon roundtrip stays within binary64 parent-scale cancellation "
+              "bound");
+      auto unchanged = back;
+      unchanged.position_metres = source.position_metres;
+      unchanged.linear_velocity_metres_per_second =
+          source.linear_velocity_metres_per_second;
+      check(same_bits(unchanged, source),
+            "Moon roundtrip preserves canonical q, body spin, craft, frame and "
+            "tick exactly");
+      expect_error(context, source, {system, tick + 1}, Code::stale_tick);
+      auto wrong = relative;
+      wrong.body->kind = BodyKind::minor;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      wrong = relative;
+      ++wrong.body->value;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      wrong = relative;
+      wrong.planet = parent.catalog.planets.front().descriptor.id;
+      expect_error(context, actual, {wrong, tick}, Code::invalid_destination);
+      expect_error(physical, source, {system, tick}, Code::invalid_source);
+      expect_error(fixture.context, source, {system, tick},
+                   Code::invalid_source);
+      const RigidCoordinateFrame planet{
+          RigidFrameKind::planet_relative_inertial,
+          parent.catalog.id,
+          parent.catalog.planets.front().descriptor.id,
+          {}};
+      expect_error(context, source, {planet, tick},
+                   Code::unsupported_frame_pair);
+      for (const auto scalar : {std::numeric_limits<double>::quiet_NaN(),
+                                std::numeric_limits<double>::infinity()}) {
+        auto invalid = source;
+        invalid.position_metres.x = scalar;
+        expect_error(context, invalid, {system, tick}, Code::invalid_source);
+      }
+      auto forged = moon;
+      ++forged.spin_period_ticks;
+      expect_error(RigidBodyWorldContext{forged}, source, {system, tick},
+                   Code::invalid_source, RigidBodyError::invalid_world_context);
+      auto excessive = actual;
+      // At least one translated component lies outside the admitted bound.
+      const auto signs =
+          components({found->position.x, found->position.y, found->position.z});
+      excessive.position_metres = {-std::copysign(1e15, signs[0]),
+                                   -std::copysign(1e15, signs[1]),
+                                   -std::copysign(1e15, signs[2])};
+      expect_error(context, excessive, {relative, tick}, Code::invalid_result);
+    }
+  }
+}
+
 } // namespace
 
 auto main() -> int {
@@ -781,6 +905,7 @@ auto main() -> int {
   validation(fixture);
   rotating_contract(fixture);
   rotating_refusals(fixture);
+  moon_handoff_contract(fixture);
   std::cout << "rigid frame handoff: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }
