@@ -90,8 +90,12 @@ The [neighboring-system trip](FREEDOM_NATIVE_TRAVEL.md) supports chart selection
 jump commitment and home return. Three initial jump charges leave an outbound,
 return and reserve charge. [Landings](LANDED_CRAFT.md) use deployed gear and
 certified dry terrain; [suited walking](FREEDOM_SURFACE_WALK.md) permits nearby
-exploration, return through the hatch and thruster liftoff. Flight basics gives
-the supported actions and conditions for each mode.
+exploration, return through the hatch and thruster liftoff. After a supported
+planetary landing, release flight and look controls, then use the displayed
+**Leave Wayfarer · suit** action, **E**, captured **left click**, or selected-pad
+**A/Cross**. Leaving pauses outside; resume explicitly to walk. **Liftoff** stays
+in paused Controls. Flight basics gives the supported actions and conditions
+for each mode.
 For the [airless Moon trip](AIRLESS_MOON.md#local-voyage-and-operation), choose
 **Select nearby moon jump** after departing the station. **Deploy gear · manual
 descent** deploys the gear; brake and descend with your thrusters. **Release
