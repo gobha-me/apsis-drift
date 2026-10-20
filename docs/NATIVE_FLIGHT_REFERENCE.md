@@ -57,8 +57,8 @@ supersede the earlier saved-profile claims that fuel, jump travel and touchdown 
 The historical unsaved thrust lab retains its own genuine prototype limits.
 
 Open **Esc / Start · Controls**, then **Flight basics (paused)**. Examples still
-read your remapped flight bindings. Ground keys are explicitly fixed WASD; this
-is distinct from those flight mappings. The reference reads a snapshot of the
+read your remapped flight bindings. The four ground movement keys are configurable
+in Settings / Controls, separately from flight mappings. The reference reads a snapshot of the
 existing C++ projection: most pages show a compact current mode; the resource
 page retains the full current observations. Historical or malformed/absent
 readouts do not gain invented fuel, charges, equipment, chart knowledge or
@@ -103,3 +103,9 @@ reference limits, not current weather or site clearance. Unknown and historical
 unsurveyed conditions gain no invented assessment. Refused commands retain their
 actual refusal. Reading these existing C++ assessments adds no simulation ticks,
 observations, save fields, confirmation gate or new damage policy.
+
+2026-10-20, desktop feedback extends saved-flight help with mouse pitch/yaw
+steering, right-button free look and explicit steering recentering. The Origin
+ports page also describes the bounded **Dock with thrusters** action: physical
+alignment, closing and braking followed by a tight automatic latch. Pausing or
+manual flight input cancels the assist; the older manual approach remains available.

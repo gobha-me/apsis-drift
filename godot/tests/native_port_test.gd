@@ -55,6 +55,87 @@ func check_port_camera(view: Control, owner: Variant, source: Dictionary) -> voi
 	check(owner.get_freedom_flight_state() == source, "Camera-only observation checks mutated authoritative flight")
 
 
+func commit_docking_fixture(owner: Variant, source := "") -> bool:
+	# Provider fixtures use the existing staged token API. Production renderer
+	# admission remains covered by native_start_staging and the station journey.
+	if not (owner.stage_freedom_new_game("42") if source.is_empty() else owner.stage_freedom_continue(source)): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
+
+func check_smooth_docking(owner: Variant, directory: String, assets: String) -> void:
+	if not commit_docking_fixture(owner):
+		check(false, "Smooth docking New Game fixture refused: " + str(owner.get_last_error()))
+		return
+	for tick in 1194:
+		if not owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0, -1, 0])):
+			check(false, "Smooth docking real station walk refused: " + str(owner.get_last_error()))
+			return
+	if not owner.begin_freedom_boarding():
+		check(false, "Smooth docking real boarding refused: " + str(owner.get_last_error()))
+		return
+	for tick in 1440:
+		if not owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0, 0, 0])):
+			check(false, "Smooth docking real boarding step refused: " + str(owner.get_last_error()))
+			return
+	var boarded: Dictionary = owner.get_freedom_flight_state()
+	check(boarded.attached and boarded.target_port == 1, "Smooth docking source is not the genuine seated D1 journey")
+	var proof := directory.path_join("port-docking-native")
+	check(DirAccess.make_dir_recursive_absolute(proof) == OK and owner.save_freedom_as(proof.path_join("seated-source.json")), "Smooth docking seated source Save refused")
+	check(owner.release_freedom_port(), "Smooth docking departure release refused")
+	var withdrawal := PackedFloat64Array()
+	withdrawal.resize(12)
+	withdrawal[4] = 0.1
+	for tick in 30:
+		check(owner.advance_freedom_flight(1.0 / 120.0, withdrawal, false), "Smooth docking real withdrawal refused")
+	var view := FlightView.new()
+	root.add_child(view)
+	view.set_process(false)
+	view.set_process_input(false)
+	if not view.initialize(owner, assets):
+		check(false, "Smooth docking native view refused: " + view.error)
+		view.free()
+		return
+	check(FlightView.valid_state(view.state) and view.state.port_docking.available and not view.docking_button.disabled, "Smooth docking near action unavailable after genuine withdrawal")
+	for invalid in [null, {}, {"available": true}, "off"]:
+		var malformed: Dictionary = view.state.duplicate(true)
+		malformed.port_docking = invalid
+		check(not FlightView.valid_state(malformed), "Malformed docking observation reached rendering")
+	for field in ["remaining_seconds", "phase", "active", "note"]:
+		var malformed: Dictionary = view.state.duplicate(true)
+		malformed.port_docking[field] = NAN if field == "remaining_seconds" else "unknown" if field == "phase" else 1 if field == "active" else []
+		check(not FlightView.valid_state(malformed), "Invalid docking field reached rendering: " + field)
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var dock_action: Button = view.controls_menu.saved_port_buttons["Dock with thrusters"]
+	check(not dock_action.disabled and view.controls_menu.saved_port_buttons["Cancel docking"].disabled, "Paused docking actions disagree with current C++ admission")
+	dock_action.pressed.emit()
+	check(view.paused and view.state.port_docking.active and view.state.tick == before.tick and view.state.position_metres == before.position_metres, "Arming smooth docking changed pose/time or resumed")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(view.paused and not owner.get_freedom_flight_state().port_docking.active and owner.get_freedom_flight_state().tick == before.tick, "Focus loss retained docking or advanced time")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.port_command("begin_freedom_port_docking")
+	view.toggle_pause()
+	check(not view.paused and view.state.port_docking.active, "Smooth docking failed explicit neutral Resume")
+	var fired := false
+	for frame in 1800:
+		view._process(0.1)
+		check(view.error.is_empty(), "Smooth docking ordinary native flight refused: " + view.error)
+		fired = fired or view.state.positive_force_body != PackedFloat64Array([0.0, 0.0, 0.0]) or view.state.negative_force_body != PackedFloat64Array([0.0, 0.0, 0.0])
+		if view.state.attached or not view.state.port_docking.active or not view.error.is_empty(): break
+	check(view.state.attached and view.state.port_docking.phase == "complete" and fired and int(view.state.tick) > int(before.tick), "Smooth docking did not physically complete and latch: " + str(view.state.port_docking))
+	check(view.state.positive_force_body == PackedFloat64Array([0.0, 0.0, 0.0]) and view.state.negative_force_body == PackedFloat64Array([0.0, 0.0, 0.0]), "Attached smooth docking retained firing exhaust")
+	var destination := proof.path_join("attached.json")
+	view.pause_controls("Smooth docking completed")
+	check(owner.save_freedom_as(destination), "Smooth docking Save As refused")
+	var saved := FileAccess.get_file_as_bytes(destination)
+	check(commit_docking_fixture(owner, destination) and not owner.get_freedom_flight_state().port_docking.active and owner.get_freedom_flight_state().attached, "Smooth docking Continue armed an aid or lost attachment")
+	check(owner.save_freedom_as(proof.path_join("continued.json")) and FileAccess.get_file_as_bytes(proof.path_join("continued.json")) == saved, "Smooth docking Continue changed complete save bytes")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	view.free()
+	print("Native smooth docking: real withdrawal, focus cancellation, physical approach and attached Save/Continue checked")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 5:
@@ -63,7 +144,7 @@ func run() -> void:
 		return
 	GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
-	check(not owner.select_freedom_port(1) and not owner.capture_freedom_port() and not owner.release_freedom_port(), "Uninitialized port actions accepted")
+	check(not owner.select_freedom_port(1) and not owner.capture_freedom_port() and not owner.release_freedom_port() and not owner.begin_freedom_port_docking() and not owner.cancel_freedom_port_docking(), "Uninitialized port actions accepted")
 	var originals: Array[PackedByteArray] = []
 	for path in args.slice(0, 4):
 		originals.append(FileAccess.get_file_as_bytes(path))
@@ -159,5 +240,6 @@ func run() -> void:
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == originals[i], "Lifecycle modified source save")
 	view.free()
+	check_smooth_docking(owner, args[0].get_base_dir(), args[4])
 	print("Native port lifecycle: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

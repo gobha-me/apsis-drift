@@ -42,6 +42,40 @@ round trip and the complete rendezvous under both assistance modes. Native
 contracts exercise the far action and a separately retained, genuinely flown
 near handoff; they do not replay the entire several-minute route in Godot.
 
+## Smooth docking
+
+**Dock with thrusters** completes the final approach and attachment after an
+explicit request. Select D1 or D2, enter its approach column, choose the action
+in the HUD or paused controls, then Resume if paused. The compact action gives
+this assist priority near an eligible port. The controller aligns while holding
+clear, closes the collar gap and brakes before latching. The phase and remaining
+attempt time appear with the live collar offsets.
+
+Admission requires the continuous Origin orbit recipe, a seated free craft,
+stowed gear, idle jump, available fuel and no orbit hold. Collar separation must
+be at most 150 m on the outward approach side, attitude error at most 0.35 radians
+(about 20 degrees), angular speed at most 0.02 rad/s and station-relative collar
+speed at most 5 m/s. The complete stowed hull must fit the fixed port column,
+extended downward to -170 m in station coordinates. These limits describe the
+supported docking corridor; the action does not navigate around obstacles.
+
+Alignment and translation request the craft's real torque and thrust ratings,
+consume fuel and advance the ordinary C++ clock. The final latch requires the
+existing physical capture assessment plus collar error at most 1 mm, attitude
+error at most 0.1 mrad, relative collar speed at most 1 mm/s and angular speed at
+most 0.1 mrad/s. Only that small residual is arrested when the mechanical
+attachment establishes the canonical station pose. Remaining approach travel is
+flown rather than teleported or hidden by a camera transition.
+
+Manual input, pause, focus loss, Save As, target or mode changes, exhausted fuel,
+lost running conditions or the 180-second attempt limit cancel the assist. A
+canceled craft continues under ordinary flight physics. Invalid commands and
+fixed steps refuse atomically. Continue retains the actual craft and attachment
+with the assist off; no new save format or docking-offset field is introduced.
+The older translation-only approach and manual capture remain available. A far
+rendezvous still hands over to the older approach; choose Dock explicitly for
+completion.
+
 ## Close-range approach
 
 The optional **Approach port with thrusters** action helps with the last part

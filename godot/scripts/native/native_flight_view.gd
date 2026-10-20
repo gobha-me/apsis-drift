@@ -104,6 +104,7 @@ var station_geometry: Dictionary = {}
 var dock_status: RichTextLabel
 var port_buttons: Array[Button] = []
 var approach_button: Button
+var docking_button: Button
 var rendezvous_button: Button
 var capture_button: Button
 var unboard_menu_button: Button
@@ -179,6 +180,14 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 static func valid_state(value: Dictionary) -> bool:
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
+	if value.has("port_docking"):
+		var docking_aid: Variant = value.port_docking
+		if not docking_aid is Dictionary or docking_aid.size() != 6: return false
+		if not docking_aid.get("available") is bool or not docking_aid.get("active") is bool: return false
+		if not docking_aid.get("remaining_seconds") is float or not is_finite(docking_aid.remaining_seconds) or docking_aid.remaining_seconds < 0.0 or docking_aid.remaining_seconds > 180.0: return false
+		if not docking_aid.get("phase") in ["off", "aligning", "closing", "complete"]: return false
+		for key in ["refusal", "note"]:
+			if not docking_aid.get(key) is String or docking_aid[key].length() > 1024: return false
 	if value.has("port_rendezvous"):
 		var rendezvous: Variant = value.port_rendezvous
 		if not rendezvous is Dictionary or rendezvous.size() != 5: return false
@@ -592,6 +601,11 @@ func build_ui() -> void:
 			port_buttons.append(button)
 		dock_status = hud_text()
 		column.add_child(dock_status)
+		docking_button = Button.new()
+		docking_button.text = "Dock with thrusters"
+		docking_button.focus_mode = Control.FOCUS_NONE
+		docking_button.pressed.connect(func(): port_command("cancel_freedom_port_docking" if state.get("port_docking", {}).get("active", false) else "begin_freedom_port_docking"))
+		column.add_child(docking_button)
 		approach_button = Button.new()
 		approach_button.text = "Approach port with thrusters"
 		approach_button.focus_mode = Control.FOCUS_NONE
@@ -843,6 +857,10 @@ func update_compact_hud() -> void:
 		var contact_text := "CONTACT · %s\n%s" % [contact.status.replace("_", " "), contact.reason]
 		primary_status.text += "\n" + contact_text
 		primary_status.tooltip_text += "\n" + contact_text + "\nCONTACT is a direction annotation; supported local trips use separate drive controls."
+	var docking_aid: Dictionary = state.get("port_docking", {})
+	if error.is_empty() and not docking_aid.is_empty() and str(docking_aid.get("note", "Docking off")) != "Docking off":
+		primary_status.text += "\n" + str(docking_aid.note)
+		if docking_aid.get("active", false): primary_status.text += " · %.0f s left" % docking_aid.remaining_seconds
 	if error.is_empty() and not surface_walking() and player_input != null:
 		primary_status.text += "\n" + ("Free look · release right mouse to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · right mouse looks · %s centers" % player_input.binding_label("recenter", "key"))
 	context_source = null
@@ -850,6 +868,7 @@ func update_compact_hud() -> void:
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
 	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
 	elif state.get("attached", false): context_source = release_button
+	elif docking_button != null and not docking_button.disabled and docking_button.visible: context_source = docking_button
 	elif capture_button != null and not capture_button.disabled and capture_button.visible: context_source = capture_button
 	elif approach_button != null and not approach_button.disabled and approach_button.visible: context_source = approach_button
 	elif state.get("surface", {}).get("maneuver", "off") != "off": context_source = null
@@ -1218,6 +1237,9 @@ func open_save_dialog() -> void:
 func pause_controls(reason: String, show_menu := true) -> void:
 	clear_flight_mouse()
 	mouse_look.set_active(false)
+	if state.get("port_docking", {}).get("active", false):
+		bridge.cancel_freedom_port_docking()
+		state = bridge.get_freedom_flight_state()
 	if state.get("port_rendezvous", {}).get("active", false):
 		bridge.cancel_freedom_port_rendezvous()
 		state = bridge.get_freedom_flight_state()
@@ -1339,7 +1361,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
-	if command in ["begin_freedom_port_approach", "begin_freedom_port_rendezvous", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
+	if command in ["begin_freedom_port_docking", "begin_freedom_port_approach", "begin_freedom_port_rendezvous", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		observe_neutral_controls()
 		if not controls_armed:
 			report_action_status("Release movement controls before changing modes or starting a maneuver.")
@@ -1366,6 +1388,9 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	elif command == "release_freedom_port":
 		var family := "pad" if player_input.last_device == "pad" else "key"
 		report_action_status("Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)])
+	elif command.ends_with("port_docking"):
+		clear_flight_mouse()
+		report_action_status(state.port_docking.note + (" · Resume flight explicitly." if paused and state.port_docking.active else ""))
 	elif command.ends_with("port_approach"):
 		report_action_status(state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else ""))
 	elif command.ends_with("port_rendezvous"):
@@ -1855,7 +1880,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		rendezvous_button.tooltip_text = "Real thrusters and fuel; allow several minutes. Manual input cancels. Near-port aid takes over; Capture stays your action." if rendezvous.get("active", false) or rendezvous.get("available", false) else str(rendezvous.get("refusal", "Select D1 or D2 in paused flight controls."))
 	if dock_status != null:
 		var changed: bool = dock_status.visible != near_port
-		for item in [port_row, dock_status, approach_button, capture_button, release_button]: item.visible = near_port
+		for item in [port_row, dock_status, docking_button, approach_button, capture_button, release_button]: item.visible = near_port
 		if changed: call_deferred("layout_hud")
 	if dock_status != null:
 		var assessment: Dictionary = state.docking
@@ -1865,6 +1890,14 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		elif not assessment.is_empty():
 			var offset: PackedFloat64Array = assessment.offset_body_metres
 			dock_status.text = "D%d · %s\nCollar %.3f m · attitude %.2f°\nInward %.3f m/s · lateral %.3f m/s\nPort offset: right %.2f · up %.2f · back %.2f m" % [state.target_port, assessment.reason, assessment.separation, rad_to_deg(assessment.alignment_radians), assessment.inward_speed, assessment.lateral_speed, offset[0], offset[1], offset[2]]
+		var docking_aid: Dictionary = state.get("port_docking", {})
+		docking_button.visible = near_port and not docking_aid.is_empty()
+		docking_button.text = "Cancel docking · %s" % docking_aid.get("phase", "") if docking_aid.get("active", false) else "Dock with thrusters"
+		docking_button.disabled = not docking_aid.get("active", false) and not docking_aid.get("available", false)
+		docking_button.tooltip_text = "Align, close and brake with real thrusters, then latch. Manual input or pause cancels." if docking_aid.get("active", false) or docking_aid.get("available", false) else str(docking_aid.get("refusal", "Select a port first."))
+		if not docking_aid.is_empty() and str(docking_aid.get("note", "Docking off")) != "Docking off":
+			dock_status.text += "\n" + str(docking_aid.get("note", ""))
+			if docking_aid.get("active", false): dock_status.text += " · %.1f s left" % docking_aid.remaining_seconds
 		var approach: Dictionary = state.get("port_approach", {})
 		dock_status.text += "\n" + str(approach.get("note", "Approach aid off"))
 		if approach.get("active", false):
