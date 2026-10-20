@@ -16,6 +16,40 @@ func checkpoint(owner: Variant, path: String, expected: String) -> void:
 	check(owner.save_freedom_as(path), "Native phase Save As failed")
 	check(JSON.parse_string(FileAccess.get_file_as_string(path)) == JSON.parse_string(FileAccess.get_file_as_string(expected)), "Native bridge differs from independently ticked C++ phase: " + expected)
 
+func check_local_choices(owner: Variant, view: Control, directory: String, ordinal: int) -> void:
+	view.select_jump_destination(ordinal)
+	var reference := directory.path_join("choice-reference.json")
+	check(owner.save_freedom_as(reference), "Neighbor choice reference Save refused")
+	var original := FileAccess.get_file_as_bytes(reference)
+	var paths := [["moon"], ["minor"], ["minor", "moon"]]
+	var choices := []
+	for i in paths.size():
+		var step := 0
+		for choice: String in paths[i]:
+			var prior_selected: String = owner.get_freedom_flight_state().jump.selected
+			if choice == "moon": view.local_moon_button.pressed.emit()
+			else: view.local_minor_button.pressed.emit()
+			var local: Dictionary = owner.get_freedom_flight_state()
+			check(local.jump.phase == "idle" and not local.jump.selected.is_empty() and local.jump.selected != prior_selected and local.jump.selected != local.chart.rows[ordinal].system_id, "Actual local button did not change its prior selected destination")
+			check(local.chart.rows[ordinal].selectable and not view.jump_destinations[ordinal].disabled, "Uncommitted local choice disabled the real neighboring-system chart")
+			var name := "choice-local-%d-%d.json" % [i, step]
+			var path := directory.path_join(name)
+			check(owner.save_freedom_as(path), "Actual pre-clear local choice Save refused")
+			choices.append({"file": name, "choice": choice, "prior_selected": prior_selected, "selected": local.jump.selected, "sha256": FileAccess.get_sha256(path)})
+			step += 1
+		view.jump_destinations[ordinal].pressed.emit()
+		var selected: Dictionary = owner.get_freedom_flight_state()
+		check(view.paused and selected.jump.phase == "idle" and selected.jump.selected == selected.chart.rows[ordinal].system_id, "Actual chart button failed to restore the neighbor choice while paused")
+		var restored := directory.path_join("choice-restored-%d.json" % i)
+		check(owner.save_freedom_as(restored) and FileAccess.get_file_as_bytes(restored) == original, "Reversible local UI choice changed the complete ordinary neighbor Save")
+		for repeat in 3: owner.get_freedom_flight_state()
+		check(owner.save_freedom_as(restored) and FileAccess.get_file_as_bytes(restored) == original, "Chart admission observations changed the saved voyage")
+	check(choices.size() == 4, "Local-choice UI evidence lost an actual pre-clear step")
+	var report := {"version": 1, "completed": failures == 0, "paths": paths, "choices": choices, "tick": owner.get_freedom_flight_state().tick, "reference_sha256": FileAccess.get_sha256(reference), "scope": "Zero-time local choices restore the ordinary neighbor Save; the following existing two charged legs use the independent C++ oracle"}
+	var file := FileAccess.open(directory.path_join("local-choice-ui.json"), FileAccess.WRITE)
+	check(file != null, "Local-choice UI report unavailable")
+	if file != null: file.store_string(JSON.stringify(report, "\t") + "\n")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 5: quit(1); return
@@ -40,6 +74,9 @@ func run() -> void:
 	view.controls_menu.hide_menu()
 	check(view is FlightView and view.staged_model.valid_current_pose(), "Travel Continue lost authored Wayfarer")
 	var start: Dictionary = owner.get_freedom_flight_state()
+	for ordinal in [-1, -(start.chart.rows.size() + 1), start.chart.rows.size(), start.chart.rows.size() + 1]:
+		view.select_jump_destination(ordinal)
+		check(owner.get_freedom_flight_state() == start, "Out-of-range chart ordinal changed initial destination or authoritative state")
 	for bad in ["", "system-0000000000000000", "SYSTEM-0000000000000000", "system-00000000000000000"]:
 		check(not owner.select_freedom_jump(bad) and owner.get_freedom_flight_state() == start, "Invalid destination changed native owner")
 	check(not owner.begin_freedom_jump(), "Unselected native jump committed")
@@ -48,6 +85,7 @@ func run() -> void:
 	for leg in 2:
 		view.state = owner.get_freedom_flight_state()
 		var ordinal := 1 if leg == 0 else 0
+		if leg == 0: check_local_choices(owner, view, directory, ordinal)
 		view.select_jump_destination(ordinal)
 		view.jump_requested()
 		var state: Dictionary = owner.get_freedom_flight_state()

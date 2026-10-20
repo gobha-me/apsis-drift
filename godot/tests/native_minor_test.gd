@@ -191,6 +191,36 @@ func replay(owner: Variant, segment: Dictionary) -> bool:
 		if not check(owner.advance_freedom_flight(1.0 / 120.0, demand, false), "Actual inspection control tick refused: " + str(owner.get_last_error())): return false
 	return true
 
+func check_blocked_chart(owner: Variant, view: Control, output: String) -> void:
+	var initial_failures := failures
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var before_path := output.path_join("blocked-chart-before.json")
+	var before := save_bytes(owner, before_path)
+	var was_open: bool = view.chart_button.button_pressed
+	view.chart_button.button_pressed = true
+	view.update_view(0.0)
+	var evidence := {"version": 1, "completed": false, "tick": state.tick, "source_sha256": FileAccess.get_sha256(before_path), "scope": "Actual committed local home return; disabled chart reason visible as text and tooltip, without a simulation tick or saved-state change"}
+	var found := false
+	for i in state.chart.rows.size():
+		var row: Dictionary = state.chart.rows[i]
+		if row.current or row.confidence not in ["resolved", "visited"]: continue
+		var button: Button = view.jump_destinations[i]
+		var reason: String = row.get("disabled_reason", "")
+		check(view.chart_status.visible and button.visible and button.disabled and not row.selectable and not reason.is_empty() and reason in view.chart_status.text and reason in button.tooltip_text, "Known neighbor refusal is unavailable to the actual chart/controller text path")
+		evidence.merge({"system_id": row.system_id, "confidence": row.confidence, "disabled_reason": reason, "chart_text": view.chart_status.text, "tooltip": button.tooltip_text})
+		found = true
+		break
+	check(found, "Actual returned home chart lacks its known noncurrent neighbor")
+	view.chart_button.button_pressed = was_open
+	view.update_view(0.0)
+	var after_path := output.path_join("blocked-chart-after.json")
+	check(save_bytes(owner, after_path) == before and owner.get_freedom_flight_state() == state, "Opening/reading/restoring disabled chart changed the full saved voyage or clock")
+	evidence.after_sha256 = FileAccess.get_sha256(after_path)
+	evidence.completed = failures == initial_failures
+	var file := FileAccess.open(output.path_join("blocked-chart.json"), FileAccess.WRITE)
+	if check(file != null, "Blocked chart evidence unavailable"):
+		file.store_string(JSON.stringify(evidence, "\t") + "\n")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -250,7 +280,9 @@ func run() -> void:
 		if restored == null: continue
 		check(restored.current_view.paused and (restored.current_view is MinorView) == (label != "home") and save_bytes(peer, output.path_join(label + "-continued.json")) == originals[label], "Complete phase Continue selected wrong view or changed bytes: " + label)
 		check(str(peer.get_freedom_flight_state().tick) == str(report.phases[label].tick), "Actual phase Continue lost authoritative tick: " + label)
-		if label == "home": await PortRendezvous.run(self, peer, restored.current_view, phases, assets, output.path_join("rendezvous-ui"))
+		if label == "home":
+			check_blocked_chart(peer, restored.current_view, output)
+			await PortRendezvous.run(self, peer, restored.current_view, phases, assets, output.path_join("rendezvous-ui"))
 		restored.free()
 		await process_frame
 	await check_controls(phases, assets, output)

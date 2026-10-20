@@ -1298,7 +1298,7 @@ func select_minor_jump() -> void:
 func select_jump_destination(ordinal: int) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	var rows: Array = state.get("chart", {}).get("rows", [])
-	if ordinal >= rows.size(): return
+	if ordinal < 0 or ordinal >= rows.size(): return
 	if not bridge.select_freedom_jump(rows[ordinal].system_id):
 		report_action_status(str(bridge.get_last_error()))
 		return
@@ -1758,6 +1758,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			chart_status.text += "\nShip sensors · %d recorded findings" % chart.observed_facts
 		for row: Dictionary in chart.rows:
 			var detail: String = " · current" if row.current else " · %.1f light-hours · %s" % [float(row.distance_light_seconds) / 3600.0, "1 charge available" if row.affordable else "No jump charges"]
+			if not row.current and not row.get("selectable", false): detail += "\n" + str(row.get("disabled_reason", "Destination unavailable"))
 			chart_status.text += "\n%s · %s%s" % [row.name, row.confidence.to_upper(), detail]
 	else:
 		chart_status.visible = false
@@ -1771,6 +1772,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		if i < rows.size():
 			button.text = "Select " + str(rows[i].name)
 			button.disabled = not rows[i].get("selectable", false)
+			button.tooltip_text = str(rows[i].get("disabled_reason", "Destination unavailable")) if button.disabled else "Select this destination; spooling commits the charge."
 	jump_button.visible = chart.get("selected", false)
 	jump_button.text = "Cancel spool · no jump charge" if phase == "spool" else "In transit" if phase == "transit" else "Spool jump · 1 charge"
 	jump_button.disabled = phase == "transit" or (phase == "idle" and not jump.get("available", false))

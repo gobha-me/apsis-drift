@@ -2786,6 +2786,7 @@ class FreedomBridge : public godot::RefCounted {
             &document.origin));
         godot::Array rows;
         for (const auto& row : view.destinations) {
+          const auto selection = session.jump_selection_available(row.system);
           godot::Dictionary item;
           item["system_id"] =
               godot::String{system_id_string(row.system).c_str()};
@@ -2799,11 +2800,14 @@ class FreedomBridge : public godot::RefCounted {
           item["authorized"] =
               row.authorized && session.starting_assembly().has_value();
           item["affordable"] = row.affordable;
-          item["available"] = row.available;
-          item["selectable"] =
-              row.selectable && session.starting_assembly().has_value();
-          item["disabled_reason"] = godot::String{
-              navigation_disabled_reason_name(row.disabled_reason).data()};
+          item["available"] = row.available && selection.has_value();
+          item["selectable"] = row.selectable && selection.has_value();
+          item["disabled_reason"] =
+              row.selectable && !selection
+                  ? godot::String{selection.error().c_str()}
+                  : godot::String{
+                        navigation_disabled_reason_name(row.disabled_reason)
+                            .data()};
           if (row.distance_metres)
             item["distance_light_seconds"] =
                 decimal(route.distance_light_seconds);

@@ -5,6 +5,42 @@
 #include <utility>
 
 namespace apsis_drift {
+namespace {
+auto local_choice(const FreedomTravelState& travel) -> bool {
+  return travel.local || travel.prior_moon || travel.origin_routes ||
+         travel.version == kFreedomLocalTravelStateVersion ||
+         travel.version == kFreedomMinorTravelStateVersion ||
+         travel.version == kFreedomOriginLocalTravelStateVersion;
+}
+auto empty_local_proofs(const FreedomLocalTravelState& local) -> bool {
+  return !local.committed && !local.commitment_resources && !local.outbound;
+}
+auto empty_local_choice(const FreedomTravelState& travel) -> bool {
+  if (!travel.local || !empty_local_proofs(*travel.local) ||
+      (travel.prior_moon && !empty_local_proofs(travel.prior_moon->local)))
+    return false;
+  if (travel.version == kFreedomLocalTravelStateVersion)
+    return !travel.prior_moon && !travel.origin_routes;
+  if (travel.version == kFreedomMinorTravelStateVersion)
+    return !travel.origin_routes;
+  if (travel.version != kFreedomOriginLocalTravelStateVersion ||
+      travel.prior_moon || !travel.origin_routes)
+    return false;
+  const auto& routes = *travel.origin_routes;
+  const auto& legacy = routes.legacy;
+  return routes.version == kFreedomOriginLocalRoutesVersion &&
+         (routes.active == FreedomLocalRouteKind::moon ||
+          routes.active == FreedomLocalRouteKind::minor) &&
+         empty_local_proofs(routes.inactive.local) &&
+         !routes.excursion_outbound && !routes.inactive.excursion_outbound &&
+         (legacy.version == kFreedomLocalTravelStateVersion ||
+          legacy.version == kFreedomMinorTravelStateVersion) &&
+         empty_local_proofs(legacy.local) &&
+         (!legacy.prior_moon || empty_local_proofs(legacy.prior_moon->local)) &&
+         legacy.next_attempt == travel.next_attempt;
+}
+} // namespace
+
 auto NativeFreedomFlightSession::travel_document() const
     -> std::expected<FreedomTravelSaveDocument, std::string> {
   if (!travel_ || !resources_ || !knowledge_)
@@ -18,32 +54,15 @@ auto NativeFreedomFlightSession::travel_document() const
     return std::unexpected{v.error().detail};
   return result;
 }
-auto NativeFreedomFlightSession::select_jump(SystemId destination)
-    -> std::expected<void, std::string> {
-  if (moon_ || minor_ || (travel_ && travel_->local))
+auto NativeFreedomFlightSession::jump_selection_available(
+    SystemId destination) const -> std::expected<void, std::string> {
+  if (moon_ || minor_ || document_.moon || document_.minor)
     return std::unexpected{
-        "The selected local moon route retains its own travel history"};
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
-    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
-        condition_)
-      return std::unexpected{"Unsupported system-flight jump selection"};
-    auto candidate = *this;
-    const auto relative = relative_freedom_flight_state(document_, system_);
-    if (!relative)
-      return std::unexpected{"Jump selection frame assessment refused: " +
-                             relative.error().detail};
-    candidate.document_.flight = *relative;
-    if (auto selected = candidate.select_jump(destination); !selected)
-      return selected;
-    // Destination choice changes travel selection, not the physical body.
-    candidate.document_.flight = document_.flight;
-    const auto saved = candidate.save_document();
-    if (!saved) return std::unexpected{saved.error()};
-    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
-      return std::unexpected{encoded.error().detail};
-    *this = std::move(candidate);
-    return {};
-  }
+        "Return home before selecting an intersystem destination"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial &&
+      (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+       condition_))
+    return std::unexpected{"Unsupported system-flight jump selection"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -73,10 +92,95 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
   if (destination == document_.flight.frame.system ||
       (destination != route.origin && destination != route.destination))
     return std::unexpected{"Select the other known system"};
-  auto candidate = *this;
-  if (!candidate.travel_) {
+  const auto body = relative_state();
+  if (!body || body->frame.kind != RigidFrameKind::planet_relative_inertial ||
+      body->frame.system != system_.catalog.id || !body->frame.planet ||
+      !validate_rigid_body_state(RigidBodyWorldContext{system_}, *body))
+    return std::unexpected{"Jump selection reference is unavailable"};
+  if (!travel_) {
     if (document_.flight.frame.system != route.origin)
       return std::unexpected{"Native travel history is required outside home"};
+  } else if (local_choice(*travel_)) {
+    // The session's owner and receipts were authenticated on open/commit.
+    // Inspect the fixed proof slots directly, rather than cloning/encoding a
+    // whole voyage every time the chart asks about a destination.
+    const auto origin = generate_physical_origin_system(
+        document_.origin.recipe.universe_seed,
+        kContinuousPhysicalLocalSystemGeneratorVersion);
+    if (!origin || *origin != system_ ||
+        body->frame.planet != document_.origin.recipe.home_planet ||
+        !document_.world || document_.world->system != route.origin ||
+        document_.world->planet != document_.origin.recipe.home_planet)
+      return std::unexpected{
+          "Change an uncommitted local choice only at Origin home"};
+    const auto& travel = *travel_;
+    if (!empty_local_choice(travel))
+      return std::unexpected{"Committed local route history is retained; "
+                             "neighboring travel cannot replace it"};
+    if (!travel.next_attempt ||
+        travel.committed.has_value() != travel.commitment_resources.has_value())
+      return std::unexpected{
+          "Existing intersystem attempt or bill is unpaired"};
+    if (!travel.committed) {
+      if (travel.next_attempt != 1)
+        return std::unexpected{
+            "An uncommitted choice cannot discard prior attempts"};
+    } else {
+      const auto& frozen = *travel.committed;
+      const auto& request = frozen.preview.request;
+      const auto& bill = *travel.commitment_resources;
+      if (request.attempt == std::numeric_limits<std::uint64_t>::max() ||
+          travel.next_attempt != request.attempt + 1 ||
+          request.destination != route.origin ||
+          frozen.preview.arrival_tick > tick ||
+          request.universe_seed != document_.origin.recipe.universe_seed ||
+          request.craft != document_.origin.state.craft ||
+          request.lineage != document_.origin.lineage ||
+          !validate_freedom_resources(bill) || !bill.jump_charges ||
+          bill.craft != request.craft || bill.frame != request.source.craft ||
+          bill.tick != request.source.tick)
+        return std::unexpected{"Retain the authentic returned-home intersystem "
+                               "receipt, bill and attempt"};
+    }
+  } else if (travel_->version != kFreedomTravelStateVersion) {
+    return std::unexpected{"Unsupported native travel selection"};
+  }
+  return {};
+}
+auto NativeFreedomFlightSession::select_jump(SystemId destination)
+    -> std::expected<void, std::string> {
+  if (auto available = jump_selection_available(destination); !available)
+    return available;
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight jump selection"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Jump selection frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    if (auto selected = candidate.select_jump(destination); !selected)
+      return selected;
+    // Destination choice changes travel selection, not the physical body.
+    candidate.document_.flight = document_.flight;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return {};
+  }
+  auto candidate = *this;
+  if (candidate.travel_ && local_choice(*candidate.travel_)) {
+    candidate.travel_->local.reset();
+    candidate.travel_->prior_moon.reset();
+    candidate.travel_->origin_routes.reset();
+    candidate.travel_->version = kFreedomTravelStateVersion;
+  }
+  if (!candidate.travel_) {
+    // Shared admission already qualified this as the ordinary home selection.
     candidate.travel_ = FreedomTravelState{};
     candidate.document_.world = FreedomActiveWorldSelection{
         1, document_.flight.frame.system, *document_.flight.frame.planet};
@@ -88,6 +192,10 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
   candidate.travel_->selected = destination;
   if (auto v = candidate.travel_document(); !v)
     return std::unexpected{v.error()};
+  const auto saved = candidate.save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
   *this = std::move(candidate);
   return {};
 }
