@@ -58,6 +58,10 @@ On 2026-10-19 the owner selected **one airless moon: approach, land and walk**
 as the next bounded expansion ([#623](https://github.com/gobha-me/apsis-drift/issues/623)).
 [The integration contract](AIRLESS_MOON.md) preserves its existing identity and
 C++ ownership; scalar/frame providers alone do not complete the playable trip.
+The next bounded continuation is [asteroid close inspection](ASTEROID_INSPECTION.md)
+([#629](https://github.com/gobha-me/apsis-drift/issues/629)): actual charged
+home–minor–home flight, saved state and a disclosed inspection stand-off guard.
+This does not activate asteroid landing, mining or the wider heterogeneous horizon.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

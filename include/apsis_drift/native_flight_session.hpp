@@ -19,10 +19,19 @@ struct NativeMoonFlightObservation {
   friend auto operator==(const NativeMoonFlightObservation&,
                          const NativeMoonFlightObservation&) -> bool = default;
 };
+struct NativeMinorFlightObservation {
+  MinorBodyGravity gravity;
+  PhysicalMinorRotationGeometry rotation;
+  double altitude_metres{}, speed_metres_per_second{};
+  double radial_speed_metres_per_second{}, tangential_speed_metres_per_second{};
+  friend auto operator==(const NativeMinorFlightObservation&,
+                         const NativeMinorFlightObservation&) -> bool = default;
+};
 struct NativeFlightObservation {
   AtmosphericFlightSample atmosphere;
   OrbitalTelemetry orbit;
   std::optional<NativeMoonFlightObservation> moon{};
+  std::optional<NativeMinorFlightObservation> minor{};
   friend auto operator==(const NativeFlightObservation&,
                          const NativeFlightObservation&) -> bool = default;
 };
@@ -34,6 +43,8 @@ struct NativeFlightStep {
   bool propulsion_refused{};
   bool jump_committed{}, jump_arrived{};
   std::optional<MoonBodyActuation> moon{};
+  std::optional<MinorBodyActuation> minor{};
+  bool minor_standoff_limited{};
 };
 
 // Transient player command, never part of the save/world recipe. The aid only
@@ -140,6 +151,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto moon() const
       -> const std::optional<PhysicalMoonDescriptor>& {
     return moon_;
+  }
+  [[nodiscard]] auto minor() const
+      -> const std::optional<PhysicalMinorDescriptor>& {
+    return minor_;
   }
   [[nodiscard]] auto rotation() const -> const PhysicalPlanetRotationRecipe& {
     return rotation_;
@@ -326,6 +341,11 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto observe_minor() const
+      -> std::expected<NativeFlightObservation, std::string>;
+  [[nodiscard]] auto advance_minor_tick(const NativeFlightControls&,
+                                        SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto advance_moon_tick(const NativeFlightControls&,
                                        SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
@@ -354,6 +374,7 @@ class NativeFreedomFlightSession {
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<PhysicalMoonDescriptor> moon_;
+  std::optional<PhysicalMinorDescriptor> minor_;
   std::optional<std::filesystem::path> source_save_;
   std::optional<FreedomDockingState> docking_;
   std::optional<OriginWalkerState> actor_;

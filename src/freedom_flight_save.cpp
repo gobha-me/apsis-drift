@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_flight_save.hpp"
 #include "apsis_drift/planet_optics.hpp"
+#include "freedom_minor_flight_save_internal.hpp"
 
 #include "freedom_moon_flight_save_internal.hpp"
 
@@ -238,6 +239,15 @@ auto relative_state_for_selected_world(
 auto relative_freedom_flight_state(const FreedomFlightSaveDocument& document,
                                    const PhysicalLocalSystem& system)
     -> std::expected<RigidBodyState, SaveSchemaError> {
+  if (document.minor) {
+    const auto hydrated = hydrate_freedom_minor_flight_document(document);
+    if (!hydrated) return std::unexpected{hydrated.error()};
+    if (hydrated->minor.catalog.owner != system)
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                     "$.world_owner",
+                                     "supplied minor owner differs")};
+    return document.flight;
+  }
   if (document.moon) {
     const auto hydrated = hydrate_freedom_moon_flight_document(document);
     if (!hydrated) return std::unexpected{hydrated.error()};
@@ -279,6 +289,13 @@ auto relative_freedom_flight_state(const FreedomFlightSaveDocument& document,
 
 auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
     -> std::expected<FreedomFlightHydration, SaveSchemaError> {
+  if (document.minor) {
+    auto hydrated = hydrate_freedom_minor_flight_document(document);
+    if (!hydrated) return std::unexpected{hydrated.error()};
+    auto system = hydrated->minor.catalog.owner;
+    return FreedomFlightHydration{
+        std::move(system), {}, {}, {}, std::move(*hydrated)};
+  }
   if (document.moon) {
     auto hydrated = hydrate_freedom_moon_flight_document(document);
     if (!hydrated) return std::unexpected{hydrated.error()};
@@ -325,6 +342,7 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
 auto encode_freedom_flight_document_json(
     const FreedomFlightSaveDocument& document)
     -> std::expected<std::string, SaveSchemaError> {
+  if (document.minor) return detail::encode_minor_flight(document);
   if (document.moon) return detail::encode_moon_flight(document);
   const auto hydrated = hydrate_freedom_flight_document(document);
   if (!hydrated) return std::unexpected{hydrated.error()};
@@ -425,6 +443,9 @@ auto decode_flight(std::string_view text, bool system_import)
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
                                    "$.format_version",
                                    "expected unsigned save version")};
+  if (!system_import &&
+      root["format_version"] == kFreedomMinorFlightSaveFormatVersion)
+    return detail::decode_minor_flight(root);
   if (!system_import &&
       root["format_version"] == kFreedomMoonFlightSaveFormatVersion)
     return detail::decode_moon_flight(root);

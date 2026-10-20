@@ -7,6 +7,7 @@ signal recovery_requested
 var journey_dialog_open := false
 ## Ordinary saved-flight consumer. C++ owns time, state, terrain and propulsion.
 const MoonState = preload("res://scripts/native/native_moon_state.gd")
+const MinorState = preload("res://scripts/native/native_minor_state.gd")
 const PlanetStreamView = preload("res://scripts/world/planet_stream.gd")
 const MainExhaust = preload("res://scripts/native/native_main_exhaust.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
@@ -43,6 +44,7 @@ var instruments_button: Button
 var instruments_open := false
 var context_source: Button
 var local_moon_button: Button
+var local_minor_button: Button
 var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
@@ -172,6 +174,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 static func valid_state(value: Dictionary) -> bool:
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
+	if value.get("body_kind") == "minor": return MinorState.valid(value)
 	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value) or not SurfaceLandmarks.valid(value) or not valid_surface_marker(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
@@ -599,6 +602,11 @@ func build_ui() -> void:
 		local_moon_button.focus_mode = Control.FOCUS_NONE
 		local_moon_button.pressed.connect(select_moon_jump)
 		column.add_child(local_moon_button)
+		local_minor_button = Button.new()
+		local_minor_button.text = "Select asteroid inspection jump"
+		local_minor_button.focus_mode = Control.FOCUS_NONE
+		local_minor_button.pressed.connect(select_minor_jump)
+		column.add_child(local_minor_button)
 		surface_status = hud_text()
 		column.add_child(surface_status)
 		landing_button = Button.new()
@@ -859,6 +867,7 @@ func setup_controls() -> void:
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
+	controls_menu.add_button(survey_column, "Select asteroid inspection jump", select_minor_jump)
 	surface_marker_button = controls_menu.add_button(survey_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
 	clear_surface_marker_button = controls_menu.add_button(survey_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
 	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
@@ -1036,7 +1045,7 @@ func select_distant_contact(index: int) -> void:
 	selected_contact_id = contacts[index].id
 	update_view(0.0)
 	# Selection is presentation-only, including under held movement controls.
-	controls_menu.show_surface_reference("DISTANT OPTICAL CONTACT\n%s\n\n%s\n\nCONTACT is a direction annotation, not an arrival target. Moon and minor-body close flight, gravity, collision and landing are not supported by this observation slice." % [contacts[index].label, contacts[index].reason], contact_buttons[index])
+	controls_menu.show_surface_reference("DISTANT OPTICAL CONTACT\n%s\n\n%s\n\nCONTACT is a direction annotation, not an arrival target. This optical annotation is not a flight target. The explicit local-drive controls support the origin Moon and asteroid inspection routes; other contacts remain distant observations." % [contacts[index].label, contacts[index].reason], contact_buttons[index])
 
 
 func clear_distant_contact() -> void:
@@ -1253,6 +1262,20 @@ func select_moon_jump() -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	report_action_status("Nearby moon selected. One charge commits after spooling.")
+	update_view(0.0)
+
+
+func select_minor_jump() -> void:
+	if not error.is_empty() or not focused or save_dialog.visible: return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release movement controls before selecting local travel.")
+		return
+	if not bridge.select_freedom_minor_jump():
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	report_action_status("Asteroid inspection selected. One charge commits after spooling.")
 	update_view(0.0)
 
 
@@ -1506,7 +1529,7 @@ func _process(delta: float) -> void:
 		pause_on_error(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
-	if state.get("body_kind") == "moon":
+	if state.get("body_kind") in ["moon", "minor"]:
 		hide_exhaust()
 		if not mode_change_pending:
 			mode_change_pending = true
@@ -1601,8 +1624,9 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		if boarding.state == "seated":
 			pilot_eye = Vector3(boarding.eye_craft[0], boarding.eye_craft[1], boarding.eye_craft[2])
 	var surface: Dictionary = state.get("surface", {})
-	if local_moon_button != null:
-		local_moon_button.disabled = state.attached or surface.get("landed", false) or surface_walking() or state.get("jump", {}).get("phase", "idle") != "idle"
+	for button in [local_moon_button, local_minor_button]:
+		if button != null:
+			button.disabled = state.attached or surface.get("landed", false) or surface_walking() or state.get("jump", {}).get("phase", "idle") != "idle"
 	if staged_model != null and not staged_model.set_gear_preview(1.0 if surface.get("gear_deployed", false) else 0.0):
 		pause_on_error("The declared landing gear pose is unavailable")
 		return

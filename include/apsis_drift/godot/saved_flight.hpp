@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/godot/saved_minor_flight.hpp"
 #include "apsis_drift/godot/saved_moon_flight.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/native_flight_session.hpp"
@@ -124,7 +125,9 @@ inline auto rated_rise_margin(const NativeFreedomFlightSession& session,
 
 inline auto validate_saved_projection(const NativeFreedomFlightSession& session)
     -> void {
-  if (session.moon())
+  if (session.minor())
+    (void)project_saved_minor_flight(session);
+  else if (session.moon())
     (void)project_saved_moon_flight(session);
   else
     (void)project_saved_flight(session);

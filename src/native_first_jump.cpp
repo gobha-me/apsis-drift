@@ -20,7 +20,7 @@ auto NativeFreedomFlightSession::travel_document() const
 }
 auto NativeFreedomFlightSession::select_jump(SystemId destination)
     -> std::expected<void, std::string> {
-  if (moon_ || (travel_ && travel_->local))
+  if (moon_ || minor_ || (travel_ && travel_->local))
     return std::unexpected{
         "The selected local moon route retains its own travel history"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
@@ -93,7 +93,7 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
 }
 auto NativeFreedomFlightSession::jump_preview() const
     -> std::expected<FreedomJumpPreview, std::string> {
-  if (moon_ || (travel_ && travel_->local))
+  if (moon_ || minor_ || (travel_ && travel_->local))
     return std::unexpected{"Local body travel uses its typed local preview"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||

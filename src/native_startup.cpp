@@ -108,7 +108,7 @@ auto select_document(FreedomFlightSaveDocument document,
     return std::unexpected{
         "Freedom flight save rejected: " + hydrated.error().path + ": " +
         hydrated.error().detail};
-  if (hydrated->moon) {
+  if (hydrated->moon || hydrated->minor) {
     const auto home = find_local_system_planet(
         hydrated->system, document.origin.recipe.home_planet);
     if (!home) return std::unexpected{"Moon history home owner is unavailable"};

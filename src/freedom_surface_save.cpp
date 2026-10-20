@@ -76,7 +76,8 @@ auto decode_base(const Json& j)
       version == kFreedomActiveFlightSaveFormatVersion ||
       version == kFreedomTerrainFlightSaveFormatVersion ||
       version == kFreedomReleaseFlightSaveFormatVersion ||
-      version == kFreedomOpticalFlightSaveFormatVersion) {
+      version == kFreedomOpticalFlightSaveFormatVersion ||
+      version == kFreedomMinorFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
@@ -157,6 +158,13 @@ auto validate_freedom_surface_document(const FreedomSurfaceSaveDocument& d)
   const auto& flight = surface_base_flight(d.base);
   const auto hydrated = hydrate_freedom_flight_document(flight);
   if (!hydrated) return std::unexpected{hydrated.error()};
+  if (flight.minor) {
+    if (!std::holds_alternative<FreedomFlightSaveDocument>(d.base) ||
+        d.surface.gear_deployed || d.surface.landed || d.surface.moon_landed)
+      return std::unexpected{
+          failure("$.surface", "Minor inspection has no surface constraints")};
+    return {};
+  }
   if (d.surface.gear_deployed && attached_or_outside(d.base))
     return std::unexpected{
         failure("$.surface.gear_deployed",

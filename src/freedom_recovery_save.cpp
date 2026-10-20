@@ -63,7 +63,8 @@ auto decode_voyage(const Json& j)
     return FreedomRecoveryVoyage{std::move(*d)};
   }
   if (j["format_version"] == kFreedomTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomLocalTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomLocalTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomMinorTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomRecoveryVoyage{std::move(*d)};
@@ -200,8 +201,9 @@ auto freedom_recovery_source_checksum(const FreedomRecoveryVoyage& v)
   auto hydrated = hydrate_freedom_flight_document(flight);
   if (!hydrated) return std::unexpected{hydrated.error()};
   const RigidBodyWorldContext context =
-      hydrated->moon ? RigidBodyWorldContext{hydrated->moon->moon}
-                     : RigidBodyWorldContext{hydrated->system};
+      hydrated->minor  ? RigidBodyWorldContext{hydrated->minor->minor}
+      : hydrated->moon ? RigidBodyWorldContext{hydrated->moon->moon}
+                       : RigidBodyWorldContext{hydrated->system};
   auto checksum = rigid_body_state_checksum(context, flight.flight);
   if (!checksum) return std::unexpected{failure("invalid loss source physics")};
   return *checksum;

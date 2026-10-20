@@ -1,5 +1,10 @@
 # Distant optical contacts
 
+The optical-only contract below remains unchanged. Explicit local-drive routes
+now separately support [Moon landing](AIRLESS_MOON.md) and
+[origin asteroid inspection](ASTEROID_INSPECTION.md). Tracking CONTACT alone does
+not select either route or imply that arbitrary contacts support close flight.
+
 The dated Freedom increment in #214 adds one C++ seeded moon and one minor
 body as optical contacts in the ordinary native sky. They share the existing
 authoritative simulation tick. Their apparent silhouette, illumination and

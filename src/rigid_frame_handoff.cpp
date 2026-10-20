@@ -92,7 +92,9 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
     if (relative.kind == RigidFrameKind::body_relative_inertial) {
       // Frame validation authenticated the descriptor and exact moon identity.
       const auto hierarchy =
-          make_body_hierarchy(context.physical_moon_owner()->catalog);
+          make_body_hierarchy(context.physical_minor_owner()
+                                  ? context.physical_minor_owner()->catalog
+                                  : context.physical_moon_owner()->catalog);
       if (!hierarchy)
         return std::unexpected{RigidFrameHandoffError{
             Code::ephemeris_failure, {}, {}, {}, {}, hierarchy.error()}};
@@ -352,6 +354,69 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
   if (!geometry)
     return std::unexpected{RigidFrameHandoffError{
         Code::invalid_rotation_recipe, {}, {}, {}, {}, {}, geometry.error()}};
+  if (identity) return source;
+  return reframe_rotating_geometry(
+      context, source, request, relative_pair, to_system,
+      geometry->fixed_to_system, geometry->body_position,
+      geometry->body_velocity, geometry->angular_velocity_radians_per_second);
+}
+
+auto reframe_rigid_body(const RigidBodyWorldContext& context,
+                        const RigidBodyState& source,
+                        const RigidFrameHandoffRequest& request,
+                        const PhysicalMinorDescriptor& minor)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError> {
+  using Code = RigidFrameHandoffErrorCode;
+  if (const auto valid = validate_rigid_body_state(context, source); !valid)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_source, valid.error(), {}}};
+  if (request.tick != source.tick)
+    return std::unexpected{RigidFrameHandoffError{Code::stale_tick, {}, {}}};
+  auto candidate = source;
+  candidate.frame = request.destination;
+  if (const auto valid = validate_rigid_body_state(context, candidate); !valid)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_destination, valid.error(), {}}};
+  const bool relative_pair =
+      (source.frame.kind == RigidFrameKind::body_fixed &&
+       request.destination.kind == RigidFrameKind::body_relative_inertial) ||
+      (source.frame.kind == RigidFrameKind::body_relative_inertial &&
+       request.destination.kind == RigidFrameKind::body_fixed);
+  const bool same_body = source.frame.body == request.destination.body;
+  const bool to_system =
+      source.frame.kind == RigidFrameKind::body_fixed &&
+      (request.destination.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_body));
+  const bool to_fixed =
+      request.destination.kind == RigidFrameKind::body_fixed &&
+      (source.frame.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_body));
+  const bool identity = source.frame.kind == RigidFrameKind::body_fixed &&
+                        source.frame == request.destination;
+  if (!to_system && !to_fixed && !identity)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::unsupported_frame_pair, {}, {}}};
+  if (!context.physical_minor_owner() ||
+      *context.physical_minor_owner() != minor)
+    return std::unexpected{
+        RigidFrameHandoffError{Code::invalid_rotation_recipe,
+                               {},
+                               {},
+                               {},
+                               {},
+                               {},
+                               {},
+                               PhysicalMinorRotationError::invalid_owner}};
+  const auto geometry = resolve_physical_minor_rotation(minor, source.tick);
+  if (!geometry)
+    return std::unexpected{RigidFrameHandoffError{Code::invalid_rotation_recipe,
+                                                  {},
+                                                  {},
+                                                  {},
+                                                  {},
+                                                  {},
+                                                  {},
+                                                  geometry.error()}};
   if (identity) return source;
   return reframe_rotating_geometry(
       context, source, request, relative_pair, to_system,

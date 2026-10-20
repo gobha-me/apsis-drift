@@ -26,12 +26,39 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
         "The first local route belongs to the origin system"};
   auto candidate = *this;
   if (!candidate.travel_) candidate.travel_ = FreedomTravelState{};
+  const auto catalog = generate_secondary_body_catalog(*origin);
+  if (!catalog) return std::unexpected{"Local catalog unavailable"};
+  const bool minor_route =
+      minor_.has_value() ||
+      target == BodyTarget{origin->catalog.id, catalog->bodies[1].node.id};
+  if (minor_route && moon_)
+    return std::unexpected{"Return home before selecting minor inspection"};
+  if (!minor_route &&
+      candidate.travel_->version == kFreedomMinorTravelStateVersion)
+    return std::unexpected{
+        "Minor inspection retains its selected local history"};
+  if (minor_route &&
+      candidate.travel_->version != kFreedomMinorTravelStateVersion) {
+    if (candidate.travel_->local && candidate.travel_->local->outbound) {
+      if (!candidate.travel_->local->committed ||
+          candidate.travel_->local->committed->arrival.moon ||
+          candidate.travel_->local->committed->arrival.minor)
+        return std::unexpected{"Complete the old Moon route home before "
+                               "adopting minor inspection"};
+      candidate.travel_->prior_moon =
+          FreedomLocalMoonHistory{*candidate.travel_->local};
+      candidate.travel_->prior_moon->local.selected.reset();
+    }
+    candidate.travel_->local = FreedomLocalTravelState{};
+  }
   if (!candidate.travel_->local)
     candidate.travel_->local = FreedomLocalTravelState{};
-  candidate.travel_->version = kFreedomLocalTravelStateVersion;
+  candidate.travel_->version = minor_route ? kFreedomMinorTravelStateVersion
+                                           : kFreedomLocalTravelStateVersion;
   candidate.travel_->selected.reset();
   candidate.travel_->local->selected = target;
-  if (!candidate.document_.moon && !candidate.document_.world) {
+  if (!candidate.document_.moon && !candidate.document_.minor &&
+      !candidate.document_.world) {
     const auto relative = candidate.relative_state();
     if (!relative || !relative->frame.planet)
       return std::unexpected{"Local departure reference unavailable"};
@@ -59,7 +86,10 @@ auto NativeFreedomFlightSession::local_jump_preview() const
   const auto home_model =
       local.outbound ? local.outbound->request.home_model : document_.model;
   const auto result = freeze_local_body_jump_arrival(
-      {1, document_, *local.selected, travel_->next_attempt, home_model});
+      {travel_->version == kFreedomMinorTravelStateVersion
+           ? kFreedomMinorLocalBodyJumpVersion
+           : kFreedomLocalBodyJumpVersion,
+       document_, *local.selected, travel_->next_attempt, home_model});
   if (!result) {
     if (result.error() == FreedomLocalBodyJumpError::unclear_departure)
       return std::unexpected{
@@ -92,7 +122,7 @@ auto NativeFreedomFlightSession::local_jump_available() const
       document_.flight.tick > std::numeric_limits<SimulationTick>::max() -
                                   kJumpSpoolTicks - kJumpTransitTicks - 3)
     return std::unexpected{"Local jump cannot retain an advanceable arrival"};
-  if (!moon_) {
+  if (!moon_ && !minor_) {
     const auto observed = observe();
     if (!observed || observed->atmosphere.altitude_metres <
                          observed->atmosphere.space_boundary_altitude_metres)
@@ -130,7 +160,13 @@ auto NativeFreedomFlightSession::advance_local_jump(
       document_.model.assistance};
   // Validate input in the actual physical owner, including during frozen
   // transit.
-  if (moon_) {
+  if (minor_) {
+    auto checked = document_.flight;
+    if (!advance_minor_body_dynamics(RigidBodyWorldContext{*minor_}, checked,
+                                     intent, {document_.minor->dynamics_recipe},
+                                     step))
+      return std::unexpected{"Invalid minor transit input"};
+  } else if (moon_) {
     auto checked = document_.flight;
     if (!advance_moon_body_dynamics(RigidBodyWorldContext{*moon_}, checked,
                                     intent, {document_.moon->dynamics_recipe},
@@ -159,7 +195,7 @@ auto NativeFreedomFlightSession::advance_local_jump(
                kJumpSpoolTicks) {
       const auto frozen = candidate.local_jump_preview();
       bool atmosphere_clear = true;
-      if (!candidate.moon_) {
+      if (!candidate.moon_ && !candidate.minor_) {
         const auto observed = candidate.observe();
         atmosphere_clear =
             observed && observed->atmosphere.altitude_metres >=
@@ -172,7 +208,8 @@ auto NativeFreedomFlightSession::advance_local_jump(
         auto& local = *candidate.travel_->local;
         local.committed = *frozen;
         local.commitment_resources = *candidate.resources_;
-        if (!local.outbound && !frozen->request.source.moon)
+        if (!local.outbound && !frozen->request.source.moon &&
+            !frozen->request.source.minor)
           local.outbound = *frozen;
         --candidate.resources_->jump_charges;
         ++candidate.travel_->next_attempt;
@@ -202,7 +239,12 @@ auto NativeFreedomFlightSession::advance_local_jump(
       candidate.moon_ = owner->moon
                             ? std::optional{std::move(owner->moon->moon)}
                             : std::nullopt;
-      candidate.surface_ = FreedomSurfaceState{};
+      candidate.minor_ = owner->minor
+                             ? std::optional{std::move(owner->minor->minor)}
+                             : std::nullopt;
+      candidate.surface_ = candidate.minor_
+                               ? std::optional<FreedomSurfaceState>{}
+                               : std::optional{FreedomSurfaceState{}};
       candidate.gear_clearance_.reset();
       candidate.surface_walk_terrain_.reset();
       candidate.moon_walk_terrain_.reset();

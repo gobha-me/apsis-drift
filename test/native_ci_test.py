@@ -108,12 +108,15 @@ class NativeCiTest(unittest.TestCase):
                     row.update(preparer_sha256=self.m["sources"]["tools/prepare_operating_assets.py"],
                                spec_sha256=self.m["sources"]["tools/wayfarer_operating_spec.py"])
                 else:
-                    role = ("moon" if family == "moon_voyage" else "surface" if
+                    role = ("minor" if family == "minor_voyage" else "moon" if family == "moon_voyage" else "surface" if
                             family in ("daynight_saves", "surface_saves", "surface_walk_saves") else
                             "planetary" if family in ("planetary_saves", "surface_loop_saves", *self.runner.ROUNDTRIP_TESTS)
                             else family.removesuffix("_saves"))
                     row.update(fixture_sha256=self.m["files"]["build/" + ci.FIXTURES[role]]["sha256"],
                                files_sha256={"phase.json": SHA})
+                    if family == "minor_voyage":
+                        row["files_sha256"] = {n + ".json": SHA for n in
+                            ("arrival", "approach", "withdraw", "home")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent")}
@@ -198,7 +201,7 @@ class NativeCiTest(unittest.TestCase):
     def test_pack_and_unpack_exact_payload_modes(self):
         output = self.root / "unpacked"
         ci.unpack(self.archive, self.envelope, output)
-        self.assertEqual(len(self.m["files"]), 10)
+        self.assertEqual(len(self.m["files"]), 11)
         for name, row in self.m["files"].items():
             p = output / name
             self.assertEqual(ci.digest(p), row["sha256"])
@@ -324,7 +327,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 41, "setup_rows": 78, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 42, "setup_rows": 79, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 60})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -468,7 +471,7 @@ class NativeCiTest(unittest.TestCase):
     def test_groups_exact_and_pairs_cannot_split(self):
         path = self.repo / "tools/native_ci_groups.json"
         value = ci.read_json(path)
-        self.assertEqual(sum(map(len, value["groups"].values())), 41)
+        self.assertEqual(sum(map(len, value["groups"].values())), 42)
         value["groups"]["1"].remove("native_first_flight_continuation")
         value["groups"]["2"].append("native_first_flight_continuation")
         ci.write_json(path, value)

@@ -2,12 +2,15 @@
 
 #include "apsis_drift/atmospheric_flight.hpp"
 #include "apsis_drift/central_body_dynamics.hpp"
+#include "apsis_drift/minor_body_dynamics.hpp"
 #include "apsis_drift/moon_body_dynamics.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cfenv>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace apsis_drift {
 namespace {
@@ -174,6 +177,9 @@ struct PlanetGravityParameters : GravityParameters {
 struct MoonGravityParameters : GravityParameters {
   BodyId body;
 };
+struct MinorGravityParameters : GravityParameters {
+  BodyId body;
+};
 auto gravity_acceleration(const GravityParameters& gravity, V position)
     -> std::expected<V, CentralBodyError> {
   if (!finite(position) ||
@@ -271,6 +277,46 @@ auto moon_gravity_sample(const MoonGravityParameters& parameters, V position)
       std::sqrt((position.x * position.x + position.y * position.y) +
                 position.z * position.z);
   return MoonBodyGravity{
+      parameters.body, parameters.radius, parameters.surface_gravity,
+      parameters.mu,   distance,          *acceleration};
+}
+
+auto minor_gravity_parameters(const RigidBodyWorldContext& context,
+                              const RigidBodyState& state,
+                              MinorBodyDynamicsRecipe recipe)
+    -> std::expected<MinorGravityParameters, MinorBodyError> {
+  using Code = CentralBodyErrorCode;
+  if (recipe.version != kMinorBodyDynamicsVersion)
+    return std::unexpected{MinorBodyError{Code::unsupported_version, {}}};
+  const auto* minor = context.physical_minor_owner();
+  if (minor == nullptr || !validate_physical_minor_descriptor(*minor))
+    return std::unexpected{MinorBodyError{Code::invalid_owner, {}}};
+  if (state.frame.kind != RigidFrameKind::body_relative_inertial)
+    return std::unexpected{
+        MinorBodyError{Code::unsupported_coordinate_frame, {}}};
+  if (!state.frame.body || *state.frame.body != minor->body)
+    return std::unexpected{MinorBodyError{Code::invalid_body, {}}};
+  if (!validate_rigid_body_state(context, state))
+    return std::unexpected{MinorBodyError{Code::invalid_state, {}}};
+  const auto physical = resolve_physical_minor_properties(*minor);
+  if (!physical)
+    return std::unexpected{MinorBodyError{Code::unsafe_arithmetic, {}}};
+  return MinorGravityParameters{
+      {static_cast<double>(minor->radius_metres),
+       physical->surface_gravity_metres_per_second_squared,
+       physical->gravitational_parameter_metres_cubed_per_second_squared,
+       RigidFrameKind::body_relative_inertial},
+      minor->body};
+}
+
+auto minor_gravity_sample(const MinorGravityParameters& parameters, V position)
+    -> std::expected<MinorBodyGravity, MinorBodyError> {
+  const auto acceleration = gravity_acceleration(parameters, position);
+  if (!acceleration) return std::unexpected{acceleration.error()};
+  const double distance =
+      std::sqrt((position.x * position.x + position.y * position.y) +
+                position.z * position.z);
+  return MinorBodyGravity{
       parameters.body, parameters.radius, parameters.surface_gravity,
       parameters.mu,   distance,          *acceleration};
 }
@@ -702,7 +748,8 @@ auto advance_vacuum_dynamics_impl(
     CentralBodyActuation* central_report = nullptr,
     const AtmosphereParameters* atmosphere = nullptr,
     AtmosphericFlightActuation* atmospheric_report = nullptr,
-    MoonBodyActuation* moon_report = nullptr)
+    MoonBodyActuation* moon_report = nullptr,
+    MinorBodyActuation* minor_report = nullptr)
     -> std::expected<VacuumActuation, VacuumDynamicsError> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{VacuumDynamicsError::invalid_step};
@@ -806,6 +853,11 @@ auto advance_vacuum_dynamics_impl(
     moon_report->total_linear_impulse_newton_seconds =
         integrated->total_linear_impulse;
   }
+  if (minor_report != nullptr) {
+    minor_report->gravity_impulse_newton_seconds = integrated->gravity_impulse;
+    minor_report->total_linear_impulse_newton_seconds =
+        integrated->total_linear_impulse;
+  }
   if (atmospheric_report != nullptr) {
     atmospheric_report->aerodynamic_linear_impulse_newton_seconds =
         integrated->aerodynamic_impulse;
@@ -899,6 +951,38 @@ auto advance_moon_body_dynamics(const RigidBodyWorldContext& context,
   return result;
 }
 
+auto evaluate_minor_body_gravity(const RigidBodyWorldContext& context,
+                                 const RigidBodyState& state,
+                                 MinorBodyDynamicsRecipe recipe)
+    -> std::expected<MinorBodyGravity, MinorBodyError> {
+  const auto parameters = minor_gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  return minor_gravity_sample(*parameters, state.position_metres);
+}
+
+auto advance_minor_body_dynamics(const RigidBodyWorldContext& context,
+                                 RigidBodyState& state,
+                                 const VacuumIntent& intent,
+                                 MinorBodyDynamicsRecipe recipe,
+                                 SimulationSeconds step)
+    -> std::expected<MinorBodyActuation, MinorBodyError> {
+  const auto parameters = minor_gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  const auto initial_gravity =
+      minor_gravity_sample(*parameters, state.position_metres);
+  if (!initial_gravity) return std::unexpected{initial_gravity.error()};
+  MinorBodyActuation result;
+  result.initial_gravity = *initial_gravity;
+  const auto propulsion = advance_vacuum_dynamics_impl(
+      context, state, intent, false, step, &*parameters, nullptr, nullptr,
+      nullptr, nullptr, &result);
+  if (!propulsion)
+    return std::unexpected{MinorBodyError{
+        CentralBodyErrorCode::dynamics_failure, propulsion.error()}};
+  result.propulsion = *propulsion;
+  return result;
+}
+
 auto evaluate_atmospheric_flight(const RigidBodyWorldContext& context,
                                  const RigidBodyState& state,
                                  const VacuumIntent& intent,
@@ -965,6 +1049,137 @@ auto advance_atmospheric_flight(const RigidBodyWorldContext& context,
   report.observation_after = *observed;
   state = candidate;
   return report;
+}
+
+namespace {
+auto minor_exclusion_geometry(const PhysicalMinorDescriptor& owner,
+                              CraftFrameRecipe frame)
+    -> std::expected<std::pair<double, double>, MinorBodyError> {
+  using Code = CentralBodyErrorCode;
+  if (!validate_physical_minor_descriptor(owner))
+    return std::unexpected{MinorBodyError{Code::invalid_owner, {}}};
+  const auto craft = resolve_craft_frame(frame);
+  if (!craft || !validate_craft_frame_properties(craft->properties) ||
+      !supports_operation(craft->properties, CraftOperation::vacuum))
+    return std::unexpected{MinorBodyError{Code::invalid_state, {}}};
+  const auto& p = craft->properties;
+  std::array<double, 3> half{};
+  for (std::size_t i = 0; i < half.size(); ++i)
+    half[i] = std::nextafter(
+        static_cast<double>(
+            std::max(std::abs(static_cast<std::int64_t>(p.hull_min_mm[i])),
+                     std::abs(static_cast<std::int64_t>(p.hull_max_mm[i])))) /
+            1000.0,
+        std::numeric_limits<double>::infinity());
+  const double hull = std::nextafter(std::hypot(half[0], half[1], half[2]),
+                                     std::numeric_limits<double>::infinity());
+  const double radius = std::nextafter(
+      owner.radius_metres + kMinorInspectionStandoffMetres + hull,
+      std::numeric_limits<double>::infinity());
+  if (!std::isfinite(radius))
+    return std::unexpected{MinorBodyError{Code::unsafe_arithmetic, {}}};
+  return std::pair{hull, radius};
+}
+} // namespace
+
+auto minor_exclusion_radius_metres(const PhysicalMinorDescriptor& owner,
+                                   CraftFrameRecipe frame)
+    -> std::expected<double, MinorBodyError> {
+  const auto geometry = minor_exclusion_geometry(owner, frame);
+  if (!geometry) return std::unexpected{geometry.error()};
+  return geometry->second;
+}
+
+auto assess_minor_exclusion_sweep(const PhysicalMinorDescriptor& owner,
+                                  const RigidBodyState& before,
+                                  const RigidBodyState& candidate)
+    -> std::expected<MinorExclusionSweep, MinorBodyError> {
+  using Code = CentralBodyErrorCode;
+  if (!validate_physical_minor_descriptor(owner))
+    return std::unexpected{MinorBodyError{Code::invalid_owner, {}}};
+  const RigidBodyWorldContext context{owner};
+  if (!validate_rigid_body_state(context, before) ||
+      !validate_rigid_body_state(context, candidate) ||
+      before.frame.kind != RigidFrameKind::body_relative_inertial ||
+      before.frame != candidate.frame || before.craft != candidate.craft ||
+      candidate.tick != before.tick + 1)
+    return std::unexpected{MinorBodyError{Code::invalid_state, {}}};
+  if (std::fegetround() != FE_TONEAREST ||
+      std::numeric_limits<long double>::digits < 64)
+    return std::unexpected{MinorBodyError{Code::unsafe_arithmetic, {}}};
+  const auto geometry = minor_exclusion_geometry(owner, before.craft);
+  if (!geometry) return std::unexpected{geometry.error()};
+  const double hull = geometry->first, radius = geometry->second;
+  const auto a = before.position_metres;
+  const auto b = candidate.position_metres;
+  const long double ax = a.x, ay = a.y, az = a.z;
+  const long double bx = b.x, by = b.y, bz = b.z;
+  const long double dx = bx - ax, dy = by - ay, dz = bz - az;
+  const long double length2 = (dx * dx + dy * dy) + dz * dz;
+  const long double source_distance = std::hypot(ax, ay, az);
+  const long double target_distance = std::hypot(bx, by, bz);
+  const long double fraction =
+      length2 == 0
+          ? 0
+          : std::clamp(-((ax * dx + ay * dy) + az * dz) / length2, 0.0L, 1.0L);
+  const long double closest =
+      std::hypot(ax + fraction * dx, ay + fraction * dy, az + fraction * dz);
+  // Bounded straight-segment evaluation with wider intermediate arithmetic.
+  // Include endpoint magnitudes, projection and final reporting conversion in
+  // the uncertainty; a near-boundary result never becomes known clear/hit.
+  const long double uncertainty =
+      256 * std::numeric_limits<long double>::epsilon() *
+          (source_distance + target_distance + radius + 1) +
+      4 * std::numeric_limits<double>::epsilon() * (closest + radius + 1);
+  if (!std::isfinite(closest) || !std::isfinite(uncertainty) ||
+      !std::isfinite(radius))
+    return std::unexpected{MinorBodyError{Code::unsafe_arithmetic, {}}};
+  if (source_distance - uncertainty <= radius)
+    return std::unexpected{MinorBodyError{Code::invalid_state, {}}};
+  MinorExclusionClass classification = MinorExclusionClass::unknown;
+  if (closest - uncertainty > radius)
+    classification = MinorExclusionClass::clear;
+  else if (closest + uncertainty < radius)
+    classification = MinorExclusionClass::intersects;
+  return MinorExclusionSweep{classification,
+                             owner.body,
+                             before.tick,
+                             candidate.tick,
+                             hull,
+                             radius,
+                             static_cast<double>(closest),
+                             static_cast<double>(uncertainty)};
+}
+
+auto respond_minor_exclusion_sweep(const PhysicalMinorDescriptor& owner,
+                                   const RigidBodyState& before,
+                                   const RigidBodyState& candidate)
+    -> std::expected<RigidBodyState, MinorBodyError> {
+  using Code = CentralBodyErrorCode;
+  const auto swept = assess_minor_exclusion_sweep(owner, before, candidate);
+  if (!swept) return std::unexpected{swept.error()};
+  if (swept->classification != MinorExclusionClass::intersects)
+    return std::unexpected{MinorBodyError{Code::invalid_state, {}}};
+  auto response = candidate;
+  response.position_metres = before.position_metres;
+  const auto p = before.position_metres;
+  const long double distance =
+      std::hypot(static_cast<long double>(p.x), static_cast<long double>(p.y),
+                 static_cast<long double>(p.z));
+  const long double nx = p.x / distance, ny = p.y / distance,
+                    nz = p.z / distance;
+  const auto v = candidate.linear_velocity_metres_per_second;
+  const long double radial = (nx * v.x + ny * v.y) + nz * v.z;
+  if (radial < 0)
+    response.linear_velocity_metres_per_second = {
+        static_cast<double>(v.x - radial * nx),
+        static_cast<double>(v.y - radial * ny),
+        static_cast<double>(v.z - radial * nz)};
+  const auto canonical =
+      canonicalize_rigid_body_state(RigidBodyWorldContext{owner}, response);
+  if (!canonical)
+    return std::unexpected{MinorBodyError{Code::unsafe_arithmetic, {}}};
+  return *canonical;
 }
 
 } // namespace apsis_drift

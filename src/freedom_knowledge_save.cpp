@@ -383,7 +383,8 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
       r.craft_lineage != flight.origin.lineage ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
       (r.version == kFreedomTravelKnowledgeVersion) !=
-          (flight.world.has_value() || flight.moon.has_value()))
+          (flight.world.has_value() || flight.moon.has_value() ||
+           flight.minor.has_value()))
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
   return {};

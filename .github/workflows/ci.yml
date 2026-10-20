@@ -271,6 +271,7 @@ jobs:
           apsis-drift-freedom-planetary-fixture
           apsis-drift-landed-craft-tests
           apsis-drift-freedom-moon-fixture
+          apsis-drift-freedom-minor-fixture
           apsis-drift-native-impact-tests
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
@@ -349,6 +350,8 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation/commands.jsonl
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-voyage/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-voyage/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-native/marker/*.json

@@ -98,6 +98,9 @@ auto validate_frame(const RigidBodyWorldContext& context,
                     const RigidCoordinateFrame& frame)
     -> std::expected<void, RigidBodyError> {
   const auto* physical = context.physical_owner();
+  const auto* minor = context.physical_minor_owner();
+  if (minor && !validate_physical_minor_descriptor(*minor))
+    return std::unexpected{RigidBodyError::invalid_world_context};
   const auto* moon = context.physical_moon_owner();
   if (moon && !validate_physical_moon_descriptor(*moon))
     return std::unexpected{RigidBodyError::invalid_world_context};
@@ -118,6 +121,12 @@ auto validate_frame(const RigidBodyWorldContext& context,
   switch (frame.kind) {
     case RigidFrameKind::body_relative_inertial:
     case RigidFrameKind::body_fixed:
+      if (minor) {
+        if (!frame.body || frame.planet || frame.station ||
+            *frame.body != minor->body || frame.body->kind != BodyKind::minor)
+          return std::unexpected{RigidBodyError::invalid_coordinate_frame};
+        return {};
+      }
       if (!moon || !frame.body || frame.planet || frame.station ||
           *frame.body != moon->body || frame.body->kind != BodyKind::moon)
         return std::unexpected{RigidBodyError::invalid_coordinate_frame};
@@ -192,10 +201,12 @@ auto frame_kind_name(RigidFrameKind kind) -> std::string_view {
   }
   throw RigidBodyError::invalid_coordinate_frame;
 }
-auto physical_projection_version(RigidFrameKind kind) -> std::uint32_t {
+auto physical_projection_version(RigidFrameKind kind, bool minor = false)
+    -> std::uint32_t {
   if (kind == RigidFrameKind::body_relative_inertial ||
       kind == RigidFrameKind::body_fixed)
-    return kMoonRelativeRigidBodyStateVersion;
+    return minor ? kMinorRelativeRigidBodyStateVersion
+                 : kMoonRelativeRigidBodyStateVersion;
   return kind == RigidFrameKind::planet_relative_inertial
              ? kPlanetRelativeRigidBodyStateVersion
              : kPhysicalRigidBodyStateVersion;
@@ -308,6 +319,35 @@ auto validate_moon_owner_json(const Json& data,
       read_moon_body(data.at("body")) != owner.body)
     throw RigidBodyError::owner_mismatch;
 }
+auto minor_body_json(BodyId body) -> Json {
+  return {{"version", body.version},
+          {"kind", "minor"},
+          {"value", std::to_string(body.value)}};
+}
+auto read_minor_body(const Json& data) -> BodyId {
+  require_keys(data, {"version", "kind", "value"});
+  if (read_version(data.at("version")) != kBodyIdentityVersion)
+    throw RigidBodyError::unsupported_version;
+  if (text(data.at("kind")) != "minor")
+    throw RigidBodyError::invalid_coordinate_frame;
+  return {kBodyIdentityVersion, BodyKind::minor, read_u64(data.at("value"))};
+}
+auto minor_owner_json(const PhysicalMinorDescriptor& owner) -> Json {
+  return {{"family", "physical_minor"},
+          {"version", owner.version},
+          {"secondary_catalog", owner.catalog.version},
+          {"body", minor_body_json(owner.body)}};
+}
+auto validate_minor_owner_json(const Json& data,
+                               const PhysicalMinorDescriptor& owner) -> void {
+  require_keys(data, {"family", "version", "secondary_catalog", "body"});
+  if (read_version(data.at("version")) != owner.version ||
+      read_version(data.at("secondary_catalog")) != owner.catalog.version)
+    throw RigidBodyError::unsupported_version;
+  if (text(data.at("family")) != "physical_minor" ||
+      read_minor_body(data.at("body")) != owner.body)
+    throw RigidBodyError::owner_mismatch;
+}
 auto validate_physical_owner_json(const Json& data,
                                   const PhysicalLocalSystem& owner) -> void {
   require_keys(data, {"family", "version", "generator",
@@ -405,7 +445,9 @@ auto rigid_body_state_checksum(const RigidBodyWorldContext& context,
       state.frame.kind == RigidFrameKind::body_relative_inertial ||
       state.frame.kind == RigidFrameKind::body_fixed;
   const std::string_view domain =
-      moon_frame ? "apsis-physical-rigid-body-v4"
+      moon_frame && context.physical_minor_owner()
+          ? "apsis-physical-rigid-body-v5"
+      : moon_frame ? "apsis-physical-rigid-body-v4"
       : physical ? (state.frame.kind == RigidFrameKind::planet_relative_inertial
                         ? "apsis-physical-rigid-body-v3"
                         : "apsis-physical-rigid-body-v2")
@@ -426,7 +468,14 @@ auto rigid_body_state_checksum(const RigidBodyWorldContext& context,
                 : 0U,
             8);
   }
-  if (moon_frame) {
+  if (moon_frame && context.physical_minor_owner()) {
+    const auto& minor = *context.physical_minor_owner();
+    integer(minor.version, 4);
+    integer(minor.catalog.version, 4);
+    integer(minor.body.version, 4);
+    integer(static_cast<std::uint8_t>(minor.body.kind), 1);
+    integer(minor.body.value, 8);
+  } else if (moon_frame) {
     const auto& moon = *context.physical_moon_owner();
     integer(moon.version, 4);
     integer(moon.catalog.version, 4);
@@ -469,7 +518,9 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
     const auto* physical = context.physical_owner();
     Json result{
         {"format", format_name},
-        {"version", physical ? physical_projection_version(state.frame.kind)
+        {"version", physical ? physical_projection_version(
+                                   state.frame.kind,
+                                   context.physical_minor_owner() != nullptr)
                              : kRigidBodyStateVersion},
         {"craft",
          {{"id", std::to_string(state.craft.id.value)},
@@ -492,8 +543,13 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
     if (physical) result["owner"] = physical_owner_json(*physical);
     if (state.frame.kind == RigidFrameKind::body_relative_inertial ||
         state.frame.kind == RigidFrameKind::body_fixed) {
-      result["frame"]["body"] = moon_body_json(*state.frame.body);
-      result["moon_owner"] = moon_owner_json(*context.physical_moon_owner());
+      if (const auto* minor = context.physical_minor_owner()) {
+        result["frame"]["body"] = minor_body_json(*state.frame.body);
+        result["minor_owner"] = minor_owner_json(*minor);
+      } else {
+        result["frame"]["body"] = moon_body_json(*state.frame.body);
+        result["moon_owner"] = moon_owner_json(*context.physical_moon_owner());
+      }
     }
     auto encoded = result.dump();
     if (encoded.size() > kMaximumRigidBodyDocumentBytes)
@@ -531,6 +587,8 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
     const Json data = Json::parse(document, callback);
     const auto* physical = context.physical_owner();
     const auto* moon = context.physical_moon_owner();
+    const auto* minor = context.physical_minor_owner();
+    bool minor_projection = false;
     bool moon_projection = false;
     if (physical) {
       if (!data.is_object()) throw RigidBodyError::invalid_type;
@@ -541,11 +599,24 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
            read_version(data.at("version")) !=
                kPlanetRelativeRigidBodyStateVersion &&
            !(moon && read_version(data.at("version")) ==
-                         kMoonRelativeRigidBodyStateVersion)))
+                         kMoonRelativeRigidBodyStateVersion) &&
+           !(minor && read_version(data.at("version")) ==
+                          kMinorRelativeRigidBodyStateVersion)))
         throw RigidBodyError::unsupported_version;
       moon_projection = read_version(data.at("version")) ==
                         kMoonRelativeRigidBodyStateVersion;
-      if (moon_projection) {
+      minor_projection = read_version(data.at("version")) ==
+                         kMinorRelativeRigidBodyStateVersion;
+      if (minor_projection) {
+        if (!validate_physical_minor_descriptor(*minor))
+          throw RigidBodyError::invalid_world_context;
+        require_keys(data, {"format", "version", "craft", "frame", "tick",
+                            "position_metres", "orientation_wxyz",
+                            "linear_velocity_metres_per_second",
+                            "angular_velocity_radians_per_second", "owner",
+                            "minor_owner"});
+        validate_minor_owner_json(data.at("minor_owner"), *minor);
+      } else if (moon_projection) {
         if (!validate_physical_moon_descriptor(*moon))
           throw RigidBodyError::invalid_world_context;
         require_keys(data, {"format", "version", "craft", "frame", "tick",
@@ -574,7 +645,7 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
     const auto& craft = data.at("craft");
     require_keys(craft, {"id", "version"});
     const auto& frame = data.at("frame");
-    if (moon_projection)
+    if (moon_projection || minor_projection)
       require_keys(frame, {"kind", "system", "planet", "station", "body"});
     else
       require_keys(frame, {"kind", "system", "planet", "station"});
@@ -588,9 +659,10 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
       candidate.frame.kind = RigidFrameKind::planet_fixed;
     else if (kind == "station_relative_inertial")
       candidate.frame.kind = RigidFrameKind::station_relative_inertial;
-    else if (moon_projection && kind == "body_relative_inertial")
+    else if ((moon_projection || minor_projection) &&
+             kind == "body_relative_inertial")
       candidate.frame.kind = RigidFrameKind::body_relative_inertial;
-    else if (moon_projection && kind == "body_fixed")
+    else if ((moon_projection || minor_projection) && kind == "body_fixed")
       candidate.frame.kind = RigidFrameKind::body_fixed;
     else if (physical &&
              read_version(data.at("version")) ==
@@ -599,15 +671,18 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
       candidate.frame.kind = RigidFrameKind::planet_relative_inertial;
     else
       throw RigidBodyError::invalid_coordinate_frame;
-    if (physical && read_version(data.at("version")) !=
-                        physical_projection_version(candidate.frame.kind))
+    if (physical &&
+        read_version(data.at("version")) !=
+            physical_projection_version(candidate.frame.kind, minor != nullptr))
       throw RigidBodyError::unsupported_version;
     candidate.frame.system = SystemId{read_u64(frame.at("system"))};
     if (!frame.at("planet").is_null())
       candidate.frame.planet = PlanetId{read_u64(frame.at("planet"))};
     if (!frame.at("station").is_null())
       candidate.frame.station = OriginStationId{read_u64(frame.at("station"))};
-    if (moon_projection)
+    if (minor_projection)
+      candidate.frame.body = read_minor_body(frame.at("body"));
+    else if (moon_projection)
       candidate.frame.body = read_moon_body(frame.at("body"));
     candidate.tick = read_u64(data.at("tick"));
     candidate.position_metres = read_vector(data.at("position_metres"));

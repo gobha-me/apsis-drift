@@ -1,6 +1,7 @@
 extends Node3D
 ## Read-only saved-flight instruments on the three authenticated screen planes.
 const MoonState = preload("res://scripts/native/native_moon_state.gd")
+const MinorState = preload("res://scripts/native/native_minor_state.gd")
 const EnvironmentState = preload("res://scripts/native/native_environment.gd")
 const REFRESH_SECONDS := 0.1
 var viewports: Array[SubViewport] = []
@@ -44,7 +45,9 @@ static func valid_screens(screens: Variant) -> bool:
 
 static func valid_state(state: Dictionary) -> bool:
 	if state.get("mode") != "freedom_flight" or not EnvironmentState.decimal(state.get("tick")) or not state.get("assistance") is bool or not state.get("attached") is bool: return false
-	if state.get("body_kind") == "moon":
+	if state.get("body_kind") == "minor":
+		if not MinorState.valid(state): return false
+	elif state.get("body_kind") == "moon":
 		if not MoonState.valid(state): return false
 	else:
 		for field in ["altitude", "planet_radius", "surface_speed", "radial_rate", "periapsis_radius"]:
@@ -70,12 +73,17 @@ static func distance(metres: float) -> String:
 static func rows(state: Dictionary) -> Array[PackedStringArray]:
 	if not valid_state(state): return []
 	var nav: PackedStringArray
-	if state.get("body_kind") == "moon":
+	if state.get("body_kind") == "minor":
+		nav = PackedStringArray(["NAV / ASTEROID INSPECTION", "Spherical source proxy / no landing", "Local drive: " + str(state.jump.phase).capitalize(), "Transfer: %.1f s" % float(state.jump.remaining_seconds), "Home route uses one jump charge", "Stand-off gap: %.1f m" % state.stand_off_gap])
+	elif state.get("body_kind") == "moon":
 		nav = PackedStringArray(["NAV / LOCAL MOON", "Airless surface", "Local drive: " + str(state.jump.phase).capitalize(), "Transfer: %.1f s" % float(state.jump.remaining_seconds), "Home route uses one jump charge", "Reference altitude is not gear clearance"])
 	else:
 		nav = PackedStringArray(["NAV / CENTRAL-BODY FORECAST", "Orbit: " + state.orbit_classification.capitalize(), "Periapsis: " + distance(state.periapsis_radius - state.planet_radius), "Apoapsis: " + (distance(state.apoapsis_radius - state.planet_radius) if state.apoapsis_radius != null else "unavailable"), "Thrust and drag change this forecast", "Not terrain or landing clearance"])
 	var flight := PackedStringArray(["FLIGHT / CURRENT OBSERVATIONS", "Reference altitude: " + distance(state.altitude), "Surface speed: %.1f m/s" % state.surface_speed, "Radial rate: %+.1f m/s" % state.radial_rate, "Attached" if state.attached else "Free craft", "C++ tick " + state.tick])
 	if state.get("body_kind") == "moon": flight[4] = MoonState.gear_clearance_text(state)
+	if state.get("body_kind") == "minor":
+		flight[1] = "Proxy clearance: " + distance(state.altitude)
+		flight[4] = "Inspection stand-off / no landing"
 	var resources: Dictionary = state.get("resources", {})
 	var systems := PackedStringArray(["SYSTEMS / APPLIED PROPULSION", "Fuel: %.1f%%" % (resources.fraction * 100.0) if resources.get("selected", false) else "Fuel tracking unavailable", "Jump charges: %d/3" % resources.jump_charges if resources.get("selected", false) else "Historical resource selection", "Main %.0f%% / Retro %.0f%%" % [clampf(state.negative_force_body[2] / state.negative_force_ratings[2], 0, 1) * 100, clampf(state.positive_force_body[2] / state.positive_force_ratings[2], 0, 1) * 100], "Flight assistance: " + ("ON" if state.assistance else "OFF"), "Actual C++ readings / no flight commands"])
 	return [nav, flight, systems]

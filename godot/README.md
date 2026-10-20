@@ -101,3 +101,7 @@ a smooth offline film is not a gameplay or frame-rate qualification.
 See [contributing](../CONTRIBUTING.md), [development](../docs/DEVELOPMENT.md),
 [CMake options and targets](../cmake/README.md), [native starting assembly](../docs/NATIVE_STARTING_ASSEMBLY.md)
 and [native asset packages](../docs/NATIVE_STARTER_ASSETS.md) for validation and asset ownership.
+
+The saved native [asteroid inspection route](../docs/ASTEROID_INSPECTION.md)
+consumes a genuine C++ minor owner, close mesh and same-tick transform. Godot
+owns the view and controls; it adds no orbit, gravity, contact or landing model.

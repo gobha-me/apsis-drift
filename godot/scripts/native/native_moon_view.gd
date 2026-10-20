@@ -12,7 +12,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	set_process(false)
 	set_process_input(false)
 	state = pending.flight_state.duplicate(true)
-	if not MoonState.valid(state):
+	if not valid_body_state(state):
 		error = "The typed lunar presentation is unavailable"
 		return false
 	bridge = owner
@@ -101,10 +101,11 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	near_environment.background_mode = Environment.BG_CLEAR_COLOR
 	camera.environment = near_environment
 	set_ship_layer(ship)
-	terrain = MoonTerrain.new()
-	terrain.bridge = bridge
-	terrain.expected_body_id = state.body_id
+	terrain = create_body_geometry(pending)
 	scene.add_child(terrain)
+	if not terrain.error.is_empty():
+		error = terrain.error
+		return false
 	suit_lamp = SpotLight3D.new()
 	suit_lamp.spot_range = 25.0
 	suit_lamp.spot_angle = 48.0
@@ -208,7 +209,7 @@ func setup_controls() -> void:
 	controls_menu = PauseMenu.new()
 	controls_menu.controls = player_input
 	controls_menu.saved_flight = true
-	controls_menu.saved_wayfarer = true
+	controls_menu.saved_wayfarer = supports_surface_controls()
 	controls_menu.ship_audio_available = ship_audio != null
 	controls_menu.audio_preferences = audio_preferences
 	if ship_audio != null:
@@ -217,13 +218,7 @@ func setup_controls() -> void:
 			var levels: Dictionary = audio_preferences.levels
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
-	controls_menu.add_button(controls_menu.save_button.get_parent(), "Select jump home", select_home)
-	controls_menu.add_button(controls_menu.save_button.get_parent(), "Begin / cancel local spool", jump_requested)
-	controls_menu.add_button(controls_menu.save_button.get_parent(), "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
-	var marker_column: Node = controls_menu.save_button.get_parent()
-	surface_marker_button = controls_menu.add_button(marker_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
-	clear_surface_marker_button = controls_menu.add_button(marker_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
-	show_surface_marker_button = controls_menu.add_button(marker_column, "Show personal marker: Off", toggle_surface_marker)
+	add_body_controls(controls_menu.save_button.get_parent())
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func(): pause_controls("Controls changed. Release controls, then resume."))
@@ -242,7 +237,7 @@ func setup_controls() -> void:
 		if quit_handler.is_valid(): quit_handler.call()
 		else: get_tree().quit())
 	controls_menu.sync_saved_state(state, false)
-	controls_menu.show_menu("Lunar flight. Release controls before resuming.")
+	controls_menu.show_menu(body_start_message())
 	refresh_control_hint()
 
 func select_home() -> void:
@@ -322,7 +317,7 @@ func update_compact_hud() -> void:
 	pause_button.text = "Resume" if paused else "Pause"
 
 func update_view(delta: float, _defer_exhaust: bool = false) -> void:
-	if not MoonState.valid(state):
+	if not valid_body_state(state):
 		if error.is_empty(): error = "Invalid typed lunar observation"
 		return
 	ship.basis = state.body_basis
@@ -387,12 +382,12 @@ func _process(delta: float) -> void:
 		pause_on_error(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
-	if state.get("body_kind") != "moon":
+	if state.get("body_kind") != current_body_kind():
 		if not mode_change_pending:
 			mode_change_pending = true
 			journey_mode_changed.emit()
 		return
-	if not MoonState.valid(state):
+	if not valid_body_state(state):
 		pause_on_error("The actual Moon observation is unavailable")
 		return
 	if state.get("recovery_pending", false):
@@ -426,3 +421,32 @@ func apply_moon_camera_depth() -> bool:
 	terrain_camera.far = distant.y
 	terrain_camera.transform = camera.transform
 	return true
+
+# The two supported companion views share the occupied-craft shell and input
+# lifecycle. Their typed observations and C++ geometry remain separate.
+func valid_body_state(value: Dictionary) -> bool:
+	return MoonState.valid(value)
+
+func current_body_kind() -> String:
+	return "moon"
+
+func supports_surface_controls() -> bool:
+	return true
+
+func body_start_message() -> String:
+	return "Lunar flight. Release controls before resuming."
+
+func create_body_geometry(_pending: Dictionary) -> Node3D:
+	var geometry := MoonTerrain.new()
+	geometry.bridge = bridge
+	geometry.expected_body_id = state.body_id
+	return geometry
+
+func add_body_controls(column: Node) -> void:
+	controls_menu.add_button(column, "Select jump home", select_home)
+	controls_menu.add_button(column, "Begin / cancel local spool", jump_requested)
+	controls_menu.add_button(column, "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
+	var marker_column: Node = column
+	surface_marker_button = controls_menu.add_button(marker_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
+	clear_surface_marker_button = controls_menu.add_button(marker_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
+	show_surface_marker_button = controls_menu.add_button(marker_column, "Show personal marker: Off", toggle_surface_marker)

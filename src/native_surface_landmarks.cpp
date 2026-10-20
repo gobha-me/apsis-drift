@@ -26,6 +26,8 @@ auto supports_landmarks(const std::optional<FreedomKnowledge>& knowledge)
 
 auto NativeFreedomFlightSession::enable_surface_landmarks()
     -> std::expected<void, std::string> {
+  if (minor_)
+    return std::unexpected{"Minor inspection has no surface landmarks"};
   if (recovery_pending() || !supports_landmarks(knowledge_))
     return std::unexpected{
         "Local landmarks require a supported active journey"};
@@ -45,7 +47,7 @@ auto NativeFreedomFlightSession::surface_landmarks_view() const
     -> std::expected<FreedomSurfaceLandmarksView, std::string> {
   FreedomSurfaceLandmarksView view;
   const bool supported = supports_landmarks(knowledge_);
-  if (moon_)
+  if (moon_ || minor_)
     return view; // Planetary site history stays retained on its own body.
   view.selected = supported && knowledge_->surface_landmarks.has_value();
   view.can_enable = supported && !view.selected && !recovery_pending();
