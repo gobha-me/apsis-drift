@@ -71,6 +71,11 @@ It changes no terrain, collision, mission or resource rules.
 asteroid-to-Moon history restriction. The same save can visit either companion
 again after returning home and physically docking for the existing free service.
 It adds no direct companion transfer, new destination or economy.
+The bounded [Origin return rendezvous aid](PORT_APPROACH_AID.md)
+([#635](https://github.com/gobha-me/apsis-drift/issues/635)) follows with optional
+real thrusters and fuel from the existing home return region, then hands over to
+the unchanged close-range aid. Capture remains explicit; general navigation and
+obstacle avoidance remain separate.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

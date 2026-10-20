@@ -1,4 +1,48 @@
-# Close-range port approach
+# Origin Station rendezvous and port approach
+
+The optional **Rendezvous with Origin Station** action covers the bounded home
+return region used by the local Moon and asteroid trips. Select D1 or D2 in
+paused flight controls, request rendezvous, then resume explicitly. The flight
+HUD also offers the action for the selected port. This uses real propulsion,
+flight fuel and elapsed time. Allow several minutes; it does not shorten travel
+or replenish reserves. Capture remains a separate player action.
+
+Admission requires the genuine continuous Origin home system, a seated free
+craft, stowed gear, idle jump, available flight fuel and no other surface or
+orbit-hold maneuver. The craft must be above the modeled atmosphere, on the
+approach side of the port, more than 150 metres and at most 50 kilometres from
+its collar, at least 150 metres outward, within 5 kilometres laterally, aligned
+within 0.35 radians, below 40 metres per second relative speed and at most
+0.02 radians per second angular speed. Historical orbit recipes retain manual
+navigation. These bounds describe this return corridor, not general navigation,
+obstacle avoidance or a swept collision guarantee.
+
+C++ follows the actual moving station, central gravity and the selected craft's
+separate force and torque ratings. Attitude control respects saved assistance.
+Commands update every 15 authoritative simulation ticks, independently of
+presentation cadence. The station's authored outward normal is already in its
+system-aligned inertial axes; the craft alignment quaternion does not rotate it
+again. No craft position, velocity, clock or resource is injected. Initial tight
+speed/alignment/lateral gates are not reapplied while the controller turns and
+accelerates; the actual owner, mode, clear-space, finite-motion, approach-side
+and 50-kilometre running bounds remain enforced.
+
+On reaching the unchanged close-range admission gate, the aid hands over to
+**Approach port with thrusters** with its full 60-second budget before the first
+close-range tick. It never captures automatically. Valid manual demand, explicit
+cancel, port reselection, assistance changes, pause, focus loss, Save As, a lost
+eligible state, exhausted flight fuel or the 2,400-second attempt limit cancels
+rendezvous. Invalid inputs and invalid fixed steps refuse atomically. Continue
+retains the actual voyage and starts paused with both aids off; no save-format
+change is needed.
+
+Issue #635 explicitly extends the former manual long-distance boundary only for
+this Origin return region. The C++ route tests fly a genuine charged asteroid
+round trip and the complete rendezvous under both assistance modes. Native
+contracts exercise the far action and a separately retained, genuinely flown
+near handoff; they do not replay the entire several-minute route in Godot.
+
+## Close-range approach
 
 The optional **Approach port with thrusters** action helps with the last part
 of returning to Origin Station. It is available in the flight HUD and the
@@ -14,7 +58,7 @@ second and station-relative speed at most 40 metres per second. The complete
 stowed hull must fit the fixed port column extended downward to -170 metres
 in station coordinates. These bounds are a small approach region, not obstacle
 avoidance or a swept collision guarantee. Aligning from another direction and
-long-distance navigation remain manual.
+navigation outside the bounded Origin rendezvous region remain manual.
 
 C++ measures same-tick collar error and relative velocity, follows the existing
 station ephemeris acceleration, accounts for central gravity, and projects its

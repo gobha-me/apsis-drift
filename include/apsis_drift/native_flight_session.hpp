@@ -58,6 +58,15 @@ struct NativePortApproach {
       -> bool = default;
 };
 inline constexpr std::uint32_t kNativePortApproachTicks{7200};
+// Optional local Origin return guidance, not a saved navigation route.
+struct NativePortRendezvous {
+  bool active{};
+  std::uint32_t remaining_ticks{};
+  std::string note{"Rendezvous off"};
+  friend auto operator==(const NativePortRendezvous&,
+                         const NativePortRendezvous&) -> bool = default;
+};
+inline constexpr std::uint32_t kNativePortRendezvousTicks{288000};
 enum class NativeSurfaceManeuverKind : std::uint8_t { off, landing, liftoff };
 struct NativeSurfaceManeuver {
   NativeSurfaceManeuverKind kind{NativeSurfaceManeuverKind::off};
@@ -191,6 +200,7 @@ class NativeFreedomFlightSession {
           "Cancel the active jump before changing assistance"};
     if (actor_ || surface_walker_)
       return std::unexpected{"Board and sit before controlling the craft"};
+    if (document_.model.assistance != enabled) cancel_port_rendezvous();
     document_.model.assistance = enabled;
     if (!enabled) cancel_surface_maneuver();
     return {};
@@ -227,6 +237,14 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto port_approach_available() const
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto port_rendezvous_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_port_rendezvous()
+      -> std::expected<void, std::string>;
+  auto cancel_port_rendezvous() -> void;
+  [[nodiscard]] auto port_rendezvous() const -> const NativePortRendezvous& {
+    return port_rendezvous_;
+  }
   [[nodiscard]] auto walker() const -> const std::optional<OriginWalkerState>& {
     return actor_;
   }
@@ -352,6 +370,13 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto port_approach_controls() const
       -> std::expected<NativeFlightControls, std::string>;
+  [[nodiscard]] auto port_rendezvous_conditions(bool initial) const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto port_rendezvous_controls() const
+      -> std::expected<NativeFlightControls, std::string>;
+  [[nodiscard]] auto advance_port_rendezvous(const NativeFlightControls&,
+                                             SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto begin_boarding_route(GameplayBoardingDirection)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto prepare_boarding_route(GameplayBoardingDirection) const
@@ -401,6 +426,9 @@ class NativeFreedomFlightSession {
   NativeCraftBinding craft_binding_;
   std::optional<FreedomBoardingState> boarding_;
   NativePortApproach port_approach_;
+  NativePortRendezvous port_rendezvous_;
+  NativeFlightControls rendezvous_held_{};
+  std::uint32_t rendezvous_held_ticks_{};
   std::optional<FreedomSurfaceState> surface_;
   std::optional<TerrainPadGapSample> gear_clearance_;
   StarterCraftId gear_clearance_craft_{};

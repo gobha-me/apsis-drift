@@ -1,4 +1,3 @@
-#include "../native_local_route_reuse_fixture.hpp"
 #include "../native_minor_route_fixture.hpp"
 
 #include <filesystem>
@@ -73,9 +72,42 @@ int main(int argc, char** argv) {
     // The original four phases/report stay unchanged. This extra genuine
     // captured return lets the native case use the service UI and revisit the
     // Moon without duplicating the C++ test guidance in presentation code.
-    const auto rendezvous_ticks = origin_route_reuse_fixture::capture_home(s);
+    need(s.select_port(1));
+    need(s.begin_port_rendezvous());
+    unsigned rendezvous_ticks{};
+    while (s.port_rendezvous().active &&
+           rendezvous_ticks < kNativePortRendezvousTicks) {
+      const auto step = need(s.advance({}));
+      ensure(!step.propulsion_refused && !s.recovery_pending() &&
+                 !s.docking()->attached,
+             "Production Origin rendezvous lost propulsion, craft or explicit "
+             "capture");
+      ++rendezvous_ticks;
+    }
+    ensure(!s.port_rendezvous().active && s.port_approach().active &&
+               s.port_approach().remaining_ticks == kNativePortApproachTicks &&
+               s.port_approach_available() && !s.docking()->attached,
+           "Production rendezvous did not hand off to the unchanged near gate");
+    // Genuine reached near pose, before the first close-controller tick. Its
+    // Continue drops transient guidance; native UI must arm the existing aid.
+    need(s.save_as(output / "rendezvous-near.json"));
+    unsigned close_ticks{};
+    while (need(s.assess_port()).decision !=
+               OriginDockDecision::capture_ready &&
+           close_ticks < kNativePortApproachTicks) {
+      const auto step = need(s.advance({}));
+      ensure(!step.propulsion_refused && !s.docking()->attached,
+             "Unchanged close aid refused or silently captured");
+      ++close_ticks;
+    }
+    ensure(need(s.assess_port()).decision == OriginDockDecision::capture_ready,
+           "Production-guided return did not reach explicit capture");
+    need(s.capture_port());
     need(s.save_as(output / "reuse-captured.json"));
-    std::cout << "reuse_capture_ticks=" << rendezvous_ticks << '\n';
+    std::cout << "rendezvous_far_ticks=" << rendezvous_ticks
+              << " near_ticks=" << close_ticks << '\n';
+    std::cout << "reuse_capture_ticks=" << rendezvous_ticks + close_ticks
+              << '\n';
     std::cout
         << "Actual station-to-minor approach/withdraw/home fixture passed\n";
     return 0;
