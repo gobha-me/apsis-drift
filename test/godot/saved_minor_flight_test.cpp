@@ -201,7 +201,8 @@ auto verify_mesh(const PhysicalMinorDescriptor& owner,
               p) < 0,
           "Exterior uses Godot-clockwise nondegenerate triangles, even caps");
   }
-  const auto stride = dimensions.longitude_intervals + 1;
+  const auto stride =
+      static_cast<std::size_t>(dimensions.longitude_intervals) + 1;
   for (std::uint32_t row = 0; row <= dimensions.latitude_intervals; ++row)
     check(vertices[row * stride] ==
               vertices[row * stride + dimensions.longitude_intervals],

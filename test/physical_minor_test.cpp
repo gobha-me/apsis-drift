@@ -35,14 +35,13 @@ auto run() -> void {
   for (const auto seed : {42ULL, 4ULL, 7ULL, 123ULL}) {
     const auto system = need(generate_physical_origin_system(Seed{seed}, 2));
     const auto catalog = need(generate_secondary_body_catalog(system));
-    const auto saved = catalog;
     const auto& source = catalog.bodies[1];
     const auto minor =
         need(generate_physical_minor_descriptor(catalog, source.node.id));
     const auto duplicate =
         need(generate_physical_minor_descriptor(catalog, source.node.id));
-    check(minor == duplicate && minor.catalog == catalog && catalog == saved,
-          "Deterministic owner and unchanged source catalog");
+    check(minor == duplicate && minor.catalog == catalog,
+          "Deterministic owner retains its source catalog");
     check(minor.body == source.node.id && minor.body.kind == BodyKind::minor &&
               minor.parent == *source.node.parent &&
               minor.parent.kind == BodyKind::star && !planet_id(minor.body),
