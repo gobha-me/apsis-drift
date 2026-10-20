@@ -52,7 +52,10 @@ Invalid or unresolved geometry refuses without committing that tick.
 The sphere's true source radius is used throughout. The bounded C++ mesh has
 32 latitude by 64 longitude intervals and is uploaded once. Its actual
 same-tick body-fixed transform, star lighting and camera-relative placement
-come from C++; Godot adds no clock, orbit or physical shape. The current physical
+come from C++; Godot adds no clock, orbit or physical shape. The seed42 route
+review reaches the unlit hemisphere: body and craft appear mainly as dark
+silhouettes. Illuminated surface detail and night-side legibility remain visual
+follow-up work. The current physical
 minor is not also drawn as a distant optical contact. Cockpit and world use the
 existing separate depth ranges to preserve close-craft precision.
 
