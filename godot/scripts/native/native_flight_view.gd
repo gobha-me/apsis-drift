@@ -53,6 +53,9 @@ var camera: Camera3D
 var terrain_camera: Camera3D
 var near_viewport: SubViewport
 var far_viewport: SubViewport
+const ViewportSize = preload("res://scripts/native/native_viewport_size.gd")
+var far_container: SubViewportContainer
+var near_container: SubViewportContainer
 var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
@@ -327,6 +330,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
+	far_container = container
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container.stretch = true
 	add_child(container)
@@ -381,7 +385,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	# Terrain uses a safe distant frustum; nearby terrain also draws with the
 	# ship so real foreground terrain can occlude it in this close-depth pass.
 	# These cameras share one C++-supplied scene and exactly the same view/FOV.
-	var near_container := SubViewportContainer.new()
+	near_container = SubViewportContainer.new()
 	near_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	near_container.stretch = true
 	near_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -743,6 +747,9 @@ func layout_hud() -> void:
 	var pixels := Vector2(get_window().size)
 	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
 		return
+	var density := get_viewport().get_final_transform().get_scale().abs()
+	ViewportSize.fit(far_container, size, density)
+	ViewportSize.fit(near_container, size, density)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	var margin := minf(16 * scale, minf(size.x, size.y) * 0.1)
 	var usable := size - Vector2.ONE * (2 * margin)

@@ -15,6 +15,7 @@ const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
 const Controls = preload("res://scripts/ui/player_input.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
+const ViewportSize = preload("res://scripts/native/native_viewport_size.gd")
 var mouse_look := MouseLook.new()
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 const StationCrew = preload("res://scripts/native/native_station_crew.gd")
@@ -42,6 +43,7 @@ var sky_material: ShaderMaterial
 var sky_owner: Dictionary = {}
 var scene: Node3D
 var viewport: SubViewport
+var scene_container: SubViewportContainer
 var telemetry: Label
 var pause_button: Button
 var board_button: Button
@@ -190,6 +192,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
+	scene_container = container
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container.stretch = true
 	add_child(container)
@@ -440,6 +443,7 @@ func layout_hud() -> void:
 	var pixels := Vector2(get_window().size)
 	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
 		return
+	ViewportSize.fit(scene_container, size, get_viewport().get_final_transform().get_scale().abs())
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	var margin := 16 * scale
 	var usable := size - Vector2.ONE * (2 * margin)

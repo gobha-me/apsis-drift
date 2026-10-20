@@ -170,6 +170,9 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		for frame in 3:
 			await process_frame
 		var bounds := Rect2(Vector2.ZERO, view.size)
+		var rendered: Vector2i = Vector2i(640, 360) if pixels == Vector2i(640, 450) else pixels
+		check(view.viewport.size == rendered, "Station 3D still renders extra logical pixels: " + str(pixels))
+		check((view.scene_container.size * view.scene_container.scale).is_equal_approx(view.size), "Physical-size station render no longer covers its logical canvas")
 		check(bounds.encloses(view.hud_scroll.get_rect()), "Station HUD escaped viewport " + str(pixels))
 		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Station HUD has horizontal overflow")
 		var font_pixels: float = view.telemetry.get_theme_font_size("font_size") * pixels.x / view.size.x

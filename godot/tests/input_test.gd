@@ -1,6 +1,7 @@
 extends SceneTree
 const Controls = preload("res://scripts/ui/player_input.gd")
 const FlightMouse = preload("res://scripts/native/native_flight_mouse.gd")
+const ViewportSize = preload("res://scripts/native/native_viewport_size.gd")
 var failures := 0
 var safety_count := 0
 
@@ -27,6 +28,7 @@ func check_initial_controller() -> void:
 
 
 func run() -> void:
+	check_viewport_dimensions()
 	check_initial_controller()
 	check_flight_mouse()
 	check_rebind_transaction()
@@ -182,6 +184,23 @@ func run() -> void:
 	controls.queue_free()
 	print("Player input contracts: %d failures (synthetic events; not hardware qualification)" % failures)
 	quit(0 if failures == 0 else 1)
+
+
+func check_viewport_dimensions() -> void:
+	for bad in [Vector2.ZERO, Vector2(-1, 720), Vector2(1280, 0), Vector2(NAN, 720), Vector2(1280, INF), Vector2(1e20, 720)]:
+		check(ViewportSize.target(bad, Vector2.ONE) == Vector2i.ZERO, "Invalid render dimensions escaped validation")
+	for bad in [Vector2.ZERO, Vector2(-1, 1), Vector2(NAN, 1), Vector2(1, INF)]:
+		check(ViewportSize.target(Vector2(1920, 1080), bad) == Vector2i.ZERO, "Invalid output density escaped validation")
+	check(ViewportSize.target(Vector2(1920, 1080), Vector2.ONE * (2.0 / 3.0)) == Vector2i(1280, 720), "Windowed render target still supersamples logical UI pixels")
+	check(ViewportSize.target(Vector2(1920, 1080), Vector2.ONE * 2.0) == Vector2i(1920, 1080), "Larger output increased the existing rendering budget")
+	check(ViewportSize.target(Vector2(1920, 1080), Vector2.ONE * 1e20) == Vector2i(1920, 1080), "Large finite output density overflowed before clamping")
+	check(ViewportSize.target(Vector2.ONE, Vector2.ONE * 0.01) == Vector2i.ONE, "Small positive target collapsed to zero")
+	var container := SubViewportContainer.new()
+	container.position = Vector2(3, 4)
+	container.size = Vector2(100, 100)
+	var before := [container.position, container.size, container.scale]
+	check(not ViewportSize.fit(container, Vector2(NAN, 720), Vector2.ONE) and [container.position, container.size, container.scale] == before, "Rejected render dimensions changed the accepted layout")
+	container.free()
 
 
 func check_flight_mouse() -> void:
