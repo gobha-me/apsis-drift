@@ -63,6 +63,7 @@ TESTS = {
     "native_recovery": "freedom_saves",
     "native_port": "freedom_saves",
     "native_walk": "freedom_saves",
+    "native_station_crew": "freedom_saves",
     "native_assembly": "native_assets",
     "native_start_staging": "freedom_saves",
     "native_title": "freedom_saves",
@@ -422,7 +423,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_station_crew", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -450,7 +451,7 @@ def main(argv=None):
             (work / "native-assets/prepared.json").read_text())
         report["setup"][-1]["companions"] = {
             name: json.loads((work / "native-assets" / name / receipt).read_text())
-            for name, receipt in (("operating", "prepared.json"), ("stowed", "preparation.json"))}
+            for name, receipt in (("operating", "prepared.json"), ("stowed", "preparation.json"), ("crew", "prepared.json"))}
         save()
     if any(TESTS[name] in ("operating_assets", "operating_motion") for name in selected):
         for filename in ("prepare_operating_assets.py", "wayfarer_operating_spec.py", "operating_asset_identity.py",
@@ -1083,6 +1084,8 @@ def main(argv=None):
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "corrupt.json", "native-assets")]
         if name == "native_walk":
             arguments = [str(work / path) for path in ("journey.json", "journey-trace.json", "native-assets")]
+        if name == "native_station_crew":
+            arguments = [str(work / path) for path in ("journey.json", "native-assets", "station-crew-native")]
         if name == "native_minor":
             arguments = [str(work / path) for path in
                          ("minor-voyage", "native-assets", "minor-native")]

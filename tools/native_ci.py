@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parent.parent
 SELECTED = """input control_settings recorded_observations freedom_start native_shell
 native_save native_asset_import native_station_view wayfarer_frame saved_flight
 native_environment native_audio first_jump native_moon native_minor native_recovery native_port
-native_walk native_assembly native_start_staging native_title native_profile
+native_walk native_station_crew native_assembly native_start_staging native_title native_profile
 native_planetary native_voyage native_roundtrip native_roundtrip_pilot
 native_roundtrip_pilot_aligned native_roundtrip_pilot_offset home_navigation
 native_status native_surface native_surface_walk native_selected_terrain
@@ -446,8 +446,14 @@ def validate_report(report, path, metadata, selected, m, runner):
         if row.get("family") == "native_assets":
             require(set(row["helper_sha256"]) == set(ASSET_HELPERS) and
                     row["prepared"]["schema"] == "apsis.native-starter-assets/1" and
-                    HEX.fullmatch(row["prepared"]["package_sha256"]) and row["companions"],
+                    HEX.fullmatch(row["prepared"]["package_sha256"]) and
+                    set(row["companions"]) == {"operating", "stowed", "crew"},
                     "Incomplete native asset provenance")
+            crew = row["companions"]["crew"]
+            require(type(crew) is dict and set(crew) == {"schema", "package_sha256"} and
+                    crew["schema"] == "apsis.origin-crew-assets/1" and
+                    type(crew["package_sha256"]) is str and HEX.fullmatch(crew["package_sha256"]),
+                    "Incomplete Origin crew provenance")
         if row.get("family") == "operating_assets":
             require(row["spec_sha256"] == m["sources"]["tools/wayfarer_operating_spec.py"], "Foreign operating spec")
         if "seed" in row or "save" in row:

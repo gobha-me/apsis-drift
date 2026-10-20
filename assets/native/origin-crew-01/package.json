@@ -1,0 +1,71 @@
+{
+  "schema": "apsis.origin-crew-assets/1",
+  "package_id": "origin-crew-01",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "README.md",
+      "bytes": 805,
+      "sha256": "74756d238af9367566a6966d8306c62795b418b6e9f98520727914b954482476"
+    },
+    {
+      "path": "casual-male-idle.png",
+      "bytes": 1818627,
+      "sha256": "007bc821141b58995d13834d45baef7996c61000ca61760a9f755ca47a577503"
+    },
+    {
+      "path": "idle-frames.json",
+      "bytes": 764,
+      "sha256": "78174bf54ac8ff4224557b90761593475c3dc22222e94f695b4fecfeb46d716e"
+    },
+    {
+      "path": "metadata/placement-check.json",
+      "bytes": 2024,
+      "sha256": "57c5de27a2f78d81936d129a3ab3dedca5240d4bee913948ce18e9ce05035131"
+    },
+    {
+      "path": "metadata/rights-clearance.json",
+      "bytes": 436,
+      "sha256": "a25a989ab0084776e4ec5c813d45023037d7e8fd93880a6ac9b3f7cadcc440d1"
+    },
+    {
+      "path": "metadata/source-frames.json",
+      "bytes": 6282,
+      "sha256": "c5079a957d067b87f411fd18b0e9cdae677f6c8f04f8520a1c6718d4cca74032"
+    },
+    {
+      "path": "metadata/source-measurements.json",
+      "bytes": 6791,
+      "sha256": "44b0df8464543797a33b55fe610aaef21a8c40c3a39f2c90bbd014ac6c8e04be"
+    },
+    {
+      "path": "metadata/source-provenance.json",
+      "bytes": 3580,
+      "sha256": "4a0e57daec848c96a9aab08418c85bab9562c4b30796c48dd15e78250f75a5d5"
+    },
+    {
+      "path": "metadata/source-readme.md",
+      "bytes": 6870,
+      "sha256": "3d4cee09075159e542a9bca977b22afb1f61fc747e92c64195b085eae0ea2a3b"
+    },
+    {
+      "path": "metadata/source-receipt.json",
+      "bytes": 3447,
+      "sha256": "9b676a5c1e20bc27f6b35f10791fce53ab9c50264e58d8532b21090e986aaf3b"
+    },
+    {
+      "path": "metadata/source-requests.json",
+      "bytes": 8477,
+      "sha256": "739d9943d47e8ee9744cbf0ab14e88ba677e155d30d593a55029ff4ae6cfdad8"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 1689,
+      "sha256": "8c3d7205e168b6ec713a8df30b1bbfce415111d7ed48223649392f0f3955382c"
+    }
+  ]
+}

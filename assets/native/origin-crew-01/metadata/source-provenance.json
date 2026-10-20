@@ -1,0 +1,49 @@
+{
+  "schema": "apsis-pixel-pilot-provenance-v1",
+  "date": "2026-09-30",
+  "status": "disposable owner-directed experiment; not production-approved",
+  "provider": "OpenAI built-in image_gen",
+  "calls": 6,
+  "cost": "Not returned by tool; no external paid-provider calls",
+  "license": {
+    "code": "See repository LICENSE",
+    "reference_and_derived_art": "Owner-supplied reference chain; redistribution clearance unconfirmed. Do not infer an open asset license from repository code license."
+  },
+  "reference": {
+    "path": "../paper-pilot/trials/diagonal-04/front-right-candidate-v1.png",
+    "sha256": "b5596818eaf47e72e25850faabcc523681242d49f8c8fe7bddc9d08bf8ee9ba1",
+    "chain": "Owner-supplied paper pilot -> illustrated diagonal trial -> right-source -> front/rear/left sources -> right/left opposite repairs. See adjacent request files."
+  },
+  "review": {
+    "right_opposite": "Partial corrective art admitted to frames 5–8; still unqualified gait and proportion continuity.",
+    "left_opposite": "Rejected, not loaded. Near arm again behind torso.",
+    "front_rear_left": "Original generated cycles retain incorrect/repeated half-step patterns.",
+    "captures": "Actual Godot Vulkan Forward+ raster output, not generated concept mockups."
+  },
+  "files": {
+    "lab.tscn": "7e8963efb0e2df0c18f72a72fe77c66d11647a582abc8a1a375d25961118843a",
+    "puppet.gd": "08c72451a55d13452fe6d57bd731a40620f19bb330dcf939f38cbc104df917e0",
+    "walker.gd": "680254dd68399b8d12b74c2dc63ac477283bb3194f92fdbeb4d13b978c492bf3",
+    "direction.gd": "11b963e79bc212c95a2283f740752e1c233fe5b6ef043b9ab8a30ba05a3b74aa",
+    "lab.gd": "bc29eaeac873686564234089f890aee61776f96ea4a2f0783891e0d581fa301b",
+    "project.godot": "acfca4e9e572e2d43f3a53fb7f7c8e039be2d978cfc4d5237d898f4b5882b189",
+    "tools/pose_review.gd": "4aa56a6cb79c3cb39be034e9c4165a160144f0a03bf84f45aeb34a6b153c90ab",
+    "tools/check.gd": "a501049541c03353fec2c082906f783eb5385a749cb784ea4df77baaa24bda3e",
+    "review/poses.png": "1bbad30d046320a643081ede4d774187fabf0fc85715e3b160d39992765868f0",
+    "review/close.png": "b994172e8af16da59c915857986b285eecbea2d167a2b10ad73db44ef0a59d87",
+    "review/world.png": "772b4fd1da10402f55dbfe5de73ce24d9b9c7de3ca47774829a09739e97231cc",
+    "assets/rear-source.png": "2dce0a97192a64410dc80bf33294720b200cae5b10ea362c4d6079bca9fe7072",
+    "assets/right-request.json": "9f6878b545ca1c0cb337d0eb26402445c1ec15bb3bd057af4b85bd1641a024d1",
+    "assets/front-request.json": "1d6f56217001b7da334e2b673ce026135a1eb6ae0810fe17876511831e4cc98a",
+    "assets/left-request.json": "313882d5e057f6dc60aaaa5edce9f06e2fa18908dbd064cc50772a942816bdc9",
+    "assets/frames.json": "2a8f65d562367cb47faeab5689aa7e33dd0a62358a77102bb702809aa4f2ab5b",
+    "assets/right-opposite.png": "3fa511a97a6dc3f05c08f441e51ea699283a4713aef2f4ac2abb494943edf2f3",
+    "assets/left-opposite-request.json": "9e5661da4233334c2823cfbb369dfeb42b852721f05b98dc6b7699dee2b6ff6b",
+    "assets/left-source.png": "d8eca7874e55e9ec1acb2d16aa2016dc33011903fee24def548c07fb34c04945",
+    "assets/front-source.png": "4004db92aabb5c9c05ace18421374b4ac4b98d381195fe36d97891730a6275af",
+    "assets/left-opposite-rejected.png": "3f73ebe852d6dbf02c82e1686c080553af3ac354d3d4b6f3f82c166682aec579",
+    "assets/right-source.png": "6efd8b5c07a5e5333abb6fd4f1d825546ef3c8218d395c2c33ee3562e1b0cd02",
+    "assets/right-opposite-request.json": "4ce4708d86dc7e7c0ffadd7e6d76b05f115501e70d00d9fd6677457e246d3b7e",
+    "assets/rear-request.json": "f3623fc696ca0bc5bb90bda5ae8263c5601ef0577c558db65ad93ed1db300318"
+  }
+}

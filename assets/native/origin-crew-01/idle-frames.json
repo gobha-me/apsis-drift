@@ -1,0 +1,59 @@
+{
+  "schema": "apsis.origin-crew-idle/1",
+  "height_metres": 1.85,
+  "reference_height_pixels": 487,
+  "views": [
+    {
+      "view": "front",
+      "rect": [
+        121,
+        15,
+        211,
+        491
+      ],
+      "anchor": [
+        106,
+        489
+      ]
+    },
+    {
+      "view": "right",
+      "rect": [
+        526,
+        15,
+        117,
+        491
+      ],
+      "anchor": [
+        57,
+        489
+      ]
+    },
+    {
+      "view": "rear",
+      "rect": [
+        849,
+        15,
+        207,
+        491
+      ],
+      "anchor": [
+        104,
+        489
+      ]
+    },
+    {
+      "view": "left",
+      "rect": [
+        1253,
+        15,
+        118,
+        491
+      ],
+      "anchor": [
+        57,
+        489
+      ]
+    }
+  ]
+}

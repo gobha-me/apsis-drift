@@ -5,6 +5,7 @@
 #include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/origin_station_crew.hpp"
 
 namespace apsis_drift {
 class MoonSurfaceWalkTerrain;
@@ -116,6 +117,8 @@ struct FreedomMoonSurfaceLandmarksView {
 // Presentation has no mutable access to state, catalog or recipe selections.
 class NativeFreedomFlightSession {
  public:
+  [[nodiscard]] auto station_crew() const
+      -> std::expected<OriginCrewView, std::string>;
   [[nodiscard]] static auto open(NativeStartup selected)
       -> std::expected<NativeFreedomFlightSession, std::string>;
   [[nodiscard]] auto document() const -> const FreedomFlightSaveDocument& {

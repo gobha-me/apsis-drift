@@ -356,6 +356,8 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::get_freedom_environment_assessment);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_walk_state"),
                                 &FreedomBridge::get_freedom_walk_state);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_crew"),
+                                &FreedomBridge::get_freedom_station_crew);
     godot::ClassDB::bind_method(
         godot::D_METHOD("advance_freedom_walk", "elapsed", "controls"),
         &FreedomBridge::advance_freedom_walk);
@@ -2188,6 +2190,41 @@ class FreedomBridge : public godot::RefCounted {
   auto get_freedom_walk_state() const -> godot::Dictionary {
     return saved_flight ? project_walk_state(*saved_flight)
                         : godot::Dictionary{};
+  }
+
+  auto get_freedom_station_crew() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto crew = saved_flight->session.station_crew();
+    if (!crew) return result;
+    result["version"] = 1;
+    result["station_id"] =
+        godot::String{std::to_string(crew->station.value).c_str()};
+    result["tick"] = godot::String{
+        std::to_string(saved_flight->session.document().flight.tick).c_str()};
+    result["ordinal"] = static_cast<std::int64_t>(crew->ordinal);
+    result["name"] = godot::String{crew->name.data()};
+    godot::PackedFloat64Array foot;
+    for (const auto value :
+         {crew->foot_position_metres.x, crew->foot_position_metres.y,
+          crew->foot_position_metres.z})
+      foot.append(value);
+    result["foot_position_metres"] = foot;
+    result["heading_radians"] = crew->heading_radians;
+    result["height_metres"] = crew->height_metres;
+    result["available"] = crew->available;
+    result["reason"] = godot::String{crew->reason.c_str()};
+    godot::Array topics;
+    for (const auto& topic : crew->topics) {
+      godot::Dictionary item;
+      item["id"] = static_cast<std::int64_t>(topic.id);
+      item["title"] = godot::String{topic.title.data()};
+      item["text"] = godot::String{topic.text.data()};
+      topics.append(item);
+    }
+    result["topics"] = topics;
+    result["remark"] = godot::String{crew->remark.data()};
+    return result;
   }
 
   static auto project_surface_marker(

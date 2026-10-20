@@ -38,6 +38,10 @@ input. Release those controls, then resume explicitly; the craft retains its
 committed pose and momentum. A resize with neutral controls keeps the current
 running or paused state. Initial layout does not add a pause.
 
+An optional [bay attendant](STATION_CREW.md) stands beyond the arrival guard.
+Face the attendant and release movement to use the displayed Talk action.
+Conversations return to paused controls; resume explicitly to continue walking.
+
 The arrivals and side branches remain outside the current supported walk route;
 visible access rails mark that limit at the junction. Follow D1 toward the
 workshop. Near the ladder, a contextual **Climb aboard** prompt names the action.

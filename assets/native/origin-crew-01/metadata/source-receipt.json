@@ -1,0 +1,68 @@
+{
+  "schema": "apsis-casual-male-receipt-v1",
+  "date": "2026-10-01",
+  "parent_commit": "4918176",
+  "provider": "built-in image_gen",
+  "calls": 5,
+  "meshy_credits": 0,
+  "license": "Inherited reference and derived-art redistribution uncleared; local owner review only",
+  "disposition": "Casual male idle/directional walk and two-pose greeting; independent scripted NPC-like rehearsal, not AI or production integration",
+  "files": {
+    "README.md": "3d4cee09075159e542a9bca977b22afb1f61fc747e92c64195b085eae0ea2a3b",
+    "brief.md": "aec15d77e5415754b2e08a24c89564dd304ee44d41ea04f6795bea8d5339446a",
+    "frames.json": "c5079a957d067b87f411fd18b0e9cdae677f6c8f04f8520a1c6718d4cca74032",
+    "measurements.json": "44b0df8464543797a33b55fe610aaef21a8c40c3a39f2c90bbd014ac6c8e04be",
+    "requests.json": "739d9943d47e8ee9744cbf0ab14e88ba677e155d30d593a55029ff4ae6cfdad8",
+    "check.gd": "0ab077e2283b949f3647fe02b57fbb6752aa50a558d124c5c2c4b85fe3e80d53",
+    "pilot.gd": "691f90d45b06ff219d7a83772f48a6d594cf85365c211b85b978d0531ae3bf42",
+    "review.gd": "06f3b156336cdbb5d6e1164f9d6989b6401b190fa961b2ffdf58237044b74e46",
+    "greeting-preview.png": "f91ee17b30b758a59264adfaacdb5c58b9892f7889e81524845cbdc943444b79",
+    "walk-preview.png": "530fc19a339ee4a49b26e1004f1445b930b1e789ce2a4df829e8d246bb348b60",
+    "sources/idle-gesture-draft.png": "007bc821141b58995d13834d45baef7996c61000ca61760a9f755ca47a577503",
+    "sources/idle-gesture-repair-draft.png": "f4fef0c5646e5cbd1088d8f46ea05383e8edeb42b0bfd544dff6b0041819f4d2",
+    "sources/walk-axial.png": "dbbd3b4db0757fa3521308a0b4a9d171f7921747931e645ddb2bd4e9aa0370cd",
+    "sources/walk-side-draft.png": "2367b81142797fa800fbeebbafffd863dfef51c3e5078c92e91fe76a82fe0f0d",
+    "sources/walk-side.png": "4a96142b274c98939451065c04ba3c7a24ab9c002e786058692cc68baa57e011"
+  },
+  "dependencies": {
+    "../flight-pair-01/receipt.json": "f2e79cae2cf55aeb12521f3969429c69e00aa4ae83478fc3a7977075293c5f54",
+    "../flight-pair-01/pilot.gd": "7cb6c4a73b70a67d73615d765f868283053b1c9fa749863bac4823deab74451d",
+    "../walk-02/receipt.json": "77373a11baf600facf36545eadb4349166441d056c5217ac585c5f0a3fd17c90",
+    "../walk-03/receipt.json": "aa72eabfc88bd9ce2497d2362900d4190ee8f2a26686b462a768a22416ee7df8",
+    "../../puppet.gd": "08c72451a55d13452fe6d57bd731a40620f19bb330dcf939f38cbc104df917e0",
+    "../../direction.gd": "11b963e79bc212c95a2283f740752e1c233fe5b6ef043b9ab8a30ba05a3b74aa",
+    "../../assets/frames.json": "2a8f65d562367cb47faeab5689aa7e33dd0a62358a77102bb702809aa4f2ab5b"
+  },
+  "evidence": {
+    "renderer": "Godot4.7.2 Vulkan Forward+ hardware GPU",
+    "benchmark": false,
+    "movies": [
+      {
+        "path": "build-godot/studies/pixel-pilot/casual-male-01/review/review.mp4",
+        "sha256": "8301384dd7621aa34e40babe5b30fce83533a551b735e07a22ddf0d8bec4d3dc",
+        "duration_seconds": 20.066667,
+        "bytes": 1820458,
+        "resolution": [
+          1280,
+          720
+        ],
+        "fps": 30,
+        "frames": 602,
+        "captions": true
+      },
+      {
+        "path": "build-godot/studies/pixel-pilot/casual-male-01/clean/review.mp4",
+        "sha256": "d96b67acb4fcce3bccc490259b21a8f8232d6c1e5d15a0fb956bd0a6ad616262",
+        "duration_seconds": 20.066667,
+        "bytes": 1730055,
+        "resolution": [
+          1280,
+          720
+        ],
+        "fps": 30,
+        "frames": 602,
+        "captions": false
+      }
+    ]
+  }
+}

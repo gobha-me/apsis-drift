@@ -102,7 +102,7 @@ class NativeRunnerTests(unittest.TestCase):
                 log.write_text("mocked preparation boundary\n")
                 if name == "prepare_freedom_native_assets.py":
                     for receipt in ("prepared.json", "operating/prepared.json",
-                                    "stowed/preparation.json"):
+                                    "stowed/preparation.json", "crew/prepared.json"):
                         path = work / "native-assets" / receipt
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_text("{}")

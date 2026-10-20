@@ -1,0 +1,115 @@
+{
+  "source_sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+  "foot_metres": [
+    1.3,
+    0.0,
+    0.0
+  ],
+  "standing_low": [
+    0.8800000000000001,
+    0.045,
+    -0.42
+  ],
+  "standing_high": [
+    1.72,
+    1.975,
+    0.42
+  ],
+  "candidate_primitives": 11,
+  "intersections": [],
+  "interaction_head_prism_intersections": [],
+  "interaction_head_prism_low": [
+    -1.0,
+    1.5,
+    -0.555
+  ],
+  "interaction_head_prism_high": [
+    1.3,
+    1.8,
+    0.555
+  ],
+  "floor_samples": [
+    {
+      "offset": [
+        -0.42,
+        -0.42
+      ],
+      "node": "KIT03 | hub continuous deck",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        -0.42,
+        0.42
+      ],
+      "node": "KIT03 | hub continuous deck",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0.42,
+        -0.42
+      ],
+      "node": "KIT03 | hub continuous deck",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0.42,
+        0.42
+      ],
+      "node": "KIT03 | hub continuous deck",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0,
+        0
+      ],
+      "node": "KIT03 | hub continuous deck",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        -0.42,
+        0.42
+      ],
+      "node": "KIT03 | replaceable deck panel.017",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        -0.42,
+        -0.42
+      ],
+      "node": "KIT03 | replaceable deck panel.018",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0.42,
+        0.42
+      ],
+      "node": "KIT03 | replaceable deck panel.022",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0.42,
+        -0.42
+      ],
+      "node": "KIT03 | replaceable deck panel.023",
+      "y": 0.0
+    },
+    {
+      "offset": [
+        0,
+        0
+      ],
+      "node": "KIT03 | replaceable deck panel.023",
+      "y": 0.0
+    }
+  ],
+  "pass": true,
+  "scope": "Full admitted GLB world transforms; conservative standing AABB triangle SAT and five floor samples at fixed authored crew site; no player-domain or geometry changes."
+}
