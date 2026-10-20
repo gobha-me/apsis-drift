@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/save_file.hpp"
 
 #include <cmath>
 #include <limits>
@@ -28,33 +29,90 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
   if (!candidate.travel_) candidate.travel_ = FreedomTravelState{};
   const auto catalog = generate_secondary_body_catalog(*origin);
   if (!catalog) return std::unexpected{"Local catalog unavailable"};
-  const bool minor_route =
-      minor_.has_value() ||
-      target == BodyTarget{origin->catalog.id, catalog->bodies[1].node.id};
-  if (minor_route && moon_)
-    return std::unexpected{"Return home before selecting minor inspection"};
-  if (!minor_route &&
-      candidate.travel_->version == kFreedomMinorTravelStateVersion)
+  const auto moon_target =
+      BodyTarget{origin->catalog.id, catalog->bodies[0].node.id};
+  const auto minor_target =
+      BodyTarget{origin->catalog.id, catalog->bodies[1].node.id};
+  const auto home_target = BodyTarget{
+      origin->catalog.id, body_id(document_.origin.recipe.home_planet)};
+  const bool at_home = !moon_ && !minor_;
+  if ((at_home && target != moon_target && target != minor_target) ||
+      (!at_home && target != home_target))
     return std::unexpected{
-        "Minor inspection retains its selected local history"};
-  if (minor_route &&
-      candidate.travel_->version != kFreedomMinorTravelStateVersion) {
-    if (candidate.travel_->local && candidate.travel_->local->outbound) {
-      if (!candidate.travel_->local->committed ||
-          candidate.travel_->local->committed->arrival.moon ||
-          candidate.travel_->local->committed->arrival.minor)
-        return std::unexpected{"Complete the old Moon route home before "
-                               "adopting minor inspection"};
-      candidate.travel_->prior_moon =
-          FreedomLocalMoonHistory{*candidate.travel_->local};
-      candidate.travel_->prior_moon->local.selected.reset();
-    }
+        "Select a local destination from home, or return home first"};
+  if (at_home && target == moon_target &&
+      candidate.travel_->version == kFreedomMinorTravelStateVersion) {
+    if (!candidate.travel_->local ||
+        candidate.travel_->local->committed.has_value() !=
+            candidate.travel_->local->outbound.has_value() ||
+        (candidate.travel_->local->committed &&
+         (candidate.travel_->local->committed->arrival.moon ||
+          candidate.travel_->local->committed->arrival.minor)))
+      return std::unexpected{
+          "Complete the minor route home before reusing origin routes"};
+    FreedomOriginLocalRoutes routes;
+    routes.legacy = {candidate.travel_->version, *candidate.travel_->local,
+                     candidate.travel_->prior_moon,
+                     candidate.travel_->next_attempt};
+    candidate.travel_->origin_routes = std::move(routes);
     candidate.travel_->local = FreedomLocalTravelState{};
+    candidate.travel_->prior_moon.reset();
+    candidate.travel_->version = kFreedomOriginLocalTravelStateVersion;
   }
-  if (!candidate.travel_->local)
-    candidate.travel_->local = FreedomLocalTravelState{};
-  candidate.travel_->version = minor_route ? kFreedomMinorTravelStateVersion
-                                           : kFreedomLocalTravelStateVersion;
+  if (candidate.travel_->version == kFreedomOriginLocalTravelStateVersion) {
+    if (!candidate.travel_->origin_routes || !candidate.travel_->local)
+      return std::unexpected{"Origin route checkpoints unavailable"};
+    auto& routes = *candidate.travel_->origin_routes;
+    if (at_home) {
+      const auto requested = target == moon_target
+                                 ? FreedomLocalRouteKind::moon
+                                 : FreedomLocalRouteKind::minor;
+      if (requested != routes.active) {
+        // A selection is not a retained journey proof. Both checkpoints are
+        // idle at home, and switching never grants a direct body-to-body leg.
+        candidate.travel_->local->selected.reset();
+        FreedomLocalRouteCheckpoint previous{
+            std::move(*candidate.travel_->local),
+            std::move(routes.excursion_outbound)};
+        candidate.travel_->local = std::move(routes.inactive.local);
+        routes.excursion_outbound =
+            std::move(routes.inactive.excursion_outbound);
+        routes.inactive = std::move(previous);
+        routes.active = requested;
+      }
+    } else if ((moon_ && routes.active != FreedomLocalRouteKind::moon) ||
+               (minor_ && routes.active != FreedomLocalRouteKind::minor)) {
+      return std::unexpected{"The active route does not own this departure"};
+    }
+  } else {
+    const bool minor_route =
+        minor_.has_value() ||
+        target == BodyTarget{origin->catalog.id, catalog->bodies[1].node.id};
+    if (minor_route && moon_)
+      return std::unexpected{"Return home before selecting minor inspection"};
+    if (!minor_route &&
+        candidate.travel_->version == kFreedomMinorTravelStateVersion)
+      return std::unexpected{
+          "Minor inspection retains its selected local history"};
+    if (minor_route &&
+        candidate.travel_->version != kFreedomMinorTravelStateVersion) {
+      if (candidate.travel_->local && candidate.travel_->local->outbound) {
+        if (!candidate.travel_->local->committed ||
+            candidate.travel_->local->committed->arrival.moon ||
+            candidate.travel_->local->committed->arrival.minor)
+          return std::unexpected{"Complete the old Moon route home before "
+                                 "adopting minor inspection"};
+        candidate.travel_->prior_moon =
+            FreedomLocalMoonHistory{*candidate.travel_->local};
+        candidate.travel_->prior_moon->local.selected.reset();
+      }
+      candidate.travel_->local = FreedomLocalTravelState{};
+    }
+    if (!candidate.travel_->local)
+      candidate.travel_->local = FreedomLocalTravelState{};
+    candidate.travel_->version = minor_route ? kFreedomMinorTravelStateVersion
+                                             : kFreedomLocalTravelStateVersion;
+  }
   candidate.travel_->selected.reset();
   candidate.travel_->local->selected = target;
   if (!candidate.document_.moon && !candidate.document_.minor &&
@@ -73,6 +131,12 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     return std::unexpected{preview.error()};
   if (auto saved = candidate.travel_document(); !saved)
     return std::unexpected{saved.error()};
+  // Adoption and switching add bounded history. Qualify the complete outer
+  // save's encoding limit before publishing any selected/checkpoint state.
+  const auto saved = candidate.save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
   *this = std::move(candidate);
   return {};
 }
@@ -83,13 +147,28 @@ auto NativeFreedomFlightSession::local_jump_preview() const
   const auto& local = *travel_->local;
   if (travel_->phase == FreedomJumpPhase::transit && local.committed)
     return *local.committed;
-  const auto home_model =
+  auto home_model =
       local.outbound ? local.outbound->request.home_model : document_.model;
+  auto policy = travel_->version == kFreedomMinorTravelStateVersion
+                    ? kFreedomMinorLocalBodyJumpVersion
+                    : kFreedomLocalBodyJumpVersion;
+  if (travel_->version == kFreedomOriginLocalTravelStateVersion) {
+    if (!travel_->origin_routes)
+      return std::unexpected{"Origin route checkpoint unavailable"};
+    const auto& routes = *travel_->origin_routes;
+    policy = routes.active == FreedomLocalRouteKind::minor
+                 ? kFreedomMinorLocalBodyJumpVersion
+                 : kFreedomLocalBodyJumpVersion;
+    if (moon_ || minor_) {
+      if (!routes.excursion_outbound)
+        return std::unexpected{"The current excursion has no home departure"};
+      home_model = routes.excursion_outbound->request.home_model;
+    } else {
+      home_model = document_.model;
+    }
+  }
   const auto result = freeze_local_body_jump_arrival(
-      {travel_->version == kFreedomMinorTravelStateVersion
-           ? kFreedomMinorLocalBodyJumpVersion
-           : kFreedomLocalBodyJumpVersion,
-       document_, *local.selected, travel_->next_attempt, home_model});
+      {policy, document_, *local.selected, travel_->next_attempt, home_model});
   if (!result) {
     if (result.error() == FreedomLocalBodyJumpError::unclear_departure)
       return std::unexpected{
@@ -208,9 +287,11 @@ auto NativeFreedomFlightSession::advance_local_jump(
         auto& local = *candidate.travel_->local;
         local.committed = *frozen;
         local.commitment_resources = *candidate.resources_;
-        if (!local.outbound && !frozen->request.source.moon &&
-            !frozen->request.source.minor)
-          local.outbound = *frozen;
+        if (!frozen->request.source.moon && !frozen->request.source.minor) {
+          if (!local.outbound) local.outbound = *frozen;
+          if (candidate.travel_->origin_routes)
+            candidate.travel_->origin_routes->excursion_outbound = *frozen;
+        }
         --candidate.resources_->jump_charges;
         ++candidate.travel_->next_attempt;
         candidate.travel_->phase = FreedomJumpPhase::transit;

@@ -74,11 +74,26 @@ selects the minor's physical/rotation/dynamics recipes without a fake PlanetId
 or Moon descriptor. Local travel format47/version3 retains the original home
 model and existing commitment history. A completed home–Moon journey can be
 retained when adopting the inspection route from home; no proof or bill is
-silently discarded. Direct Moon–minor and arbitrary intersystem combinations
-are outside this increment. After adopting the inspection route, repeating that
-route is supported; selecting a new Moon or intersystem leg in that saved
-journey requires future travel-history composition. Historical Moon flight42/walk44/local45 encodings
+silently discarded. Historical Moon flight42/walk44/local45 encodings
 retain their original validators and bytes.
+
+[Local route reuse #633](https://github.com/gobha-me/apsis-drift/issues/633)
+lets the existing Moon and asteroid round trips share one save. Return home,
+approach and capture the moving station, use **Replenish flight fuel and jump
+charges · free**, release the port and withdraw before choosing either existing
+destination. The home return leaves one reserve charge; another full round trip
+requires two. Selection, Continue and changing destinations never refill fuel.
+Direct Moon–asteroid transfers and switching to an intersystem voyage remain
+unavailable.
+
+Selecting the Moon after adopting the asteroid route explicitly selects local
+travel format48/version4. Reading an old save does not upgrade it. One fixed
+legacy span keeps the original old-format proofs; the active and inactive routes
+keep bounded first/latest checkpoints, independent of the number of trips. Each
+new excursion retains its actual home departure model for its return, including
+assistance changes made at home. Old45/47 saves keep their existing encoding
+until this explicit adoption. Personal markers and inspection records remain
+part of the same journey; choosing a destination does not grant survey facts.
 
 The actual voyage fixture starts with station walking and boarding, then uses
 real controls, charged travel and home return. Its phase saves and control

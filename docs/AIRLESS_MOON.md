@@ -132,6 +132,10 @@ It does not add arbitrary local-body selection, landable asteroids, a new
 intersystem risk policy or seamless gravity transitions. The existing
 intersystem route retains its validators; switching from a retained local
 voyage into that route is explicitly refused in this increment.
+The existing Moon and asteroid round trips can be reused in the same save through
+[the home route and station service](ASTEROID_INSPECTION.md#versioned-ownership-and-compatibility).
+Go home between companions and replenish at the real station before another full
+round trip; destination selection provides no free fuel or charges.
 
 The explicit moon flight codec uses format42 and a separate optional moon world
 selection on the shared flight document. It cannot coexist with a planet world

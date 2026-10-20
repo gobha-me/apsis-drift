@@ -10,7 +10,7 @@ namespace apsis_drift::detail {
 [[nodiscard]] auto encode_local_travel(const FreedomTravelSaveDocument&)
     -> std::expected<std::string, SaveSchemaError>;
 // Public travel parsing has already bounded depth/bytes and rejected duplicate
-// keys before dispatching this explicit format45 branch.
+// keys before dispatching the explicit local formats45/47/48.
 [[nodiscard]] auto decode_local_travel(const nlohmann::ordered_json&)
     -> std::expected<FreedomTravelSaveDocument, SaveSchemaError>;
 

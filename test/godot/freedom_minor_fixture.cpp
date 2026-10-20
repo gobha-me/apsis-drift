@@ -1,3 +1,4 @@
+#include "../native_local_route_reuse_fixture.hpp"
 #include "../native_minor_route_fixture.hpp"
 
 #include <filesystem>
@@ -69,6 +70,12 @@ int main(int argc, char** argv) {
     std::ofstream stream{output / "report.json"};
     stream << report.dump(2) << '\n';
     if (!stream) throw std::runtime_error("Minor fixture report write failed");
+    // The original four phases/report stay unchanged. This extra genuine
+    // captured return lets the native case use the service UI and revisit the
+    // Moon without duplicating the C++ test guidance in presentation code.
+    const auto rendezvous_ticks = origin_route_reuse_fixture::capture_home(s);
+    need(s.save_as(output / "reuse-captured.json"));
+    std::cout << "reuse_capture_ticks=" << rendezvous_ticks << '\n';
     std::cout
         << "Actual station-to-minor approach/withdraw/home fixture passed\n";
     return 0;
