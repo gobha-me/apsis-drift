@@ -6,6 +6,7 @@ const MinorView = preload("res://scripts/native/native_minor_view.gd")
 const MinorState = preload("res://scripts/native/native_minor_state.gd")
 const MinorGeometry = preload("res://scripts/native/native_minor_geometry.gd")
 const RouteReuse = preload("res://tests/native_local_route_reuse.gd")
+const PortRendezvous = preload("res://tests/native_port_rendezvous.gd")
 const PHASES = ["arrival", "approach", "withdraw", "home"]
 var failures := 0
 
@@ -249,6 +250,7 @@ func run() -> void:
 		if restored == null: continue
 		check(restored.current_view.paused and (restored.current_view is MinorView) == (label != "home") and save_bytes(peer, output.path_join(label + "-continued.json")) == originals[label], "Complete phase Continue selected wrong view or changed bytes: " + label)
 		check(str(peer.get_freedom_flight_state().tick) == str(report.phases[label].tick), "Actual phase Continue lost authoritative tick: " + label)
+		if label == "home": await PortRendezvous.run(self, peer, restored.current_view, phases, assets, output.path_join("rendezvous-ui"))
 		restored.free()
 		await process_frame
 	await check_controls(phases, assets, output)

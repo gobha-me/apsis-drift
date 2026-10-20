@@ -125,11 +125,13 @@ auto NativeFreedomFlightSession::begin_port_approach()
     return {};
   }
   if (auto valid = port_approach_available(); !valid) return valid;
+  cancel_port_rendezvous();
   port_approach_ = {true, kNativePortApproachTicks,
                     "Approaching with thrusters; manual input cancels"};
   return {};
 }
 auto NativeFreedomFlightSession::cancel_port_approach() -> void {
+  cancel_port_rendezvous();
   port_approach_ = {false, 0, "Approach aid off"};
 }
 auto NativeFreedomFlightSession::port_approach_controls() const

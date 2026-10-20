@@ -675,6 +675,7 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_ || surface_walker_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  if (port_rendezvous_.active) return advance_port_rendezvous(controls, step);
   if (minor_) return advance_minor_tick(controls, step);
   if (moon_) return advance_moon_tick(controls, step);
   if (surface_ && (surface_->gear_deployed || surface_->landed ||

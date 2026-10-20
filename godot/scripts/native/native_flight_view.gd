@@ -101,6 +101,7 @@ var station_geometry: Dictionary = {}
 var dock_status: RichTextLabel
 var port_buttons: Array[Button] = []
 var approach_button: Button
+var rendezvous_button: Button
 var capture_button: Button
 var unboard_menu_button: Button
 var unboard_button: Button
@@ -175,6 +176,13 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 static func valid_state(value: Dictionary) -> bool:
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
+	if value.has("port_rendezvous"):
+		var rendezvous: Variant = value.port_rendezvous
+		if not rendezvous is Dictionary or rendezvous.size() != 5: return false
+		if not rendezvous.get("available") is bool or not rendezvous.get("active") is bool: return false
+		if not rendezvous.get("remaining_seconds") is float or not is_finite(rendezvous.remaining_seconds) or rendezvous.remaining_seconds < 0.0 or rendezvous.remaining_seconds > 2400.0: return false
+		for key in ["refusal", "note"]:
+			if not rendezvous.get(key) is String or rendezvous[key].length() > 1024: return false
 	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value) or not PlanetOptics.valid(value) or not SurfaceAppearance.valid(value) or not SurfaceLandmarks.valid(value) or not valid_surface_marker(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
@@ -582,6 +590,11 @@ func build_ui() -> void:
 		approach_button.focus_mode = Control.FOCUS_NONE
 		approach_button.pressed.connect(func(): port_command("cancel_freedom_port_approach" if state.get("port_approach", {}).get("active", false) else "begin_freedom_port_approach"))
 		column.add_child(approach_button)
+		rendezvous_button = Button.new()
+		rendezvous_button.text = "Rendezvous with Origin Station"
+		rendezvous_button.focus_mode = Control.FOCUS_NONE
+		rendezvous_button.pressed.connect(func(): port_command("cancel_freedom_port_rendezvous" if state.get("port_rendezvous", {}).get("active", false) else "begin_freedom_port_rendezvous"))
+		column.add_child(rendezvous_button)
 		capture_button = Button.new()
 		capture_button.text = "Capture port"
 		capture_button.focus_mode = Control.FOCUS_NONE
@@ -1193,6 +1206,9 @@ func open_save_dialog() -> void:
 
 func pause_controls(reason: String, show_menu := true) -> void:
 	mouse_look.set_active(false)
+	if state.get("port_rendezvous", {}).get("active", false):
+		bridge.cancel_freedom_port_rendezvous()
+		state = bridge.get_freedom_flight_state()
 	if state.get("surface", {}).get("maneuver", "off") != "off":
 		bridge.cancel_freedom_surface_maneuver()
 		state = bridge.get_freedom_flight_state()
@@ -1309,7 +1325,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
-	if command in ["begin_freedom_port_approach", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
+	if command in ["begin_freedom_port_approach", "begin_freedom_port_rendezvous", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		observe_neutral_controls()
 		if not controls_armed:
 			report_action_status("Release movement controls before changing modes or starting a maneuver.")
@@ -1338,6 +1354,8 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		report_action_status("Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)])
 	elif command.ends_with("port_approach"):
 		report_action_status(state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else ""))
+	elif command.ends_with("port_rendezvous"):
+		report_action_status(state.port_rendezvous.note + (" · Uses flight fuel; allow several minutes." if state.port_rendezvous.active else "") + (" Resume flight explicitly." if paused and state.port_rendezvous.active else ""))
 	elif canceled_aid:
 		report_action_status(surface_aid_cue.text())
 	elif command in ["request_freedom_landing", "liftoff_freedom_surface"] and state.surface.maneuver != "off":
@@ -1776,6 +1794,12 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
 	home_cue.tooltip_text = "Station " + state.station_id + " · HOME marks its projected direction. It does not steer or certify a route."
 	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)
+	if rendezvous_button != null:
+		var rendezvous: Dictionary = state.get("port_rendezvous", {})
+		rendezvous_button.visible = state.get("station_available", true) and not state.attached and not surface_walking() and not rendezvous.is_empty()
+		rendezvous_button.text = "Cancel station rendezvous · %.0f s left" % rendezvous.get("remaining_seconds", 0.0) if rendezvous.get("active", false) else "Rendezvous with Origin Station"
+		rendezvous_button.disabled = not rendezvous.get("active", false) and not rendezvous.get("available", false)
+		rendezvous_button.tooltip_text = "Real thrusters and fuel; allow several minutes. Manual input cancels. Near-port aid takes over; Capture stays your action." if rendezvous.get("active", false) or rendezvous.get("available", false) else str(rendezvous.get("refusal", "Select D1 or D2 in paused flight controls."))
 	if dock_status != null:
 		var changed: bool = dock_status.visible != near_port
 		for item in [port_row, dock_status, approach_button, capture_button, release_button]: item.visible = near_port

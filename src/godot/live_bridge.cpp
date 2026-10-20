@@ -436,6 +436,12 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::begin_freedom_port_approach);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_approach"),
                                 &FreedomBridge::cancel_freedom_port_approach);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("begin_freedom_port_rendezvous"),
+        &FreedomBridge::begin_freedom_port_rendezvous);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("cancel_freedom_port_rendezvous"),
+        &FreedomBridge::cancel_freedom_port_rendezvous);
     godot::ClassDB::bind_method(godot::D_METHOD("replenish_freedom_resources"),
                                 &FreedomBridge::replenish_freedom_resources);
     godot::ClassDB::bind_method(godot::D_METHOD("release_freedom_port"),
@@ -1958,6 +1964,20 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto begin_freedom_port_rendezvous() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_port_rendezvous();
+    });
+  }
+  auto cancel_freedom_port_rendezvous() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session)
+            -> std::expected<void, std::string> {
+          session.cancel_port_rendezvous();
+          return {};
+        },
+        true);
+  }
 
   auto begin_freedom_boarding() -> bool {
     return change_freedom_port(
@@ -2615,6 +2635,19 @@ class FreedomBridge : public godot::RefCounted {
           session.port_approach().remaining_ticks / 120.0;
       approach["note"] = godot::String{session.port_approach().note.c_str()};
       result["port_approach"] = approach;
+      const auto rendezvous_available = session.port_rendezvous_available();
+      godot::Dictionary rendezvous;
+      rendezvous["available"] = rendezvous_available.has_value();
+      rendezvous["refusal"] =
+          rendezvous_available
+              ? godot::String{}
+              : godot::String{rendezvous_available.error().c_str()};
+      rendezvous["active"] = session.port_rendezvous().active;
+      rendezvous["remaining_seconds"] =
+          session.port_rendezvous().remaining_ticks / 120.0;
+      rendezvous["note"] =
+          godot::String{session.port_rendezvous().note.c_str()};
+      result["port_rendezvous"] = rendezvous;
       godot::Dictionary surface;
       surface["gear_deployed"] =
           session.surface() && session.surface()->gear_deployed;
