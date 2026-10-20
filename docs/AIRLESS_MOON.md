@@ -183,3 +183,7 @@ Suit oxygen/exposure, economy, missions, a wider fleet and multi-body gravity
 are separate scopes. The existing local central-body approximation remains a
 bounded simulation model. Scripted journeys and reviewed captures remain
 separate from manual controller and platform qualification.
+
+Local [geological exposures](FREEDOM_SURFACE_LANDMARKS.md#moon-walks) can be
+explicitly enabled in paused Controls. They reuse this supported walk and
+contact ground; a visible band is neither a deposit nor a new solid obstacle.

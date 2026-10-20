@@ -175,6 +175,24 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
     root["surface_landmarks"] = {{"version", k.surface_landmarks->version},
                                  {"inspections", std::move(inspections)}};
   }
+  if (k.moon_surface_landmarks) {
+    Json inspections = Json::array();
+    for (const auto& inspection : k.moon_surface_landmarks->inspections) {
+      const auto target = encode_body_target(inspection.target);
+      if (!target)
+        return std::unexpected{failure("invalid Moon exposure target")};
+      inspections.push_back(
+          {{"target", Json::parse(*target)},
+           {"cell", Json::array({inspection.cell.x, inspection.cell.y,
+                                 inspection.cell.z})},
+           {"site", inspection.site.value},
+           {"terrain_recipe", inspection.terrain_recipe},
+           {"tick", inspection.tick}});
+    }
+    root["moon_surface_landmarks"] = {
+        {"version", k.moon_surface_landmarks->version},
+        {"inspections", std::move(inspections)}};
+  }
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -188,9 +206,12 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("surface_marker");
   const bool landmarks_selected =
       root->is_object() && root->contains("surface_landmarks");
+  const bool moon_landmarks_selected =
+      root->is_object() && root->contains("moon_surface_landmarks");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
+  if (moon_landmarks_selected) root_shape.erase("moon_surface_landmarks");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -327,6 +348,42 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
             cell[2].get<std::int32_t>()},
            {inspection["site"].get<std::uint64_t>()},
            inspection["terrain_policy"].get<std::uint32_t>(),
+           inspection["tick"].get<SimulationTick>()});
+    }
+  }
+  if (moon_landmarks_selected) {
+    const auto& landmarks = (*root)["moon_surface_landmarks"];
+    if (!observed || !fields(landmarks, {"version", "inspections"}) ||
+        !unsigned_fields(landmarks, {"version"}) ||
+        landmarks["version"] != kFreedomMoonSurfaceLandmarkVersion ||
+        !landmarks["inspections"].is_array() ||
+        landmarks["inspections"].size() >
+            kMaximumFreedomSurfaceLandmarkInspections)
+      return std::unexpected{failure("unsupported Moon exposure selection")};
+    k.moon_surface_landmarks = FreedomMoonSurfaceLandmarkState{};
+    for (const auto& inspection : landmarks["inspections"]) {
+      if (!fields(inspection,
+                  {"target", "cell", "site", "terrain_recipe", "tick"}) ||
+          !unsigned_fields(inspection, {"site", "terrain_recipe", "tick"}) ||
+          inspection["terrain_recipe"] >
+              std::numeric_limits<std::uint32_t>::max() ||
+          !inspection["cell"].is_array() || inspection["cell"].size() != 3)
+        return std::unexpected{
+            failure("invalid closed Moon exposure inspection")};
+      const auto target = decode_body_target(inspection["target"].dump());
+      if (!target)
+        return std::unexpected{failure("invalid Moon exposure target")};
+      const auto& cell = inspection["cell"];
+      for (const auto& coordinate : cell)
+        if (!bounded_cell_coordinate(coordinate))
+          return std::unexpected{
+              failure("bounded integer Moon exposure cell required")};
+      k.moon_surface_landmarks->inspections.push_back(
+          {*target,
+           {cell[0].get<std::int32_t>(), cell[1].get<std::int32_t>(),
+            cell[2].get<std::int32_t>()},
+           {inspection["site"].get<std::uint64_t>()},
+           inspection["terrain_recipe"].get<std::uint32_t>(),
            inspection["tick"].get<SimulationTick>()});
     }
   }

@@ -62,6 +62,10 @@ The next bounded continuation is [asteroid close inspection](ASTEROID_INSPECTION
 ([#629](https://github.com/gobha-me/apsis-drift/issues/629)): actual charged
 home–minor–home flight, saved state and a disclosed inspection stand-off guard.
 This does not activate asteroid landing, mining or the wider heterogeneous horizon.
+The next carry-over, [Moon geological exposures](FREEDOM_SURFACE_LANDMARKS.md#moon-walks)
+([#631](https://github.com/gobha-me/apsis-drift/issues/631)), adds visible sites,
+actual supported walking/inspection and retained first visits to that Moon.
+It changes no terrain, collision, mission or resource rules.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

@@ -67,3 +67,24 @@ terrain policy and authoritative first tick. Historical absence remains absent.
 Inspection authenticates the current site and supported actor, then checks the
 complete save byte limit before committing. Standard recovery retains these
 records independently of the replacement craft's lineage.
+
+## Moon walks
+
+The origin Moon has its own seeded exposures on the existing lunar ground.
+Choose **Enable local landmarks** in paused Controls while on that Moon;
+historical journeys and New Game do not silently adopt this separate selection.
+Land, leave the Wayfarer and use the same nearby card, eight-metre inspection
+action and paused reader. A reachable hatch keeps priority over an exposure.
+The personal marker remains an independent navigation aid.
+
+Lunar sites use genuine Moon identity and the selected lunar contact top. Dry
+basins below the reference radius remain eligible ground. The tint adds no rock,
+collision, composition measurement or terrain change. Nearby positions come
+from C++; the lunar material only applies the same bounded bands and fade as
+planetary exposures.
+
+Optional version1 `moon_surface_landmarks` metadata retains typed body targets,
+cells, site IDs, terrain recipe and first-inspection ticks. The combined Moon
+and planetary inspection history is bounded to64 records; historical planetary
+JSON and seed domains remain unchanged. Enabling and inspecting are zero-time,
+transactional metadata actions; Continue and recovery retain both histories.

@@ -7,6 +7,7 @@ const MoonState = preload("res://scripts/native/native_moon_state.gd")
 const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
 const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
+const MoonExposures = preload("res://tests/native_moon_exposures.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -601,6 +602,7 @@ func run() -> void:
 	await check_outside(phases, assets, output)
 	DirAccess.make_dir_recursive_absolute(output.path_join("marker"))
 	await check_moon_marker(phases, assets, output)
+	failures += await MoonExposures.run(self, phases, assets, output.path_join("exposures"))
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Native Moon test rewrote C++ source phase: " + label)
 	print("Native Moon: %d failures" % failures)
 	quit(1 if failures else 0)
