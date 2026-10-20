@@ -1,6 +1,5 @@
 extends "res://scripts/native/native_moon_view.gd"
 ## The same occupied-craft shell; a distinct C++ minor owner and close mesh.
-const MinorState = preload("res://scripts/native/native_minor_state.gd")
 const MinorGeometry = preload("res://scripts/native/native_minor_geometry.gd")
 
 func valid_body_state(value: Dictionary) -> bool:
