@@ -6,6 +6,8 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomLocalBodyJumpVersion{1};
 inline constexpr double kFreedomLocalMoonArrivalClearanceMetres{10000.0};
+inline constexpr std::uint32_t kFreedomMinorLocalBodyJumpVersion{2};
+inline constexpr double kFreedomLocalMinorArrivalClearanceMetres{11000.0};
 
 // source.tick is the actual COMMIT tick after the ordinary kJumpSpoolTicks.
 // The outer native journey owns selection/spooling, charges and provenance of

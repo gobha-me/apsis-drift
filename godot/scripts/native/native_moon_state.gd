@@ -34,7 +34,13 @@ static func gear_clearance_text(state: Dictionary) -> String:
 	return "Gear clearance: %.3f…%.3f m" % [clearance.minimum_gap_metres, clearance.maximum_gap_metres]
 
 static func valid(value: Dictionary) -> bool:
-	if value.get("mode") != "freedom_flight" or value.get("body_kind") != "moon" or value.get("body_version") != 1 or value.has("planet_id"): return false
+	return value.get("coordinate_frame") == "moon_relative_inertial" and valid_companion(value, "moon")
+
+# Both companion packets keep genuine typed ownership; this validates only
+# their shared instruments/pilot/clock fields, not a surface model.
+static func valid_companion(value: Dictionary, kind: String) -> bool:
+	if kind not in ["moon", "minor"]: return false
+	if value.get("mode") != "freedom_flight" or value.get("body_kind") != kind or value.get("body_version") != 1 or value.has("planet_id"): return false
 	for key in ["universe_seed", "system_id", "body_id", "craft_id", "frame_id", "tick", "checksum"]:
 		if not decimal(value.get(key)): return false
 	if value.get("frame_id") != "2" or typeof(value.get("frame_version")) != TYPE_INT or value.frame_version != 1 or not value.get("assistance") is bool: return false

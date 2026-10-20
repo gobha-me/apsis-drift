@@ -1,6 +1,7 @@
 #include "apsis_drift/godot/flight_guidance.hpp"
 #include "apsis_drift/godot/moon_stream_runtime.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
+#include "apsis_drift/godot/saved_minor_flight.hpp"
 #include "apsis_drift/godot/snapshot.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/godot/surface_start.hpp"
@@ -220,7 +221,9 @@ class FreedomBridge : public godot::RefCounted {
     ++stream_generation;
   }
   auto replace_saved_stream(const NativeFreedomFlightSession& session) -> void {
-    if (session.moon()) {
+    if (session.minor()) {
+      replace_stream(nullptr);
+    } else if (session.moon()) {
       auto replacement = std::make_unique<MoonStreamRuntime>(*session.moon());
       replacement->request(project_saved_moon_flight(session).tangent.origin);
       replace_moon_stream(std::move(replacement));
@@ -372,6 +375,11 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_jump", "system_id"),
         &FreedomBridge::select_freedom_jump);
+    godot::ClassDB::bind_method(godot::D_METHOD("select_freedom_minor_jump"),
+                                &FreedomBridge::select_freedom_minor_jump);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_minor_geometry", "candidate_id"),
+        &FreedomBridge::get_freedom_minor_geometry);
     godot::ClassDB::bind_method(godot::D_METHOD("select_freedom_moon_jump"),
                                 &FreedomBridge::select_freedom_moon_jump);
     godot::ClassDB::bind_method(
@@ -701,7 +709,8 @@ class FreedomBridge : public godot::RefCounted {
       if (!opened) throw std::runtime_error(opened.error());
       validate_saved_projection(*opened);
       const bool station_available =
-          !opened->moon() && project_saved_flight(*opened).station_available;
+          !opened->moon() && !opened->minor() &&
+          project_saved_flight(*opened).station_available;
       candidate->flight = std::make_unique<SavedFlightWorld>(
           SavedFlightWorld{std::move(*opened), {}, {}, 0});
       if (project_flight_state(*candidate->flight).is_empty() ||
@@ -719,7 +728,7 @@ class FreedomBridge : public godot::RefCounted {
         candidate->moon_stream->request(
             project_saved_moon_flight(candidate->flight->session)
                 .tangent.origin);
-      } else
+      } else if (!candidate->flight->session.minor())
         candidate->stream = saved_stream(candidate->flight->session);
     } else {
       auto start = prepare_native_freedom_station_start(std::move(selected));
@@ -832,7 +841,8 @@ class FreedomBridge : public godot::RefCounted {
     godot::Dictionary result;
     result["candidate_id"] = godot::String{pending->id.c_str()};
     result["streaming_ready"] =
-        pending->stream != nullptr || pending->moon_stream != nullptr;
+        pending->stream != nullptr || pending->moon_stream != nullptr ||
+        (pending->flight && pending->flight->session.minor().has_value());
     result["mode"] =
         pending->flight ? (pending->flight->session.walker() ? "freedom_walk"
                                                              : "freedom_flight")
@@ -853,6 +863,7 @@ class FreedomBridge : public godot::RefCounted {
         pending->station
             ? project_station_geometry(pending->station->station)
             : (!pending->flight->session.moon() &&
+                       !pending->flight->session.minor() &&
                        project_saved_flight(pending->flight->session)
                            .station_available
                    ? project_station_geometry(generate_origin_station(
@@ -1204,11 +1215,25 @@ class FreedomBridge : public godot::RefCounted {
           {session.system().catalog.id, catalog->bodies[0].node.id});
     });
   }
+  auto select_freedom_minor_jump() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      if (session.minor()) return std::unexpected{"Already at the minor body"};
+      if (session.moon())
+        return std::unexpected{"Return home before selecting the minor body"};
+      const auto catalog = generate_secondary_body_catalog(session.system());
+      if (!catalog)
+        return std::unexpected{"Actual minor-body catalog unavailable"};
+      return session.select_local_jump(
+          {session.system().catalog.id, catalog->bodies[1].node.id});
+    });
+  }
   auto select_freedom_home_body_jump() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
-      if (!session.moon())
-        return std::unexpected{"Return home requires the actual Moon owner"};
+      if (!session.moon() && !session.minor())
+        return std::unexpected{
+            "Return home requires an actual companion owner"};
       return session.select_local_jump(
           {session.system().catalog.id,
            body_id(session.document().origin.recipe.home_planet)});
@@ -1626,6 +1651,181 @@ class FreedomBridge : public godot::RefCounted {
     result["star_angular_radius"] = std::asin(
         std::min(1.0, static_cast<double>(star.radius_kilometres) * 1000.0 /
                           view.rotation.observer_star_distance_metres));
+    return result;
+  }
+
+  static auto project_minor_flight_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto& session = selected.session;
+    const auto& document = session.document();
+    const auto& body = document.flight;
+    const auto view = project_saved_minor_flight(session);
+    const auto fixed =
+        require(reframe_rigid_body(RigidBodyWorldContext{view.minor}, body,
+                                   {view.fixed_frame, body.tick}, view.minor));
+    const auto observation = require(session.observe());
+    if (!observation.minor)
+      throw std::invalid_argument("Actual minor observation missing");
+    const auto coordinates = [](const auto& value) {
+      godot::PackedFloat64Array array;
+      for (double v : {value.x, value.y, value.z})
+        array.append(v);
+      return array;
+    };
+    const auto decimal = [](std::uint64_t v) {
+      return godot::String{std::to_string(v).c_str()};
+    };
+    const auto vector = [](LocalPositionMetres v) {
+      return godot::Vector3(v.east, v.up, -v.north);
+    };
+    godot::Basis basis, system_basis;
+    for (int i = 0; i < 3; ++i) {
+      basis.set_column(i, vector(view.body_axes[static_cast<std::size_t>(i)]));
+      system_basis.set_column(
+          i, vector(view.system_axes[static_cast<std::size_t>(i)]));
+    }
+    result["mode"] = "freedom_flight";
+    result["body_kind"] = "minor";
+    result["body_version"] = static_cast<std::int64_t>(view.minor.body.version);
+    result["body_id"] = decimal(view.minor.body.value);
+    result["body_radius"] = static_cast<double>(view.minor.radius_metres);
+    result["universe_seed"] =
+        decimal(document.origin.recipe.universe_seed.value);
+    result["system_id"] = decimal(body.frame.system.value);
+    result["craft_id"] = decimal(document.origin.state.craft.value);
+    result["frame_id"] = decimal(body.craft.id.value);
+    result["frame_version"] = static_cast<std::int64_t>(body.craft.version);
+    result["tick"] = decimal(body.tick);
+    result["checksum"] = decimal(require(
+        rigid_body_state_checksum(RigidBodyWorldContext{view.minor}, body)));
+    result["continued"] = session.source_save().has_value();
+    result["coordinate_frame"] = "minor_relative_inertial";
+    result["body_basis"] = basis;
+    result["station_basis"] = system_basis;
+    result["station_available"] = false;
+    result["station_id"] = godot::String{};
+    result["air_density"] = 0.0;
+    result["dynamic_pressure"] = 0.0;
+    result["recovery_pending"] = session.recovery_pending();
+
+    result["attached"] = false;
+    result["target_port"] = std::int64_t{0};
+    result["assistance"] = document.model.assistance;
+    result["hold_enabled"] = false;
+    result["latitude"] = view.pose.latitude_radians;
+    result["longitude"] = view.pose.longitude_radians;
+    result["altitude"] = view.pose.altitude_metres;
+    const auto velocity = fixed.linear_velocity_metres_per_second;
+    result["surface_speed"] = std::hypot(velocity.x, velocity.y, velocity.z);
+    result["radial_rate"] = observation.minor->radial_speed_metres_per_second;
+    result["position_metres"] = coordinates(body.position_metres);
+    result["velocity_metres_per_second"] =
+        coordinates(body.linear_velocity_metres_per_second);
+    result["angular_velocity_body"] =
+        coordinates(body.angular_velocity_radians_per_second);
+    result["dropped_seconds"] = selected.dropped_seconds;
+    result["boarding"] = project_boarding_state(selected);
+    result["surface_walk"] = godot::Dictionary{};
+    result["surface_marker"] =
+        project_surface_marker(selected, view.system_axes);
+    godot::Dictionary surface;
+    surface["gear_deployed"] = false;
+    surface["landed"] = false;
+    surface["maneuver"] = "off";
+    surface["remaining_seconds"] = 0.0;
+    surface["note"] = godot::String{session.surface_maneuver().note.c_str()};
+    godot::Dictionary clearance;
+    clearance["available"] = false;
+    surface["gear_clearance"] = clearance;
+    result["surface"] = surface;
+    godot::Dictionary resources;
+    resources["selected"] = session.resources().has_value();
+    if (session.resources()) {
+      const auto reading = require(freedom_resource_reading(
+          *session.resources(),
+          selected.last_step ? selected.last_step->fuel_debit_quanta : 0,
+          selected.last_step && selected.last_step->propulsion_refused));
+      resources["quantity_quanta"] = decimal(reading.quantity_quanta);
+      resources["capacity_quanta"] = decimal(reading.capacity_quanta);
+      resources["last_tick_quanta"] = decimal(reading.last_tick_quanta);
+      resources["fraction"] = reading.fraction;
+      resources["main_equivalent_seconds"] = reading.main_equivalent_seconds;
+      resources["equivalent_newtons"] = reading.equivalent_newtons;
+      resources["jump_charges"] =
+          static_cast<std::int64_t>(reading.jump_charges);
+      resources["reserve"] = reading.reserve;
+      resources["operationally_empty"] = reading.operationally_empty;
+      resources["propulsion_refused"] = reading.propulsion_refused;
+    }
+    result["resources"] = resources;
+    godot::Dictionary jump;
+    const auto& travel = session.travel();
+    const auto available = session.jump_available();
+    jump["available"] = available.has_value();
+    jump["refusal"] =
+        available ? godot::String{} : godot::String{available.error().c_str()};
+    jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle ? "idle"
+                    : travel->phase == FreedomJumpPhase::spool         ? "spool"
+                                                               : "transit";
+    jump["selected"] = travel && travel->local && travel->local->selected
+                           ? decimal(travel->local->selected->body.value)
+                           : godot::String{};
+    jump["remaining_seconds"] =
+        travel && travel->phase == FreedomJumpPhase::spool
+            ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
+        : travel && travel->phase == FreedomJumpPhase::transit &&
+                travel->local && travel->local->committed
+            ? (travel->local->committed->arrival_tick - body.tick) / 120.0
+            : 0.0;
+    result["jump"] = jump;
+    const auto force = selected.last_step && selected.last_step->minor
+                           ? selected.last_step->minor->propulsion
+                           : VacuumActuation{};
+    result["positive_force_body"] = coordinates(force.positive_force_newtons);
+    result["negative_force_body"] = coordinates(force.negative_force_newtons);
+    result["positive_torque_body"] =
+        coordinates(force.positive_torque_newton_metres);
+    result["negative_torque_body"] =
+        coordinates(force.negative_torque_newton_metres);
+    result["applied_force_body"] = coordinates(force.applied_force_newtons);
+    const auto frame = require(resolve_craft_frame(body.craft));
+    godot::PackedFloat64Array positive, negative;
+    for (const auto v : frame.properties.positive_force_newtons)
+      positive.append(v);
+    for (const auto v : frame.properties.negative_force_newtons)
+      negative.append(v);
+    result["positive_force_ratings"] = positive;
+    result["negative_force_ratings"] = negative;
+    result["star_direction"] = vector(view.star_direction);
+    const auto& star = session.system().catalog.star;
+    result["star_color"] =
+        godot::Color(star.color.red / 255.0f, star.color.green / 255.0f,
+                     star.color.blue / 255.0f, 1);
+    result["star_angular_radius"] = std::asin(
+        std::min(1.0, static_cast<double>(star.radius_kilometres) * 1000.0 /
+                          view.rotation.observer_star_distance_metres));
+    result["minor_center"] = godot::Vector3(
+        view.minor_center.x, view.minor_center.y, view.minor_center.z);
+    godot::Basis minor_basis;
+    for (int i = 0; i < 3; ++i) {
+      const auto& axis = view.minor_fixed_basis[static_cast<std::size_t>(i)];
+      minor_basis.set_column(i, godot::Vector3(axis.x, axis.y, axis.z));
+    }
+    result["minor_fixed_basis"] = minor_basis;
+    result["minor_tint"] = godot::Color(view.minor.tint.red / 255.0f,
+                                        view.minor.tint.green / 255.0f,
+                                        view.minor.tint.blue / 255.0f, 1);
+    const auto exclusion =
+        require(minor_exclusion_radius_metres(view.minor, body.craft));
+    result["exclusion_radius"] = exclusion;
+    result["stand_off_gap"] =
+        observation.minor->gravity.distance_metres - exclusion;
+    result["inspection_limited"] = true;
+    result["inspection_note"] =
+        selected.last_step && selected.last_step->minor_standoff_limited
+            ? "Stand-off limit: inward motion stopped; steer or thrust away."
+            : "";
     return result;
   }
 
@@ -2214,6 +2414,7 @@ class FreedomBridge : public godot::RefCounted {
     try {
       const auto& session = selected.session;
       if (session.moon()) return project_moon_flight_state(selected);
+      if (session.minor()) return project_minor_flight_state(selected);
       const auto& document = session.document();
       const auto& body = document.flight;
       const auto relative = require(session.relative_state());
@@ -2971,10 +3172,56 @@ class FreedomBridge : public godot::RefCounted {
   auto get_freedom_station_geometry() const -> godot::Dictionary {
     if (native_start) return project_station_geometry(native_start->station);
     if (saved_flight && !saved_flight->session.moon() &&
+        !saved_flight->session.minor() &&
         project_saved_flight(saved_flight->session).station_available)
       return project_station_geometry(generate_origin_station(
           saved_flight->session.document().origin.recipe.universe_seed));
     return {};
+  }
+
+  auto get_freedom_minor_geometry(const godot::String& candidate_id) const
+      -> godot::Dictionary {
+    const SavedFlightWorld* selected = saved_flight.get();
+    if (!candidate_id.is_empty()) {
+      if (!pending || candidate_id != godot::String{pending->id.c_str()})
+        return {};
+      selected = pending->flight.get();
+    }
+    if (!selected || !selected->session.minor()) return {};
+    try {
+      const auto& owner = *selected->session.minor();
+      const auto state = project_minor_flight_state(*selected);
+      const MinorProxyMeshDimensions dimensions{};
+      const auto counts = require(minor_proxy_mesh_counts(dimensions));
+      std::vector<MinorProxyMeshVertex> vertices(counts.vertices);
+      std::vector<std::uint32_t> indices(counts.indices);
+      (void)require(
+          fill_minor_proxy_mesh(owner, dimensions, vertices, indices));
+      godot::Dictionary result;
+      result["version"] = std::int64_t{1};
+      result["body_kind"] = "minor";
+      for (const auto* key :
+           {"body_version", "body_id", "system_id", "craft_id", "frame_id",
+            "frame_version", "tick", "body_radius"})
+        result[key] = state[key];
+      result["source_checksum"] = state["checksum"];
+      godot::PackedVector3Array positions, normals;
+      godot::PackedInt32Array elements;
+      for (const auto& vertex : vertices) {
+        const auto& p = vertex.position_metres;
+        const auto& n = vertex.normal;
+        positions.append(godot::Vector3(p.x, p.y, p.z));
+        normals.append(godot::Vector3(n.x, n.y, n.z));
+      }
+      for (const auto index : indices)
+        elements.append(static_cast<std::int32_t>(index));
+      result["vertices"] = positions;
+      result["normals"] = normals;
+      result["indices"] = elements;
+      return result;
+    } catch (const std::exception&) {
+      return {};
+    }
   }
 
   auto get_freedom_background_sky(const godot::String& candidate_id) const
@@ -3659,6 +3906,10 @@ class FreedomBridge : public godot::RefCounted {
 
   auto enable_streaming() -> bool {
     try {
+      if (saved_flight && saved_flight->session.minor()) {
+        last_error = godot::String{};
+        return true;
+      }
       if (saved_flight && saved_flight->session.moon()) {
         if (!moon_stream) replace_saved_stream(saved_flight->session);
         last_error = godot::String{};

@@ -59,6 +59,7 @@ TESTS = {
     "native_audio": "freedom_saves",
     "first_jump": "freedom_saves",
     "native_moon": "freedom_saves",
+    "native_minor": "freedom_saves",
     "native_recovery": "freedom_saves",
     "native_port": "freedom_saves",
     "native_walk": "freedom_saves",
@@ -258,6 +259,7 @@ def main(argv=None):
     bridge = build / "bin/libapsis_freedom_bridge.so"
     start_fixture = build / "apsis-drift-freedom-start-fixture"
     moon_fixture = build / "apsis-drift-freedom-moon-fixture"
+    minor_fixture = build / "apsis-drift-freedom-minor-fixture"
     planetary_fixture = build / "apsis-drift-freedom-planetary-fixture"
     surface_fixture = args.build_dir.resolve() / "apsis-drift-landed-craft-tests"
     impact_fixture = args.build_dir.resolve() / "apsis-drift-native-impact-tests"
@@ -272,6 +274,9 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
+    if "native_minor" in selected:
+        if not minor_fixture.is_file() or not os.access(minor_fixture, os.X_OK):
+            parser.error(f"missing actual minor route fixture: {minor_fixture}")
     if "native_moon" in selected:
         if not moon_fixture.is_file() or not os.access(moon_fixture, os.X_OK):
             parser.error(f"missing actual Moon route fixture: {moon_fixture}")
@@ -359,6 +364,10 @@ def main(argv=None):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
         staged_executables.append(start_fixture)
+    if "native_minor" in selected:
+        shutil.copy2(minor_fixture, work / minor_fixture.name)
+        minor_fixture = work / minor_fixture.name
+        staged_executables.append(minor_fixture)
     if "native_moon" in selected:
         shutil.copy2(moon_fixture, work / moon_fixture.name)
         moon_fixture = work / moon_fixture.name
@@ -413,7 +422,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -530,6 +539,28 @@ def main(argv=None):
             report["setup"][-1]["save_sha256"] = sha256(path)
             save()
         (work / "corrupt.json").write_text("{broken json\n")
+    if "native_minor" in selected:
+        phases = work / "minor-voyage"
+        code, timed_out, elapsed = run_logged(
+            [str(minor_fixture), str(phases)],
+            work / "minor-voyage-fixture.log", env, args.timeout)
+        record = {"family": "minor_voyage", "returncode": code,
+                  "timed_out": timed_out, "seconds": elapsed,
+                  "fixture_sha256": sha256(minor_fixture)}
+        report["setup"].append(record)
+        save()
+        if code != 0 or timed_out:
+            print("FAIL actual continuous minor route fixture", flush=True)
+            return 1
+        names = ("arrival", "approach", "withdraw", "home")
+        if not all((phases / (name + ".json")).is_file() and
+                   0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
+                   for name in names):
+            print("FAIL incomplete or oversized minor route phases", flush=True)
+            return 1
+        record["files_sha256"] = {
+            name + ".json": sha256(phases / (name + ".json")) for name in names}
+        save()
     if "native_moon" in selected:
         phases = work / "moon-voyage"
         code, timed_out, elapsed = run_logged(
@@ -1052,6 +1083,9 @@ def main(argv=None):
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "corrupt.json", "native-assets")]
         if name == "native_walk":
             arguments = [str(work / path) for path in ("journey.json", "journey-trace.json", "native-assets")]
+        if name == "native_minor":
+            arguments = [str(work / path) for path in
+                         ("minor-voyage", "native-assets", "minor-native")]
         if name == "native_moon":
             arguments = [str(work / path) for path in
                          ("moon-voyage", "native-assets", "moon-native")]

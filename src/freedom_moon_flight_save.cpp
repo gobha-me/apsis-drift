@@ -26,7 +26,7 @@ auto selected_version(const Json& value, std::uint32_t version) -> bool {
 auto hydrate_freedom_moon_flight_document(
     const FreedomFlightSaveDocument& document)
     -> std::expected<FreedomMoonFlightHydration, SaveSchemaError> {
-  if (!document.moon || document.world)
+  if (!document.moon || document.world || document.minor)
     return std::unexpected{failure(
         "$.world_owner", "moon requires an exclusive typed world selection")};
   if (const auto valid = validate_freedom_save_document(document.origin);

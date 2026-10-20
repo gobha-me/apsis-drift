@@ -26,6 +26,8 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
       rotation_(hydrated.rotation),
       moon_(hydrated.moon ? std::optional{std::move(hydrated.moon->moon)}
                           : std::nullopt),
+      minor_(hydrated.minor ? std::optional{std::move(hydrated.minor->minor)}
+                            : std::nullopt),
       source_save_(std::move(source)) {
 }
 
@@ -184,8 +186,9 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     return std::unexpected{"System flight cannot select contact, outside "
                            "actors, impacts or an active jump yet"};
   const auto reference = find_local_system_planet(
-      hydrated->system, hydrated->moon ? document.origin.recipe.home_planet
-                                       : *relative->frame.planet);
+      hydrated->system, (hydrated->moon || hydrated->minor)
+                            ? document.origin.recipe.home_planet
+                            : *relative->frame.planet);
   if (!reference || selected.home_planet != (*reference)->descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};
@@ -202,7 +205,8 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   }
   if (!boarding) boarding = travel_pilot;
   result.boarding_ = boarding;
-  result.surface_ = surface;
+  result.surface_ =
+      result.minor_ ? std::optional<FreedomSurfaceState>{} : surface;
   result.resources_ = resources;
   result.knowledge_ = std::move(knowledge);
   result.travel_ = std::move(travel);
@@ -336,6 +340,7 @@ auto NativeFreedomFlightSession::begin_boarding_route(
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
     -> std::expected<void, std::string> {
+  if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -357,6 +362,7 @@ auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
 
 auto NativeFreedomFlightSession::assess_port() const
     -> std::expected<OriginDockAssessment, std::string> {
+  if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (!docking_) return std::unexpected{"Select an Origin port first"};
   const auto station =
       generate_origin_station(document_.origin.recipe.universe_seed);
@@ -372,6 +378,7 @@ auto NativeFreedomFlightSession::assess_port() const
 
 auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
+  if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -474,7 +481,7 @@ auto NativeFreedomFlightSession::relative_state() const
   // Admission and committing mutations already validate this private state.
   // Ordinary relative observations retain the existing direct-body path.
   if (document_.flight.frame.kind == RigidFrameKind::planet_relative_inertial ||
-      (moon_ &&
+      ((moon_ || minor_) &&
        document_.flight.frame.kind == RigidFrameKind::body_relative_inertial))
     return document_.flight;
   // The complete owner was authenticated at open or a committing command.
@@ -519,6 +526,7 @@ auto NativeFreedomFlightSession::relative_state() const
 
 auto NativeFreedomFlightSession::observe() const
     -> std::expected<NativeFlightObservation, std::string> {
+  if (minor_) return observe_minor();
   if (moon_) {
     const RigidBodyWorldContext context{*moon_};
     const auto gravity = evaluate_moon_body_gravity(context, document_.flight);
@@ -566,7 +574,7 @@ auto NativeFreedomFlightSession::observe() const
 
 auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
-  if (moon_) {
+  if (moon_ || minor_) {
     if (request.version != kOrbitHoldVersion || request.target)
       return std::unexpected{"Moon orbit hold is unavailable"};
     document_.model.hold = request;
@@ -604,7 +612,8 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
 
 auto NativeFreedomFlightSession::current_orbit_hold_target() const
     -> std::expected<OrbitHoldTarget, std::string> {
-  if (moon_) return std::unexpected{"Moon orbit hold is unavailable"};
+  if (moon_ || minor_)
+    return std::unexpected{"Secondary body orbit hold is unavailable"};
   if (recovery_pending())
     return std::unexpected{"Continue the recorded loss before requesting hold"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
@@ -666,6 +675,7 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_ || surface_walker_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  if (minor_) return advance_minor_tick(controls, step);
   if (moon_) return advance_moon_tick(controls, step);
   if (surface_ && (surface_->gear_deployed || surface_->landed ||
                    surface_maneuver_.kind != NativeSurfaceManeuverKind::off))
@@ -771,6 +781,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     *this = std::move(candidate);
     return result;
   }
+  if (minor_) return advance_minor_tick(controls, step);
   if (moon_) return advance_moon_tick(controls, step);
   const RigidBodyWorldContext context{system_};
   VacuumIntent intent{controls.positive_translation,
@@ -1092,7 +1103,8 @@ auto NativeFreedomFlightSession::record_observation(const KnowledgeEvidence& e)
 
 auto NativeFreedomFlightSession::refresh_knowledge(LocalObservationEvent event)
     -> std::expected<void, std::string> {
-  if (!knowledge_ || knowledge_->recipe.version == kFreedomKnowledgeVersion)
+  if (minor_ || !knowledge_ ||
+      knowledge_->recipe.version == kFreedomKnowledgeVersion)
     return {};
   if (event == LocalObservationEvent::sensor_tick &&
       (actor_ || document_.flight.tick % kFreedomLocalObservationInterval != 0))
@@ -1120,6 +1132,9 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (minor_)
+    return std::unexpected{
+        "Minor body inspection has no landing gear/contact mode"};
   if (moon_) return set_moon_landing_gear(deployed);
   const bool selected =
       document_.model.frame_policy == kFreedomReleaseSystemFramePolicy;
@@ -1193,6 +1208,7 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
     std::optional<TerrainPadGapSample>* sampled_gap)
     -> std::expected<void, std::string> {
   if (sampled_gap) sampled_gap->reset();
+  if (minor_) return std::unexpected{"Minor body landing is unavailable"};
   if (moon_) return commit_moon_touchdown(expected_source_checksum);
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
     return std::unexpected{
@@ -1237,6 +1253,8 @@ auto NativeFreedomFlightSession::commit_touchdown_observed(
 }
 auto NativeFreedomFlightSession::release_surface()
     -> std::expected<void, std::string> {
+  if (minor_)
+    return std::unexpected{"Minor body surface support is unavailable"};
   if (moon_) return release_moon_surface();
   if (recovery_pending())
     return std::unexpected{

@@ -3,6 +3,7 @@
 #include <expected>
 #include <optional>
 
+#include "apsis_drift/physical_minor_rotation.hpp"
 #include "apsis_drift/physical_moon_rotation.hpp"
 #include "apsis_drift/planet_rotation.hpp"
 #include "apsis_drift/rigid_body.hpp"
@@ -33,6 +34,7 @@ struct RigidFrameHandoffError {
   std::optional<PhysicalLocalSystemError> physical_ephemeris_error{};
   std::optional<BodyEphemerisError> body_ephemeris_error{};
   std::optional<PhysicalMoonRotationError> moon_rotation_error{};
+  std::optional<PhysicalMinorRotationError> minor_rotation_error{};
   friend auto operator==(const RigidFrameHandoffError&,
                          const RigidFrameHandoffError&) -> bool = default;
 };
@@ -83,6 +85,13 @@ struct RigidFrameHandoffError {
     const RigidBodyWorldContext& context, const RigidBodyState& source,
     const RigidFrameHandoffRequest& request,
     const PhysicalMoonDescriptor& moon_rotation_owner)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError>;
+
+// Explicit minor-only rotation owner; no Moon/planet identity substitution.
+[[nodiscard]] auto reframe_rigid_body(const RigidBodyWorldContext&,
+                                      const RigidBodyState&,
+                                      const RigidFrameHandoffRequest&,
+                                      const PhysicalMinorDescriptor&)
     -> std::expected<RigidBodyState, RigidFrameHandoffError>;
 
 } // namespace apsis_drift

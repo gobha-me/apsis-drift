@@ -26,6 +26,7 @@ auto length(V v) -> double {
 
 auto NativeFreedomFlightSession::port_approach_available() const
     -> std::expected<void, std::string> {
+  if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
         condition_)

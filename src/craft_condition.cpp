@@ -223,7 +223,7 @@ auto validate_craft_condition(const CraftCondition& c,
     // An actual Moon has its own terrain recipe. A retained planetary receipt
     // continues to name its original, independently authenticated planet below;
     // the Moon's unused planetary model default does not reinterpret it.
-    if ((!d.moon && w.terrain_policy != d.model.terrain_policy) ||
+    if ((!d.moon && !d.minor && w.terrain_policy != d.model.terrain_policy) ||
         (w.system != ids.origin_system && w.system != ids.target_system))
       return std::unexpected(
           "Impact receipt has an unknown physical owner or terrain selection");

@@ -101,3 +101,15 @@ transitions, broader planetary presentation, jump stress and impact consequences
 have open work. Scripted journey checks and software renders do not establish
 physical controller feel, GPU appearance, audio-device behavior or frame pacing.
 Missions, paid economy and populated stations are outside this first route.
+
+## Optional asteroid inspection trip
+
+After station departure, paused Controls offer **Select asteroid inspection jump**.
+Release controls, select the actual origin minor, begin the normal local spool
+and explicitly resume. A committed outbound and home leg each spend one jump
+charge. Use real thrust to inspect or withdraw; the cockpit/HUD show proxy
+clearance, radial speed and the disclosed stand-off gap. Landing is unavailable.
+Select home and spool normally to return to the real moving station.
+[The inspection contract](ASTEROID_INSPECTION.md) explains the prototype guard,
+Save/Continue, fuel accounting and spherical-shape limit. The existing Moon trip
+remains a separate route; direct Moon–minor hops are not supported.

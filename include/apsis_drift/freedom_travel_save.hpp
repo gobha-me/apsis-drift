@@ -10,6 +10,8 @@ inline constexpr std::uint32_t kFreedomTravelSaveFormatVersion{27};
 inline constexpr std::uint32_t kFreedomTravelStateVersion{1};
 inline constexpr std::uint32_t kFreedomLocalTravelSaveFormatVersion{45};
 inline constexpr std::uint32_t kFreedomLocalTravelStateVersion{2};
+inline constexpr std::uint32_t kFreedomMinorTravelSaveFormatVersion{47};
+inline constexpr std::uint32_t kFreedomMinorTravelStateVersion{3};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
 struct FreedomLocalTravelState {
   std::optional<BodyTarget> selected;
@@ -20,6 +22,11 @@ struct FreedomLocalTravelState {
   std::optional<FrozenLocalBodyJumpArrival> outbound;
   friend auto operator==(const FreedomLocalTravelState&,
                          const FreedomLocalTravelState&) -> bool = default;
+};
+struct FreedomLocalMoonHistory {
+  FreedomLocalTravelState local;
+  friend auto operator==(const FreedomLocalMoonHistory&,
+                         const FreedomLocalMoonHistory&) -> bool = default;
 };
 struct FreedomTravelState {
   std::uint32_t version{kFreedomTravelStateVersion};
@@ -34,6 +41,7 @@ struct FreedomTravelState {
   // Explicit version2 only. Existing intersystem commitment/bill remain prior
   // history; phase, spool clock and attempt counter own the selected local leg.
   std::optional<FreedomLocalTravelState> local{};
+  std::optional<FreedomLocalMoonHistory> prior_moon{};
   friend auto operator==(const FreedomTravelState&, const FreedomTravelState&)
       -> bool = default;
 };

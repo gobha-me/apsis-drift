@@ -41,6 +41,8 @@ auto NativeFreedomFlightSession::condition_document() const
 
 auto NativeFreedomFlightSession::impact_consequences_available() const
     -> std::expected<void, std::string> {
+  if (minor_)
+    return std::unexpected{"Minor inspection has no terrain-impact mode"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy)
       return std::unexpected{"Unsupported system-flight impact selection"};
@@ -70,6 +72,8 @@ auto NativeFreedomFlightSession::impact_consequences_available() const
 
 auto NativeFreedomFlightSession::enable_impact_consequences()
     -> std::expected<void, std::string> {
+  if (minor_)
+    return std::unexpected{"Minor inspection has no terrain-impact mode"};
   if (condition_) return {};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy)

@@ -271,7 +271,9 @@ auto travel_binding_json(const NativeStartingAssemblySelection& value)
 } // namespace detail
 auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
-  if (d.travel.local || d.travel.version == kFreedomLocalTravelStateVersion)
+  if (d.travel.local || d.travel.prior_moon ||
+      d.travel.version == kFreedomLocalTravelStateVersion ||
+      d.travel.version == kFreedomMinorTravelStateVersion)
     return detail::validate_local_travel(d);
   if (auto v = validate_freedom_knowledge_document(d.voyage); !v) return v;
   const auto& voyage = d.voyage.voyage.voyage;
@@ -393,7 +395,9 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
 }
 auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
-  if (d.travel.local || d.travel.version == kFreedomLocalTravelStateVersion)
+  if (d.travel.local || d.travel.prior_moon ||
+      d.travel.version == kFreedomLocalTravelStateVersion ||
+      d.travel.version == kFreedomMinorTravelStateVersion)
     return detail::encode_local_travel(d);
   if (auto v = validate_freedom_travel_document(d); !v)
     return std::unexpected{v.error()};
@@ -441,7 +445,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root) return std::unexpected{root.error()};
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
-  if ((*root)["format_version"] == kFreedomLocalTravelSaveFormatVersion)
+  if ((*root)["format_version"] == kFreedomLocalTravelSaveFormatVersion ||
+      (*root)["format_version"] == kFreedomMinorTravelSaveFormatVersion)
     return detail::decode_local_travel(*root);
   if ((*root)["format_version"] != kFreedomTravelSaveFormatVersion)
     return std::unexpected{

@@ -17,7 +17,7 @@ import time
 REPO = Path(__file__).resolve().parent.parent
 SELECTED = """input control_settings recorded_observations freedom_start native_shell
 native_save native_asset_import native_station_view wayfarer_frame saved_flight
-native_environment native_audio first_jump native_moon native_recovery native_port
+native_environment native_audio first_jump native_moon native_minor native_recovery native_port
 native_walk native_assembly native_start_staging native_title native_profile
 native_planetary native_voyage native_roundtrip native_roundtrip_pilot
 native_roundtrip_pilot_aligned native_roundtrip_pilot_offset home_navigation
@@ -29,6 +29,7 @@ GODOT_SUFFIXES = {".gd", ".gdshader", ".gdshaderinc", ".godot", ".tscn", ".json"
 FIXTURES = {
     "start": "src/godot/apsis-drift-freedom-start-fixture",
     "moon": "src/godot/apsis-drift-freedom-moon-fixture",
+    "minor": "src/godot/apsis-drift-freedom-minor-fixture",
     "planetary": "src/godot/apsis-drift-freedom-planetary-fixture",
     "surface": "apsis-drift-landed-craft-tests",
     "impact": "apsis-drift-native-impact-tests",
@@ -149,8 +150,8 @@ def groups(repo):
     result = value["groups"]
     require(set(result) == {"1", "2", "3", "4"}, "Expected four groups")
     union = [name for names in result.values() for name in names]
-    require(len(union) == 41 and len(set(union)) == 41 and set(union) == set(SELECTED),
-            "Groups must cover the exact 41 tests once")
+    require(len(union) == len(SELECTED) and len(set(union)) == len(SELECTED) and set(union) == set(SELECTED),
+            "Groups must cover every selected native test exactly once")
     for names in result.values():
         require(names == [name for name in SELECTED if name in names], "Group order changed")
     for pair in (("native_surface_loop", "native_first_flight_continuation"),
@@ -327,6 +328,8 @@ def layout(selected, runner):
     if any(runner.TESTS[name] == "freedom_saves" for name in selected):
         rows += ["save:" + name for name in SAVES]
         binaries.append(FIXTURES["start"])
+    if "native_minor" in selected:
+        add("minor_voyage", "minor")
     if "native_moon" in selected:
         add("moon_voyage", "moon")
     if "native_environment" in selected:
@@ -422,13 +425,17 @@ def validate_report(report, path, metadata, selected, m, runner):
                 require(row[key] is True, "Shell identity/history/save mismatch")
         if "fixture_sha256" in row:
             family = row["family"]
-            role = ("moon" if family == "moon_voyage" else "surface" if
+            role = ("minor" if family == "minor_voyage" else "moon" if family == "moon_voyage" else "surface" if
                     family in ("daynight_saves", "surface_saves", "surface_walk_saves") else
                     "planetary" if family in ("planetary_saves", "surface_loop_saves", *runner.ROUNDTRIP_TESTS)
                     else family.removesuffix("_saves"))
             require(row["fixture_sha256"] == files["build/" + FIXTURES[role]]["sha256"] and
                     isinstance(row.get("files_sha256"), dict) and row["files_sha256"] and
                     all(HEX.fullmatch(sha) for sha in row["files_sha256"].values()), "Foreign/incomplete fixture")
+            if family == "minor_voyage":
+                require(set(row["files_sha256"]) == {name + ".json" for name in
+                    ("arrival", "approach", "withdraw", "home")},
+                    "Incomplete actual minor phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
                     ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent")},

@@ -47,6 +47,7 @@ player's station-to-flight journey.
 
 - [Seed derivation](SEED_DERIVATION.md) and [planet generation](PLANET_GENERATION.md)
 - [Body identity and circular hierarchy](BODY_EPHEMERIS.md): compatible catalog projections, parent transforms and full-width target serialization.
+- [Asteroid close inspection](ASTEROID_INSPECTION.md): actual flight, stand-off guard, saved local trip and home return.
 - [Airless moon integration](AIRLESS_MOON.md): local charged voyage, physical surface, walking, controls and versioned ownership.
 - [Planetary scale and surface-fidelity contract](PLANETARY_SCALE_CONTRACT.md): physical units, handoffs and capture/fixture targets.
 - [Immutable planetary ambient environment](PLANET_AMBIENT.md)

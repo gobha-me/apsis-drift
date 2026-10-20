@@ -38,6 +38,7 @@
     ],
     "4": [
       "first_jump",
+      "native_minor",
       "native_walk",
       "native_assembly",
       "native_start_staging",
