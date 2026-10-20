@@ -476,8 +476,10 @@ func refresh_hud() -> void:
 	hud_hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer" % preferences_provider.foot_keyboard_label()
 	var text := telemetry.text + "\nEsc / Start: controls" if boarding_transition() else "Origin Station · D1\n%s / left stick: walk\nMouse / look keys / right stick: look\nEsc / Start: controls" % preferences_provider.foot_keyboard_label()
 	if crew_talk_nearby() and not boarding_transition():
-		text += "\nE / left click · Talk to " + str(crew_packet.name)
-		text += "\n" + ("Stopping to talk…" if not pending_crew_talk.is_empty() else "Release walking and look controls to talk." if not current_controls_neutral() else crew_feedback if not crew_feedback.is_empty() else str(crew_packet.reason))
+		# The world prompt already names the worker. Keep the running card
+		# compact while leaving immediate stopping/refusal feedback readable.
+		text = "%s: walk · Mouse: look\nE / left click: Talk\nEsc / Start: controls" % preferences_provider.foot_keyboard_label()
+		text += "\n" + ("Stopping to talk…" if not pending_crew_talk.is_empty() else "Release controls to talk." if not current_controls_neutral() else crew_feedback if not crew_feedback.is_empty() else str(crew_packet.reason))
 	if active_status.text != text:
 		active_status.text = text
 		active_card.reset_size()
