@@ -38,6 +38,9 @@ jobs:
       - name: Check native test-runner failure handling
         run: python3 test/native_runner_test.py
 
+      - name: Check parallel native CI provenance and failure handling
+        run: python3 test/native_ci_test.py
+
       - name: Check native asset package refusal and atomic preparation
         run: python3 test/native_asset_package_test.py
 
@@ -208,8 +211,8 @@ jobs:
       - name: Test native and headless targets
         run: ctest --test-dir build-core --output-on-failure
 
-  native-godot-runtime:
-    name: Godot 4.7.2 / saved Freedom start
+  native-godot-build:
+    name: Godot 4.7.2 / verified native build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -272,56 +275,137 @@ jobs:
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
 
-      # The complete surface round trip has passed at 569 seconds. Allow bounded
-      # shared-runner headroom without dropping its final disembark/save checks.
-      - name: Check saved-start bridge, native shell and audio shutdown in Godot
+      - name: Package the verified engine and native executables
         run: >-
-          python3 tools/test_godot_native.py
-          --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
+          python3 tools/native_ci.py pack
           --build-dir build-native
-          --output-parent build-native-contracts
-          --timeout 900
-          --test input --test control_settings --test recorded_observations --test freedom_start --test native_shell --test native_save
-          --test native_asset_import --test native_station_view --test wayfarer_frame
-          --test saved_flight --test native_environment --test native_audio --test first_jump --test native_moon --test native_recovery
-          --test native_port --test native_walk
-          --test native_assembly --test native_start_staging --test native_title --test native_profile --test native_planetary --test native_voyage
-          --test native_roundtrip --test native_roundtrip_pilot
-          --test native_roundtrip_pilot_aligned --test native_roundtrip_pilot_offset
-          --test home_navigation --test native_status --test native_surface --test native_surface_walk
-          --test native_selected_terrain --test native_surface_detail --test native_surface_walk_detail
-          --test native_impact
-          --test native_frame_import --test native_system_release
-          --test native_surface_loop
-          --test native_first_flight_continuation
-          --test wayfarer_operating
-          --test recorded_audio_shutdown
+          --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
+          --archive native-ci.tar.gz
+          --manifest native-ci-manifest.json
 
-      - name: Retain native runtime logs and report
+      - name: Share the immutable native build
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ci-build
+          path: |
+            native-ci.tar.gz
+            native-ci-manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
+  native-godot-group:
+    name: Godot 4.7.2 / native group ${{ matrix.group }}
+    needs: native-godot-build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the immutable native build
+        uses: actions/download-artifact@v8
+        with:
+          name: native-ci-build
+          path: native-ci-build
+
+      # Each hosted worker has its own project, imports, saves and user data.
+      # The existing runner and every per-process deadline remain unchanged.
+      - name: Verify the build and run this native group
+        run: >-
+          python3 tools/native_ci.py run
+          --archive native-ci-build/native-ci.tar.gz
+          --manifest native-ci-build/native-ci-manifest.json
+          --group ${{ matrix.group }}
+          --output-parent build-native-contracts-g${{ matrix.group }}
+          --receipt invocation-g${{ matrix.group }}.json
+
+      - name: Retain this group's native runtime logs and proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-native-group-${{ matrix.group }}
+          path: |
+            invocation-g${{ matrix.group }}.json
+            build-native-contracts-g${{ matrix.group }}/*.log
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/report.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/*.log
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/planetary/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/voyage-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-detail/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-detail-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk-detail/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk-detail-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/native-selected-terrain/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/frame-import/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/frame-import-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-loop/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-loop-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation/commands.jsonl
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/native_first_flight_continuation-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-voyage/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-native/marker/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release-native/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  native-godot-runtime:
+    # Keep the protected context; success requires the build, sky and all groups.
+    name: Godot 4.7.2 / saved Freedom start
+    if: always()
+    needs: [native-godot-build, native-godot-group]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the native build manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: native-ci-build
+          path: native-ci-build
+
+      - name: Download the four isolated native results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: godot-native-group-*
+          merge-multiple: true
+          path: native-ci-results
+
+      - name: Download the actual sky result
+        uses: actions/download-artifact@v8
+        with:
+          name: godot-sky-camera
+          path: native-ci-sky
+
+      - name: Require complete native and sky coverage
+        run: >-
+          python3 tools/native_ci.py check
+          --manifest native-ci-build/native-ci-manifest.json
+          --invocation native-ci-results/invocation-g1.json
+          --invocation native-ci-results/invocation-g2.json
+          --invocation native-ci-results/invocation-g3.json
+          --invocation native-ci-results/invocation-g4.json
+          --sky-report native-ci-sky/sky-camera-*/report.json
+          --dependency producer=${{ needs.native-godot-build.result }}
+          --dependency workers=${{ needs.native-godot-group.result }}
+          --output native-ci-summary.json
+
+      - name: Retain the complete native runtime proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: godot-saved-start-contracts
           path: |
-            build-native-contracts/native-contracts-*/report.json
-            build-native-contracts/native-contracts-*/*.log
-            build-native-contracts/native-contracts-*/planetary/*.json
-            build-native-contracts/native-contracts-*/voyage-native/*.json
-            build-native-contracts/native-contracts-*/surface/*.json
-            build-native-contracts/native-contracts-*/surface-native/*.json
-            build-native-contracts/native-contracts-*/surface-walk/*.json
-            build-native-contracts/native-contracts-*/surface-walk-native/*.json
-            build-native-contracts/native-contracts-*/surface-detail/*.json
-            build-native-contracts/native-contracts-*/surface-detail-native/*.json
-            build-native-contracts/native-contracts-*/surface-walk-detail/*.json
-            build-native-contracts/native-contracts-*/surface-walk-detail-native/*.json
-            build-native-contracts/native-contracts-*/native-selected-terrain/*.json
-            build-native-contracts/native-contracts-*/frame-import/*.json
-            build-native-contracts/native-contracts-*/frame-import-native/*.json
-            build-native-contracts/native-contracts-*/surface-loop/*.json
-            build-native-contracts/native-contracts-*/surface-loop-native/*.json
-            build-native-contracts/native-contracts-*/native_first_flight_continuation/*.json
-            build-native-contracts/native-contracts-*/native_first_flight_continuation/commands.jsonl
-            build-native-contracts/native-contracts-*/native_first_flight_continuation-native/*.json
+            native-ci-summary.json
+            native-ci-build/native-ci-manifest.json
+            native-ci-results/
           if-no-files-found: warn
           retention-days: 7

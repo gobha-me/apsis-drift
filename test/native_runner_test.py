@@ -6,7 +6,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
@@ -459,16 +458,6 @@ class NativeRunnerTests(unittest.TestCase):
         self.assertEqual(runner.timeout_seconds("1"), 1.0)
         self.assertEqual(runner.timeout_seconds("600"), 600.0)
         self.assertEqual(runner.timeout_seconds("900"), 900.0)
-
-    def test_workflow_deadline_is_accepted_by_runner(self):
-        workflow = (Path(runner.__file__).resolve().parents[1] /
-                    ".github/workflows/ci.yml").read_text()
-        step = workflow.split(
-            "- name: Check saved-start bridge, native shell and audio shutdown in Godot\n", 1)[1]
-        step = step.split("- name:", 1)[0]
-        deadline = re.search(r"--timeout\s+(\S+)", step)
-        self.assertIsNotNone(deadline)
-        runner.timeout_seconds(deadline.group(1))
 
     def test_roundtrip_continuation_refuses_before_subprocess_or_output(self):
         with tempfile.TemporaryDirectory(prefix="native-continuation-") as directory:
