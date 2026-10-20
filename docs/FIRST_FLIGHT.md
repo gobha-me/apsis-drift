@@ -104,7 +104,7 @@ Missions, paid economy and populated stations are outside this first route.
 
 ## Optional asteroid inspection trip
 
-After station departure, paused Controls offer **Asteroid inspection jump**.
+After station departure, paused Controls offer **Select asteroid inspection jump**.
 Release controls, select the actual origin minor, begin the normal local spool
 and explicitly resume. A committed outbound and home leg each spend one jump
 charge. Use real thrust to inspect or withdraw; the cockpit/HUD show proxy

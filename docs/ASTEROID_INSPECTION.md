@@ -9,7 +9,7 @@ not move the ship or select a jump.
 ## Fly there and return
 
 Start on Origin Station, walk to Wayfarer, board and sit. Release the port and
-withdraw into space. In paused Controls, select **Asteroid inspection jump**,
+withdraw into space. In paused Controls, select **Select asteroid inspection jump**,
 then **Begin local jump** and explicitly resume. Selecting a target is free;
 the ordinary three-second spool commits one jump charge, followed by the
 existing two-second transit. Cancel during spool spends no charge.
@@ -72,7 +72,9 @@ or Moon descriptor. Local travel format47/version3 retains the original home
 model and existing commitment history. A completed home–Moon journey can be
 retained when adopting the inspection route from home; no proof or bill is
 silently discarded. Direct Moon–minor and arbitrary intersystem combinations
-are outside this increment. Historical Moon flight42/walk44/local45 encodings
+are outside this increment. After adopting the inspection route, repeating that
+route is supported; selecting a new Moon or intersystem leg in that saved
+journey requires future travel-history composition. Historical Moon flight42/walk44/local45 encodings
 retain their original validators and bytes.
 
 The actual voyage fixture starts with station walking and boarding, then uses
