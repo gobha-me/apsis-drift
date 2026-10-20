@@ -695,7 +695,7 @@ func build_ui() -> void:
 	context_action.clip_text = true
 	context_action.focus_mode = Control.FOCUS_NONE
 	context_action.pressed.connect(func():
-		if surface_walking():
+		if surface_walking() or landed_hatch_available():
 			request_surface_interaction()
 			return
 		if context_source != null and not context_source.disabled:
@@ -866,7 +866,7 @@ func update_compact_hud() -> void:
 	context_source = null
 	if surface_walking():
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
-	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
+	elif state.get("surface", {}).get("landed", false): context_source = surface_walk_button if landed_hatch_available() else liftoff_button
 	elif state.get("attached", false): context_source = release_button
 	elif docking_button != null and not docking_button.disabled and docking_button.visible: context_source = docking_button
 	elif capture_button != null and not capture_button.disabled and capture_button.visible: context_source = capture_button
@@ -877,7 +877,7 @@ func update_compact_hud() -> void:
 	context_action.visible = not detailed and context_source != null
 	if context_source != null:
 		context_action.text = context_source.text
-		if surface_walking(): context_action.text += " · " + surface_interaction_binding()
+		if surface_walking() or landed_hatch_available(): context_action.text += " · " + surface_interaction_binding()
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
 
@@ -890,6 +890,7 @@ func setup_controls() -> void:
 	player_input.thrust_mode = true
 	player_input.assistance_request_only = true
 	player_input.surface_interaction_enabled = surface_walking()
+	player_input.landed_hatch_enabled = landed_hatch_available()
 	player_input.assist = state.assistance
 	add_child(player_input)
 	player_input.set_enabled(false)
@@ -1044,8 +1045,29 @@ func surface_interaction_neutral() -> bool:
 	return true
 
 
+func landed_hatch_available() -> bool:
+	# Presentation eligibility never replaces the C++ entry/floor assessment.
+	# Historical craft without the seated native assembly gain no exit action.
+	return state.get("body_kind", "planet") == "planet" and state.get("frame_id") == "2" and state.get("surface", {}).get("landed", false) and state.get("surface", {}).get("maneuver", "off") == "off" and not state.get("attached", false) and not surface_walking() and state.get("boarding", {}).get("state") == "seated" and state.get("jump", {}).get("phase", "") == "idle" and not state.get("impact", {}).get("pending_loss", false) and state.get("resources", {}).get("selected", false) and state.get("chart", {}).get("selected", false)
+
+
 func request_surface_interaction() -> void:
-	if not activated or not focused or paused or not surface_walking() or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not player_input.waiting_action.is_empty(): return
+	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty(): return
+	if not surface_walking():
+		if not landed_hatch_available(): return
+		# E is also a flight strafe binding. Exempt only that physical key;
+		# every other key, remap barrier and independent pad demand stays checked.
+		if not controls_armed or not player_input.landed_hatch_neutral() or not surface_interaction_neutral():
+			report_action_status("Release flight and look controls to use the hatch.")
+			return
+		if not bridge.begin_freedom_surface_walk():
+			report_action_status(str(bridge.get_last_error()))
+			return
+		state = bridge.get_freedom_flight_state()
+		look_offset = Vector2.ZERO
+		pause_controls("On the surface. Release controls, then resume to walk.")
+		update_view(0.0)
+		return
 	if not controls_armed or not surface_interaction_neutral():
 		report_action_status("Release walking and look controls to interact.")
 		return
@@ -1777,6 +1799,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not apply_camera_depth(camera_relation, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if player_input != null:
 		player_input.surface_interaction_enabled = surface_walking()
+		player_input.landed_hatch_enabled = landed_hatch_available()
 		player_input.assist = state.assistance
 		assist_button.set_pressed_no_signal(state.assistance)
 		controls_menu.sync_saved_state(state, false)

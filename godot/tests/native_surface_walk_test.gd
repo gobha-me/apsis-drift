@@ -63,6 +63,10 @@ func check_airborne_liftoff_refusal(view: Control, owner: Variant, output: Strin
 	var path := output.path_join("reference-airborne-refusal.json")
 	if not check(owner.save_freedom_as(path), "Airborne reference refusal baseline Save refused"): return
 	var bytes := FileAccess.get_file_as_bytes(path)
+	check(not view.landed_hatch_available() and not view.player_input.landed_hatch_enabled, "Airborne craft retained the landed hatch context")
+	surface_context_key(view, true)
+	check(not view.surface_walking() and view.player_input.sample().thrust_axes[5] == 1.0 and owner.get_freedom_flight_state() == before, "Airborne E lost ordinary flight strafe or issued a hatch command")
+	surface_context_key(view, false)
 	view.port_command("liftoff_freedom_surface")
 	var diagnostic: String = owner.get_last_error()
 	check(not diagnostic.is_empty() and view.save_status.text == diagnostic and view.paused == paused_before and owner.get_freedom_flight_state() == before and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Refused airborne liftoff appended reference feedback or changed the voyage")
@@ -469,6 +473,76 @@ func surface_context_pad(view: Control, device: int) -> void:
 		surface_context_event(view, event)
 
 
+func check_planetary_hatch(view: Control, owner: Variant, output: String) -> void:
+	# Reuse the real at-hatch return above. No new start, pose or terrain fixture.
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var prefix := output.path_join("context-leave")
+	if not check(owner.save_freedom_as(prefix + "-before.json"), "Planetary hatch baseline Save refused"): return
+	var bytes := FileAccess.get_file_as_bytes(prefix + "-before.json")
+	var records: Dictionary = owner.get_freedom_observations()
+	check(view.paused and view.landed_hatch_available() and view.player_input.landed_hatch_enabled and not view.player_input.surface_interaction_enabled and view.context_source == view.surface_walk_button and "E / left click" in view.context_action.text, "Actual landed planetary craft lacks its separate seated Leave context")
+	check(not view.controls_menu.saved_port_buttons["Liftoff with thrusters"].disabled, "Contextual Leave removed the ordinary paused Liftoff action")
+	surface_context_key(view, true)
+	surface_context_key(view, false)
+	check(view.paused and owner.get_freedom_flight_state() == before, "Paused E left the planetary craft")
+	if not resume(view): return
+	# One independent flight-only demand must refuse even though E itself is
+	# exempted as an interaction key. No physics tick is inserted by these reads.
+	var fall_key: int = view.player_input.bindings.fall.key.code
+	key(fall_key, true)
+	surface_context_key(view, true)
+	surface_context_key(view, false)
+	key(fall_key, false)
+	check(not view.paused and not view.surface_walking() and owner.get_freedom_flight_state() == before and "Release flight" in view.primary_status.text, "Independent held flight demand bypassed planetary hatch neutral gating")
+	view.journey_dialog_open = true
+	surface_context_key(view, true)
+	surface_context_key(view, false)
+	view.journey_dialog_open = false
+	check(not view.surface_walking() and owner.get_freedom_flight_state() == before, "Journey modal admitted planetary hatch input")
+	var device: int = view.player_input.device
+	var pads: Dictionary = view.player_input.available_pads.duplicate()
+	view.player_input.device = 19
+	view.player_input.available_pads = {19: true, 9: true}
+	view.player_input.install()
+	view.pause_controls("Planetary hatch device boundary")
+	if not resume(view): return
+	surface_context_pad(view, 9)
+	check(not view.surface_walking() and owner.get_freedom_flight_state() == before, "Foreign controller left the planetary craft")
+	check(owner.save_freedom_as(prefix + "-refused.json") and FileAccess.get_file_as_bytes(prefix + "-refused.json") == bytes, "Hatch input refusals changed complete journey bytes")
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(peer.stage_freedom_continue(prefix + "-before.json") and peer.commit_pending_freedom_start(peer.get_pending_freedom_start().candidate_id) and peer.begin_freedom_surface_walk(), "Direct C++ planetary Leave reference refused"): return
+	if not check(peer.save_freedom_as(prefix + "-expected.json"), "Direct planetary Leave reference Save refused"): return
+	var expected := FileAccess.get_file_as_bytes(prefix + "-expected.json")
+	for action in ["key", "click", "pad"]:
+		if not resume(view): return
+		check(view.mouse_look.active and view.context_source == view.surface_walk_button and not view.context_action.disabled, "Active planetary Leave lost captured/contextual input")
+		if action == "key":
+			surface_context_key(view, true)
+			surface_context_key(view, false)
+		elif action == "pad": surface_context_pad(view, 19)
+		else:
+			for pressed in [true, false]:
+				var click := InputEventMouseButton.new()
+				click.button_index = MOUSE_BUTTON_LEFT
+				click.pressed = pressed
+				surface_context_event(view, click)
+		var actual: Dictionary = owner.get_freedom_flight_state()
+		check(view.paused and view.surface_walking() and not view.mouse_look.active and view.player_input.surface_interaction_enabled and not view.player_input.landed_hatch_enabled and view.liftoff_button.disabled, "Planetary %s Leave did not pause the actual outside handoff" % action)
+		check(actual.tick == before.tick and actual.checksum == before.checksum and actual.resources == before.resources and owner.get_freedom_observations() == records, "Planetary hatch changed craft/time/resources/observations: " + action)
+		check(owner.save_freedom_as(prefix + "-" + action + ".json") and FileAccess.get_file_as_bytes(prefix + "-" + action + ".json") == expected, "Planetary contextual Leave differs from the complete direct C++ result: " + action)
+		# Return via the existing real C++ command to the same seated checkpoint;
+		# each input source must independently perform the actual zero-time exit.
+		if not check(owner.return_from_freedom_surface_walk(), "Planetary hatch test return refused"): return
+		view.state = owner.get_freedom_flight_state()
+		view.update_view(0.0)
+		check(owner.save_freedom_as(prefix + "-returned.json") and FileAccess.get_file_as_bytes(prefix + "-returned.json") == bytes, "Planetary Leave/Return changed the retained seated checkpoint")
+	view.player_input.device = device
+	view.player_input.available_pads = pads
+	view.player_input.install()
+	peer = null
+	print("Planetary contextual hatch: actual E/click/selected A, refusal gates and direct C++ Save parity checked")
+
+
 func check_surface_context(source: String, assets: String, output: String) -> void:
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var shell := Shell.new()
@@ -579,6 +653,7 @@ func check_surface_context(source: String, assets: String, output: String) -> vo
 		surface_context_key(view, false)
 	check(view.paused and not view.surface_walking() and not view.player_input.surface_interaction_enabled, "E failed to return through the actual hatch and pause seated input")
 	check(owner.save_freedom_as(before_return + ".actual.json") and peer.save_freedom_as(before_return + ".expected.json") and FileAccess.get_file_as_bytes(before_return + ".actual.json") == FileAccess.get_file_as_bytes(before_return + ".expected.json"), "Direct foot return differs from the exact C++ command result")
+	check_planetary_hatch(view, owner, output)
 	shell.free()
 
 

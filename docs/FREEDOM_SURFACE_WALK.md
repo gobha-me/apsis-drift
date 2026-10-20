@@ -1,7 +1,10 @@
 # Landed surface walking prototype
 
-After a supported, stable Wayfarer landing, **Leave Wayfarer · suit** selects
-first-person ground walking. Release controls and resume explicitly. Configured walking keys (WASD by default) and
+After a supported, stable Wayfarer landing, release flight and look controls,
+then use the displayed **Leave Wayfarer · suit** action, **E**, captured **left
+click**, or the selected controller's **A/Cross**. Leaving pauses outside;
+resume explicitly to walk. **Liftoff** remains available in paused Controls.
+Configured walking keys (WASD by default) and
 the left stick walk; ordinary mouse movement, arrow keys and the right stick look. Pause and focus loss release the mouse; Resume captures it again. **Return through hatch**
 works within 3.5 metres of the original ground access point. Reboarding pauses
 again, after which the ordinary flight controls and thruster liftoff resume.
