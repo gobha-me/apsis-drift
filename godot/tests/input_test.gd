@@ -27,6 +27,7 @@ func check_initial_controller() -> void:
 
 func run() -> void:
 	check_initial_controller()
+	check_rebind_transaction()
 	check_foot_keyboard_look()
 	check_foot_controller_look()
 	check_surface_interaction()
@@ -203,6 +204,135 @@ func physical_key(code: int, pressed: bool) -> void:
 	event.pressed = pressed
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+
+func binding_snapshot(controls: Node) -> Dictionary:
+	var action_map := {}
+	for action in InputMap.get_actions():
+		if not str(action).begins_with("pilot_") and action not in ["ui_accept", "ui_cancel", "ui_up", "ui_down", "ui_left", "ui_right"]: continue
+		var events := []
+		for event in InputMap.action_get_events(action):
+			events.append([event.get_class(), event.device, event.as_text()])
+		action_map[action] = [InputMap.action_get_deadzone(action), events, Input.get_action_raw_strength(action)]
+	var retained := []
+	for event in controls.remap_neutral_events:
+		retained.append([event.get_class(), event.device, event.as_text()])
+	# Failure may explain itself through status, but may change none of these
+	# live owners, mapped actions, held-input barriers or pending capture fields.
+	return {"settings": controls.settings.duplicate(true), "bindings": controls.bindings.duplicate(true), "source": controls.source_document.duplicate(true), "writable": controls.preferences_writable, "waiting": controls.waiting_action, "family": controls.waiting_family, "enabled": controls.enabled, "focused": controls.focused, "device": controls.device, "neutral": controls.needs_neutral, "looking": controls.looking, "look_neutral": controls.look_axes_needs_neutral, "retained": retained, "overflow": controls.remap_neutral_overflow, "foot_keys": controls.foot_remap_keys.duplicate(), "actions": action_map}
+
+func capture_binding_key(controls: Node, code: int) -> void:
+	# The isolated provider has automatic _input disabled. Physical events still
+	# reach InputMap; forward the pressed event through its actual capture path.
+	physical_key(code, true)
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.keycode = code
+	event.pressed = true
+	controls._input(event)
+	physical_key(code, false)
+
+func write_binding_fixture(path: String, text: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	check(file != null, "Could not open private binding fixture")
+	if file == null: return false
+	file.store_string(text)
+	file.flush()
+	var written := file.get_error() == OK
+	file.close()
+	check(written, "Could not write private binding fixture")
+	return written
+
+func check_rebind_transaction() -> void:
+	var folder := "user://input-remap-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var made := DirAccess.make_dir_absolute(folder)
+	check(made == OK, "Private binding fixture directory unavailable")
+	if made != OK: return
+	var invalid_path := folder.path_join("invalid.json")
+	var durable_path := folder.path_join("controls.json")
+	var directory_path := folder.path_join("directory-target")
+	if not write_binding_fixture(invalid_path, "{invalid controls"):
+		DirAccess.remove_absolute(invalid_path)
+		DirAccess.remove_absolute(folder)
+		return
+	var invalid_bytes := FileAccess.get_file_as_bytes(invalid_path)
+	var blocked := Controls.new()
+	blocked.settings_path = invalid_path
+	blocked.initial_device = -1
+	root.add_child(blocked)
+	blocked.set_process_input(false)
+	var blocked_installs := [0]
+	blocked.bindings_changed.connect(func(): blocked_installs[0] += 1)
+	check(not blocked.preferences_writable and blocked.bindings.forward.key.code == KEY_W, "Invalid binding source did not retain protected defaults")
+	blocked.waiting_action = "forward"
+	blocked.waiting_family = "key"
+	physical_key(KEY_W, true)
+	var protected_before := binding_snapshot(blocked)
+	capture_binding_key(blocked, KEY_T)
+	check(binding_snapshot(blocked) == protected_before and blocked_installs[0] == 0 and not blocked.status.is_empty(), "Protected-source capture changed controls, InputMap, barriers or pending capture")
+	check(FileAccess.get_file_as_bytes(invalid_path) == invalid_bytes and not FileAccess.file_exists(invalid_path + ".tmp"), "Protected-source capture replaced its invalid file or left a temporary")
+	# An explicit session-only run may remap even when the old file is protected.
+	blocked.persist = false
+	capture_binding_key(blocked, KEY_T)
+	check(blocked.waiting_action.is_empty() and blocked.bindings.forward.key.code == KEY_T and blocked_installs[0] == 1 and blocked.status == "Binding applied for this session only.", "Session-only capture failed to adopt once or claimed durable success")
+	check(FileAccess.get_file_as_bytes(invalid_path) == invalid_bytes and not blocked.preferences_writable, "Session-only remap overwrote or unprotected the original file")
+	check(blocked.needs_neutral and not blocked.remap_neutral_events.is_empty() and not blocked.observe_neutral(), "Session-only capture lost the physically held old-key barrier")
+	physical_key(KEY_W, false)
+	check(blocked.observe_neutral() and not blocked.needs_neutral and blocked.remap_neutral_events.is_empty(), "Released session-only old key did not recover neutral")
+	var document := {"version": 4, "settings": blocked.settings.duplicate(true), "bindings": blocked.bindings.duplicate(true), "future": {"retained": [7, "extension"]}}
+	document.bindings.forward.key = {"kind": "key", "code": KEY_W}
+	document.settings.future_scalar = "retained"
+	document.bindings.forward.future_action = {"retained": true}
+	document.bindings.backward.key.future_key = "retained"
+	blocked.free()
+	if not write_binding_fixture(durable_path, JSON.stringify(document)):
+		DirAccess.remove_absolute(durable_path)
+		DirAccess.remove_absolute(invalid_path)
+		DirAccess.remove_absolute(folder)
+		return
+	var original_bytes := FileAccess.get_file_as_bytes(durable_path)
+	var controls := Controls.new()
+	controls.settings_path = durable_path
+	controls.initial_device = -1
+	root.add_child(controls)
+	controls.set_process_input(false)
+	var installs := [0]
+	controls.bindings_changed.connect(func(): installs[0] += 1)
+	check(controls.preferences_writable and controls.bindings.forward.key.code == KEY_W, "Valid durable remap fixture failed to load")
+	controls.waiting_action = "forward"
+	controls.waiting_family = "key"
+	physical_key(KEY_W, true)
+	var directory_made := DirAccess.make_dir_absolute(directory_path)
+	check(directory_made == OK, "Private rename-refusal directory unavailable")
+	for path in [folder.path_join("missing-parent/controls.json"), directory_path]:
+		controls.settings_path = path
+		var before := binding_snapshot(controls)
+		capture_binding_key(controls, KEY_T)
+		check(binding_snapshot(controls) == before and installs[0] == 0 and not controls.status.is_empty(), "Failed open/rename adopted a binding, installed input or cleared capture: " + path)
+		check(not FileAccess.file_exists(path + ".tmp") and FileAccess.get_file_as_bytes(durable_path) == original_bytes, "Failed remap left a temporary or changed the retained file")
+	check(DirAccess.dir_exists_absolute(directory_path), "Failed remap replaced its directory target")
+	controls.settings_path = durable_path
+	var expected := controls.source_document.duplicate(true)
+	expected.version = 4
+	expected.bindings.forward.key = {"kind": "key", "code": KEY_T}
+	# JSON decodes numeric fields as floats, including the layout version and
+	# key codes. Compare reloads with that representation, not the live integers.
+	var durable_expected: Dictionary = JSON.parse_string(JSON.stringify(expected))
+	capture_binding_key(controls, KEY_T)
+	check(controls.waiting_action.is_empty() and installs[0] == 1 and controls.status == "Binding saved." and controls.source_document == expected and controls.bindings == expected.bindings and controls.settings == expected.settings, "Durable capture failed exact candidate adoption or changed another setting/binding/extension")
+	check(JSON.parse_string(FileAccess.get_file_as_string(durable_path)) == durable_expected and not FileAccess.file_exists(durable_path + ".tmp"), "Durable capture did not atomically write its complete candidate")
+	check(controls.needs_neutral and not controls.remap_neutral_events.is_empty() and not controls.observe_neutral(), "Successful durable capture forgot the held removed key")
+	physical_key(KEY_W, false)
+	check(controls.observe_neutral() and not controls.needs_neutral and controls.remap_neutral_events.is_empty(), "Durable capture did not rearm after actual old-key release")
+	physical_key(KEY_T, true)
+	check(controls.strength("forward") == 1.0, "Durable capture did not install the accepted actual key")
+	physical_key(KEY_T, false)
+	var reloaded := Controls.new()
+	reloaded.load_settings(durable_path)
+	check(reloaded.preferences_writable and reloaded.bindings == durable_expected.bindings and reloaded.settings == durable_expected.settings and reloaded.source_document == durable_expected, "Durable remap failed complete restart/extension preservation")
+	reloaded.free()
+	controls.free()
+	for path in [durable_path, invalid_path, directory_path, folder]:
+		check(DirAccess.remove_absolute(path) == OK, "Could not clean private remap fixture: " + path)
 
 func check_request_and_history(controls: Node) -> void:
 	controls.focused = true

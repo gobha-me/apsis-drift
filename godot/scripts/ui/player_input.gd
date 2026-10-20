@@ -311,10 +311,23 @@ func rebind(action: String, family: String, binding: Dictionary) -> bool:
 		if other != action and binding_token(bindings[other][family]) == binding_token(binding) and not shared_context(other, action, family):
 			status = "Already assigned to %s. Choose another control." % TITLES[ACTIONS.find(other)]
 			return false
-	bindings[action][family] = binding
-	status = "Binding saved."
+	var candidate := bindings.duplicate(true)
+	candidate[action][family] = binding.duplicate(true)
+	var document := source_document.duplicate(true)
+	document.merge({"version": 4, "settings": settings.duplicate(true), "bindings": candidate.duplicate(true)}, true)
+	if not valid_document(document):
+		status = "Controls settings are invalid."
+		return false
+	if persist and not preferences_writable:
+		status = "Existing controls file cannot be safely replaced. Inspect or move it before applying settings."
+		return false
+	if not write_preferences(document): return false
+	# Keep the old InputMap intact until persistence succeeds, so install can
+	# retain every removed control that is still physically held.
+	bindings = candidate
+	source_document = document
 	install()
-	save_settings()
+	status = "Binding saved." if persist else "Binding applied for this session only."
 	return true
 
 func try_select_controller(event: InputEvent) -> bool:
