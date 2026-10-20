@@ -2465,8 +2465,8 @@ class FreedomBridge : public godot::RefCounted {
         switch (item.status) {
           case SecondaryObservationStatus::visible:
             status = "visible";
-            reason = "Distant optical contact. Close flight and landing are "
-                     "unavailable.";
+            reason = "Distant optical projection only; supported local trips "
+                     "use separate drive controls.";
             break;
           case SecondaryObservationStatus::unresolved: break;
           case SecondaryObservationStatus::occluded:
@@ -2475,8 +2475,9 @@ class FreedomBridge : public godot::RefCounted {
             break;
           case SecondaryObservationStatus::close_unavailable:
             status = "close_unavailable";
-            reason = "Outside the supported distant-observation range. No "
-                     "surface, collision or landing is available.";
+            reason = "Outside this optical projection's range; it supplies no "
+                     "surface or collision. Supported local trips use separate "
+                     "drive controls.";
             break;
         }
         godot::Dictionary contact;

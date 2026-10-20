@@ -86,7 +86,7 @@ Finish the native build before starting the Linux runtime runner:
 
 ```sh
 python3 tools/test_godot_native.py \
-  --godot "$GODOT_BIN" --build-dir build-native
+  --godot "$GODOT_BIN" --build-dir build-native --timeout 900
 python3 tools/test_godot_native.py \
   --godot "$GODOT_BIN" --build-dir build-native --test native_shell
 python3 test/native_runner_test.py
@@ -94,7 +94,10 @@ python3 test/native_ci_test.py
 ```
 
 Set `GODOT_BIN` to the actual executable for these explicit commands. `--test`
-is repeatable and selects a subset. The runner stages an isolated project and
+is repeatable and selects a subset. The full-suite command uses the same
+900-second per-process deadline as CI; the runner's 120-second default is too
+short for some complete journey and asset-staging cases. This is a deadline,
+not a frame-rate target. The runner stages an isolated project and
 retains logs, reports, fixture/save outputs and copied source under `build-godot`.
 After success it removes that run's generated asset/import/cache copies and
 staged binaries, recording removed paths/bytes and the original binary hashes.
@@ -105,7 +108,7 @@ The runner does not build or synchronize with concurrent builds.
 A crash, timeout, script error or missing completion marker
 fails even when other output looks successful.
 
-CI runs the same 41 contracts in four isolated hosted groups listed in
+CI runs the full contract roster in four isolated hosted groups listed in
 [`native_ci_groups.json`](../tools/native_ci_groups.json). One producer verifies
 Godot and builds the native executables; every group verifies their hashes
 and the checked-out source before starting the unchanged runner. The protected
