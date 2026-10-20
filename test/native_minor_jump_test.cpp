@@ -129,12 +129,19 @@ auto run() -> void {
   ensure(nlohmann::ordered_json::parse(need(encode_freedom_travel_document_json(
              historical)))["format_version"] == 45,
          "Historical Moon bytes changed format");
+  // Ordinary free-flight assistance can change after the historical return.
+  // Adoption preserves that old proof but selects the actual current profile.
+  (void)need(old.advance({}));
+  const bool current_assistance = !old.document().model.assistance;
+  need(old.set_assistance(current_assistance));
+  (void)need(old.travel_document());
   const auto retained = old.travel()->local;
   const auto charges = old.resources()->jump_charges;
   need(old.select_local_jump(minor_target(old)));
   ensure(old.travel()->version == 3 && old.travel()->prior_moon &&
              (retained && old.travel()->prior_moon->local == *retained) &&
-             old.resources()->jump_charges == charges,
+             old.resources()->jump_charges == charges &&
+             old.document().model.assistance == current_assistance,
          "Minor adoption discarded old Moon proof or refilled charges");
   auto adopted = need(old.travel_document());
   ensure(nlohmann::ordered_json::parse(need(encode_freedom_travel_document_json(

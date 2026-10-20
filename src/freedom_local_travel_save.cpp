@@ -138,7 +138,6 @@ auto prior_history(const FreedomTravelSaveDocument& d,
         first.request.source.minor || !last.request.source.moon ||
         last.arrival.moon || last.arrival.minor ||
         last.request.home_model != first.request.home_model ||
-        first_source.model != first.request.home_model ||
         !same_history(first.request.source, first_source) ||
         !same_history(last.request.source, first_source) ||
         last.request.attempt < first.request.attempt ||

@@ -34,7 +34,7 @@ static func gear_clearance_text(state: Dictionary) -> String:
 	return "Gear clearance: %.3f…%.3f m" % [clearance.minimum_gap_metres, clearance.maximum_gap_metres]
 
 static func valid(value: Dictionary) -> bool:
-	return valid_companion(value, "moon")
+	return value.get("coordinate_frame") == "moon_relative_inertial" and valid_companion(value, "moon")
 
 # Both companion packets keep genuine typed ownership; this validates only
 # their shared instruments/pilot/clock fields, not a surface model.

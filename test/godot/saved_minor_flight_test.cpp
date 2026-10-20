@@ -229,14 +229,14 @@ auto verify_mesh(const PhysicalMinorDescriptor& owner,
   check(!refused && refused.error() == MinorProxyMeshError::invalid_owner &&
             vertices == saved_vertices && indices == saved_indices,
         "Nonfinite forged owner refuses atomically before caller writes");
-  forged = owner;
-  ++forged.radius_metres;
-  refused = fill_minor_proxy_mesh(forged, dimensions, vertices, indices);
+  auto wrong_radius = owner;
+  ++wrong_radius.radius_metres;
+  refused = fill_minor_proxy_mesh(wrong_radius, dimensions, vertices, indices);
   check(!refused && vertices == saved_vertices && indices == saved_indices,
         "No presentation radius retuning can replace authenticated source");
-  forged = owner;
-  forged.version = 99;
-  refused = fill_minor_proxy_mesh(forged, dimensions, vertices, indices);
+  auto future_owner = owner;
+  future_owner.version = 99;
+  refused = fill_minor_proxy_mesh(future_owner, dimensions, vertices, indices);
   check(!refused && vertices == saved_vertices && indices == saved_indices,
         "Unknown physical recipe refuses without touching output buffers");
   for (auto bad : {MinorProxyMeshDimensions{0, 64},
