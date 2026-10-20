@@ -140,6 +140,37 @@ func check_gear_clearance(view: Control, owner: Variant, output: String, label: 
 		check(view.cockpit_displays.refresh(before, 0.0, true), "Quiet Moon clearance cockpit refresh failed: " + label)
 	check(view.paused and view.error.is_empty() and view.camera.transform == camera_before and view.look_offset == look_before and view.cockpit == cockpit_before and owner.get_freedom_flight_state() == before and save_bytes(owner, output.path_join(label + "-clearance-after.json")) == frozen, "Moon clearance projection/readouts changed pause, camera/look, clock, resources, physics or complete Save: " + label)
 
+func check_manual_moon_menu(view: Control, owner: Variant, output: String, label: String) -> void:
+	var original: Dictionary = owner.get_freedom_flight_state()
+	var original_bytes := save_bytes(owner, output.path_join(label + "-manual-menu-original.json"))
+	if not check(view.paused and view.controls_menu.panel.visible and original.body_kind == "moon" and original.surface_walk.is_empty() and original.jump.phase == "idle" and not original_bytes.is_empty(), "Manual Moon menu lacks its genuine paused seated phase: " + label): return
+	var menu: CanvasLayer = view.controls_menu
+	var landing: Button = menu.saved_port_buttons["Land / deploy gear"]
+	var liftoff: Button = menu.saved_port_buttons["Liftoff with thrusters"]
+	for assisted in [false, true]:
+		menu.assistance_requested.emit(assisted)
+		var live: Dictionary = owner.get_freedom_flight_state()
+		if not check(live.assistance == assisted and live.tick == original.tick and live.resources == original.resources and view.error.is_empty(), "Actual Moon menu assistance selection changed time/resources or refused: " + label): return
+		var prefix := output.path_join(label + "-manual-menu-" + ("assisted" if assisted else "unassisted"))
+		var frozen := save_bytes(owner, prefix + "-before.json")
+		for repeat in 2:
+			menu.sync_saved_state(live, false)
+			check(landing.text == view.landing_button.text and landing.text == "Deploy gear · manual descent" and liftoff.text == view.liftoff_button.text and liftoff.text == "Release support · use up thrusters", "Paused Moon actions promise automatic landing/liftoff or differ from the actual HUD: " + label)
+			check("manual thrusters" in landing.tooltip_text and "does not land" in landing.tooltip_text and "apply up thrusters" in liftoff.tooltip_text and "no automatic" in liftoff.tooltip_text, "Paused Moon actions omit their manual-thrust instructions: " + label)
+			check(landing.disabled == live.surface.landed and liftoff.disabled == (not live.surface.landed) and menu.saved_assist_button.button_pressed == assisted, "Moon label refresh changed action admission or assistance: " + label)
+		# Pure presentation fallback, not a claim of a flown planetary state.
+		# Reuse this same menu to detect stale Moon text/tooltips on its next owner.
+		var planetary := live.duplicate(true)
+		planetary.erase("body_kind")
+		menu.sync_saved_state(planetary, false)
+		check(landing.text == ("Land with thrusters" if assisted else "Deploy gear · manual landing") and liftoff.text == "Liftoff with thrusters" and landing.tooltip_text.is_empty() and liftoff.tooltip_text.is_empty(), "Shared menu failed to restore its unchanged planetary action text/tooltips: " + label)
+		check(landing.disabled == live.surface.landed and liftoff.disabled == (not live.surface.landed), "Planetary presentation fallback changed existing action admission: " + label)
+		menu.sync_saved_state(live, false)
+		check(landing.text == "Deploy gear · manual descent" and liftoff.text == "Release support · use up thrusters" and not landing.tooltip_text.is_empty() and not liftoff.tooltip_text.is_empty(), "Moon action instructions were not restored after planetary presentation fallback: " + label)
+		check(view.paused and view.controls_menu.panel.visible and owner.get_freedom_flight_state() == live and save_bytes(owner, prefix + "-after.json") == frozen, "Reading shared Moon/planet menu changed the actual Moon state or complete Save: " + label)
+	menu.assistance_requested.emit(original.assistance)
+	check(owner.get_freedom_flight_state().assistance == original.assistance and save_bytes(owner, output.path_join(label + "-manual-menu-restored.json")) == original_bytes, "Moon menu checks failed to restore the genuine phase's original complete Save: " + label)
+
 func check_rollback(shell: Control, owner: Variant) -> void:
 	var previous: Control = shell.current_view
 	var model: Node3D = previous.staged_model
@@ -590,6 +621,8 @@ func run() -> void:
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
 		check_gear_clearance(phase_shell.current_view, restored, output, label)
 		var phase_view: Control = phase_shell.current_view
+		if label in ["approach", "landed"]:
+			check_manual_moon_menu(phase_view, restored, output, label)
 		var observed: Dictionary = restored.get_freedom_flight_state()
 		if phase_view.moon_jump_button.disabled:
 			check(not phase_view.moon_jump_button.tooltip_text.is_empty() and phase_view.moon_jump_button.tooltip_text == str(observed.jump.refusal), "Disabled Moon jump control omitted its actual C++ reason: " + label)
