@@ -6,11 +6,19 @@ const MAX_SITES := 8
 static func valid(state: Dictionary) -> bool:
 	if not state.has("surface_landmarks"): return true
 	var data: Variant = state.surface_landmarks
-	if not data is Dictionary or data.size() != 8 or typeof(data.get("version")) != TYPE_INT or data.version != 1: return false
+	if not data is Dictionary or typeof(data.get("version")) != TYPE_INT: return false
+	if data.version == 1:
+		if data.size() != 8: return false
+		if not EnvironmentState.decimal(data.get("planet_id")) or data.planet_id != state.get("planet_id"): return false
+	elif data.version == 2:
+		if data.size() != 10 or state.get("body_kind") != "moon" or data.get("body_kind") != "moon" or state.has("planet_id"): return false
+		if typeof(data.get("body_version")) != TYPE_INT or data.body_version != 1 or data.body_version != state.get("body_version"): return false
+		if not EnvironmentState.decimal(data.get("body_id")) or data.body_id != state.get("body_id"): return false
+	else: return false
 	for field in ["selected", "can_enable"]:
 		if typeof(data.get(field)) != TYPE_BOOL: return false
 	if data.selected and data.can_enable: return false
-	for field in ["system_id", "planet_id", "tick"]:
+	for field in ["system_id", "tick"]:
 		if not EnvironmentState.decimal(data.get(field)) or data[field] != state.get(field): return false
 	if typeof(data.get("inspection_count")) != TYPE_INT or data.inspection_count < 0 or data.inspection_count > 64: return false
 	if not data.get("sites") is Array or data.sites.size() > MAX_SITES: return false

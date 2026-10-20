@@ -15,6 +15,7 @@ inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
 inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
+inline constexpr std::uint32_t kFreedomMoonSurfaceLandmarkVersion{1};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
@@ -128,6 +129,25 @@ struct FreedomSurfaceLandmarkState {
   friend auto operator==(const FreedomSurfaceLandmarkState&,
                          const FreedomSurfaceLandmarkState&) -> bool = default;
 };
+// Optional Moon history uses its genuine typed target and independent recipe.
+// Absence stays absent in historical and default journey encodings.
+struct FreedomMoonSurfaceLandmarkInspection {
+  BodyTarget target;
+  SurfaceLandmarkCell cell;
+  SurfaceLandmarkId site;
+  std::uint32_t terrain_recipe{kMoonTerrainRecipeVersion};
+  SimulationTick tick{};
+  friend auto operator==(const FreedomMoonSurfaceLandmarkInspection&,
+                         const FreedomMoonSurfaceLandmarkInspection&)
+      -> bool = default;
+};
+struct FreedomMoonSurfaceLandmarkState {
+  std::uint32_t version{kFreedomMoonSurfaceLandmarkVersion};
+  std::vector<FreedomMoonSurfaceLandmarkInspection> inspections;
+  friend auto operator==(const FreedomMoonSurfaceLandmarkState&,
+                         const FreedomMoonSurfaceLandmarkState&)
+      -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
@@ -135,6 +155,7 @@ struct FreedomKnowledge {
   // retains its explicit version after the pilot clears the point.
   std::optional<FreedomSurfaceMarkerState> surface_marker{};
   std::optional<FreedomSurfaceLandmarkState> surface_landmarks{};
+  std::optional<FreedomMoonSurfaceLandmarkState> moon_surface_landmarks{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };

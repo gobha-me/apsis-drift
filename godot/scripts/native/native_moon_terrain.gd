@@ -12,13 +12,11 @@ var timer := 0.0
 var is_ready := false
 var owner_id := ""
 var expected_body_id := ""
-var material: StandardMaterial3D
+var material: ShaderMaterial
 
 func _init() -> void:
-	material = StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
-	material.roughness = 1.0
-	material.metallic = 0.0
+	material = ShaderMaterial.new()
+	material.shader = preload("res://shaders/native_moon_terrain.gdshader")
 
 func reset_world() -> void:
 	for node: MeshInstance3D in nodes.values(): node.queue_free()

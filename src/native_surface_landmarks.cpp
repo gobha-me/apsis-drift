@@ -28,6 +28,7 @@ auto NativeFreedomFlightSession::enable_surface_landmarks()
     -> std::expected<void, std::string> {
   if (minor_)
     return std::unexpected{"Minor inspection has no surface landmarks"};
+  if (moon_) return enable_moon_surface_landmarks();
   if (recovery_pending() || !supports_landmarks(knowledge_))
     return std::unexpected{
         "Local landmarks require a supported active journey"};
@@ -141,6 +142,7 @@ auto NativeFreedomFlightSession::surface_landmarks_view() const
 
 auto NativeFreedomFlightSession::inspect_surface_landmark(SurfaceLandmarkId id)
     -> std::expected<void, std::string> {
+  if (moon_) return inspect_moon_surface_landmark(id);
   if (recovery_pending() || !supports_landmarks(knowledge_) ||
       !knowledge_->surface_landmarks || !surface_walker_ ||
       !surface_walk_terrain_ || !surface_ || !surface_->landed ||
@@ -158,7 +160,12 @@ auto NativeFreedomFlightSession::inspect_surface_landmark(SurfaceLandmarkId id)
     return std::unexpected{
         "Move within 8 metres of the exposure centre to inspect"};
   if (found->inspected) return {};
-  if (view->inspection_count >= kMaximumFreedomSurfaceLandmarkInspections)
+  const auto moon_count =
+      knowledge_->moon_surface_landmarks
+          ? knowledge_->moon_surface_landmarks->inspections.size()
+          : 0;
+  if (view->inspection_count + moon_count >=
+      kMaximumFreedomSurfaceLandmarkInspections)
     return std::unexpected{"The local exposure record is full"};
   auto candidate = *this;
   auto& inspections = candidate.knowledge_->surface_landmarks->inspections;

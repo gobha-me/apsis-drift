@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_knowledge.hpp"
 
+#include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/physical_moon.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
@@ -238,6 +239,14 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
       }
     }
   }
+  const auto planet_count =
+      k.surface_landmarks ? k.surface_landmarks->inspections.size() : 0;
+  const auto moon_count = k.moon_surface_landmarks
+                              ? k.moon_surface_landmarks->inspections.size()
+                              : 0;
+  if (planet_count > kMaximumFreedomSurfaceLandmarkInspections ||
+      moon_count > kMaximumFreedomSurfaceLandmarkInspections - planet_count)
+    return std::unexpected{Error::invalid_surface_landmarks};
   if (k.surface_landmarks) {
     const auto& landmarks = *k.surface_landmarks;
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
@@ -262,6 +271,36 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
         return std::unexpected{Error::invalid_surface_landmarks};
       const auto identity = identify_surface_landmark(
           body->descriptor, inspection.cell, landmarks.version);
+      if (!identity || !*identity || (*identity)->id != inspection.site)
+        return std::unexpected{Error::invalid_surface_landmarks};
+    }
+  }
+  if (k.moon_surface_landmarks) {
+    const auto& landmarks = *k.moon_surface_landmarks;
+    if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
+         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+        landmarks.version != kFreedomMoonSurfaceLandmarkVersion)
+      return std::unexpected{Error::invalid_surface_landmarks};
+    const auto catalog = generate_secondary_body_catalog(w.origin);
+    if (!catalog) return std::unexpected{Error::invalid_surface_landmarks};
+    const auto inspection_key = [](const auto& item) {
+      return std::tuple{item.target.system.value, item.target.body.version,
+                        item.target.body.kind, item.target.body.value,
+                        item.site.value};
+    };
+    for (std::size_t i = 0; i < landmarks.inspections.size(); ++i) {
+      const auto& inspection = landmarks.inspections[i];
+      if (inspection.target.system != w.origin.catalog.id ||
+          inspection.tick > now ||
+          inspection.terrain_recipe != kMoonTerrainRecipeVersion ||
+          (i && !(inspection_key(landmarks.inspections[i - 1]) <
+                  inspection_key(inspection))))
+        return std::unexpected{Error::invalid_surface_landmarks};
+      const auto moon =
+          generate_physical_moon_descriptor(*catalog, inspection.target.body);
+      if (!moon) return std::unexpected{Error::invalid_surface_landmarks};
+      const auto identity = identify_moon_surface_landmark(
+          *moon, inspection.cell, landmarks.version);
       if (!identity || !*identity || (*identity)->id != inspection.site)
         return std::unexpected{Error::invalid_surface_landmarks};
     }

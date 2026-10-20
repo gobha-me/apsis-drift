@@ -134,6 +134,31 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
                               });
       if (!retained && inspection.tick < loss_tick) return false;
     }
+  const auto same_moon_site = [](const auto& a, const auto& b) {
+    return a.target == b.target && a.site == b.site;
+  };
+  if (old.moon_surface_landmarks) {
+    if (!now.moon_surface_landmarks || now.moon_surface_landmarks->version !=
+                                           old.moon_surface_landmarks->version)
+      return false;
+    for (const auto& inspection : old.moon_surface_landmarks->inspections) {
+      const auto& records = now.moon_surface_landmarks->inspections;
+      const auto found = std::ranges::find_if(records, [&](const auto& record) {
+        return same_moon_site(record, inspection);
+      });
+      if (found == records.end() || *found != inspection) return false;
+    }
+  }
+  if (now.moon_surface_landmarks)
+    for (const auto& inspection : now.moon_surface_landmarks->inspections) {
+      const bool retained =
+          old.moon_surface_landmarks &&
+          std::ranges::any_of(old.moon_surface_landmarks->inspections,
+                              [&](const auto& record) {
+                                return same_moon_site(record, inspection);
+                              });
+      if (!retained && inspection.tick < loss_tick) return false;
+    }
   for (const auto& e : old.entries) {
     auto found = std::find_if(
         now.entries.begin(), now.entries.end(), [&](const auto& n) {

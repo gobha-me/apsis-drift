@@ -2,6 +2,7 @@
 
 #include "apsis_drift/freedom_local_jump.hpp"
 #include "apsis_drift/freedom_local_observations.hpp"
+#include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
 
@@ -87,6 +88,18 @@ struct FreedomSurfaceLandmarksView {
   bool selected{}, can_enable{};
   std::size_t inspection_count{};
   std::vector<FreedomSurfaceLandmarkView> sites;
+};
+
+struct FreedomMoonSurfaceLandmarkView {
+  MoonSurfaceLandmarkSite site;
+  RigidVector3 target_craft_relative_metres;
+  double distance_metres{};
+  bool nearby{}, can_inspect{}, inspected{};
+};
+struct FreedomMoonSurfaceLandmarksView {
+  bool selected{}, can_enable{};
+  std::size_t inspection_count{};
+  std::vector<FreedomMoonSurfaceLandmarkView> sites;
 };
 
 // Application-owned mutable session. Moving/copying it never retains dangling
@@ -281,6 +294,8 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto surface_landmarks_view() const
       -> std::expected<FreedomSurfaceLandmarksView, std::string>;
+  [[nodiscard]] auto moon_surface_landmarks_view() const
+      -> std::expected<FreedomMoonSurfaceLandmarksView, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto last_gear_clearance() const
       -> std::optional<TerrainPadGapSample>;
@@ -324,6 +339,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_local_jump(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto enable_moon_surface_landmarks()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto inspect_moon_surface_landmark(SurfaceLandmarkId)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto store_surface_marker(bool replace)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_jump(const NativeFlightControls&,
@@ -393,6 +412,8 @@ class NativeFreedomFlightSession {
   std::shared_ptr<MoonSurfaceWalkTerrain> moon_walk_terrain_;
   // Pure derived terrain memoization, never a saved world or actor owner.
   mutable std::shared_ptr<SurfaceLandmarkField> surface_landmark_field_;
+  mutable std::shared_ptr<MoonSurfaceLandmarkField>
+      moon_surface_landmark_field_;
   mutable SystemId surface_landmark_system_{};
   mutable PlanetId surface_landmark_planet_{};
   mutable std::uint32_t surface_landmark_policy_{};

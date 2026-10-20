@@ -1651,6 +1651,8 @@ class FreedomBridge : public godot::RefCounted {
     result["star_angular_radius"] = std::asin(
         std::min(1.0, static_cast<double>(star.radius_kilometres) * 1000.0 /
                           view.rotation.observer_star_distance_metres));
+    result["surface_landmarks"] =
+        project_moon_surface_landmarks(selected, view);
     return result;
   }
 
@@ -2243,22 +2245,11 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
-  static auto project_surface_landmarks(const SavedFlightWorld& selected,
-                                        const SavedFlightProjection& view)
-      -> godot::Dictionary {
-    const auto landmarks = require(selected.session.surface_landmarks_view());
+  static auto project_surface_landmark_sites(const auto& landmarks,
+                                             const auto& view) -> godot::Array {
     const auto decimal = [](std::uint64_t value) {
       return godot::String{std::to_string(value).c_str()};
     };
-    godot::Dictionary result;
-    result["version"] = 1;
-    result["selected"] = landmarks.selected;
-    result["can_enable"] = landmarks.can_enable;
-    result["system_id"] = decimal(selected.session.system().catalog.id.value);
-    result["planet_id"] = decimal(view.planet.id.value);
-    result["tick"] = decimal(selected.session.document().flight.tick);
-    result["inspection_count"] =
-        static_cast<std::int64_t>(landmarks.inspection_count);
     godot::Array sites;
     for (const auto& item : landmarks.sites) {
       const auto& identity = item.site.identity;
@@ -2306,7 +2297,49 @@ class FreedomBridge : public godot::RefCounted {
       site["inspected"] = item.inspected;
       sites.append(site);
     }
-    result["sites"] = sites;
+    return sites;
+  }
+
+  static auto project_surface_landmarks(const SavedFlightWorld& selected,
+                                        const SavedFlightProjection& view)
+      -> godot::Dictionary {
+    const auto landmarks = require(selected.session.surface_landmarks_view());
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    godot::Dictionary result;
+    result["version"] = 1;
+    result["selected"] = landmarks.selected;
+    result["can_enable"] = landmarks.can_enable;
+    result["system_id"] = decimal(selected.session.system().catalog.id.value);
+    result["planet_id"] = decimal(view.planet.id.value);
+    result["tick"] = decimal(selected.session.document().flight.tick);
+    result["inspection_count"] =
+        static_cast<std::int64_t>(landmarks.inspection_count);
+    result["sites"] = project_surface_landmark_sites(landmarks, view);
+    return result;
+  }
+
+  static auto project_moon_surface_landmarks(
+      const SavedFlightWorld& selected, const SavedMoonFlightProjection& view)
+      -> godot::Dictionary {
+    const auto landmarks =
+        require(selected.session.moon_surface_landmarks_view());
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    godot::Dictionary result;
+    result["version"] = 2;
+    result["selected"] = landmarks.selected;
+    result["can_enable"] = landmarks.can_enable;
+    result["system_id"] = decimal(selected.session.system().catalog.id.value);
+    result["body_kind"] = "moon";
+    result["body_version"] = 1;
+    result["body_id"] = decimal(view.moon.body.value);
+    result["tick"] = decimal(selected.session.document().flight.tick);
+    result["inspection_count"] =
+        static_cast<std::int64_t>(landmarks.inspection_count);
+    result["sites"] = project_surface_landmark_sites(landmarks, view);
     return result;
   }
 

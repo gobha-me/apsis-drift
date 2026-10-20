@@ -301,9 +301,13 @@ func update_compact_hud() -> void:
 	var hatch_binding := "E"
 	if player_input != null and player_input.available_pads.get(player_input.device, false):
 		hatch_binding += " / " + ("Cross" if player_input.playstation() else "A")
-	context_action.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit · " + hatch_binding
+	var exposure := SurfaceLandmarks.nearest_nearby(state)
+	var within_return: bool = surface_walking() and state.surface_walk.get("return_access", {}).get("within_reach", false)
+	var can_inspect: bool = surface_walking() and not exposure.is_empty() and exposure.can_inspect
+	context_action.text = ("Return through hatch" if within_return else "Inspect " + exposure.label if can_inspect else "Approach hatch or exposure") if surface_walking() else "Leave Wayfarer · suit · " + hatch_binding
+	if not exposure.is_empty(): primary_status.text += "\n%s · %.1f m%s" % [exposure.label, exposure.distance_metres, " · recorded" if exposure.inspected else ""]
 	if landed_hatch_available(): primary_status.text += "\n" + hatch_binding + ": leave Wayfarer · suit"
-	context_action.disabled = surface_walking() and not state.surface_walk.get("return_access", {}).get("within_reach", false)
+	context_action.disabled = surface_walking() and not within_return and not can_inspect
 	landing_button.disabled = landed or surface_walking() or jumping
 	stow_gear_button.disabled = landed or surface_walking() or jumping or not state.get("surface", {}).get("gear_deployed", false)
 	liftoff_button.disabled = not landed or surface_walking() or jumping
@@ -366,6 +370,10 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 			ship_marker.label_text = "RETURN" if access.available else "SHIP"
 			ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
 		refresh_surface_marker()
+	if not surface_landmarks.apply(state, [terrain.material]):
+		pause_on_error("The lunar exposure appearance is unavailable")
+		return
+	refresh_surface_landmarks()
 	refresh_control_hint()
 	update_compact_hud()
 
@@ -440,6 +448,7 @@ func create_body_geometry(_pending: Dictionary) -> Node3D:
 	var geometry := MoonTerrain.new()
 	geometry.bridge = bridge
 	geometry.expected_body_id = state.body_id
+	if not surface_landmarks.apply(state, [geometry.material]): geometry.error = "The lunar exposure packet is invalid"
 	return geometry
 
 func add_body_controls(column: Node) -> void:
@@ -450,3 +459,5 @@ func add_body_controls(column: Node) -> void:
 	surface_marker_button = controls_menu.add_button(marker_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
 	clear_surface_marker_button = controls_menu.add_button(marker_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
 	show_surface_marker_button = controls_menu.add_button(marker_column, "Show personal marker: Off", toggle_surface_marker)
+	landmark_enable_button = controls_menu.add_button(column, "Enable local landmarks", enable_surface_landmarks)
+	landmark_inspect_button = controls_menu.add_button(column, "Inspect exposure", inspect_surface_landmark)
