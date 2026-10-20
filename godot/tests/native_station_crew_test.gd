@@ -113,6 +113,76 @@ func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, out
 	await process_frame
 	check(save(owner, output.path_join("reader-resized.json")) == baseline, "Crew reader resize changed complete journey")
 
+func stop_talk_regressions(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
+	# Start from real Continue each time, then move with physical input. These
+	# cases deliberately do not insert the old test's neutral frame before E.
+	var interaction := output.path_join("interaction")
+	if not check(DirAccess.make_dir_recursive_absolute(interaction) == OK, "Stop-talk proof directory unavailable"): return
+	for scenario in ["key", "click", "movement", "pause", "focus", "save_modal", "journey_modal"]:
+		if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Stop-talk Continue refused: " + scenario): return
+		var view: Control = shell.current_view
+		view.set_process(false)
+		view.set_process_input(false)
+		view.resume_requested()
+		var motion := InputEventMouseMotion.new()
+		var sensitivity := 0.003 * float(view.preferences_provider.settings.look_speed) / 1.6
+		motion.relative = Vector2(PI / sensitivity, (0.35 if scenario == "click" else -0.35) / sensitivity)
+		view._input(motion)
+		key(view, KEY_W, true)
+		view.crew_query_elapsed = 0.1
+		view._process(0.025)
+		var moving: Dictionary = owner.get_freedom_walk_state()
+		check(moving.velocity_metres_per_second != PackedFloat64Array([0, 0, 0]) and not view.crew_packet.available, "Stop-talk fixture did not actually move or retain unavailable cached crew: " + scenario)
+		key(view, KEY_E, true)
+		key(view, KEY_E, false)
+		check(not view.crew_open() and view.pending_crew_talk.is_empty() and view.active_card.visible and "Release walking" in view.active_status.text, "Held Talk did not refuse visibly: " + scenario)
+		key(view, KEY_W, false)
+		var path := interaction.path_join("stop-talk-" + scenario + ".json")
+		var moving_save := save(owner, path)
+		if scenario == "click":
+			var click := InputEventMouseButton.new()
+			click.button_index = MOUSE_BUTTON_LEFT
+			click.pressed = true
+			view._input(click)
+		else:
+			key(view, KEY_E, true)
+			key(view, KEY_E, false)
+		check(not view.crew_open() and not view.pending_crew_talk.is_empty() and "Stopping to talk" in view.active_status.text and save(owner, path) == moving_save, "Immediate released Talk was lost, invisible or stepped the owner: " + scenario)
+		match scenario:
+			"movement":
+				# A press and release between frames must still cancel the request.
+				key(view, KEY_W, true)
+				key(view, KEY_W, false)
+			"pause":
+				view.pause_controls("Stop-talk cancellation")
+				view.resume_requested()
+			"focus":
+				view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+				view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+				view.resume_requested()
+			"save_modal": view.save_dialog.show()
+			"journey_modal": view.journey_dialog_open = true
+		if scenario in ["save_modal", "journey_modal"]:
+			view._process(0.0)
+			check(view.pending_crew_talk.is_empty(), "Modal retained pending Talk: " + scenario)
+			view.save_dialog.hide()
+			view.journey_dialog_open = false
+		var tick := int(owner.get_freedom_walk_state().tick)
+		view._process(0.1)
+		if scenario in ["key", "click"]:
+			check(view.crew_open() and view.paused and view.pending_crew_talk.is_empty() and not view.mouse_look.active, "Released Talk did not open after the ordinary stopping step: " + scenario)
+			var stopped: Dictionary = owner.get_freedom_walk_state()
+			check(stopped.velocity_metres_per_second == PackedFloat64Array([0, 0, 0]) and stopped.foot_position_metres == moving.foot_position_metres and int(stopped.tick) - tick == 12, "Deferred Talk injected movement or extra ticks: " + scenario)
+			var stopped_save := save(owner, path)
+			view._process(0.5)
+			check(save(owner, path) == stopped_save, "Conversation advanced the stopped complete journey: " + scenario)
+		else:
+			check(not view.crew_open() and view.pending_crew_talk.is_empty(), "Canceled Talk opened later: " + scenario)
+			view._process(0.1)
+			check(not view.crew_open(), "Canceled Talk survived a second ordinary frame: " + scenario)
+			save(owner, path)
+	print("Station stop-talk regressions: 7 scenarios checked")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -252,6 +322,9 @@ func run() -> void:
 	view.set_process(false)
 	view.set_process_input(false)
 	check(view.paused and not view.crew_open() and save(owner, output.path_join("talk-continued.json")) == frozen and owner.get_freedom_station_crew() == packet, "Crew Save Continue changed world or invented dialogue progression")
+	# Keep the original nine proof saves/report unchanged; additional desk-input
+	# regressions run independently before the existing original-route reset.
+	stop_talk_regressions(shell, owner, source, assets, output)
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Original station route reset refused"): shell.free(); quit(1); return
 	view = shell.current_view
 	view.set_process(false)

@@ -1,5 +1,6 @@
 extends SceneTree
 const Controls = preload("res://scripts/ui/player_input.gd")
+const FlightMouse = preload("res://scripts/native/native_flight_mouse.gd")
 var failures := 0
 var safety_count := 0
 
@@ -27,6 +28,7 @@ func check_initial_controller() -> void:
 
 func run() -> void:
 	check_initial_controller()
+	check_flight_mouse()
 	check_rebind_transaction()
 	check_foot_keyboard_look()
 	check_foot_controller_look()
@@ -180,6 +182,70 @@ func run() -> void:
 	controls.queue_free()
 	print("Player input contracts: %d failures (synthetic events; not hardware qualification)" % failures)
 	quit(0 if failures == 0 else 1)
+
+
+func check_flight_mouse() -> void:
+	var mouse := FlightMouse.new()
+	var other := FlightMouse.new()
+	var settings: Dictionary = Controls.DEFAULT_SETTINGS.duplicate(true)
+	var unchanged := settings.duplicate(true)
+	var dimensions := Vector2(1280, 720)
+	check(mouse.mouse_filter == Control.MOUSE_FILTER_IGNORE and mouse.focus_mode == Control.FOCUS_NONE, "Mouse steering intercepted pointer or keyboard focus")
+	check(mouse.offset == Vector2.ZERO and mouse.demands(settings) == Vector2.ZERO, "Mouse steering did not start neutral")
+	check(mouse.motion(Vector2(24, -12), dimensions, settings), "Ordinary captured relative mouse travel refused")
+	var demand: Vector2 = mouse.demands(settings)
+	check(demand.x > 0 and demand.y > 0 and demand.length() < 1, "Right/up mouse travel did not command bounded positive yaw/pitch")
+	check(mouse.demands(settings) == demand, "Reading virtual stick aged or consumed its demand")
+	check(other.motion(Vector2(48, -24), dimensions * 2, settings) and other.offset.is_equal_approx(mouse.offset) and other.demands(settings).is_equal_approx(demand), "Equivalent relative viewport travel changed steering")
+	other.clear()
+	check(other.motion(Vector2(12, -6), dimensions, settings) and other.motion(Vector2(12, -6), dimensions, settings) and other.demands(settings).is_equal_approx(demand), "Splitting one mouse gesture changed unsaturated steering")
+	check(other.motion(Vector2(-24, 12), dimensions, settings) and other.demands(settings) == Vector2.ZERO, "Opposite mouse travel failed to recenter virtual stick")
+	var inverted := settings.duplicate(true)
+	inverted.invert_look = true
+	var reversed: Vector2 = mouse.demands(inverted)
+	check(is_equal_approx(reversed.x, -demand.x) and is_equal_approx(reversed.y, demand.y), "Mouse inversion changed yaw or failed to reverse pitch")
+	var curved := settings.duplicate(true)
+	curved.curve = 3.0
+	var linear := settings.duplicate(true)
+	linear.curve = 1.0
+	check(mouse.demands(curved).length() < mouse.demands(linear).length(), "Existing response curve did not soften partial mouse steering")
+	other.clear()
+	var fast := settings.duplicate(true)
+	fast.look_speed = 3.2
+	check(other.motion(Vector2(24, -12), dimensions, fast) and other.demands(fast).length() > demand.length(), "Mouse sensitivity did not change travel response")
+	mouse.clear()
+	check(mouse.motion(Vector2(9, 0), dimensions, settings) and mouse.demands(settings) == Vector2.ZERO, "Small mouse offset escaped the fixed steering deadzone")
+	check(mouse.motion(Vector2(12, 0), dimensions, settings) and mouse.demands(settings).y > 0, "Mouse steering failed to leave its deadzone")
+	mouse.clear()
+	check(mouse.motion(Vector2(10000, -10000), dimensions, settings), "Finite large mouse travel failed to saturate")
+	var diagonal: Vector2 = mouse.demands(settings)
+	check(mouse.offset.length() <= 1.000001 and diagonal.length() <= 1.000001 and diagonal.x > 0.6 and diagonal.x < 0.8 and diagonal.y > 0.6 and diagonal.y < 0.8, "Diagonal virtual stick exceeded radial saturation or doubled full-scale intent")
+	mouse.clear()
+	check(mouse.offset == Vector2.ZERO and mouse.demands(settings) == Vector2.ZERO, "Explicit mouse reset retained steering")
+	check(mouse.motion(Vector2(-24, 12), Vector2i(1280, 720), settings) and mouse.demands(settings).x < 0 and mouse.demands(settings).y < 0, "Integer viewport or negative steering signs refused")
+	for bad in [null, [], "1280x720", Vector3.ONE, Vector2.ZERO, Vector2(0, 720), Vector2(-1, 720), Vector2(1280, -1), Vector2(0.25, 720), Vector2(NAN, 720), Vector2(1280, INF), Vector2(65537, 720)]:
+		mouse.clear()
+		check(mouse.motion(Vector2(24, -12), dimensions, settings), "Invalid-dimension fixture could not establish prior mouse intent")
+		check(not mouse.motion(Vector2.ONE, bad, settings) and mouse.offset == Vector2.ZERO and mouse.demands(settings) == Vector2.ZERO, "Invalid viewport retained mouse intent")
+	for bad in [null, [], "mouse", Vector3.ONE, Vector2(NAN, 0), Vector2(0, INF), Vector2(1000001, 0), Vector2(0, -1000001)]:
+		check(mouse.motion(Vector2(24, -12), dimensions, settings), "Invalid-delta fixture could not establish prior mouse intent")
+		check(not mouse.motion(bad, dimensions, settings) and mouse.offset == Vector2.ZERO, "Invalid or excessive mouse delta retained steering")
+	var malformed: Array = [{}]
+	for item in [["look_speed", null], ["look_speed", true], ["look_speed", NAN], ["look_speed", INF], ["look_speed", 0.29], ["look_speed", 4.01], ["curve", false], ["curve", "1.4"], ["curve", NAN], ["curve", 0.99], ["curve", 3.01], ["invert_look", 1]]:
+		var bad: Dictionary = settings.duplicate(true)
+		bad[item[0]] = item[1]
+		malformed.append(bad)
+	for bad in malformed:
+		check(mouse.motion(Vector2(24, -12), dimensions, settings), "Invalid-settings fixture could not establish prior mouse intent")
+		check(not mouse.motion(Vector2.ONE, dimensions, bad) and mouse.offset == Vector2.ZERO, "Malformed mouse settings accepted motion")
+		check(mouse.motion(Vector2(24, -12), dimensions, settings) and mouse.demands(bad) == Vector2.ZERO and mouse.offset == Vector2.ZERO, "Malformed demand settings failed to clear mouse-owned intent")
+	mouse.offset = Vector2(NAN, 0)
+	check(mouse.demands(settings) == Vector2.ZERO and mouse.offset == Vector2.ZERO, "Nonfinite retained mouse offset escaped demands")
+	mouse.offset = Vector2(2, 0)
+	check(mouse.demands(settings) == Vector2.ZERO and mouse.offset == Vector2.ZERO, "Unbounded retained mouse offset escaped demands")
+	check(settings == unchanged, "Mouse helper changed shared control preferences")
+	mouse.free()
+	other.free()
 
 func joy_axis(code: int, value: float, device := 0) -> void:
 	var event := InputEventJoypadMotion.new()

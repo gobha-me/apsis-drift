@@ -891,6 +891,107 @@ func check_replacement_controller(view: Control, owner: Variant, directory: Stri
 	Input.joy_connection_changed.emit(0, true)
 
 
+func flight_mouse_motion(view: Control, relative: Vector2) -> void:
+	var event := InputEventMouseMotion.new()
+	event.relative = relative
+	view._input(event)
+
+
+func flight_mouse_button(view: Control, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_RIGHT
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	view._input(event)
+
+
+func check_saved_mouse(view: Control, owner: Variant, source: String) -> void:
+	var original_cockpit: bool = view.cockpit
+	view.pause_controls("Mouse steering regression")
+	var controls: Node = view.player_input
+	controls.device = -1
+	controls.install()
+	var reference: Variant = ClassDB.instantiate("FreedomBridge")
+	var final: Dictionary = {}
+	for batch in [1, 2, 4]:
+		check(owner.initialize_freedom_continue(source) and owner.enable_streaming(), "Mouse cadence source refused")
+		view.state = owner.get_freedom_flight_state()
+		view.update_view(0.0)
+		view.toggle_pause()
+		check(not view.paused and view.mouse_look.active and view.flight_mouse.offset == Vector2.ZERO, "Mouse steering did not resume captured and centered")
+		var before: Dictionary = owner.get_freedom_flight_state()
+		var head: Vector2 = view.look_offset
+		flight_mouse_motion(view, view.size * Vector2(0.02, -0.01))
+		var demand: Vector2 = view.flight_mouse.demands(controls.settings)
+		check(demand.x > 0.0 and demand.y > 0.0 and view.look_offset == head and owner.get_freedom_flight_state() == before, "Ordinary mouse did not select pitch/yaw, or moved camera/world before a tick")
+		check(reference.initialize_freedom_continue(source), "Independent mouse reference refused")
+		var axes := PackedFloat64Array([0, 0, demand.x, demand.y, 0, 0, 0])
+		var expected: PackedFloat64Array = FlightView.actuator_fractions(axes)
+		for frame in int(12 / batch):
+			view._process(float(batch) / 120.0)
+			check(reference.advance_freedom_flight(float(batch) / 120.0, expected, false), "Independent mouse flight tick refused")
+		check(view.error.is_empty() and owner.get_freedom_flight_state() == reference.get_freedom_flight_state(), "Mouse pitch/yaw did not reach the ordinary C++ actuator path")
+		if final.is_empty(): final = owner.get_freedom_flight_state()
+		else: check(final == owner.get_freedom_flight_state(), "Render batching changed the same held mouse command")
+		view.pause_controls("Next mouse cadence")
+	check(owner.initialize_freedom_continue(source) and owner.enable_streaming(), "Mouse free-look source refused")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	view.toggle_pause()
+	flight_mouse_motion(view, view.size * Vector2(0.02, 0.01))
+	flight_mouse_button(view, true)
+	check(view.flight_mouse.offset == Vector2.ZERO and not view.flight_mouse.visible, "Held free look retained steering intent/cue")
+	var before: Dictionary = owner.get_freedom_flight_state()
+	flight_mouse_motion(view, Vector2(8, -4))
+	check(view.look_offset != Vector2.ZERO and view.flight_mouse.offset == Vector2.ZERO and owner.get_freedom_flight_state() == before, "Held right mouse failed independent camera look")
+	flight_mouse_button(view, false)
+	check(view.look_offset == Vector2.ZERO and view.flight_mouse.offset == Vector2.ZERO, "Free-look release retained head/steering deflection")
+	controls.device = 0
+	flight_mouse_motion(view, view.size * Vector2(0.02, -0.01))
+	var mouse_offset: Vector2 = view.flight_mouse.offset
+	var pad_motion := InputEventJoypadMotion.new()
+	pad_motion.device = 0
+	pad_motion.axis = JOY_AXIS_LEFT_X
+	for value in [0.0, float(controls.settings.deadzone) * 0.5]:
+		pad_motion.axis_value = value
+		view._input(pad_motion)
+		check(view.flight_mouse.offset == mouse_offset, "Neutral controller noise erased mouse steering")
+	pad_motion.axis_value = 0.8
+	pad_motion.device = 1
+	view._input(pad_motion)
+	check(view.flight_mouse.offset == mouse_offset, "Unselected controller erased mouse steering")
+	pad_motion.device = 0
+	view._input(pad_motion)
+	check(view.flight_mouse.offset == Vector2.ZERO and owner.get_freedom_flight_state() == before, "Selected controller demand did not clear mouse steering without moving world")
+	controls.device = -1
+	for boundary in ["pause", "focus", "resize", "camera", "modal", "invalid"]:
+		flight_mouse_motion(view, view.size * Vector2(0.02, -0.01))
+		check(view.flight_mouse.offset != Vector2.ZERO, "Mouse boundary control was not deflected: " + boundary)
+		before = owner.get_freedom_flight_state()
+		if boundary == "pause": view.pause_controls("Mouse boundary")
+		elif boundary == "focus": view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+		elif boundary == "resize":
+			view.last_window_size -= Vector2i.ONE
+			view.window_resized()
+		elif boundary == "camera": view.change_camera()
+		elif boundary == "modal":
+			view.journey_dialog_open = true
+			view.sync_mouse_look()
+		else: flight_mouse_motion(view, Vector2(NAN, 0))
+		check(view.flight_mouse.offset == Vector2.ZERO and owner.get_freedom_flight_state() == before, "Mouse boundary retained steering or changed world: " + boundary)
+		if boundary == "focus": view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+		if boundary == "modal": view.journey_dialog_open = false
+		if view.paused: view.toggle_pause()
+		view.sync_mouse_look()
+	view.pause_controls("Mouse regression complete")
+	view.cockpit = original_cockpit
+	check(owner.initialize_freedom_continue(source), "Mouse regression damaged source Continue")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	reference = null
+
+
 func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
 	# Earlier direct Continue checks reset the real stream owned by this bridge.
 	check(owner.enable_streaming(), "Focus regression could not reenable authoritative terrain")
@@ -1132,6 +1233,7 @@ func run() -> void:
 	await check_saved_reference(view, owner, args[0].get_base_dir())
 	await check_saved_observations(view, owner, args[0].get_base_dir())
 	await check_saved_settings(view, owner, args[0].get_base_dir())
+	check_saved_mouse(view, owner, args[0])
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
 	view.state = owner.get_freedom_flight_state()
