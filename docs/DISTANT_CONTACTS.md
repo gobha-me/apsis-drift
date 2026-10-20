@@ -14,9 +14,10 @@ clock, physical surface or gravity source.
 Resolved eligible contacts use their supplied angular radius, without an
 enlarged asteroid silhouette. Unresolved contacts can have a direction
 annotation but no fabricated optical disc. Occluded and close-unavailable
-contacts are not drawn. The C++ close-observation boundary is explicit:
-this slice supports distant observation, not approaching a new solid body,
-gravity switching, collision, terrain or moon/asteroid landing.
+contacts are not drawn. The C++ close-observation boundary applies to this
+optical projection: it supplies no surface, collision or arrival target.
+The separate local-drive routes provide the supported Moon landing and
+asteroid inspection trips; tracking an annotation never selects those routes.
 
 In paused Controls, **Track optical contact 1/2** selects a view-local CONTACT
 annotation and explains its current visibility or limitation. Back returns to
@@ -65,7 +66,8 @@ bounded population recipe does not model long-term orbital stability or new
 forces. The minor body's spherical optical proxy and coarse analytic surface
 variation are provisional art. The close boundary begins when apparent radius
 would exceed 0.2 radians; its disc is suppressed and the tracking readout
-states that close flight and landing are unavailable. Apparent radii below
+explains that the optical projection is out of range and supported local trips
+use separate drive controls. Apparent radii below
 0.00002 radians remain unresolved, with an optional annotation only.
 
 Optical limits: occultation currently tests the centre sightline, so partial

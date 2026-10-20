@@ -5,6 +5,10 @@ Station's hub floor. Walking reaches the workshop and D1 vestibule while the
 actual Wayfarer stays at its qualified roof port. C++ owns the actor, craft,
 station recipe, shared clock and save; Godot presents those same results.
 
+The separately selected [Origin crew slice](STATION_CREW.md) adds a stationary
+attendant beyond the arrival guard. Its optional conversations preserve this
+walking domain, physical route and save contract.
+
 The walking/boarding solar light consumes the same current C++ star direction
 and tangent presentation frame as saved flight. It is set during detached
 staging and refreshed from accepted walking/boarding state, including the final

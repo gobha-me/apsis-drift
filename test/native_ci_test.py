@@ -103,7 +103,8 @@ class NativeCiTest(unittest.TestCase):
                     row.update(preparer_sha256=self.m["sources"]["tools/prepare_freedom_native_assets.py"],
                                helper_sha256={name: self.m["sources"]["tools/" + name] for name in ci.ASSET_HELPERS},
                                prepared={"schema": "apsis.native-starter-assets/1", "package_sha256": SHA},
-                               companions={"unit": True})
+                               companions={"operating": {"unit": True}, "stowed": {"unit": True},
+                                           "crew": {"schema": "apsis.origin-crew-assets/1", "package_sha256": SHA}})
                 elif family == "operating_assets":
                     row.update(preparer_sha256=self.m["sources"]["tools/prepare_operating_assets.py"],
                                spec_sha256=self.m["sources"]["tools/wayfarer_operating_spec.py"])
@@ -327,7 +328,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 42, "setup_rows": 79, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 43, "setup_rows": 79, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 60})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -388,7 +389,9 @@ class NativeCiTest(unittest.TestCase):
                      lambda r: r["tests"][0].update(seconds=-1),
                      lambda r: r["setup"][0].update(returncode=1),
                      lambda r: r["setup"][0].update(timed_out=True),
-                     lambda r: r["setup"].pop(), lambda r: r["setup"][0].update(helper_sha256={})]
+                     lambda r: r["setup"].pop(), lambda r: r["setup"][0].update(helper_sha256={}),
+                     lambda r: r["setup"][0]["companions"].pop("crew"),
+                     lambda r: r["setup"][0]["companions"]["crew"].update(schema="foreign")]
         for index, mutate in enumerate(mutations):
             with self.subTest(mutation=index):
                 self.change_report(args, 1, lambda r: (r.clear(), r.update(copy.deepcopy(original)), mutate(r)))
@@ -471,7 +474,7 @@ class NativeCiTest(unittest.TestCase):
     def test_groups_exact_and_pairs_cannot_split(self):
         path = self.repo / "tools/native_ci_groups.json"
         value = ci.read_json(path)
-        self.assertEqual(sum(map(len, value["groups"].values())), 42)
+        self.assertEqual(sum(map(len, value["groups"].values())), 43)
         value["groups"]["1"].remove("native_first_flight_continuation")
         value["groups"]["2"].append("native_first_flight_continuation")
         ci.write_json(path, value)

@@ -1,0 +1,55 @@
+{
+  "provider": "built-in image_gen",
+  "model": "tool-selected; identifier not exposed",
+  "meshy_credits": 0,
+  "rights": "Inherited reference/derived redistribution uncleared",
+  "requests": [
+    {
+      "output": "sources/idle-gesture-draft.png",
+      "references": [
+        "../flight-pair-01/sources/male-idle.png",
+        "../walk-03/idle-source.png"
+      ],
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent pixel-art character sprite sheet for Apsis Drift.\nImage 1 is MALE IDENTITY reference only: preserve short dark brown hair, warm adult face with subtle stubble, adult male proportions. Image2 is PIXEL STYLE and casual clothing language reference, not gender/body to copy.\nDraw the same male in everyday station attire: charcoal graphite short open jacket with restrained amber seam trim, ivory crewneck shirt, comfortable dark gray SLACKS (not armored cargo suit), brown flat low walking SHOES (not armored boots). Bare hands, full jacket sleeves, modest belt. No pressure collar, spacesuit, helmet, gloves, armor or backpack. Authentic deliberate pixel clusters like Image2, not smooth vector/3D.\nSheet 1536x1024, FOUR equal columns TWO equal rows, eight complete head-to-toe figures. True transparent background; no floor shadows, no labels/grid/letters/props.\nRow1: front neutral idle, strict RIGHT profile idle, true REAR idle, strict LEFT profile idle.\nRow2 all strict RIGHT profile, identical planted foot positions, identical torso/head scale: 1 neutral relaxed arms; 2 right elbow bent lifting bare hand to chest greeting preparation; 3 right bare hand raised beside shoulder palm open toward a person to the right, friendly restrained greeting; 4 right hand lowered halfway to relaxed recovery. Left arm stays relaxed. Hand/forearm/elbow anatomically attached. Expression friendly subtle resting smile not grimace.\nSame height scale/limb lengths/clothing across all8, generous margins between complete figures, never clipped feet/hair/fingers. Clear natural shoulder/elbow/wrist overlap, no detached joints. Practical civilian clothing, no logos/trademarks or weapons."
+    },
+    {
+      "output": "sources/idle-gesture-repair-draft.png",
+      "references": [
+        "sources/idle-gesture-draft.png"
+      ],
+      "transparent_background": true,
+      "prompt": "Use case: precise-object-edit. Edit this eight-pose transparent character atlas. Preserve top row all four figures exactly, identity, clothing, shoes, scale, resolution, pixel style, alpha, positions. Fix ONLY bottom row greeting arm continuity. All bottom figures face RIGHT. The NEAR arm (on viewer side, arising from the prominent jacket shoulder with amber stripe at screen LEFT of chest) must perform EVERY phase. The FAR arm stays relaxed beside/behind the far hip in every pose. Bottom col1 neutral unchanged. Bottom col2 near elbow bent hand at chest already correct; preserve. Bottom col3 currently wrong arm raises while near arm hangs: REPLACE this with the NEAR upper arm angled forward, near elbow bent, near forearm raised vertically and near hand open palm beside shoulder to greet. Attach the raised forearm naturally to the near jacket elbow, DO NOT leave an extra near hanging arm. Far arm remains down. Bottom col4 near arm lowered halfway, preserve. No gloves, no props, no added limbs. All heads, torsos, legs, feet and their positions unchanged. Genuine transparent background.",
+      "disposition": "Rejected: still switches which arm raises."
+    },
+    {
+      "output": "sources/walk-side-draft.png",
+      "references": [
+        "sources/idle-gesture-draft.png"
+      ],
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Reference image fixes exact male identity, casual outfit and pixel style. Draw EIGHT whole-body walking sprites, strict RIGHT profile, FOUR columns TWO rows, true transparent RGBA,1536x1024. Graphite open jacket amber seams, ivory shirt, dark SLACKS, brown low SHOES, bare hands, short dark hair and stubble. Same head scale and limb lengths. No spacesuit or boot armor. Generous gutters and full head/soles, no floor/shadows/text/grid/props.\nNatural relaxed WALK not march: bent knees only slightly, lifted shoe only 3cm clear, hands swing low beside thighs, elbow bend under20degrees.\nNear leg = closest to viewer, lighter pants leg. Near arm = visible shoulder. Alternate opposite arm/leg.\nRead cells left-right row1thenrow2.\n0 contact A: NEAR leg forward/right heel lands; FAR leg back/left toe supports. NEAR arm trails/left, FAR arm forward/right.\n1 down A: same leg order, body settles slightly.\n2 passing A: NEAR leg planted straight under pelvis, FAR leg passes forward with mild bent knee, low shoe. Arms passing down.\n3 up A: FAR leg approaches forward contact, near leg trails; near arm moving forward.\n4 contact B: FAR leg forward/right heel lands; NEAR leg back/left toe supports. NEAR arm forward/right, FAR arm trails/left. MUST be opposite of cell0.\n5 down B: same leg order as4, body settles slightly.\n6 passing B: FAR leg planted under pelvis, NEAR leg passes forward low, arms passing down.\n7 up B: NEAR leg approaches forward contact, far leg trails.\nAll limbs attached with clean overlap. Consistent pelvis and floor level. Do not repeat same leading leg eight times.",
+      "disposition": "Rejected: weak/repeated passing silhouettes."
+    },
+    {
+      "output": "sources/walk-axial.png",
+      "references": [
+        "sources/idle-gesture-draft.png"
+      ],
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Reference image fixes exact male identity, casual outfit and pixel style. Draw EIGHT full-body natural walking sprites in FOUR equal columns TWO equal rows, transparent RGBA1536x1024. Top row FOUR frames facing FRONT walking toward viewer. Bottom row FOUR true REAR views walking away: back of head, jacketback, trouser rear pockets, heel/sole details, no face.\nSame graphite jacket amber seams, ivory shirt, dark simple SLACKS, brown low SHOES, bare hands, short dark hair. Not flight suit or boots.\nEach row chronological four keys: 1 character RIGHT foot forward/support and LEFT arm forward; 2 passing with right leg planted and left leg passing low; 3 character LEFT foot forward/support and RIGHT arm forward; 4 passing with left leg planted and right leg passing low. Natural modest arm swing beside hips, no exaggerated knee lifts. Do not rotate torso away from strict front/rear. Clear alternating foot contacts and arm positions, same body height and limb proportions across8, slight walk bob only. Complete silhouettes and generous gaps, no cropped shoes/hair. Deliberate pixel clusters, no smoothed render. No ground shadows, text, panels, grid or props.",
+      "disposition": "Retained with repeated passing/contact limitation."
+    },
+    {
+      "output": "sources/walk-side.png",
+      "references": [
+        "../walk-02/keys-source.png",
+        "sources/idle-gesture-draft.png"
+      ],
+      "transparent_background": true,
+      "prompt": "Use case: identity-preserve. Image1 is edit target: FOUR animation keyframes arranged TWO columns TWO rows, transparent portrait sheet. Image2 is the male identity/clothing reference. Replace the female in all FOUR Image1 poses with this same male from Image2, keeping the FOUR WALK POSES and view direction of Image1.\nPreserve exact leg placement, supporting/passing foot relationships, opposite arm swing and modest body scale of Image1. Do not invent eight poses. All strict RIGHT profile. Top-left contact nearlegforward neararmback; top-right passing feet close under hips; bottom-left oppositecontact nearlegback neararmforward; bottom-right oppositepassing feetclose. Same male short darkhair/stubble head across4. Graphite short open jacket amber trim, ivory shirt, dark plain SLACKS without cargo pockets, brown LOW walking SHOES, bare hands. Follow male civilian outfit Image2, no female waist/breasts, no pressure suit, no boots/gloves/helmet. Natural relaxed walk not marching; low passing foot, elbows relaxed and hands near thighs.\nSame head/body scale eachcell, coherent attached limbs. Genuine transparent background, generous gutters, full toes/heels/hair visible, no shadows or text. Crisp pixel clusters matching Image1, 1024x1536portrait TWO BY TWO.",
+      "disposition": "Four retained keys; coarse but clearer than eight-frame attempt."
+    }
+  ],
+  "calls": 5
+}

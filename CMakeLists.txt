@@ -151,6 +151,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_boarding_save.cpp
   src/native_starting_assembly.cpp
   src/origin_walker.cpp
+  src/origin_station_crew.cpp
   src/origin_gameplay_boarding.cpp
   src/operating_motion.cpp
   src/origin_boarding_support.cpp

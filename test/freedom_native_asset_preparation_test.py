@@ -3,6 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -31,6 +32,22 @@ class PublicationTests(unittest.TestCase):
         patch.object(assets.starter, 'prepare', side_effect=self.make_starter).start()
         patch.object(assets.operating, 'prepare', side_effect=self.companion).start()
         patch.object(assets.stowed, 'prepare', side_effect=self.companion).start()
+        # Keep crew verification real, with a tiny authenticated package rather
+        # than copying the production sprites into every publication fixture.
+        crew = self.repository / 'assets/native/origin-crew-01'
+        crew.mkdir(parents=True)
+        records = []
+        for name in assets.CREW_OUTPUTS:
+            data = ('crew fixture ' + name).encode()
+            (crew / name).write_bytes(data)
+            records.append({'path': name, 'bytes': len(data),
+                            'sha256': hashlib.sha256(data).hexdigest()})
+        manifest = crew / 'package.json'
+        manifest.write_text(json.dumps({'schema': 'apsis.origin-crew-assets/1',
+                                       'package_id': 'origin-crew-01',
+                                       'files': records}))
+        patch.object(assets, 'CREW_PACKAGE_SHA256',
+                     hashlib.sha256(manifest.read_bytes()).hexdigest()).start()
 
     def make_starter(self, package, destination):
         destination.mkdir()
@@ -57,7 +74,7 @@ class PublicationTests(unittest.TestCase):
         assets.prepare(self.repository, self.output)
         self.assertEqual(before, self.snapshot())
         self.assertEqual(set(self.output.iterdir()), {
-            self.output / name for name in ('starter.glb', 'prepared.json', 'operating', 'stowed')})
+            self.output / name for name in ('starter.glb', 'prepared.json', 'operating', 'stowed', 'crew')})
 
     def test_late_companion_failure_publishes_nothing(self):
         with patch.object(assets.stowed, 'prepare', side_effect=ValueError('late failure')):
@@ -70,8 +87,9 @@ class PublicationTests(unittest.TestCase):
         install = assets.operating.install_new
 
         def race(candidate, destination):
-            destination.mkdir()
-            (destination / 'winner').write_bytes(b'preserve me')
+            if destination == self.output:
+                destination.mkdir()
+                (destination / 'winner').write_bytes(b'preserve me')
             install(candidate, destination)
 
         with patch.object(assets.operating, 'install_new', side_effect=race):
@@ -110,6 +128,43 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unexpected native asset entry'):
             assets.prepare(self.repository, self.output)
         self.assertEqual(before, self.snapshot())
+
+    def test_legacy_install_acquires_only_missing_crew(self):
+        assets.prepare(self.repository, self.output)
+        shutil.rmtree(self.output / 'crew')
+        before = self.snapshot()
+        assets.prepare(self.repository, self.output)
+        after = self.snapshot()
+        self.assertEqual(before, {name: data for name, data in after.items()
+                                  if not name.startswith('crew/')})
+        self.assertEqual({name.removeprefix('crew/') for name in after
+                          if name.startswith('crew/')},
+                         set(assets.CREW_OUTPUTS) | {'prepared.json'})
+
+    def test_changed_crew_is_not_repaired(self):
+        assets.prepare(self.repository, self.output)
+        (self.output / 'crew' / assets.CREW_OUTPUTS[0]).write_bytes(b'changed')
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'Prepared crew bytes changed'):
+            assets.prepare(self.repository, self.output)
+        self.assertEqual(before, self.snapshot())
+
+    def test_legacy_migration_rejects_changed_existing_companion(self):
+        assets.prepare(self.repository, self.output)
+        shutil.rmtree(self.output / 'crew')
+        (self.output / 'stowed/model').write_bytes(b'changed')
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'Changed companion'):
+            assets.prepare(self.repository, self.output)
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((self.output / 'crew').exists())
+
+    def test_late_crew_failure_publishes_nothing(self):
+        with patch.object(assets, 'prepare_crew', side_effect=ValueError('crew failure')):
+            with self.assertRaisesRegex(ValueError, 'crew failure'):
+                assets.prepare(self.repository, self.output)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(list(self.root.glob('.freedom-native-*')), [])
 
 
 if __name__ == '__main__':

@@ -1,0 +1,344 @@
+{
+  "schema": "apsis-casual-male-frames-v1",
+  "height_m": 1.85,
+  "cycle_distance_m": 1.4,
+  "sheets": {
+    "idle": {
+      "texture": "res://trials/casual-male-01/sources/idle-gesture-draft.png",
+      "reference_height": 487,
+      "frames": [
+        {
+          "rect": [
+            121,
+            15,
+            211,
+            491
+          ],
+          "anchor": [
+            106,
+            489
+          ],
+          "source_cell": 0
+        },
+        {
+          "rect": [
+            526,
+            15,
+            117,
+            491
+          ],
+          "anchor": [
+            57,
+            489
+          ],
+          "source_cell": 1
+        },
+        {
+          "rect": [
+            849,
+            15,
+            207,
+            491
+          ],
+          "anchor": [
+            104,
+            489
+          ],
+          "source_cell": 2
+        },
+        {
+          "rect": [
+            1253,
+            15,
+            118,
+            491
+          ],
+          "anchor": [
+            57,
+            489
+          ],
+          "source_cell": 3
+        },
+        {
+          "rect": [
+            174,
+            520,
+            119,
+            490
+          ],
+          "anchor": [
+            57,
+            488
+          ],
+          "source_cell": 4
+        },
+        {
+          "rect": [
+            174,
+            520,
+            119,
+            490
+          ],
+          "anchor": [
+            57,
+            488
+          ],
+          "source_cell": 4
+        },
+        {
+          "rect": [
+            882,
+            520,
+            170,
+            489
+          ],
+          "anchor": [
+            59,
+            487
+          ],
+          "source_cell": 6
+        },
+        {
+          "rect": [
+            174,
+            520,
+            119,
+            490
+          ],
+          "anchor": [
+            57,
+            488
+          ],
+          "source_cell": 4
+        }
+      ]
+    },
+    "walk_side": {
+      "texture": "res://trials/casual-male-01/sources/walk-side.png",
+      "reference_height": 659,
+      "frames": [
+        {
+          "rect": [
+            140,
+            48,
+            376,
+            648
+          ],
+          "anchor": [
+            170,
+            646
+          ],
+          "source_cell": 0
+        },
+        {
+          "rect": [
+            140,
+            48,
+            376,
+            648
+          ],
+          "anchor": [
+            170,
+            646
+          ],
+          "source_cell": 0
+        },
+        {
+          "rect": [
+            654,
+            48,
+            172,
+            650
+          ],
+          "anchor": [
+            91,
+            648
+          ],
+          "source_cell": 1
+        },
+        {
+          "rect": [
+            654,
+            48,
+            172,
+            650
+          ],
+          "anchor": [
+            91,
+            648
+          ],
+          "source_cell": 1
+        },
+        {
+          "rect": [
+            130,
+            770,
+            441,
+            655
+          ],
+          "anchor": [
+            188,
+            653
+          ],
+          "source_cell": 2
+        },
+        {
+          "rect": [
+            130,
+            770,
+            441,
+            655
+          ],
+          "anchor": [
+            188,
+            653
+          ],
+          "source_cell": 2
+        },
+        {
+          "rect": [
+            657,
+            770,
+            182,
+            663
+          ],
+          "anchor": [
+            93,
+            661
+          ],
+          "source_cell": 3
+        },
+        {
+          "rect": [
+            657,
+            770,
+            182,
+            663
+          ],
+          "anchor": [
+            93,
+            661
+          ],
+          "source_cell": 3
+        }
+      ]
+    },
+    "walk_axial": {
+      "texture": "res://trials/casual-male-01/sources/walk-axial.png",
+      "reference_height": 487,
+      "frames": [
+        {
+          "rect": [
+            119,
+            12,
+            216,
+            489
+          ],
+          "anchor": [
+            109,
+            487
+          ],
+          "source_cell": 0
+        },
+        {
+          "rect": [
+            468,
+            12,
+            207,
+            490
+          ],
+          "anchor": [
+            102,
+            488
+          ],
+          "source_cell": 1
+        },
+        {
+          "rect": [
+            848,
+            12,
+            212,
+            489
+          ],
+          "anchor": [
+            107,
+            487
+          ],
+          "source_cell": 2
+        },
+        {
+          "rect": [
+            1204,
+            11,
+            208,
+            491
+          ],
+          "anchor": [
+            106,
+            489
+          ],
+          "source_cell": 3
+        },
+        {
+          "rect": [
+            120,
+            514,
+            205,
+            488
+          ],
+          "anchor": [
+            105,
+            486
+          ],
+          "source_cell": 4
+        },
+        {
+          "rect": [
+            466,
+            513,
+            206,
+            482
+          ],
+          "anchor": [
+            104,
+            480
+          ],
+          "source_cell": 5
+        },
+        {
+          "rect": [
+            849,
+            513,
+            209,
+            489
+          ],
+          "anchor": [
+            102,
+            487
+          ],
+          "source_cell": 6
+        },
+        {
+          "rect": [
+            1204,
+            513,
+            211,
+            482
+          ],
+          "anchor": [
+            105,
+            480
+          ],
+          "source_cell": 7
+        }
+      ]
+    }
+  },
+  "notes": [
+    "Raw idle-gesture-draft source is selected for four idle views and two coherent greeting poses only; cells5/7 rejected for switching arms.",
+    "Unsuccessful repair archived but unused.",
+    "Side keys are four distinct drawings held twice. Nonuniform atlas layout uses measured bounds, not nominal half-width crop.",
+    "Axial passing keys repeat some contact silhouettes. No planted-foot or smooth animation certification.",
+    "Whole outfits, no mix-and-match wardrobe. Bareheaded casual attire not pressure safe."
+  ]
+}

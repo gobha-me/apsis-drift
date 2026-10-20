@@ -163,6 +163,10 @@ func install_walk_access(access: Dictionary) -> void:
 		# rather than below the camera's vertical field of view.
 		label.position.y = 1.7
 		label.pixel_size = 0.0015
+		if limit == limits[0]:
+			# Keep the arrival restriction readable beside the attendant's face.
+			label.position.z = 0.3
+			label.pixel_size = 0.0009
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.font_size = 32
 		gate.add_child(label)

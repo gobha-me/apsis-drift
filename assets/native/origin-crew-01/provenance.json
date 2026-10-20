@@ -1,0 +1,25 @@
+{
+  "schema": "apsis.origin-crew-provenance/1",
+  "package_id": "origin-crew-01",
+  "license": "BSD-3-Clause",
+  "rights_clearance": "metadata/rights-clearance.json",
+  "rights_public_record": "https://github.com/gobha-me/apsis-drift/issues/641#issuecomment-6295020900",
+  "provider": "OpenAI built-in image_gen; model identifier not exposed",
+  "source_commit": "032e74505ab4a0ef33a6c60e669c59135c31a600",
+  "source_repository_path": "experiments/pixel-pilot/trials/casual-male-01",
+  "selected_sheet_sha256": "007bc821141b58995d13834d45baef7996c61000ca61760a9f755ca47a577503",
+  "selection": "Original idle-gesture-draft PNG unchanged. Only first four top-row idle frames: front/right/rear/left. Original rects, anchors and 1.85 m/reference 487 scale. No animation or mirroring.",
+  "historical_records": "Original source metadata retains historical uncleared/local-review wording. The dated owner clearance supersedes that restriction for these selected assets and references. Metadata paths are historical evidence, never runtime dependencies.",
+  "new_generation_calls": 0,
+  "image_edits": 0,
+  "limits": [
+    "Fixed idle art only; no root motion, collision or support authority.",
+    "No arbitrary-angle anatomy, smooth turning or body-shaped shadows claimed.",
+    "The source PNG maximum alpha is 254; zero-alpha corners retained."
+  ],
+  "station_placement": {
+    "metadata": "metadata/placement-check.json",
+    "source_full_model_sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+    "scope": "Fixed attendant beyond existing player access guard. Full source placement evidence does not extend the player walk crop or add a Godot collider."
+  }
+}

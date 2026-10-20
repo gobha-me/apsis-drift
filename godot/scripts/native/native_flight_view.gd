@@ -833,7 +833,7 @@ func update_compact_hud() -> void:
 	if error.is_empty() and not contact.is_empty():
 		var contact_text := "CONTACT · %s\n%s" % [contact.status.replace("_", " "), contact.reason]
 		primary_status.text += "\n" + contact_text
-		primary_status.tooltip_text += "\n" + contact_text + "\nDistant optical observation only; no supported approach or landing."
+		primary_status.tooltip_text += "\n" + contact_text + "\nCONTACT is a direction annotation; supported local trips use separate drive controls."
 	context_source = null
 	if surface_walking():
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
@@ -1077,7 +1077,7 @@ func refresh_distant_contacts() -> void:
 		button.visible = index < contacts.size()
 		if index < contacts.size():
 			button.text = "%s optical contact %d" % ["Tracking" if contacts[index].id == selected_contact_id else "Track", index + 1]
-			button.tooltip_text = "Distant observation only · " + (contacts[index].reason if contacts[index].id == selected_contact_id else "Select to inspect current optical availability; no supported approach or landing.")
+			button.tooltip_text = "Distant observation only · " + (contacts[index].reason if contacts[index].id == selected_contact_id else "Inspect optical availability. Tracking selects no arrival target; local trips use separate drive controls.")
 	if contact_clear_button != null: contact_clear_button.visible = not selected.is_empty()
 	if contact_marker == null: return
 	contact_marker.visible = not selected.is_empty() and selected.status in ["visible", "unresolved"]

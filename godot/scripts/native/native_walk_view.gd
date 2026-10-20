@@ -17,6 +17,15 @@ const Controls = preload("res://scripts/ui/player_input.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
 var mouse_look := MouseLook.new()
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
+const StationCrew = preload("res://scripts/native/native_station_crew.gd")
+const CrewConversation = preload("res://scripts/native/station_crew_conversation.gd")
+var crew_actor: Node3D
+var crew_reader: Control
+var crew_packet: Dictionary = {}
+var crew_query_elapsed := 0.1
+var crew_nearby := false
+var crew_remark_tick := -3600
+var crew_remark_until := -1
 var stick_settings_path := Controls.SETTINGS_PATH
 var stick_preferences: Dictionary = {}
 var stick_preferences_status := ""
@@ -194,6 +203,11 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	if not station.initialize(state, pending.station_geometry, assets, false):
 		error = station.error
 		return false
+	crew_actor = StationCrew.new()
+	station.add_child(crew_actor)
+	if not crew_actor.configure(assets):
+		error = crew_actor.error
+		return false
 	ship = Node3D.new()
 	scene.add_child(ship)
 	ship.add_child(model)
@@ -330,7 +344,7 @@ func build_ui() -> void:
 	load_button = Button.new()
 	load_button.text = "Load…"
 	load_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open():
 			pause_controls("Load replaces the journey only after confirmation.")
 			load_requested.emit())
 	column.add_child(load_button)
@@ -341,7 +355,7 @@ func build_ui() -> void:
 	title_button = Button.new()
 	title_button.text = "Title…"
 	title_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open():
 			pause_controls("Return to title only after discarding unsaved progress.")
 			title_requested.emit())
 	column.add_child(title_button)
@@ -390,6 +404,10 @@ func build_ui() -> void:
 	# The station owns device/focus filtering before forwarding reader scrolling.
 	# Letting the child process first would admit stale disconnected-pad events.
 	observations_view.set_process_input(false)
+	crew_reader = CrewConversation.new()
+	crew_reader.topic_requested.connect(select_crew_topic)
+	crew_reader.back_requested.connect(close_crew_conversation)
+	add_child(crew_reader)
 	save_dialog.canceled.connect(save_canceled)
 	resized.connect(layout_hud)
 
@@ -450,7 +468,7 @@ func layout_hud() -> void:
 
 func refresh_hud() -> void:
 	if hud_scroll == null or active_card == null: return
-	var nested := settings_open() or observations_open()
+	var nested := settings_open() or observations_open() or crew_open()
 	hud_scroll.visible = paused and not nested
 	active_card.visible = not paused and not nested and not journey_dialog_open and save_dialog != null and not save_dialog.visible and error.is_empty()
 	hud_hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer" % preferences_provider.foot_keyboard_label()
@@ -469,6 +487,7 @@ func set_paused(value: bool) -> void:
 
 func pause_controls(reason: String) -> void:
 	paused = true
+	if crew_actor != null and crew_actor.bubble != null: crew_actor.bubble.hide()
 	refresh_hud()
 	mouse_look.set_active(false)
 	controls_armed = false
@@ -478,7 +497,7 @@ func pause_controls(reason: String) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
-		if focused and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open():
+		if focused and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open():
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
@@ -488,6 +507,9 @@ func pause_controls(reason: String) -> void:
 
 
 func toggle_pause() -> void:
+	if crew_open():
+		close_crew_conversation()
+		return
 	if observations_open():
 		close_observations()
 		return
@@ -501,7 +523,7 @@ func toggle_pause() -> void:
 
 
 func resume_requested() -> void:
-	if journey_dialog_open or settings_open() or observations_open(): return
+	if journey_dialog_open or settings_open() or observations_open() or crew_open(): return
 	if not error.is_empty() or not focused or save_dialog == null or save_dialog.visible:
 		return
 	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
@@ -512,6 +534,7 @@ func resume_requested() -> void:
 	paused = false
 	sync_mouse_look()
 	refresh_boarding_action()
+	refresh_crew()
 	pause_button.text = "Pause"
 	# Resume may come from Escape while any paused HUD action owns focus.
 	# Active arrow look must not also navigate that action's GUI neighbors.
@@ -547,7 +570,7 @@ func controller_connection_changed(device: int, connected: bool) -> void:
 
 
 func open_save_dialog() -> void:
-	if not focused or save_dialog == null or settings_open() or observations_open():
+	if not focused or save_dialog == null or settings_open() or observations_open() or crew_open():
 		return
 	pause_controls("Save As preserves the last committed journey state.")
 	save_dialog.popup_centered_ratio(0.75)
@@ -569,9 +592,96 @@ func settings_open() -> bool:
 func observations_open() -> bool:
 	return is_instance_valid(observations_view) and observations_view.visible
 
+func crew_open() -> bool:
+	return is_instance_valid(crew_reader) and crew_reader.visible
+
+func request_crew_conversation() -> void:
+	if not activated or paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or boarding_transition(): return
+	var boarding: Variant = bridge.get_freedom_boarding_availability()
+	if valid_boarding_availability(boarding, state) and boarding.available: return
+	if not controls_armed or not current_controls_neutral():
+		save_status.text = "Release walking and look controls to talk."
+		return
+	var packet: Variant = bridge.get_freedom_station_crew()
+	if not StationCrew.valid_packet(packet, state) or not packet.available:
+		save_status.text = str(packet.get("reason", "Approach and face the station worker to talk.")) if packet is Dictionary else "Station conversation unavailable."
+		return
+	pause_controls("Talking with " + str(packet.name) + ". The journey stays paused.")
+	crew_reader.open(packet)
+	crew_actor.bubble.hide()
+	boarding_prompt.hide()
+	refresh_hud()
+
+func select_crew_topic(id: int) -> void:
+	if not crew_open() or not paused or not focused or journey_dialog_open or save_dialog.visible or not error.is_empty(): return
+	# Eligibility and topic text come from the actual current owner on every
+	# selection. A stale UI topic cannot fabricate a new interaction or progress.
+	var packet: Variant = bridge.get_freedom_station_crew()
+	if not StationCrew.valid_packet(packet, state) or not packet.available: return
+	for topic in packet.topics:
+		if topic.id == id:
+			crew_reader.text.text = topic.text
+			return
+
+func close_crew_conversation() -> void:
+	if not crew_open() or not focused: return
+	crew_reader.hide()
+	controls_armed = false
+	refresh_hud()
+	pause_button.grab_focus()
+	save_status.text = "Conversation closed. Release controls, then Resume explicitly."
+
+func refresh_crew() -> void:
+	if crew_actor == null or not activated: return
+	if boarding_transition() or mode_change_pending:
+		crew_actor.hide()
+		crew_actor.bubble.hide()
+		return
+	if crew_query_elapsed >= 0.1:
+		crew_query_elapsed = 0.0
+		var packet: Variant = bridge.get_freedom_station_crew()
+		if packet is Dictionary and packet.is_empty():
+			crew_packet.clear()
+		elif StationCrew.valid_packet(packet, state):
+			crew_packet = packet
+		else:
+			error = "The station crew observation is unavailable."
+			pause_controls(error)
+			return
+	if crew_packet.is_empty():
+		crew_actor.hide()
+		crew_actor.bubble.hide()
+		return
+	if not crew_actor.present(crew_packet, station.to_local(camera.global_position)):
+		error = "The station crew presentation is unavailable."
+		pause_controls(error)
+		return
+	refresh_crew_remark()
+	if not boarding_availability.get("available", false) and crew_packet.available and focused and not paused and not journey_dialog_open and not save_dialog.visible:
+		boarding_prompt.text = "E / left click" + (" / " + ("Cross" if preferences_provider.playstation() else "A") if available_pads.get(selected_pad, false) else "") + " · Talk to " + str(crew_packet.name)
+		boarding_prompt.show()
+
+func refresh_crew_remark() -> void:
+	if crew_actor == null or crew_actor.bubble == null: return
+	if paused or not focused or journey_dialog_open or crew_open() or boarding_transition() or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or crew_packet.is_empty():
+		crew_actor.bubble.hide()
+		return
+	var p: PackedFloat64Array = state.foot_position_metres
+	var worker: PackedFloat64Array = crew_packet.foot_position_metres
+	var nearby := p[0] >= -1.0 and Vector3(p[0] - worker[0], p[1] - worker[1], p[2] - worker[2]).length_squared() <= 6.25
+	var head := crew_actor.global_transform * Vector3(0, 1.7, 0)
+	nearby = nearby and camera.is_position_in_frustum(head) and not camera.is_position_behind(head)
+	var tick := str(state.tick).to_int()
+	if nearby and not crew_nearby and tick >= crew_remark_tick and tick - crew_remark_tick >= 3600:
+		crew_remark_tick = tick
+		crew_remark_until = tick + 480
+		crew_actor.bubble.text = crew_packet.remark
+	crew_nearby = nearby
+	crew_actor.bubble.visible = nearby and tick >= crew_remark_tick and tick < crew_remark_until
+
 
 func open_observations() -> void:
-	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open(): return
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open(): return
 	pause_controls("Reading retained observations does not operate sensors.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
@@ -593,7 +703,7 @@ func close_observations() -> void:
 
 
 func open_settings() -> void:
-	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open(): return
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open(): return
 	pause_controls("Control choices stay pending until Apply.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
@@ -706,7 +816,7 @@ func board_requested() -> void:
 
 
 func sync_mouse_look() -> void:
-	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not mode_change_pending)
+	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not mode_change_pending)
 
 
 func _exit_tree() -> void:
@@ -790,6 +900,7 @@ func update_view(delta: float = 0.0) -> void:
 	var look := boarding_look * boarding_look_weight(float(boarding.get("progress", 0.0))) if boarding_transition() else Vector2.ZERO
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians - look.x) * Basis(Vector3.RIGHT, pitch - look.y), state.actor_eye_position)
 	refresh_boarding_action()
+	refresh_crew()
 	if boarding_transition():
 		var cues := {"approach": "Approaching the ladder", "ladder": "Climbing through the hatch", "cabin": "Moving into the cabin", "seat": "Taking the pilot seat", "hardware": "Securing the hatch", "complete": "Ready"}
 		telemetry.text = "%s · %d%%\n%s\nLook around · view settles near the end" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
@@ -811,11 +922,13 @@ func _process(delta: float) -> void:
 		observations_return_frames -= 1
 		if observations_return_frames == 0 and not observations_open() and not settings_open(): hud_scroll.ensure_control_visible(observations_button)
 	if paused:
+		refresh_crew_remark()
 		if not settings_open(): observe_neutral_controls()
 		return
 	if not focused or not error.is_empty() or save_dialog.visible:
 		return
 	if is_finite(delta) and delta > 0.0: boarding_query_elapsed = minf(0.1, boarding_query_elapsed + delta)
+	if is_finite(delta) and delta > 0.0: crew_query_elapsed = minf(0.1, crew_query_elapsed + delta)
 	advance_requested(delta, input_controls(minf(delta, 0.1)))
 
 
@@ -861,6 +974,17 @@ func _input(event: InputEvent) -> void:
 	var pressed := event.is_pressed() and not event.is_echo()
 	var key: int = event.physical_keycode if event is InputEventKey else KEY_NONE
 	var button: int = event.button_index if event is InputEventJoypadButton else -1
+	if crew_open():
+		if pressed and (key == KEY_ESCAPE or button in [JOY_BUTTON_START, JOY_BUTTON_B]):
+			close_crew_conversation()
+			get_viewport().set_input_as_handled()
+		elif pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
+			crew_reader.navigate(-1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1)
+			get_viewport().set_input_as_handled()
+		elif pressed and (key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE] or button == JOY_BUTTON_A):
+			crew_reader.accept()
+			get_viewport().set_input_as_handled()
+		return
 	if pressed and (key == KEY_ESCAPE or button == JOY_BUTTON_START or (paused and button == JOY_BUTTON_B)):
 		toggle_pause()
 		get_viewport().set_input_as_handled()
@@ -919,8 +1043,12 @@ func _input(event: InputEvent) -> void:
 		else:
 			resume_requested()
 		get_viewport().set_input_as_handled()
-	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and boarding_availability.get("available", false))):
-		board_requested()
+	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and (boarding_availability.get("available", false) or crew_packet.get("available", false)))):
+		# Keyboard/controller boarding previously queried the real command even
+		# before the 0.1s prompt refresh. Keep that priority and responsiveness.
+		var boarding: Variant = bridge.get_freedom_boarding_availability()
+		if valid_boarding_availability(boarding, state) and boarding.available: board_requested()
+		else: request_crew_conversation()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and not paused and error.is_empty():
 		var motion := MouseLook.motion_delta(event.relative, preferences_provider.settings)
@@ -935,6 +1063,6 @@ func refresh_profile_actions() -> void:
 	save_button.tooltip_text = replace_save_button.tooltip_text
 
 func request_catalog_save(save_as: bool) -> void:
-	if not focused or journey_dialog_open or settings_open() or observations_open() or save_dialog.visible: return
+	if not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or save_dialog.visible: return
 	pause_controls("Save uses the last committed journey state.")
 	catalog_save_requested.emit(save_as)

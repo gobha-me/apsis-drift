@@ -40,6 +40,7 @@
       "first_jump",
       "native_minor",
       "native_walk",
+      "native_station_crew",
       "native_assembly",
       "native_start_staging",
       "native_profile",
