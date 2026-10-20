@@ -203,6 +203,10 @@ func exercise(shell: Control, owner: Variant, assets: String) -> void:
 	var target: Dictionary = enabled.surface_landmarks.sites[0]
 	report.target_id = target.id
 	report.initial_gap_metres = target.distance_metres
+	var initial_sites: Array = []
+	for site: Dictionary in enabled.surface_landmarks.sites:
+		initial_sites.append({"id": site.id, "distance_metres": site.distance_metres})
+	report.initial_observation = {"body_kind": enabled.body_kind, "body_version": enabled.body_version, "body_id": enabled.body_id, "system_id": enabled.system_id, "tick": enabled.tick, "checksum": enabled.checksum, "sites": initial_sites}
 	if not check(target.distance_metres <= 384.0 and not target.inspected, "Initial nearest actual site is outside the selected query or already recorded"): return
 	for candidate: Dictionary in enabled.surface_landmarks.sites:
 		if not check(candidate.distance_metres >= target.distance_metres, "Ordinary C++ nearby query is not nearest-first"): return

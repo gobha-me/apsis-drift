@@ -166,7 +166,6 @@ auto invalid_inputs() -> void {
 
 auto identity_and_sites() -> void {
   const auto moon = owner();
-  const auto saved = moon;
   const auto sampler = need(MoonTerrainSampler::create(moon));
   auto field = need(MoonSurfaceLandmarkField::create(moon));
   auto reverse = need(MoonSurfaceLandmarkField::create(moon));
@@ -300,7 +299,7 @@ auto identity_and_sites() -> void {
     check(need(reverse.site(*it)) == need(field.site(*it)),
           "Reverse access and eviction preserve site identity/geometry");
   check(field.cache_size() <= 64 && reverse.cache_size() <= 64 &&
-            field.owner() == saved && moon == saved,
+            field.owner() == moon && reverse.owner() == moon,
         "Both bounded fields retain source ownership unchanged");
   for (std::size_t i = 0; i < directions.size(); ++i)
     check(need(sampler.sample(directions[i])) == terrain_before[i],
