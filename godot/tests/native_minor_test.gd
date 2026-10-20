@@ -5,6 +5,7 @@ const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const MinorView = preload("res://scripts/native/native_minor_view.gd")
 const MinorState = preload("res://scripts/native/native_minor_state.gd")
 const MinorGeometry = preload("res://scripts/native/native_minor_geometry.gd")
+const RouteReuse = preload("res://tests/native_local_route_reuse.gd")
 const PHASES = ["arrival", "approach", "withdraw", "home"]
 var failures := 0
 
@@ -251,6 +252,12 @@ func run() -> void:
 		restored.free()
 		await process_frame
 	await check_controls(phases, assets, output)
+	var reused: Variant = ClassDB.instantiate("FreedomBridge")
+	var reuse_shell := shell_for(reused, phases.path_join("reuse-captured.json"), assets)
+	if reuse_shell != null:
+		failures += await RouteReuse.run(self, reuse_shell, reused, assets, output.path_join("route-reuse"), "moon")
+		reuse_shell.free()
+		await process_frame
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Minor integration test changed source fixture: " + label)
 	print("Native minor: %d failures" % failures)
 	quit(1 if failures else 0)

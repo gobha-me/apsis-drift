@@ -12,6 +12,9 @@ inline constexpr std::uint32_t kFreedomLocalTravelSaveFormatVersion{45};
 inline constexpr std::uint32_t kFreedomLocalTravelStateVersion{2};
 inline constexpr std::uint32_t kFreedomMinorTravelSaveFormatVersion{47};
 inline constexpr std::uint32_t kFreedomMinorTravelStateVersion{3};
+inline constexpr std::uint32_t kFreedomOriginLocalTravelSaveFormatVersion{48};
+inline constexpr std::uint32_t kFreedomOriginLocalTravelStateVersion{4};
+inline constexpr std::uint32_t kFreedomOriginLocalRoutesVersion{1};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
 struct FreedomLocalTravelState {
   std::optional<BodyTarget> selected;
@@ -28,6 +31,33 @@ struct FreedomLocalMoonHistory {
   friend auto operator==(const FreedomLocalMoonHistory&,
                          const FreedomLocalMoonHistory&) -> bool = default;
 };
+enum class FreedomLocalRouteKind : std::uint8_t { moon, minor };
+struct FreedomLocalRouteCheckpoint {
+  FreedomLocalTravelState local;
+  std::optional<FrozenLocalBodyJumpArrival> excursion_outbound;
+  friend auto operator==(const FreedomLocalRouteCheckpoint&,
+                         const FreedomLocalRouteCheckpoint&) -> bool = default;
+};
+// Original old-format proofs, not a nested travel/voyage or an inferred last
+// outbound. New version4 checkpoints start empty on explicit home adoption.
+struct FreedomLocalTravelLegacySpan {
+  std::uint32_t version{};
+  FreedomLocalTravelState local;
+  std::optional<FreedomLocalMoonHistory> prior_moon;
+  std::uint64_t next_attempt{};
+  friend auto operator==(const FreedomLocalTravelLegacySpan&,
+                         const FreedomLocalTravelLegacySpan&) -> bool = default;
+};
+struct FreedomOriginLocalRoutes {
+  std::uint32_t version{kFreedomOriginLocalRoutesVersion};
+  FreedomLocalRouteKind active{FreedomLocalRouteKind::moon};
+  // The opposite route's fixed checkpoint. travel.local owns the active one.
+  FreedomLocalRouteCheckpoint inactive;
+  std::optional<FrozenLocalBodyJumpArrival> excursion_outbound;
+  FreedomLocalTravelLegacySpan legacy;
+  friend auto operator==(const FreedomOriginLocalRoutes&,
+                         const FreedomOriginLocalRoutes&) -> bool = default;
+};
 struct FreedomTravelState {
   std::uint32_t version{kFreedomTravelStateVersion};
   FreedomJumpPhase phase{FreedomJumpPhase::idle};
@@ -42,6 +72,7 @@ struct FreedomTravelState {
   // history; phase, spool clock and attempt counter own the selected local leg.
   std::optional<FreedomLocalTravelState> local{};
   std::optional<FreedomLocalMoonHistory> prior_moon{};
+  std::optional<FreedomOriginLocalRoutes> origin_routes{};
   friend auto operator==(const FreedomTravelState&, const FreedomTravelState&)
       -> bool = default;
 };

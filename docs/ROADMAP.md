@@ -66,6 +66,11 @@ The next carry-over, [Moon geological exposures](FREEDOM_SURFACE_LANDMARKS.md#mo
 ([#631](https://github.com/gobha-me/apsis-drift/issues/631)), adds visible sites,
 actual supported walking/inspection and retained first visits to that Moon.
 It changes no terrain, collision, mission or resource rules.
+[Reusing those local round trips](ASTEROID_INSPECTION.md#versioned-ownership-and-compatibility)
+([#633](https://github.com/gobha-me/apsis-drift/issues/633)) removes the one-way
+asteroid-to-Moon history restriction. The same save can visit either companion
+again after returning home and physically docking for the existing free service.
+It adds no direct companion transfer, new destination or economy.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
