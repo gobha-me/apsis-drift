@@ -394,12 +394,16 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 			continue
 		var surface: Dictionary = state.get("surface", {})
 		var landed: bool = surface.get("landed", false)
+		var moon: bool = state.get("body_kind") == "moon"
 		if name == "Land / deploy gear":
-			button.text = "Land with thrusters" if state.get("assistance", false) else "Deploy gear · manual landing"
+			button.text = "Deploy gear · manual descent" if moon else "Land with thrusters" if state.get("assistance", false) else "Deploy gear · manual landing"
+			button.tooltip_text = "Deploy gear only. Brake and descend with manual thrusters; flight assistance does not land the craft." if moon else ""
 			button.disabled = failed or attached or landed
 		elif name == "Stow landing gear":
 			button.disabled = failed or attached or landed or not surface.get("gear_deployed", false)
 		elif name == "Liftoff with thrusters":
+			button.text = "Release support · use up thrusters" if moon else "Liftoff with thrusters"
+			button.tooltip_text = "Release lunar support only. Resume and apply up thrusters to ascend; no automatic liftoff thrust." if moon else ""
 			button.disabled = failed or not landed
 		elif name == "Cancel surface aid":
 			button.disabled = failed or surface.get("maneuver", "off") == "off"

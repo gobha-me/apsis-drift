@@ -21,6 +21,9 @@ opens paused controls. **Settings / Controls** lets you change each walking key
 for both station and surface movement. Choices stay pending until Apply; Cancel
 keeps the previous keys. The walking hint shows the current choices. Release
 held movement keys before resuming, including keys held while changing them.
+Flight-key and controller remapping takes effect after the preferences save.
+A save error keeps the previous binding and leaves capture open; follow the
+status message or press **Esc / Start** to cancel.
 The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md). Look speed and vertical inversion apply to
 on-foot keys and the right stick as well as flight look. Walking keeps its
@@ -76,6 +79,11 @@ return and reserve charge. [Landings](LANDED_CRAFT.md) use deployed gear and
 certified dry terrain; [suited walking](FREEDOM_SURFACE_WALK.md) permits nearby
 exploration, return through the hatch and thruster liftoff. Flight basics gives
 the supported actions and conditions for each mode.
+For the [airless Moon trip](AIRLESS_MOON.md#local-voyage-and-operation), choose
+**Select nearby moon jump** after departing the station. **Deploy gear · manual
+descent** deploys the gear; brake and descend with your thrusters. **Release
+support · use up thrusters** releases a landed craft so you can thrust upward.
+Keep fuel for ascent and clear the Moon's departure envelope before jumping home.
 On foot, release walking and look controls and use **E**, captured **left click**
 or selected-pad **A/Cross** for the nearby hatch or geological inspection. The
 hatch takes priority when within reach; inspection opens a paused reader.
