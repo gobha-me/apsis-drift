@@ -6,7 +6,13 @@ Conversations introduce no jobs, fees, rewards or required departure steps.
 
 The attendant stands on the far side of the existing arrival guard. Approach
 the guard, face the attendant and release movement before interacting. Boarding
-keeps priority near the Wayfarer. The conversation reader pauses the journey;
+keeps priority near the Wayfarer. The compact card shows nearby Talk guidance
+and the current refusal. Releasing movement and immediately pressing Talk queues
+one request until the next ordinary walking step confirms that you stopped.
+Renewed input, pause, focus loss, a dialog or an owner change cancels it; input
+does not force an extra simulation tick or relax C++ eligibility.
+
+The conversation reader pauses the journey;
 closing it returns to paused controls, with an explicit neutral Resume.
 
 C++ supplies the station-qualified crew identity, fixed pose, interaction

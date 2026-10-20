@@ -26,6 +26,8 @@ var crew_query_elapsed := 0.1
 var crew_nearby := false
 var crew_remark_tick := -3600
 var crew_remark_until := -1
+var pending_crew_talk: Dictionary = {}
+var crew_feedback := ""
 var stick_settings_path := Controls.SETTINGS_PATH
 var stick_preferences: Dictionary = {}
 var stick_preferences_status := ""
@@ -473,6 +475,9 @@ func refresh_hud() -> void:
 	active_card.visible = not paused and not nested and not journey_dialog_open and save_dialog != null and not save_dialog.visible and error.is_empty()
 	hud_hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer" % preferences_provider.foot_keyboard_label()
 	var text := telemetry.text + "\nEsc / Start: controls" if boarding_transition() else "Origin Station · D1\n%s / left stick: walk\nMouse / look keys / right stick: look\nEsc / Start: controls" % preferences_provider.foot_keyboard_label()
+	if crew_talk_nearby() and not boarding_transition():
+		text += "\nE / left click · Talk to " + str(crew_packet.name)
+		text += "\n" + ("Stopping to talk…" if not pending_crew_talk.is_empty() else "Release walking and look controls to talk." if not current_controls_neutral() else crew_feedback if not crew_feedback.is_empty() else str(crew_packet.reason))
 	if active_status.text != text:
 		active_status.text = text
 		active_card.reset_size()
@@ -486,6 +491,7 @@ func set_paused(value: bool) -> void:
 
 
 func pause_controls(reason: String) -> void:
+	pending_crew_talk.clear()
 	paused = true
 	if crew_actor != null and crew_actor.bubble != null: crew_actor.bubble.hide()
 	refresh_hud()
@@ -595,17 +601,45 @@ func observations_open() -> bool:
 func crew_open() -> bool:
 	return is_instance_valid(crew_reader) and crew_reader.visible
 
-func request_crew_conversation() -> void:
+func crew_talk_nearby() -> bool:
+	# This is prompt/click routing only. The fresh C++ query still owns every
+	# physical eligibility check, including the qualified clear interaction area.
+	if crew_packet.is_empty() or not state.has("foot_position_metres"): return false
+	var foot: PackedFloat64Array = state.foot_position_metres
+	var worker: PackedFloat64Array = crew_packet.foot_position_metres
+	return foot[0] >= -1.0 and Vector3(foot[0] - worker[0], foot[1] - worker[1], foot[2] - worker[2]).length_squared() <= 6.25
+
+func crew_talk_owner() -> Array:
+	return [state.get("universe_seed"), state.get("system_id"), state.get("planet_id"), state.get("station_id"), state.get("craft_id"), state.get("actor_id")]
+
+func pending_crew_talk_valid() -> bool:
+	return activated and not paused and focused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not boarding_transition() and controls_armed and current_controls_neutral() and pending_crew_talk.get("owner") == crew_talk_owner()
+
+func request_crew_conversation(allow_pending := true) -> void:
 	if not activated or paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or boarding_transition(): return
 	var boarding: Variant = bridge.get_freedom_boarding_availability()
 	if valid_boarding_availability(boarding, state) and boarding.available: return
 	if not controls_armed or not current_controls_neutral():
-		save_status.text = "Release walking and look controls to talk."
+		pending_crew_talk.clear()
+		crew_feedback = "Release walking and look controls to talk."
+		save_status.text = crew_feedback
+		refresh_hud()
 		return
 	var packet: Variant = bridge.get_freedom_station_crew()
 	if not StationCrew.valid_packet(packet, state) or not packet.available:
-		save_status.text = str(packet.get("reason", "Approach and face the station worker to talk.")) if packet is Dictionary else "Station conversation unavailable."
+		crew_feedback = str(packet.get("reason", "Approach and face the station worker to talk.")) if packet is Dictionary else "Station conversation unavailable."
+		save_status.text = crew_feedback
+		if StationCrew.valid_packet(packet, state):
+			crew_packet = packet
+			# A released key can precede the next ordinary fixed walking step.
+			# Retain one request until that step stops the real actor; never add a
+			# tick here, change its pose, or weaken C++ eligibility for a modal.
+			if allow_pending and pending_crew_talk.is_empty() and crew_talk_nearby() and packet.reason == "Stop moving to talk":
+				pending_crew_talk = {"owner": crew_talk_owner(), "tick": state.tick}
+		refresh_hud()
 		return
+	pending_crew_talk.clear()
+	crew_feedback = ""
 	pause_controls("Talking with " + str(packet.name) + ". The journey stays paused.")
 	crew_reader.open(packet)
 	crew_actor.bubble.hide()
@@ -644,11 +678,13 @@ func refresh_crew() -> void:
 			crew_packet.clear()
 		elif StationCrew.valid_packet(packet, state):
 			crew_packet = packet
+			crew_feedback = ""
 		else:
 			error = "The station crew observation is unavailable."
 			pause_controls(error)
 			return
 	if crew_packet.is_empty():
+		pending_crew_talk.clear()
 		crew_actor.hide()
 		crew_actor.bubble.hide()
 		return
@@ -793,6 +829,12 @@ func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
 		set_paused(true)
 		return false
 	update_view(delta)
+	if not pending_crew_talk.is_empty():
+		if not pending_crew_talk_valid():
+			pending_crew_talk.clear()
+		elif state.tick != pending_crew_talk.tick:
+			pending_crew_talk.clear()
+			request_crew_conversation(false)
 	return true
 
 
@@ -801,6 +843,7 @@ func boarding_transition() -> bool:
 
 
 func board_requested() -> void:
+	pending_crew_talk.clear()
 	if paused or not focused or not error.is_empty() or save_dialog.visible or boarding_transition(): return
 	if not current_controls_neutral():
 		save_status.text = "Release movement and look controls to board."
@@ -912,6 +955,7 @@ func update_view(delta: float = 0.0) -> void:
 func _process(delta: float) -> void:
 	if bridge == null or not activated:
 		return
+	if not pending_crew_talk.is_empty() and not pending_crew_talk_valid(): pending_crew_talk.clear()
 	sync_mouse_look()
 	if settings_open():
 		stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
@@ -954,6 +998,9 @@ func try_select_controller(event: InputEvent) -> bool:
 	return false
 
 func _input(event: InputEvent) -> void:
+	# Cancel at the press too, even if a renewed movement key is released again
+	# before the next process frame. Focus/modal changes are checked separately.
+	if not pending_crew_talk.is_empty() and not pending_crew_talk_valid(): pending_crew_talk.clear()
 	if journey_dialog_open: return
 	if save_dialog == null:
 		return
@@ -1043,7 +1090,7 @@ func _input(event: InputEvent) -> void:
 		else:
 			resume_requested()
 		get_viewport().set_input_as_handled()
-	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and (boarding_availability.get("available", false) or crew_packet.get("available", false)))):
+	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active and (boarding_availability.get("available", false) or crew_talk_nearby()))):
 		# Keyboard/controller boarding previously queried the real command even
 		# before the 0.1s prompt refresh. Keep that priority and responsiveness.
 		var boarding: Variant = bridge.get_freedom_boarding_availability()

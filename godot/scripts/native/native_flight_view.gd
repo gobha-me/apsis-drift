@@ -19,6 +19,9 @@ const SurfaceMarker = preload("res://scripts/native/native_surface_marker.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
 var mouse_look := MouseLook.new()
+const FlightMouse = preload("res://scripts/native/native_flight_mouse.gd")
+var flight_mouse: Control
+var mouse_free_look := false
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 var cockpit_displays: Node3D
@@ -489,6 +492,10 @@ static func set_ship_layer(node: Node) -> void:
 
 
 func build_ui() -> void:
+	flight_mouse = FlightMouse.new()
+	add_child(flight_mouse)
+	flight_mouse.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flight_mouse.hide()
 	var backing := StyleBoxFlat.new()
 	backing.bg_color = Color(0.01, 0.015, 0.025, 0.94)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
@@ -709,7 +716,9 @@ func window_resized() -> void:
 		# Neutral, valid resizes remain cosmetic and preserve inertial flight.
 		# Held controls require the existing explicit neutral/resume gate.
 		observe_neutral_controls()
-		if not controls_armed:
+		var mouse_held: bool = flight_mouse != null and flight_mouse.offset != Vector2.ZERO
+		clear_flight_mouse()
+		if not controls_armed or mouse_held:
 			pause_controls("Window resized. Release controls, then resume explicitly.")
 	layout_hud()
 
@@ -834,6 +843,8 @@ func update_compact_hud() -> void:
 		var contact_text := "CONTACT · %s\n%s" % [contact.status.replace("_", " "), contact.reason]
 		primary_status.text += "\n" + contact_text
 		primary_status.tooltip_text += "\n" + contact_text + "\nCONTACT is a direction annotation; supported local trips use separate drive controls."
+	if error.is_empty() and not surface_walking() and player_input != null:
+		primary_status.text += "\n" + ("Free look · release right mouse to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · right mouse looks · %s centers" % player_input.binding_label("recenter", "key"))
 	context_source = null
 	if surface_walking():
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
@@ -1155,7 +1166,7 @@ func refresh_control_hint() -> void:
 		hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse · Return near the aft ground access to reboard" % player_input.foot_keyboard_label()
 		return
 	var family := "pad" if player_input.last_device == "pad" else "key"
-	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nHold right mouse to look · %s recenter head\nFlight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family), player_input.binding_label("recenter", family)]
+	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nMouse steers · Hold right mouse to look · %s centers steering/head\nFlight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family), player_input.binding_label("recenter", family)]
 
 
 func request_assistance(enabled: bool) -> void:
@@ -1205,6 +1216,7 @@ func open_save_dialog() -> void:
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	clear_flight_mouse()
 	mouse_look.set_active(false)
 	if state.get("port_rendezvous", {}).get("active", false):
 		bridge.cancel_freedom_port_rendezvous()
@@ -1242,12 +1254,14 @@ func pause_controls(reason: String, show_menu := true) -> void:
 func change_camera() -> void:
 	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2" and not surface_walking():
 		cockpit = not cockpit
+		clear_flight_mouse()
 		look_offset = Vector2.ZERO
 		update_view(0.0)
 
 
 func recenter_camera() -> void:
 	if error.is_empty() and focused and not paused and not save_dialog.visible:
+		clear_flight_mouse()
 		look_offset = Vector2(-float(state.surface_walk.heading), 0.0) if surface_walking() else Vector2.ZERO
 		update_view(0.0)
 
@@ -1465,25 +1479,54 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), heading])
 
 
+func clear_flight_mouse() -> void:
+	if flight_mouse != null:
+		flight_mouse.clear()
+		flight_mouse.hide()
+
+
+func mouse_steering_available() -> bool:
+	return activated and focused and not paused and controls_armed and player_input != null and player_input.enabled and not player_input.needs_neutral and player_input.waiting_action.is_empty() and error.is_empty() and not journey_dialog_open and not recovery_notified and not mode_change_pending and save_dialog != null and not save_dialog.visible and not surface_walking() and not state.get("attached", false) and not state.get("surface", {}).get("landed", false) and state.get("jump", {}).get("phase", "idle") == "idle" and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and not player_input.looking
+
+
 func sync_mouse_look() -> void:
-	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and not recovery_notified and save_dialog != null and not save_dialog.visible and (surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
+	var looking := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	if looking != mouse_free_look:
+		clear_flight_mouse()
+		if mouse_free_look and not surface_walking(): look_offset = Vector2.ZERO
+		mouse_free_look = looking
+	var active := activated and focused and not paused and error.is_empty() and not journey_dialog_open and not recovery_notified and not mode_change_pending and save_dialog != null and not save_dialog.visible
+	mouse_look.set_active(active)
+	if flight_mouse != null:
+		flight_mouse.visible = mouse_steering_available()
+		if not flight_mouse.visible: flight_mouse.clear()
 
 
 func _exit_tree() -> void:
+	clear_flight_mouse()
 	mouse_look.set_active(false)
 
 
 func _input(event: InputEvent) -> void:
 	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and surface_walking() and mouse_look.active:
-		request_surface_interaction()
+	if player_input != null and event.device == player_input.device:
+		if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > float(player_input.settings.deadzone)):
+			clear_flight_mouse()
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active:
+		if surface_walking(): request_surface_interaction()
+		elif context_action != null and context_action.visible and not context_action.disabled:
+			context_action.pressed.emit()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		sync_mouse_look()
-	elif event is InputEventMouseMotion and (surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)):
-		look_offset += MouseLook.motion_delta(event.relative, player_input.settings)
-		look_offset.x = wrapf(look_offset.x, -PI, PI) if surface_walking() else clampf(look_offset.x, -1.2 if cockpit else -PI, 1.2 if cockpit else PI)
-		look_offset.y = clampf(look_offset.y, -1.3 if surface_walking() else -0.8 if cockpit else -1.2, 1.3 if surface_walking() else 0.8 if cockpit else 1.2)
+	elif event is InputEventMouseMotion and mouse_look.active:
+		if surface_walking() or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			look_offset += MouseLook.motion_delta(event.relative, player_input.settings)
+			look_offset.x = wrapf(look_offset.x, -PI, PI) if surface_walking() else clampf(look_offset.x, -1.2 if cockpit else -PI, 1.2 if cockpit else PI)
+			look_offset.y = clampf(look_offset.y, -1.3 if surface_walking() else -0.8 if cockpit else -1.2, 1.3 if surface_walking() else 0.8 if cockpit else 1.2)
+		elif mouse_steering_available():
+			flight_mouse.motion(event.relative, size, player_input.settings)
+			get_viewport().set_input_as_handled()
 
 
 func _notification(what: int) -> void:
@@ -1505,6 +1548,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.physical_keycode == KEY_F3 and error.is_empty() and focused and state.frame_id == "2" and not surface_walking():
 		# Historical alias may inspect the camera while paused; no world action.
 		cockpit = not cockpit
+		clear_flight_mouse()
 		look_offset = Vector2.ZERO
 		update_view(0.0)
 
@@ -1539,7 +1583,13 @@ func _process(delta: float) -> void:
 		return
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
-	var demand := actuator_fractions(resolved.thrust_axes)
+	var flight_axes: PackedFloat64Array = resolved.thrust_axes.duplicate()
+	if mouse_steering_available() and flight_mouse != null:
+		var steering: Vector2 = flight_mouse.demands(player_input.settings)
+		flight_axes[2] = clampf(flight_axes[2] + steering.x, -1.0, 1.0)
+		flight_axes[3] = clampf(flight_axes[3] + steering.y, -1.0, 1.0)
+	else: clear_flight_mouse()
+	var demand := actuator_fractions(flight_axes)
 	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
 	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
@@ -1624,6 +1674,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_impact_action()
 	var owner_key := str(state.system_id) + ":" + str(state.planet_id)
 	if owner_key != rendered_world:
+		clear_flight_mouse()
 		# C++ has already installed the actual world/stream. Retire old GPU
 		# tiles before any of their same-shaped keys can alias the new planet.
 		terrain.reset_world()

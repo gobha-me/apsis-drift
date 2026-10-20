@@ -28,10 +28,13 @@ The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md). Look speed and vertical inversion apply to
 on-foot keys and the right stick as well as flight look. Walking keeps its
 default stick rate; the speed setting scales it. Mouse look uses the same speed
-and vertical inversion preferences. Walking captures the pointer; pause, focus
-loss and dialogs release it. Resume explicitly after releasing controls. In the
-cockpit, hold the right mouse button to look and use the displayed recenter
-binding to face forward; releasing the button restores the cursor.
+and vertical inversion preferences. Walking and flight capture the pointer; pause,
+focus loss and dialogs release it. Resume explicitly after releasing controls.
+In flight, move the mouse from the centre to request pitch and yaw; the ring shows
+your steering demand. Bring it back to centre or use the displayed recenter binding
+to neutralize steering. Hold right mouse for free look; releasing it faces forward
+and starts steering from neutral. These requests use the same physical thrusters
+and fuel as keyboard/controller steering.
 
 Resizing the window while movement, flight or look controls are held pauses
 input. Release those controls, then resume explicitly; the craft retains its
@@ -39,7 +42,10 @@ committed pose and momentum. A resize with neutral controls keeps the current
 running or paused state. Initial layout does not add a pause.
 
 An optional [bay attendant](STATION_CREW.md) stands beyond the arrival guard.
-Face the attendant and release movement to use the displayed Talk action.
+Face the attendant and release movement to use the displayed Talk action
+(**E**, left click or controller **A**). If you press just as you stop, the request
+waits for the next ordinary walking step. Moving again cancels it. Nearby guidance
+shows a refusal when you need to get closer, face the attendant or stop.
 Conversations return to paused controls; resume explicitly to continue walking.
 
 The arrivals and side branches remain outside the current supported walk route;

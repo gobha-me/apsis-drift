@@ -43,8 +43,10 @@ New Game starts on Origin Station. Walking keys (WASD by default, configurable i
 Settings / Controls) or the left stick move; ordinary mouse
 movement, arrow keys or the right stick look. Escape releases the pointer and
 opens pause controls. Near the D1 ladder, release movement and use the contextual
-E/left-click/controller action to board. In cockpit/chase, hold right mouse to
-look; the displayed recenter binding faces forward. Save As persists through
+E/left-click/controller action to board or talk to the nearby attendant. In
+cockpit/chase, mouse movement steers pitch/yaw using physical thrusters. The ring
+shows the demand; return to centre or use the recenter binding to neutralize it.
+Hold right mouse for free look; release to face forward and steer from neutral. Save As persists through
 C++; Quit does not autosave. Continue starts paused. Boarding, sitting and
 leaving the station are playable prototypes with refinements still deferred. See [current scope](../docs/ROADMAP.md)
 and [saved station walking](../docs/SAVED_STATION_WALK.md).
