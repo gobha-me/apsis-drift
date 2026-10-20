@@ -40,8 +40,8 @@ func refresh_control_hint() -> void:
 
 func update_compact_hud() -> void:
 	if primary_status == null: return
-	primary_status.text = "ASTEROID / CLOSE INSPECTION\nRange above spherical proxy %.1f km\nRadial rate %+.1f m/s · speed %.1f m/s\nStand-off gap %.1f m\nFuel %.1f%% · jump charges %d\nInspection only · no landing" % [state.altitude / 1000.0, state.radial_rate, state.surface_speed, state.stand_off_gap, state.resources.fraction * 100.0, state.resources.jump_charges]
-	primary_status.tooltip_text = "The source catalog currently supplies a spherical proxy, not an asteroid terrain or landing surface. The C++ stand-off constraint stops inward motion before that proxy. Rotation and applied-thrust fuel accounting continue."
+	primary_status.text = "ASTEROID / CLOSE INSPECTION\nReference altitude %.1f km\nRadial rate %+.1f m/s · speed %.1f m/s\nStand-off gap %.1f m\nFuel %.1f%% · jump charges %d\nInspection only · no landing" % [state.altitude / 1000.0, state.radial_rate, state.surface_speed, state.stand_off_gap, state.resources.fraction * 100.0, state.resources.jump_charges]
+	primary_status.tooltip_text = "Altitude is measured above the chart reference radius. Landing is unavailable. The stand-off limit stops inward motion before the hull reaches the body. Steering and fuel use continue; thrust away to leave the limit."
 	var note := str(state.get("inspection_note", ""))
 	if not note.is_empty(): primary_status.text += "\n" + note
 	var jumping: bool = state.jump.phase != "idle"
