@@ -153,6 +153,9 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto travel_document() const
       -> std::expected<FreedomTravelSaveDocument, std::string>;
+  // Destination choice only; fuel, space and launch readiness remain separate.
+  [[nodiscard]] auto jump_selection_available(SystemId) const
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto select_jump(SystemId) -> std::expected<void, std::string>;
   [[nodiscard]] auto select_local_jump(BodyTarget)
       -> std::expected<void, std::string>;

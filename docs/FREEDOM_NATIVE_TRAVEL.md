@@ -16,6 +16,15 @@ advance the shared clock without propulsion burn. Controls cannot change the
 committed destination, assistance profile or attachment. Pause freezes simulation;
 Save As does not cancel spool or transit.
 
+At home, choosing the Moon or asteroid can be replaced by the known neighbor
+before any local jump commits. Cancel an active spool first, then select the
+neighbor from the chart. This removes only empty local choices; the complete
+ordinary neighbor save, prior intersystem receipt, resources and attempt counter
+remain intact. Completed local history remains retained and cannot yet join an
+intersystem voyage. The chart uses the same C++ admission query as selection and
+shows its refusal, independently of whether the drive is ready to spool. That
+query observes state without cloning or encoding the whole voyage per chart row.
+
 At arrival, install the destination's actual seeded physical system, planet frame
 and rotation. Convert the frozen barycentric point/velocity to that reference;
 retain orientation and angular velocity. The bubble holds the commitment pose

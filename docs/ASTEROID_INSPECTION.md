@@ -83,8 +83,15 @@ approach and capture the moving station, use **Replenish flight fuel and jump
 charges · free**, release the port and withdraw before choosing either existing
 destination. The home return leaves one reserve charge; another full round trip
 requires two. Selection, Continue and changing destinations never refill fuel.
-Direct Moon–asteroid transfers and switching to an intersystem voyage remain
-unavailable.
+Direct Moon–asteroid transfers and combining completed local routes with an
+intersystem voyage remain unavailable.
+
+A local destination choice at home stays reversible until a local jump commits.
+Cancel any active spool, then select the known neighboring system from the chart.
+This replaces only empty local choices, including empty format48 route slots;
+it preserves the actual ship, resources, knowledge, previous intersystem receipt
+and next-attempt counter. Any committed local proof stays retained and refuses
+that switch. Selecting a chart entry never moves the ship or spends a charge.
 
 Selecting the Moon after adopting the asteroid route explicitly selects local
 travel format48/version4. Reading an old save does not upgrade it. One fixed
