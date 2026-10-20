@@ -59,6 +59,29 @@ struct NativePortApproach {
       -> bool = default;
 };
 inline constexpr std::uint32_t kNativePortApproachTicks{7200};
+enum class NativePortDockingPhase : std::uint8_t {
+  off,
+  aligning,
+  closing,
+  complete
+};
+// Opt-in close docking. All fields are transient; attachment still uses the
+// unchanged canonical port constraint and existing save schema.
+struct NativePortDocking {
+  bool active{};
+  std::uint32_t remaining_ticks{};
+  NativePortDockingPhase phase{NativePortDockingPhase::off};
+  std::string note{"Docking off"};
+  double alignment_outward_metres{};
+  std::optional<OriginDockAssessment> latch_assessment;
+  friend auto operator==(const NativePortDocking&, const NativePortDocking&)
+      -> bool = default;
+};
+inline constexpr std::uint32_t kNativePortDockingTicks{21600};
+inline constexpr double kNativePortDockingLatchMetres{.001};
+inline constexpr double kNativePortDockingLatchRadians{.0001};
+inline constexpr double kNativePortDockingLatchSpeed{.001};
+inline constexpr double kNativePortDockingLatchAngularSpeed{.0001};
 // Optional local Origin return guidance, not a saved navigation route.
 struct NativePortRendezvous {
   bool active{};
@@ -206,7 +229,10 @@ class NativeFreedomFlightSession {
           "Cancel the active jump before changing assistance"};
     if (actor_ || surface_walker_)
       return std::unexpected{"Board and sit before controlling the craft"};
-    if (document_.model.assistance != enabled) cancel_port_rendezvous();
+    if (document_.model.assistance != enabled) {
+      cancel_port_rendezvous();
+      cancel_port_docking();
+    }
     document_.model.assistance = enabled;
     if (!enabled) cancel_surface_maneuver();
     return {};
@@ -243,6 +269,13 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto port_approach_available() const
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto port_docking_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_port_docking() -> std::expected<void, std::string>;
+  auto cancel_port_docking() -> void;
+  [[nodiscard]] auto port_docking() const -> const NativePortDocking& {
+    return port_docking_;
+  }
   [[nodiscard]] auto port_rendezvous_available() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_port_rendezvous()
@@ -376,6 +409,13 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto port_approach_controls() const
       -> std::expected<NativeFlightControls, std::string>;
+  [[nodiscard]] auto port_docking_conditions(bool initial) const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto port_docking_controls() const
+      -> std::expected<NativeFlightControls, std::string>;
+  [[nodiscard]] auto advance_port_docking(const NativeFlightControls&,
+                                          SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto port_rendezvous_conditions(bool initial) const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto port_rendezvous_controls() const
@@ -432,6 +472,7 @@ class NativeFreedomFlightSession {
   NativeCraftBinding craft_binding_;
   std::optional<FreedomBoardingState> boarding_;
   NativePortApproach port_approach_;
+  NativePortDocking port_docking_;
   NativePortRendezvous port_rendezvous_;
   NativeFlightControls rendezvous_held_{};
   std::uint32_t rendezvous_held_ticks_{};

@@ -434,6 +434,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("cancel_freedom_surface_maneuver"),
         &FreedomBridge::cancel_freedom_surface_maneuver);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_port_docking"),
+                                &FreedomBridge::begin_freedom_port_docking);
+    godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_docking"),
+                                &FreedomBridge::cancel_freedom_port_docking);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_port_approach"),
                                 &FreedomBridge::begin_freedom_port_approach);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_approach"),
@@ -1952,6 +1956,20 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto begin_freedom_port_docking() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_port_docking();
+    });
+  }
+  auto cancel_freedom_port_docking() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session)
+            -> std::expected<void, std::string> {
+          session.cancel_port_docking();
+          return {};
+        },
+        true);
+  }
   auto begin_freedom_port_approach() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.begin_port_approach();
@@ -2662,6 +2680,22 @@ class FreedomBridge : public godot::RefCounted {
         docking["offset_body_metres"] = coordinates(offset);
       }
       result["docking"] = docking;
+      const auto docking_available = session.port_docking_available();
+      const auto& docking_aid = session.port_docking();
+      godot::Dictionary smooth_docking;
+      smooth_docking["available"] = docking_available.has_value();
+      smooth_docking["refusal"] =
+          docking_available ? godot::String{}
+                            : godot::String{docking_available.error().c_str()};
+      smooth_docking["active"] = docking_aid.active;
+      smooth_docking["remaining_seconds"] = docking_aid.remaining_ticks / 120.0;
+      smooth_docking["note"] = godot::String{docking_aid.note.c_str()};
+      smooth_docking["phase"] = godot::String{
+          docking_aid.phase == NativePortDockingPhase::aligning   ? "aligning"
+          : docking_aid.phase == NativePortDockingPhase::closing  ? "closing"
+          : docking_aid.phase == NativePortDockingPhase::complete ? "complete"
+                                                                  : "off"};
+      result["port_docking"] = smooth_docking;
       const auto available = session.port_approach_available();
       godot::Dictionary approach;
       approach["available"] = available.has_value();
@@ -2900,10 +2934,12 @@ class FreedomBridge : public godot::RefCounted {
       // No hidden sampled point, destination body identity or catalog leaks.
       result["jump"] = jump;
 
-      const auto force = selected.last_step && !(session.surface() &&
-                                                 session.surface()->landed)
-                             ? selected.last_step->actuation.central.propulsion
-                             : VacuumActuation{};
+      const auto force =
+          selected.last_step &&
+                  !(session.docking() && session.docking()->attached) &&
+                  !(session.surface() && session.surface()->landed)
+              ? selected.last_step->actuation.central.propulsion
+              : VacuumActuation{};
       result["positive_force_body"] = coordinates(force.positive_force_newtons);
       result["negative_force_body"] = coordinates(force.negative_force_newtons);
       result["positive_torque_body"] =

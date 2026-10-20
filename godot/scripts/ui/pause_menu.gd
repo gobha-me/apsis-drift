@@ -143,7 +143,7 @@ func _ready() -> void:
 		get_window().size_changed.connect(layout_saved_hold)
 		layout_saved_hold()
 		if saved_wayfarer:
-			for item in [["Rendezvous with Origin Station", "begin_freedom_port_rendezvous", 0], ["Cancel station rendezvous", "cancel_freedom_port_rendezvous", 0], ["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0], ["Land / deploy gear", "request_freedom_landing", 0], ["Stow landing gear", "stow_freedom_landing_gear", 0], ["Liftoff with thrusters", "liftoff_freedom_surface", 0], ["Cancel surface aid", "cancel_freedom_surface_maneuver", 0]]:
+			for item in [["Rendezvous with Origin Station", "begin_freedom_port_rendezvous", 0], ["Cancel station rendezvous", "cancel_freedom_port_rendezvous", 0], ["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Dock with thrusters", "begin_freedom_port_docking", 0], ["Cancel docking", "cancel_freedom_port_docking", 0], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0], ["Land / deploy gear", "request_freedom_landing", 0], ["Stow landing gear", "stow_freedom_landing_gear", 0], ["Liftoff with thrusters", "liftoff_freedom_surface", 0], ["Cancel surface aid", "cancel_freedom_surface_maneuver", 0]]:
 				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
 				saved_port_buttons[item[0]] = button
 	if saved_flight or controls.thrust_mode:
@@ -413,6 +413,13 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		elif name == "Release attached port":
 			button.disabled = failed or not attached
 			button.tooltip_text = "Release the physical attachment." if attached else "No port is attached."
+		elif name == "Dock with thrusters":
+			var docking_aid: Dictionary = state.get("port_docking", {})
+			button.disabled = failed or docking_aid.get("active", false) or not docking_aid.get("available", false)
+			button.tooltip_text = "Resume explicitly. Align, close and brake with thrusters, then latch. Manual control or pause cancels." if docking_aid.get("available", false) else str(docking_aid.get("refusal", "Select a port first."))
+		elif name == "Cancel docking":
+			button.disabled = failed or not state.get("port_docking", {}).get("active", false)
+			button.tooltip_text = "Cancel docking; coast under ordinary flight physics."
 		elif name == "Approach port with thrusters":
 			var approach: Dictionary = state.get("port_approach", {})
 			button.disabled = failed or approach.get("active", false) or not approach.get("available", false)
