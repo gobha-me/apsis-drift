@@ -10,6 +10,7 @@ const Navigation = preload("res://scripts/native/home_navigation.gd")
 const MoonExposures = preload("res://tests/native_moon_exposures.gd")
 const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 const CompanionMouseChecks = preload("res://tests/native_companion_mouse_checks.gd")
+const CockpitGearChecks = preload("res://tests/native_cockpit_gear_checks.gd")
 const CompanionLayoutChecks = preload("res://tests/native_companion_layout_checks.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
@@ -656,6 +657,7 @@ func run() -> void:
 	var originals := {}
 	for label in PHASES: originals[label] = FileAccess.get_file_as_bytes(phases.path_join(label + ".json"))
 	await CompanionMouseChecks.run(self, phases.path_join("arrival.json"), assets, output.path_join("mouse"), "moon", check)
+	await CockpitGearChecks.run(self, phases.path_join("arrival.json"), assets, output.path_join("cockpit-gear"), check)
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var shell := Shell.new()
 	shell.presentation_only = true

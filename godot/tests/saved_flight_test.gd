@@ -1188,7 +1188,7 @@ func run() -> void:
 	await check_saved_menu_layout(view, owner, args[0].get_base_dir())
 	await FrameDiagnosticsChecks.run(self, view, owner, args[0].get_base_dir().path_join("menu-layout-after.json"), check)
 	check_hold_controls(view, owner, args[0].get_base_dir())
-	check(view.paused and not view.cockpit and view.ship.get_child_count() == 3 and view.exhaust != null and view.cockpit_displays != null and view.cockpit_displays.get_parent() == view.ship and view.cockpit_displays.viewports.size() == 3, "Continue did not start safely paused with the actual model and live instruments")
+	check(view.paused and not view.cockpit and view.ship.get_child_count() == 4 and view.exhaust != null and view.cockpit_displays != null and view.cockpit_displays.get_parent() == view.ship and view.cockpit_displays.viewports.size() == 3 and view.cockpit_control != null and view.cockpit_control.get_parent() == view.ship and view.cockpit_control.bound and not view.cockpit_control.visible, "Continue did not start safely paused with the actual model, live instruments and inactive cockpit control")
 	check(view.terrain.bridge == owner and owner.get_freedom_flight_state() == start, "Terrain/view invented or advanced saved state")
 	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.terrain_camera.far / view.terrain_camera.near <= 500001.0, "Native camera depth ranges are unsafe")
 	check(view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov and view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1, "Close terrain occlusion/camera registration was lost")

@@ -36,6 +36,15 @@ var settings_path := SETTINGS_PATH
 var assistance_request_only := false
 var surface_interaction_enabled := false
 var landed_hatch_enabled := false
+# One aimed cockpit control borrows the fixed contextual E/A gesture only.
+# Retain a held gesture after leaving the target until its physical release.
+var cockpit_key_held := false
+var cockpit_pad_held := false
+var cockpit_interaction_enabled := false:
+	set(value):
+		if value and not cockpit_interaction_enabled and Input.is_physical_key_pressed(KEY_E): cockpit_key_held = true
+		if value and not cockpit_interaction_enabled and device >= 0 and Input.is_joy_button_pressed(device, JOY_BUTTON_A): cockpit_pad_held = true
+		cockpit_interaction_enabled = value
 var looking := false
 var look_axes_needs_neutral := false
 var remap_neutral_events: Array[InputEvent] = []
@@ -340,6 +349,8 @@ func try_select_controller(event: InputEvent) -> bool:
 	return false
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.physical_keycode == KEY_E and not event.pressed: cockpit_key_held = false
+	if event is InputEventJoypadButton and event.device == device and event.button_index == JOY_BUTTON_A and not event.pressed: cockpit_pad_held = false
 	if not focused:
 		return
 	var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
@@ -377,7 +388,13 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif enabled and pressed:
 		# Contextual interaction has priority over remapped flight actions.
-		if (surface_interaction_enabled or landed_hatch_enabled) and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
+		if cockpit_interaction_enabled and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
+			var fresh := not (cockpit_key_held if event is InputEventKey else cockpit_pad_held)
+			if event is InputEventKey: cockpit_key_held = true
+			else: cockpit_pad_held = true
+			if fresh and (not pad or available_pads.get(device, false)): surface_interaction_requested.emit()
+			get_viewport().set_input_as_handled()
+		elif (surface_interaction_enabled or landed_hatch_enabled) and ((event is InputEventKey and event.physical_keycode == KEY_E) or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)):
 			if not pad or available_pads.get(device, false): surface_interaction_requested.emit()
 			get_viewport().set_input_as_handled()
 		elif surface_interaction_enabled and event is InputEventKey and event.physical_keycode in foot_key_codes():
@@ -402,6 +419,15 @@ static func shape(value: float, deadzone: float, curve: float) -> float:
 	return signf(value) * pow(clampf((absf(value) - deadzone) / (1.0 - deadzone), 0, 1), curve)
 
 func strength(action: String) -> float:
+	if cockpit_key_held and not Input.is_physical_key_pressed(KEY_E): cockpit_key_held = false
+	if (cockpit_interaction_enabled or cockpit_key_held) and Input.is_physical_key_pressed(KEY_E) and int(bindings[action].key.code) == KEY_E:
+		# InputMap combines keyboard/pad with max(), so re-read only the other
+		# channel rather than subtracting E and accidentally erasing a bumper.
+		if device < 0 or not available_pads.get(device, false): return 0.0
+		var binding: Dictionary = bindings[action].pad
+		if binding.kind == "button": return 1.0 if Input.is_joy_button_pressed(device, int(binding.code)) else 0.0
+		var value := Input.get_joy_axis(device, int(binding.code)) * float(binding.sign)
+		return maxf(0.0, value) if is_finite(value) else value
 	return Input.get_action_raw_strength("pilot_" + action)
 
 func foot_key_codes() -> Array[int]:
@@ -488,6 +514,32 @@ func landed_hatch_neutral() -> bool:
 				if not is_finite(value) or value * float(binding.sign) > float(settings.deadzone): return false
 			elif binding.kind == "button" and Input.is_joy_button_pressed(device, int(binding.code)):
 				return false
+	return true
+
+
+# Same physical E exemption and independent pad checks as the landed hatch;
+# the caller separately authenticates an aimed, seated cockpit control.
+func cockpit_interaction_neutral() -> bool:
+	if not cockpit_interaction_enabled or not enabled or not focused or needs_neutral or not waiting_action.is_empty() or remap_neutral_overflow: return false
+	for event in remap_neutral_events:
+		if event_held(event): return false
+	for code in foot_remap_keys:
+		if Input.is_physical_key_pressed(code): return false
+	if device >= 0 and not available_pads.get(device, false): return false
+	for action in ACTIONS:
+		# A stationary head-look modifier may stay held while aiming; every
+		# look axis and every actual flight channel still has to be neutral.
+		if action == "look_hold": continue
+		var code: int = int(bindings[action].key.code)
+		var demand := strength(action)
+		if not is_finite(demand) or demand > float(settings.deadzone): return false
+		if code != KEY_E and Input.is_physical_key_pressed(code): return false
+		if device >= 0:
+			var binding: Dictionary = bindings[action].pad
+			if binding.kind == "axis":
+				var value := Input.get_joy_axis(device, int(binding.code))
+				if not is_finite(value) or value * float(binding.sign) > float(settings.deadzone): return false
+			elif binding.kind == "button" and Input.is_joy_button_pressed(device, int(binding.code)): return false
 	return true
 
 

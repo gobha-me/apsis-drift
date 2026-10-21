@@ -47,6 +47,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	if not cockpit_displays.bind_screens(model.specification.screens) or not cockpit_displays.refresh(state, 0.0, true):
 		error = "The Wayfarer lunar instruments are unavailable"
 		return false
+	if not setup_cockpit_control(): return false
 	camera = Camera3D.new()
 	camera.near = 0.05
 	camera.far = 200.0
@@ -288,6 +289,9 @@ func landed_hatch_available() -> bool:
 	return state.get("body_kind") == "moon" and state.get("surface", {}).get("landed", false) and not surface_walking() and state.get("boarding", {}).get("seated", false) and state.get("jump", {}).get("phase", "") == "idle" and not state.get("recovery_pending", true)
 
 func request_surface_interaction() -> void:
+	if cockpit_control_aimed():
+		request_cockpit_gear()
+		return
 	if surface_walking():
 		# Share the existing foot-only neutral/modal gates: E is also a flight key.
 		super.request_surface_interaction()
@@ -360,6 +364,7 @@ func update_compact_hud() -> void:
 	moon_jump_button.tooltip_text = jump_reason if moon_jump_button.disabled else ""
 	if moon_jump_button.disabled and not landed and not surface_walking() and not jumping:
 		primary_status.text += "\nJump unavailable · " + jump_reason
+	if cockpit_control_aimed(): primary_status.text += "\n" + surface_interaction_binding() + " · " + ("Stow gear" if state.surface.gear_deployed else "Deploy gear · manual")
 	pause_button.text = "Resume" if paused else "Pause"
 
 func update_view(delta: float, _defer_exhaust: bool = false) -> void:
@@ -417,6 +422,7 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 		return
 	refresh_surface_landmarks()
 	refresh_control_hint()
+	refresh_cockpit_control()
 	update_compact_hud()
 
 func _process(delta: float) -> void:

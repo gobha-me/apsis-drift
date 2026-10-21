@@ -422,6 +422,9 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::capture_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("request_freedom_landing"),
                                 &FreedomBridge::request_freedom_landing);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_freedom_landing_gear", "deployed"),
+        &FreedomBridge::set_freedom_landing_gear);
     godot::ClassDB::bind_method(godot::D_METHOD("stow_freedom_landing_gear"),
                                 &FreedomBridge::stow_freedom_landing_gear);
     godot::ClassDB::bind_method(godot::D_METHOD("liftoff_freedom_surface"),
@@ -1550,6 +1553,11 @@ class FreedomBridge : public godot::RefCounted {
   auto request_freedom_landing() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.request_landing();
+    });
+  }
+  auto set_freedom_landing_gear(bool deployed) -> bool {
+    return change_freedom_port([deployed](NativeFreedomFlightSession& session) {
+      return session.set_landing_gear(deployed);
     });
   }
   auto stow_freedom_landing_gear() -> bool {
