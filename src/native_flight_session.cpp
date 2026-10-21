@@ -665,8 +665,8 @@ auto NativeFreedomFlightSession::hold_current_orbit()
   return set_hold({kOrbitHoldVersion, *target});
 }
 
-auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
-                                         SimulationSeconds step)
+auto NativeFreedomFlightSession::advance_flight(
+    const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
   if (recovery_pending())
     return std::unexpected{

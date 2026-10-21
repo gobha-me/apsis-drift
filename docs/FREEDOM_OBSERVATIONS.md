@@ -76,8 +76,10 @@ local pressure. Resolved hazards are the immutable coarse ambient envelopes;
 resolved landing is terrain character/water coverage. These are inferred
 planet models, not live weather, certified engineering safety, a complete survey,
 qualified landing pads or a guaranteed route. #102/#202/#253 retain those
-assessment/contact/consequence responsibilities. Sample collection and detailed
-survey operations remain future scope.
+assessment/contact/consequence responsibilities. The optional [orbital terrain survey](FREEDOM_ORBITAL_SURVEY.md) can resolve
+this coarse landing model after deliberate orbital acquisition, without
+changing these automatic sensor rules. Sample collection and detailed surface
+mapping remain future scope.
 
 ## Actual presence and transactions
 

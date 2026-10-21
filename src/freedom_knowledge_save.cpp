@@ -193,6 +193,28 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"version", k.moon_surface_landmarks->version},
         {"inspections", std::move(inspections)}};
   }
+  if (k.orbital_surveys) {
+    const auto& surveys = *k.orbital_surveys;
+    Json active = nullptr;
+    if (surveys.active) {
+      const auto& item = *surveys.active;
+      active = {{"system", item.system.value},
+                {"planet", item.planet.value},
+                {"craft", item.craft.value},
+                {"started_tick", item.started_tick},
+                {"acquired_ticks", item.acquired_ticks}};
+    }
+    Json completed = Json::array();
+    for (const auto& item : surveys.completed)
+      completed.push_back({{"system", item.system.value},
+                           {"planet", item.planet.value},
+                           {"craft", item.craft.value},
+                           {"started_tick", item.started_tick},
+                           {"completed_tick", item.completed_tick}});
+    root["orbital_surveys"] = {{"version", surveys.version},
+                               {"active", std::move(active)},
+                               {"completed", std::move(completed)}};
+  }
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -208,10 +230,13 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("surface_landmarks");
   const bool moon_landmarks_selected =
       root->is_object() && root->contains("moon_surface_landmarks");
+  const bool surveys_selected =
+      root->is_object() && root->contains("orbital_surveys");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
   if (moon_landmarks_selected) root_shape.erase("moon_surface_landmarks");
+  if (surveys_selected) root_shape.erase("orbital_surveys");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -387,6 +412,44 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
            inspection["tick"].get<SimulationTick>()});
     }
   }
+  if (surveys_selected) {
+    const auto& surveys = (*root)["orbital_surveys"];
+    if (!fields(surveys, {"version", "active", "completed"}) ||
+        !unsigned_fields(surveys, {"version"}) ||
+        surveys["version"] != kFreedomOrbitalSurveyVersion ||
+        !surveys["completed"].is_array() ||
+        surveys["completed"].size() > kMaximumFreedomOrbitalSurveys)
+      return std::unexpected{failure("invalid orbital survey state")};
+    FreedomOrbitalSurveyState state;
+    if (!surveys["active"].is_null()) {
+      const auto& item = surveys["active"];
+      if (!fields(item, {"system", "planet", "craft", "started_tick",
+                         "acquired_ticks"}) ||
+          !unsigned_fields(item, {"system", "planet", "craft", "started_tick",
+                                  "acquired_ticks"}) ||
+          item["acquired_ticks"] >= kFreedomOrbitalSurveyTicks)
+        return std::unexpected{failure("invalid active orbital survey")};
+      state.active = FreedomOrbitalSurveyAcquisition{
+          {item["system"].get<std::uint64_t>()},
+          {item["planet"].get<std::uint64_t>()},
+          {item["craft"].get<std::uint64_t>()},
+          item["started_tick"].get<SimulationTick>(),
+          item["acquired_ticks"].get<std::uint32_t>()};
+    }
+    for (const auto& item : surveys["completed"]) {
+      if (!fields(item, {"system", "planet", "craft", "started_tick",
+                         "completed_tick"}) ||
+          !unsigned_fields(item, {"system", "planet", "craft", "started_tick",
+                                  "completed_tick"}))
+        return std::unexpected{failure("invalid completed orbital survey")};
+      state.completed.push_back({{item["system"].get<std::uint64_t>()},
+                                 {item["planet"].get<std::uint64_t>()},
+                                 {item["craft"].get<std::uint64_t>()},
+                                 item["started_tick"].get<SimulationTick>(),
+                                 item["completed_tick"].get<SimulationTick>()});
+    }
+    k.orbital_surveys = std::move(state);
+  }
   const auto& entries = (*root)["entries"];
   if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
     return std::unexpected{failure("invalid or oversized fact array")};
@@ -444,6 +507,17 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
            flight.minor.has_value()))
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
+  if (d.knowledge.orbital_surveys && d.knowledge.orbital_surveys->active) {
+    const auto& active = *d.knowledge.orbital_surveys->active;
+    const auto system =
+        flight.world ? flight.world->system : flight.flight.frame.system;
+    const auto planet = flight.world ? std::optional{flight.world->planet}
+                                     : flight.flight.frame.planet;
+    if (active.craft != flight.origin.state.craft || flight.moon ||
+        flight.minor || active.system != system || !planet ||
+        active.planet != *planet)
+      return std::unexpected{failure("active orbital survey owner mismatch")};
+  }
   return {};
 }
 auto encode_freedom_knowledge_document_json(

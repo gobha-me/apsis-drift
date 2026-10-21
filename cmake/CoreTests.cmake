@@ -944,6 +944,18 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME freedom-knowledge-contract COMMAND apsis-drift-freedom-knowledge-tests)
   set_tests_properties(freedom-knowledge-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-native-orbital-survey-tests test/native_orbital_survey_test.cpp)
+  target_link_libraries(apsis-drift-native-orbital-survey-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-native-orbital-survey-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME native-orbital-survey-contract COMMAND apsis-drift-native-orbital-survey-tests)
+  set_tests_properties(native-orbital-survey-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-freedom-orbital-survey-save-tests test/freedom_orbital_survey_save_test.cpp)
+  target_link_libraries(apsis-drift-freedom-orbital-survey-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-orbital-survey-save-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME freedom-orbital-survey-save-contract COMMAND apsis-drift-freedom-orbital-survey-save-tests)
+  set_tests_properties(freedom-orbital-survey-save-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-freedom-local-observation-tests test/freedom_local_observations_test.cpp)
   target_link_libraries(apsis-drift-freedom-local-observation-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-local-observation-tests PRIVATE

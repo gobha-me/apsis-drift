@@ -108,6 +108,39 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  if (old.orbital_surveys) {
+    if (!now.orbital_surveys ||
+        now.orbital_surveys->version != old.orbital_surveys->version)
+      return false;
+    for (const auto& record : old.orbital_surveys->completed) {
+      const auto found = std::ranges::find_if(
+          now.orbital_surveys->completed, [&](const auto& candidate) {
+            return candidate.system == record.system &&
+                   candidate.planet == record.planet;
+          });
+      if (found == now.orbital_surveys->completed.end() || *found != record)
+        return false;
+    }
+  }
+  if (now.orbital_surveys) {
+    for (const auto& record : now.orbital_surveys->completed) {
+      const bool retained =
+          old.orbital_surveys &&
+          std::ranges::any_of(old.orbital_surveys->completed,
+                              [&](const auto& previous) {
+                                return previous.system == record.system &&
+                                       previous.planet == record.planet;
+                              });
+      if (!retained &&
+          (record.craft != current || record.started_tick < loss_tick ||
+           record.completed_tick < loss_tick))
+        return false;
+    }
+    if (now.orbital_surveys->active &&
+        (now.orbital_surveys->active->craft != current ||
+         now.orbital_surveys->active->started_tick < loss_tick))
+      return false;
+  }
   // Inspections are append-only personal history. Unlike the editable marker,
   // replacement cannot clear a selection or rewrite an already recorded site.
   const auto same_site = [](const auto& a, const auto& b) {
@@ -390,6 +423,7 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   assembly->journey.voyage.docking = {geometry->version, safe->port, true};
   const FreedomResources resources{1, *identity, body->craft, body->tick};
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
+  if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();
   if (knowledge.recipe.version == kFreedomObservedKnowledgeVersion) {
     knowledge.recipe.version = kFreedomTravelKnowledgeVersion;
     knowledge.recipe.world_domain = 1;

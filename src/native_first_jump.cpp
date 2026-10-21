@@ -309,6 +309,8 @@ auto NativeFreedomFlightSession::begin_jump()
   }
   if (auto available = jump_available(); !available) return available;
   auto candidate = *this;
+  if (candidate.knowledge_->orbital_surveys)
+    candidate.knowledge_->orbital_surveys->active.reset();
   candidate.travel_->phase = FreedomJumpPhase::spool;
   candidate.gear_clearance_.reset();
   candidate.travel_->spool_tick = document_.flight.tick;

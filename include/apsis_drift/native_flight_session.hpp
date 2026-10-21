@@ -135,6 +135,13 @@ struct FreedomMoonSurfaceLandmarksView {
   std::vector<FreedomMoonSurfaceLandmarkView> sites;
 };
 
+struct NativeOrbitalSurveyView {
+  bool selected{}, active{}, can_begin{}, completed{};
+  std::uint32_t acquired_ticks{};
+  std::string note, body_name;
+  std::optional<KnownLanding> result;
+};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -195,6 +202,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_orbital_survey() -> std::expected<void, std::string>;
+  [[nodiscard]] auto cancel_orbital_survey()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto orbital_survey_view() const -> NativeOrbitalSurveyView;
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
@@ -368,6 +379,13 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto advance_flight(const NativeFlightControls&,
+                                    SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto orbital_survey_conditions() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_orbital_survey_tick()
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto set_moon_landing_gear(bool)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto commit_moon_touchdown(std::uint64_t)

@@ -55,6 +55,7 @@ TESTS = {
     "native_station_view": "native_assets",
     "wayfarer_frame": "native_assets",
     "saved_flight": "freedom_saves",
+    "orbital_survey": "orbital_survey_saves",
     "native_environment": "freedom_saves",
     "native_audio": "freedom_saves",
     "first_jump": "freedom_saves",
@@ -266,6 +267,7 @@ def main(argv=None):
     impact_fixture = args.build_dir.resolve() / "apsis-drift-native-impact-tests"
     frame_import_fixture = args.build_dir.resolve() / "apsis-drift-freedom-flight-import-tests"
     system_release_fixture = args.build_dir.resolve() / "apsis-drift-native-system-release-tests"
+    survey_fixture = args.build_dir.resolve() / "apsis-drift-native-orbital-survey-tests"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
@@ -296,6 +298,9 @@ def main(argv=None):
     if "native_system_release" in selected:
         if not system_release_fixture.is_file() or not os.access(system_release_fixture, os.X_OK):
             parser.error(f"missing C++ system release fixture: {system_release_fixture}")
+    if "orbital_survey" in selected:
+        if not survey_fixture.is_file() or not os.access(survey_fixture, os.X_OK):
+            parser.error(f"missing C++ orbital survey fixture: {survey_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -393,6 +398,10 @@ def main(argv=None):
         shutil.copy2(system_release_fixture, work / system_release_fixture.name)
         system_release_fixture = work / system_release_fixture.name
         staged_executables.append(system_release_fixture)
+    if "orbital_survey" in selected:
+        shutil.copy2(survey_fixture, work / survey_fixture.name)
+        survey_fixture = work / survey_fixture.name
+        staged_executables.append(survey_fixture)
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -423,7 +432,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_station_crew", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_station_crew", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", "orbital_survey", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -807,6 +816,21 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
+    if "orbital_survey" in selected:
+        phases = work / "orbital-survey"
+        log = work / "orbital-survey-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(survey_fixture), "--fixtures", str(phases)], log, env, args.timeout)
+        report["setup"].append({"family": "orbital_survey_saves", "returncode": code,
+            "timed_out": timed_out, "seconds": elapsed,
+            "fixture_sha256": sha256(survey_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL authoritative orbital survey fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
+        save()
     for name, (stem, fixture_flag, terrain_policy) in SURFACE_TESTS.items():
         if name not in selected:
             continue
@@ -1021,7 +1045,9 @@ def main(argv=None):
                 print(f"FAIL {name} launch cases", flush=True)
                 continue
         arguments = []
-        if TESTS[name] == "snapshot":
+        if TESTS[name] == "orbital_survey_saves":
+            arguments = [str(work / "orbital-survey"), str(work / "native-assets")]
+        elif TESTS[name] == "snapshot":
             arguments = [str(work / "snapshot-42.json")]
         elif TESTS[name] == "two_snapshots":
             arguments = [str(work / f"snapshot-{seed}.json") for seed in (42, 4)]

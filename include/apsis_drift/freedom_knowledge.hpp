@@ -19,6 +19,9 @@ inline constexpr std::uint32_t kFreedomMoonSurfaceLandmarkVersion{1};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
+inline constexpr std::uint32_t kFreedomOrbitalSurveyVersion{1};
+inline constexpr std::uint32_t kFreedomOrbitalSurveyTicks{3600};
+inline constexpr std::size_t kMaximumFreedomOrbitalSurveys{16};
 
 // Preserve the existing typed identities. Future BodyId hierarchy adds an
 // explicit subject kind/version; it never silently reinterprets PlanetId.
@@ -148,6 +151,32 @@ struct FreedomMoonSurfaceLandmarkState {
                          const FreedomMoonSurfaceLandmarkState&)
       -> bool = default;
 };
+struct FreedomOrbitalSurveyAcquisition {
+  SystemId system;
+  PlanetId planet;
+  StarterCraftId craft;
+  SimulationTick started_tick{};
+  std::uint32_t acquired_ticks{};
+  friend auto operator==(const FreedomOrbitalSurveyAcquisition&,
+                         const FreedomOrbitalSurveyAcquisition&)
+      -> bool = default;
+};
+struct FreedomOrbitalSurveyRecord {
+  SystemId system;
+  PlanetId planet;
+  StarterCraftId craft;
+  SimulationTick started_tick{};
+  SimulationTick completed_tick{};
+  friend auto operator==(const FreedomOrbitalSurveyRecord&,
+                         const FreedomOrbitalSurveyRecord&) -> bool = default;
+};
+struct FreedomOrbitalSurveyState {
+  std::uint32_t version{kFreedomOrbitalSurveyVersion};
+  std::optional<FreedomOrbitalSurveyAcquisition> active;
+  std::vector<FreedomOrbitalSurveyRecord> completed;
+  friend auto operator==(const FreedomOrbitalSurveyState&,
+                         const FreedomOrbitalSurveyState&) -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
@@ -156,6 +185,8 @@ struct FreedomKnowledge {
   std::optional<FreedomSurfaceMarkerState> surface_marker{};
   std::optional<FreedomSurfaceLandmarkState> surface_landmarks{};
   std::optional<FreedomMoonSurfaceLandmarkState> moon_surface_landmarks{};
+  // Explicit player-selected acquisition; absence preserves historical bytes.
+  std::optional<FreedomOrbitalSurveyState> orbital_surveys{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -174,7 +205,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_ledger,
   oversized_ledger,
   invalid_surface_marker,
-  invalid_surface_landmarks
+  invalid_surface_landmarks,
+  invalid_orbital_surveys
 };
 
 struct KnownIdentity {

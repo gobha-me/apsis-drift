@@ -221,6 +221,7 @@ add_library(apsis_drift_core STATIC
   src/native_recovery.cpp
   src/native_port_approach.cpp
   src/native_port_docking.cpp
+  src/native_orbital_survey.cpp
   src/native_port_rendezvous.cpp
   src/onboarding.cpp
   src/origin_station.cpp
@@ -336,7 +337,7 @@ set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIO
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/native_first_jump.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
-set_property(SOURCE src/native_port_rendezvous.cpp src/native_port_docking.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/native_port_rendezvous.cpp src/native_port_docking.cpp src/native_orbital_survey.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_resources.cpp src/freedom_local_observations.cpp src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/terrain_touchdown.cpp src/terrain_hull_clearance.cpp src/landed_craft.cpp src/native_surface_maneuver.cpp src/godot/contact_surface.cpp src/godot/contact_patch.cpp src/godot/saved_contact_geometry.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_source_endpoint_surface_checkpoint.cpp src/origin_boarding_lower_foot_transfer.cpp src/origin_boarding_lower_foot_transfer_surface_sweep.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
