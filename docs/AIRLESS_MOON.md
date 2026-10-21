@@ -67,6 +67,12 @@ retains the supported fixed pose; idle resolution applies the actual spin at the
 shared tick. Liftoff release checks actual local GM/r² and adds no impulse.
 `moon_surface_walker.hpp` consumes those top facets through the same movement,
 slope, step, obstruction and return-access kernel as planet walking.
+The on-foot HUD shows the configured walking controls and hatch/inspection
+shortcut rather than the parked craft's flight instruments. It explains the
+last committed blocked step, including unresolved ground support, steep ground,
+excessive steps or the Wayfarer hull. A supported or neutral step clears the
+message. Pause preserves it; Continue starts without a previous movement result.
+This transient feedback adds no saved field or movement rule.
 
 ## Local voyage and operation
 

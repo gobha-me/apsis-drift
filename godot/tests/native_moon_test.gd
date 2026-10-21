@@ -367,6 +367,64 @@ func check_outside(phases: String, assets: String, output: String) -> void:
 	shell.free()
 	await process_frame
 
+func check_walk_feedback(view: Control, owner: Variant, output: String) -> void:
+	# Reuse the actual returned-phase contextual Leave above. Its fresh C++
+	# ground entry faces the craft; no actor/terrain/heading fixture is rewritten.
+	if not check(view.paused and view.surface_walking() and is_zero_approx(view.state.surface_walk.heading) and view.state.surface_walk.get("movement_blockage") == null, "Fresh actual Moon departure lacks neutral walking feedback"): return
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	for value in [null, "terrain_unresolved", "water", "slope", "step", "craft_obstruction"]:
+		var candidate := initial.duplicate(true)
+		candidate.surface_walk.movement_blockage = value
+		check(MoonState.valid(candidate), "Known optional Moon walking result refused: " + str(value))
+	for value in [false, 1, 1.0, {}, [], "supported", "unknown"]:
+		var candidate := initial.duplicate(true)
+		candidate.surface_walk.movement_blockage = value
+		check(not MoonState.valid(candidate), "Malformed Moon walking result accepted: " + str(value))
+	var missing := initial.duplicate(true)
+	missing.surface_walk.erase("movement_blockage")
+	check(not MoonState.valid(missing) and owner.get_freedom_flight_state() == initial, "Missing Moon walking feedback accepted or admission mutated the actual source")
+	view.player_input.persist = false
+	view.player_input.device = -1
+	view.player_input.install()
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Moon hull-feedback walk could not resume explicitly"): return
+	key(KEY_W, true)
+	for frame in 8: view._process(0.125)
+	key(KEY_W, false)
+	if not check(view.error.is_empty() and not view.paused and view.state.surface_walk.get("movement_blockage") == "craft_obstruction" and "Last step blocked" in view.primary_status.text and "Wayfarer hull" in view.primary_status.text and "On foot" in view.primary_status.text and not "Datum altitude" in view.primary_status.text, "Actual Moon walk into the ship lost its hull refusal or retained seated-craft instruments"): return
+	check(int(view.state.tick) == int(initial.tick) + 120 and view.state.surface_walk.heading == initial.surface_walk.heading and view.state.resources == initial.resources, "Moon hull feedback changed the existing movement clock, heading or resources")
+	# Compare the actual saved body-fixed foot, not the time-varying projected
+	# eye relative to the rotating craft/tangent frame.
+	var before_blocked: Dictionary = JSON.parse_string(save_bytes(owner, output.path_join("walk-blocked-before.json")).get_string_from_utf8())
+	key(KEY_W, true)
+	view._process(0.125)
+	key(KEY_W, false)
+	view.pause_controls("Inspecting actual blocked Moon step")
+	var frozen: Dictionary = owner.get_freedom_flight_state()
+	var path := output.path_join("walk-blocked.json")
+	var blocked := save_bytes(owner, path)
+	var blocked_document: Dictionary = JSON.parse_string(blocked.get_string_from_utf8())
+	check(view.state.surface_walk.movement_blockage == "craft_obstruction" and blocked_document.actor.foot_position_metres == before_blocked.actor.foot_position_metres, "Moon hull obstruction allowed the actor to tunnel or lost its reason")
+	view._process(0.125)
+	check(not owner.advance_freedom_surface_walk(0.125, PackedFloat64Array([0, 0]), false) and owner.get_freedom_flight_state() == frozen and save_bytes(owner, output.path_join("walk-blocked-paused.json")) == blocked and "Wayfarer hull" in view.primary_status.text, "Moon pause/refused input changed blocked feedback or the complete Save")
+	var peer: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(peer.stage_freedom_continue(path), "Blocked Moon peer Continue staging refused"): return
+	var pending: Dictionary = peer.get_pending_freedom_start()
+	if not check(not pending.is_empty() and peer.commit_pending_freedom_start(pending.candidate_id), "Blocked Moon peer Continue commit refused"): return
+	check(peer.get_freedom_flight_state().surface_walk.get("movement_blockage") == null and save_bytes(peer, output.path_join("walk-blocked-continued.json")) == blocked, "Moon Continue restored transient blockage or changed saved state")
+	view.observe_neutral_controls()
+	view.toggle_pause()
+	if not check(not view.paused and view.controls_armed, "Actual Moon retreat failed neutral Resume"): return
+	key(KEY_S, true)
+	view._process(0.125)
+	key(KEY_S, false)
+	var retreated := save_bytes(owner, output.path_join("walk-retreated.json"))
+	var retreated_document: Dictionary = JSON.parse_string(retreated.get_string_from_utf8())
+	check(view.error.is_empty() and view.state.surface_walk.get("movement_blockage") == null and not "Last step blocked" in view.primary_status.text and retreated_document.actor.foot_position_metres != blocked_document.actor.foot_position_metres, "Actual supported Moon retreat retained a stale hull warning or failed to move")
+	check(peer.advance_freedom_surface_walk(0.125, PackedFloat64Array([-1, 0, 0]), false) and owner.get_freedom_flight_state() == peer.get_freedom_flight_state() and retreated == save_bytes(peer, output.path_join("walk-retreated-peer.json")), "Moon walking feedback changed the actual retreat or complete Save relative to direct C++ continuation")
+	view.pause_controls("Moon feedback check complete")
+
 func check_landed_hatch(view: Control, owner: Variant, output: String, label: String, controller: bool) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var prefix := output.path_join(label + "-context-hatch")
@@ -637,6 +695,7 @@ func run() -> void:
 				check("Jump unavailable" in phase_view.primary_status.text and str(observed.jump.refusal) in phase_view.primary_status.text, "Compact Moon HUD omitted controller-readable jump refusal: " + label)
 		if label in ["landed", "returned"]:
 			check_landed_hatch(phase_shell.current_view, restored, output, label, label == "returned")
+			if label == "returned": check_walk_feedback(phase_shell.current_view, restored, output)
 		phase_shell.free()
 		await process_frame
 	await check_outside(phases, assets, output)
