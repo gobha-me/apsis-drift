@@ -197,6 +197,61 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     return std::unexpected{Error::invalid_tick};
   if (k.entries.size() > kMaximumFreedomKnowledgeFacts)
     return std::unexpected{Error::oversized_ledger};
+  if (k.orbital_surveys) {
+    const auto& surveys = *k.orbital_surveys;
+    if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
+         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+        surveys.version != kFreedomOrbitalSurveyVersion ||
+        surveys.completed.size() > kMaximumFreedomOrbitalSurveys)
+      return std::unexpected{Error::invalid_orbital_surveys};
+    const auto target = [](const auto& item) {
+      return std::tuple{item.system.value, item.planet.value};
+    };
+    const auto valid_source = [&](const auto& item) {
+      const KnowledgeSubject subject{KnowledgeSubjectKind::planet, item.system,
+                                     item.planet.value};
+      return locate(k, subject, KnowledgeFact::identity_type) !=
+                 k.entries.end() &&
+             validate_evidence(w,
+                               {subject,
+                                KnowledgeFact::landing,
+                                {NavigationKnowledgeLevel::resolved,
+                                 KnowledgeSource::local_ship, item.craft.value,
+                                 item.started_tick, item.craft}},
+                               now)
+                 .has_value();
+    };
+    for (std::size_t i = 0; i < surveys.completed.size(); ++i) {
+      const auto& record = surveys.completed[i];
+      const auto landing = locate(
+          k, {KnowledgeSubjectKind::planet, record.system, record.planet.value},
+          KnowledgeFact::landing);
+      if (!valid_source(record) || record.completed_tick > now ||
+          record.started_tick > record.completed_tick ||
+          record.completed_tick - record.started_tick <
+              kFreedomOrbitalSurveyTicks ||
+          landing == k.entries.end() ||
+          !std::ranges::any_of(
+              landing->transitions,
+              [&](const auto& evidence) {
+                return evidence.level == NavigationKnowledgeLevel::resolved &&
+                       evidence.tick <= record.completed_tick;
+              }) ||
+          (i && !(target(surveys.completed[i - 1]) < target(record))))
+        return std::unexpected{Error::invalid_orbital_surveys};
+    }
+    if (surveys.active) {
+      const auto& active = *surveys.active;
+      if (!valid_source(active) ||
+          active.acquired_ticks >= kFreedomOrbitalSurveyTicks ||
+          active.started_tick > now ||
+          active.acquired_ticks > now - active.started_tick ||
+          std::ranges::any_of(surveys.completed, [&](const auto& record) {
+            return target(record) == target(active);
+          }))
+        return std::unexpected{Error::invalid_orbital_surveys};
+    }
+  }
   if (k.surface_marker) {
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
          k.recipe.version != kFreedomTravelKnowledgeVersion) ||

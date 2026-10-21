@@ -3,6 +3,7 @@ extends "res://scripts/flight/flight_basics.gd"
 ## This view consumes only the C++ knowledge query, never world descriptors.
 var query: Callable
 var readings: Dictionary = {}
+const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const VALUE_FIELDS := {
 	"identity_type": {"name": TYPE_STRING},
 	"physical": {"radius_kilometres": TYPE_INT, "gravity_milli_g": TYPE_INT},
@@ -18,6 +19,7 @@ static func valid_readings(candidate: Variant) -> bool:
 	if candidate.subjects.size() > 128 or (not candidate.selected and not candidate.subjects.is_empty()): return false
 	for subject in candidate.subjects:
 		if not subject is Dictionary: return false
+		if subject.has("orbital_survey") and not OrbitalSurvey.valid_provenance(subject.orbital_survey): return false
 		for key in ["name", "kind", "system_id", "subject_id"]:
 			if not subject.get(key) is String: return false
 		if not subject.get("facts") is Array or subject.facts.size() > 8: return false
@@ -69,6 +71,9 @@ func refresh() -> void:
 
 static func subject_text(subject: Dictionary) -> String:
 	var lines := PackedStringArray([str(subject.name), "%s · system %s" % [str(subject.kind).capitalize(), subject.system_id], ""])
+	if subject.has("orbital_survey") and OrbitalSurvey.valid_provenance(subject.orbital_survey):
+		var survey: Dictionary = subject.orbital_survey
+		lines.append("Orbital terrain survey · 30 s acquired\nStarted at ship time %s · completed %s · craft %s\n" % [time_text(survey.started_tick), time_text(survey.completed_tick), survey.craft_id])
 	for fact: Dictionary in subject.facts:
 		lines.append("%s · %s" % [str(fact.fact).replace("_", " ").capitalize(), str(fact.confidence).to_upper()])
 		lines.append(value_text(fact.fact, fact.value))

@@ -34,6 +34,9 @@ const SurfaceLandmarks = preload("res://scripts/native/native_surface_landmarks.
 var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
+const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
+var survey_start_button: Button
+var survey_cancel_button: Button
 var observation_cue := Status.ObservationCue.new()
 var surface_aid_cue := Status.SurfaceAidCue.new()
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
@@ -181,6 +184,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_state(value: Dictionary) -> bool:
+	if value.has("orbital_survey") and not OrbitalSurvey.valid(value.orbital_survey): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
 	if value.has("port_docking"):
@@ -840,9 +844,19 @@ func update_compact_hud() -> void:
 		var lines := primary_status.text.split("\n")
 		lines.insert(1, save_status.text.left(180) + ("…" if save_status.text.length() > 180 else ""))
 		primary_status.text = "\n".join(lines)
+	var survey_text := OrbitalSurvey.text(state.get("orbital_survey"))
 	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
-		primary_status.text += "\n" + observation_cue.text()
+		# The completed survey already names the retained result and Records.
+		# Preserve the actual observation notice in the tooltip without stacking
+		# its duplicate destination over the compact completion line.
+		if survey_text.is_empty() or not state.orbital_survey.completed:
+			primary_status.text += "\n" + observation_cue.text()
 		primary_status.tooltip_text += "\n" + observation_cue.text()
+	if error.is_empty() and not survey_text.is_empty():
+		primary_status.tooltip_text += "\n" + survey_text
+		# Command/refusal and maneuver outcomes retain their existing priority.
+		primary_status.text += "\n" + OrbitalSurvey.compact_text(state.orbital_survey, not observation_cue.text().is_empty())
+		primary_status.tooltip_text += "\n" + str(state.orbital_survey.note)
 	var personal: Dictionary = state.get("surface_marker", {})
 	if error.is_empty() and personal.get("present", false):
 		var marker_text := ""
@@ -869,7 +883,11 @@ func update_compact_hud() -> void:
 		primary_status.text += "\n" + str(docking_aid.note)
 		if docking_aid.get("active", false): primary_status.text += " · %.0f s left" % docking_aid.remaining_seconds
 	if error.is_empty() and not surface_walking() and player_input != null:
-		primary_status.text += "\n" + ("Free look · release right mouse to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · right mouse looks · %s centers" % player_input.binding_label("recenter", "key"))
+		var steering_hint := "Free look · release right mouse to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · right mouse looks · %s centers" % player_input.binding_label("recenter", "key")
+		primary_status.tooltip_text += "\n" + steering_hint
+		var compact_steering := "RMB looks · release to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · RMB looks"
+		if survey_text.is_empty():
+			primary_status.text += "\n" + (compact_steering if state.get("orbital_survey", {}).get("selected", false) else steering_hint)
 	context_source = null
 	if surface_walking():
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
@@ -915,6 +933,8 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
+	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
+	survey_cancel_button = controls_menu.add_button(survey_column, "Stop orbital survey", orbital_survey_command.bind(true))
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
@@ -1108,6 +1128,40 @@ func refresh_surface_landmarks() -> void:
 
 func marker_controls_available() -> bool:
 	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible)
+
+
+func orbital_survey_command(cancel := false) -> void:
+	if not marker_controls_available() or mode_change_pending or not OrbitalSurvey.valid(state.get("orbital_survey")): return
+	if cancel:
+		if not state.orbital_survey.active: return
+	else:
+		observe_neutral_controls()
+		if not controls_armed:
+			report_action_status("Release movement controls before starting an orbital survey.")
+			return
+		if not state.orbital_survey.can_begin: return
+	if not bridge.call("cancel_freedom_orbital_survey" if cancel else "begin_freedom_orbital_survey"):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	report_action_status("Survey stopped." if cancel else "Survey started · Resume to scan.")
+	controls_menu.resume_button.grab_focus()
+
+
+func refresh_orbital_survey() -> void:
+	if survey_start_button == null: return
+	var packet: Variant = state.get("orbital_survey")
+	var available := OrbitalSurvey.valid(packet)
+	survey_start_button.visible = available and not packet.active
+	survey_cancel_button.visible = available and packet.active
+	survey_start_button.disabled = not available or not packet.can_begin
+	survey_start_button.tooltip_text = "30 seconds of committed flight in a stable bound orbit, above the atmosphere and within two body radii. Pause and Save freeze acquisition; a nonqualifying orbit holds progress. Accepted jumps or craft replacement discard unfinished work. A terrain model, never landing clearance." if available else "Orbital surveys unavailable."
+	if available:
+		var progress := OrbitalSurvey.text(packet)
+		survey_start_button.tooltip_text += "\n" + packet.note
+		survey_cancel_button.tooltip_text = progress + "\nStop, accepted jumps or craft replacement discard unfinished work. Pause and Save preserve it; a nonqualifying orbit holds progress."
 
 
 func select_distant_contact(index: int) -> void:
@@ -1964,5 +2018,6 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\n%s / left stick: walk\nMouse / look keys / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship." % player_input.foot_keyboard_label()
 	refresh_surface_marker()
 	refresh_surface_landmarks()
+	refresh_orbital_survey()
 	refresh_distant_contacts()
 	update_compact_hud()

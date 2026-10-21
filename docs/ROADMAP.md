@@ -77,6 +77,12 @@ real thrusters and fuel from the existing home return region, then hands over to
 the unchanged close-range aid. Capture remains explicit; general navigation and
 obstacle avoidance remain separate.
 
+On 2026-10-21 the owner selected [orbital terrain surveys](FREEDOM_ORBITAL_SURVEY.md)
+([#652](https://github.com/gobha-me/apsis-drift/issues/652)): deliberate acquisition
+in actual stable orbital flight, retained partial progress and a coarse terrain
+model with survey provenance. It does not activate probes, survey payment,
+missions, full mapping coverage or the broader #207 network horizon.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

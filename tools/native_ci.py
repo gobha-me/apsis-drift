@@ -17,7 +17,7 @@ import time
 REPO = Path(__file__).resolve().parent.parent
 SELECTED = """input control_settings recorded_observations freedom_start native_shell
 native_save native_asset_import native_station_view wayfarer_frame saved_flight
-native_environment native_audio first_jump native_moon native_minor native_recovery native_port
+orbital_survey native_environment native_audio first_jump native_moon native_minor native_recovery native_port
 native_walk native_station_crew native_assembly native_start_staging native_title native_profile
 native_planetary native_voyage native_roundtrip native_roundtrip_pilot
 native_roundtrip_pilot_aligned native_roundtrip_pilot_offset home_navigation
@@ -35,6 +35,7 @@ FIXTURES = {
     "impact": "apsis-drift-native-impact-tests",
     "frame_import": "apsis-drift-freedom-flight-import-tests",
     "system_release": "apsis-drift-native-system-release-tests",
+    "orbital_survey": "apsis-drift-native-orbital-survey-tests",
 }
 EXPORTER = "src/godot/apsis-drift-godot-snapshot"
 BRIDGE = "src/godot/bin/libapsis_freedom_bridge.so"
@@ -343,7 +344,7 @@ def layout(selected, runner):
         if name in selected:
             add(name, "planetary")
     for name, role in (("native_impact", "impact"), ("native_frame_import", "frame_import"),
-                       ("native_system_release", "system_release")):
+                       ("native_system_release", "system_release"), ("orbital_survey", "orbital_survey")):
         if name in selected:
             add(role + "_saves", role)
     for name in runner.SURFACE_TESTS:

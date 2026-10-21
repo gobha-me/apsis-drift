@@ -275,6 +275,7 @@ jobs:
           apsis-drift-native-impact-tests
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
+          apsis-drift-native-orbital-survey-tests
 
       - name: Package the verified engine and native executables
         run: >-
@@ -365,6 +366,8 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/moon-native/exposures/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/*.json
           if-no-files-found: warn
           retention-days: 7
 

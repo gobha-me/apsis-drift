@@ -414,6 +414,11 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_orbital_survey"),
+                                &FreedomBridge::begin_freedom_orbital_survey);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("cancel_freedom_orbital_survey"),
+        &FreedomBridge::cancel_freedom_orbital_survey);
     godot::ClassDB::bind_method(godot::D_METHOD("mark_freedom_surface_marker"),
                                 &FreedomBridge::mark_freedom_surface_marker);
     godot::ClassDB::bind_method(
@@ -1338,6 +1343,16 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto begin_freedom_orbital_survey() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_orbital_survey();
+    });
+  }
+  auto cancel_freedom_orbital_survey() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.cancel_orbital_survey();
+    });
+  }
   auto mark_freedom_surface_marker() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.mark_surface_marker();
@@ -1554,6 +1569,7 @@ class FreedomBridge : public godot::RefCounted {
     result["dropped_seconds"] = selected.dropped_seconds;
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = project_moon_surface_walk_actor(selected);
+    result["orbital_survey"] = project_orbital_survey(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
     godot::Dictionary surface;
@@ -1741,6 +1757,7 @@ class FreedomBridge : public godot::RefCounted {
     result["dropped_seconds"] = selected.dropped_seconds;
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = godot::Dictionary{};
+    result["orbital_survey"] = project_orbital_survey(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
     godot::Dictionary surface;
@@ -2245,6 +2262,27 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  static auto project_orbital_survey(const NativeFreedomFlightSession& session)
+      -> godot::Dictionary {
+    const auto view = session.orbital_survey_view();
+    godot::Dictionary result, model;
+    result["selected"] = view.selected;
+    result["active"] = view.active;
+    result["can_begin"] = view.can_begin;
+    result["completed"] = view.completed;
+    result["note"] = godot::String{view.note.c_str()};
+    result["body_name"] = godot::String{view.body_name.c_str()};
+    result["acquired_ticks"] = static_cast<std::int64_t>(view.acquired_ticks);
+    result["required_ticks"] =
+        static_cast<std::int64_t>(kFreedomOrbitalSurveyTicks);
+    if (view.result) {
+      model["character"] =
+          godot::String{terrain_character_name(view.result->character).data()};
+      model["water_basis_points"] = view.result->water_basis_points;
+    }
+    result["result"] = model;
+    return result;
+  }
   static auto project_surface_marker(
       const SavedFlightWorld& selected,
       const std::array<LocalPositionMetres, 3>& axes) -> godot::Dictionary {
@@ -2559,6 +2597,7 @@ class FreedomBridge : public godot::RefCounted {
       result["terrain_policy"] =
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
+      result["orbital_survey"] = project_orbital_survey(selected.session);
       result["surface_marker"] =
           project_surface_marker(selected, view.system_axes);
       result["surface_landmarks"] = project_surface_landmarks(selected, view);
@@ -3186,6 +3225,21 @@ class FreedomBridge : public godot::RefCounted {
           fact["craft_id"] = decimal(provenance.flight.value);
           fact["value"] = value;
           readings.append(fact);
+        }
+        if (ledger.orbital_surveys &&
+            subject.kind == KnowledgeSubjectKind::planet) {
+          for (const auto& record : ledger.orbital_surveys->completed) {
+            if (record.system != subject.system ||
+                record.planet.value != subject.identity)
+              continue;
+            godot::Dictionary survey;
+            survey["started_tick"] = decimal(record.started_tick);
+            survey["completed_tick"] = decimal(record.completed_tick);
+            survey["craft_id"] = decimal(record.craft.value);
+            survey["acquired_ticks"] =
+                static_cast<std::int64_t>(kFreedomOrbitalSurveyTicks);
+            row["orbital_survey"] = survey;
+          }
         }
         row["facts"] = readings;
         subjects.append(row);

@@ -79,6 +79,11 @@ available in paused controls.
 While attached at D1, **Unboard to station** restores station walking and
 [free station replenishment](FREEDOM_RESOURCES.md) can restore both resources.
 
+For a deliberate observation, establish a stable orbit and choose
+**Begin orbital terrain survey** in Controls. [Orbital surveys](FREEDOM_ORBITAL_SURVEY.md)
+acquire the current known planet's coarse terrain model in 30 seconds of
+qualifying ship time; leaving the band holds progress.
+
 The three cockpit screens show native NAV, FLIGHT and SYSTEMS readings,
 including fuel, jump charges and applied propulsion. Reference altitude is
 height above the body's reference sphere, not ground clearance. Use paused

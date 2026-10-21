@@ -10,6 +10,7 @@
       "native_shell",
       "native_save",
       "saved_flight",
+      "orbital_survey",
       "native_environment",
       "native_audio",
       "native_title",

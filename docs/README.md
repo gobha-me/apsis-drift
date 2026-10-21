@@ -58,6 +58,7 @@ player's station-to-flight journey.
 - [Freedom starting chart and nearby topology](FREEDOM_TOPOLOGY.md)
 - [Persistent Freedom knowledge and provenance](FREEDOM_KNOWLEDGE.md)
 - [Local ship observations](FREEDOM_OBSERVATIONS.md): selected sensor policy, physical triggers and save/resume.
+- [Orbital terrain survey](FREEDOM_ORBITAL_SURVEY.md): deliberate acquisition, held progress and retained terrain-model evidence.
 - [Native First Jump](FREEDOM_NATIVE_TRAVEL.md): actual spool, commitment, world handoff, return and phase persistence.
 - [Native round-trip verification](FREEDOM_NATIVE_ROUNDTRIP.md): station departure, neighboring observation, physical docking/service and disembarking.
 - [Standard Freedom recovery](FREEDOM_RECOVERY.md): explicit loss, retained universe/history, one replacement and native continuation.
