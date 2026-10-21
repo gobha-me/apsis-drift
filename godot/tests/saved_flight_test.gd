@@ -1,4 +1,5 @@
 extends SceneTree
+const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 ## Real selected flight/control/Save As trace against independently written C++.
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const MainExhaust = preload("res://scripts/native/native_main_exhaust.gd")
@@ -1185,6 +1186,7 @@ func run() -> void:
 	check(view.initialize(owner, args[4]), "Production flight view failed: " + view.error)
 	view.set_process(false)
 	await check_saved_menu_layout(view, owner, args[0].get_base_dir())
+	await FrameDiagnosticsChecks.run(self, view, owner, args[0].get_base_dir().path_join("menu-layout-after.json"), check)
 	check_hold_controls(view, owner, args[0].get_base_dir())
 	check(view.paused and not view.cockpit and view.ship.get_child_count() == 3 and view.exhaust != null and view.cockpit_displays != null and view.cockpit_displays.get_parent() == view.ship and view.cockpit_displays.viewports.size() == 3, "Continue did not start safely paused with the actual model and live instruments")
 	check(view.terrain.bridge == owner and owner.get_freedom_flight_state() == start, "Terrain/view invented or advanced saved state")

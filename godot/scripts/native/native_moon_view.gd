@@ -218,6 +218,7 @@ func setup_controls() -> void:
 			var levels: Dictionary = audio_preferences.levels
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
+	setup_frame_diagnostics(controls_menu.save_button.get_parent())
 	add_body_controls(controls_menu.save_button.get_parent())
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
@@ -378,6 +379,7 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	update_compact_hud()
 
 func _process(delta: float) -> void:
+	sample_frame_diagnostics(delta)
 	if not activated or recovery_notified or bridge == null or not error.is_empty(): return
 	sync_mouse_look()
 	if not focused: return

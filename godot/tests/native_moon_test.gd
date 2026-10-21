@@ -8,6 +8,7 @@ const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
 const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const MoonExposures = preload("res://tests/native_moon_exposures.gd")
+const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -609,6 +610,7 @@ func run() -> void:
 	view.set_process(false)
 	var arrived := save_bytes(owner, output.path_join("arrival-native.json"))
 	check(arrived == originals.arrival, "Native charged Moon jump differs from continuous C++ arrival Save")
+	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
 	await check_cover(view, owner)
 	check_assistance(view, owner, output)
 	await check_home(shell, owner, assets, output)

@@ -2,6 +2,7 @@ extends SceneTree
 ## Production first-person consumer against independent C++ journey save bytes.
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 var failures := 0
 
 func sky_values(view: Control) -> Array:
@@ -856,6 +857,7 @@ func run() -> void:
 		return
 	check(view.station != null and view.station.camera == null and view.ship != null, "Walking lost real ship/station or used an inspection camera")
 	check(view.camera.position == start.actor_eye_position and view.station.transform == Transform3D(start.station_basis, start.station_position), "Actor camera/station differs from authoritative projection")
+	await FrameDiagnosticsChecks.run(self, view, owner, path, check)
 	await check_station_controls(view, owner, path, start, originals[0], args[2])
 	view.free()
 	view = WalkView.new()

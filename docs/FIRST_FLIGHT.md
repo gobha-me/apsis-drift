@@ -143,3 +143,7 @@ Select home and spool normally to return to the real moving station.
 [The inspection contract](ASTEROID_INSPECTION.md) explains the prototype guard,
 Save/Continue, fuel accounting and spherical-shape limit. The existing Moon trip
 remains a separate route; direct Moon–minor hops are not supported.
+
+For optional read-only frame and fixed-clock readings during a playtest, see
+[frame diagnostics](NATIVE_FRAME_DIAGNOSTICS.md). The paused toggle does not
+change the journey or tune graphics automatically.
