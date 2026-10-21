@@ -7,6 +7,8 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomTravelSaveFormatVersion{27};
+// Explicit network selection; logical travel states remain1..4.
+inline constexpr std::uint32_t kFreedomNetworkTravelSaveFormatVersion{53};
 inline constexpr std::uint32_t kFreedomTravelStateVersion{1};
 inline constexpr std::uint32_t kFreedomLocalTravelSaveFormatVersion{45};
 inline constexpr std::uint32_t kFreedomLocalTravelStateVersion{2};

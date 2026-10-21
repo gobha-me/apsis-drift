@@ -323,6 +323,9 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("stage_freedom_new_game", "universe_seed"),
         &FreedomBridge::stage_freedom_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_network_new_game", "universe_seed"),
+        &FreedomBridge::stage_freedom_network_new_game);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_continue", "save_path"),
         &FreedomBridge::stage_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("stage_freedom_recovery"),
@@ -762,6 +765,14 @@ class FreedomBridge : public godot::RefCounted {
     return true;
   }
   auto stage_freedom_new_game(const godot::String& universe_seed) -> bool {
+    return stage_freedom_new_game_selection(universe_seed, false);
+  }
+  auto stage_freedom_network_new_game(const godot::String& universe_seed)
+      -> bool {
+    return stage_freedom_new_game_selection(universe_seed, true);
+  }
+  auto stage_freedom_new_game_selection(const godot::String& universe_seed,
+                                        bool network) -> bool {
     try {
       if (pending)
         throw std::invalid_argument("A Freedom start is already pending");
@@ -775,7 +786,8 @@ class FreedomBridge : public godot::RefCounted {
           (digits.size() > 1 && digits.front() == '0') ||
           read.ec != std::errc{} || read.ptr != digits.data() + digits.size())
         throw std::invalid_argument("New Game requires canonical decimal seed");
-      auto selected = native_new_game(seed);
+      auto selected =
+          network ? native_network_new_game(seed) : native_new_game(seed);
       if (!selected) throw std::runtime_error(selected.error());
       return stage_selected(std::move(*selected));
     } catch (const std::exception& e) {
@@ -2289,7 +2301,8 @@ class FreedomBridge : public godot::RefCounted {
     const bool supported =
         knowledge &&
         (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
-         knowledge->recipe.version == kFreedomTravelKnowledgeVersion);
+         knowledge->recipe.version == kFreedomTravelKnowledgeVersion ||
+         knowledge->recipe.version == kFreedomNetworkKnowledgeVersion);
     godot::Dictionary result;
     const auto version = knowledge && knowledge->surface_marker
                              ? knowledge->surface_marker->version
@@ -2885,8 +2898,6 @@ class FreedomBridge : public godot::RefCounted {
         chart["observed_facts"] = observed_facts;
         chart["observation_transitions"] = observation_transitions;
         chart["last_observation_tick"] = decimal(last_observation);
-        const auto route =
-            generate_first_universe_route(ledger.recipe.universe_seed);
         const auto view = require(resolve_freedom_knowledge_chart(
             ledger, session.system().catalog.id, *session.resources(),
             !session.travel() ||
@@ -2898,8 +2909,15 @@ class FreedomBridge : public godot::RefCounted {
           godot::Dictionary item;
           item["system_id"] =
               godot::String{system_id_string(row.system).c_str()};
-          item["name"] =
-              row.system == route.origin ? "Home system" : "Nearby system";
+          const auto identity = require(query_freedom_knowledge(
+              ledger,
+              {KnowledgeSubjectKind::system, row.system, row.system.value},
+              KnowledgeFact::identity_type, document.flight.tick));
+          if (!identity ||
+              !std::holds_alternative<KnownIdentity>(identity->value))
+            throw std::runtime_error("Chart identity is unavailable");
+          item["name"] = godot::String{
+              std::get<KnownIdentity>(identity->value).name.c_str()};
           item["confidence"] = godot::String{
               navigation_knowledge_level_name(row.knowledge).data()};
           item["current"] = row.system == view.current_system;
@@ -2918,7 +2936,7 @@ class FreedomBridge : public godot::RefCounted {
                             .data()};
           if (row.distance_metres)
             item["distance_light_seconds"] =
-                decimal(route.distance_light_seconds);
+                decimal(*row.distance_metres / kMetresPerLightSecond);
           rows.append(item);
         }
         chart["rows"] = rows;

@@ -1,5 +1,6 @@
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
+#include "native_local_route_reuse_fixture.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -35,14 +36,16 @@ auto hash(std::string_view value) -> void {
     fingerprint *= 1099511628211ULL;
   }
 }
-auto fixture(Seed seed, bool assisted = true) -> NativeFreedomFlightSession {
+auto fixture(Seed seed, bool assisted = true, bool network = false)
+    -> NativeFreedomFlightSession {
   // Valid saved spaceflight fixture. Existing station/boarding tests own the
   // earlier walk/seat/departure route; every jump below uses actual session
   // ticks.
   const auto system = need(generate_physical_origin_system(seed, 2));
   const auto& body = system.catalog.planets[0].descriptor;
   FreedomFlightSaveDocument flight;
-  flight.origin = make_freedom_new_game_document(seed);
+  flight.origin = network ? need(make_freedom_network_new_game_document(seed))
+                          : make_freedom_new_game_document(seed);
   flight.origin.state.tick = 240;
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
@@ -52,10 +55,13 @@ auto fixture(Seed seed, bool assisted = true) -> NativeFreedomFlightSession {
       RigidFrameKind::planet_relative_inertial, system.catalog.id, body.id, {}};
   flight.flight.tick = 240;
   flight.flight.position_metres = {0, 0, body.radius.value * 10000.0};
-  flight.world = FreedomActiveWorldSelection{1, system.catalog.id, body.id};
+  flight.world = FreedomActiveWorldSelection{network ? 2U : 1U,
+                                             system.catalog.id, body.id};
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              240};
-  auto knowledge = need(make_freedom_starting_knowledge(seed, 3));
+  auto knowledge = need(make_freedom_starting_knowledge(
+      seed, network ? kFreedomNetworkKnowledgeVersion
+                    : kFreedomTravelKnowledgeVersion));
   FreedomSurfaceSaveDocument surface{flight, {}};
   FreedomResourceSaveDocument fueled{std::move(surface), resources};
   FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(knowledge)};
@@ -375,6 +381,104 @@ auto marker_travel(const std::filesystem::path& path) -> void {
           hidden_session.knowledge()->entries == source.knowledge()->entries,
       "Another-body metadata neither invents a body name nor grants knowledge");
 }
+auto network_roundtrip(const std::filesystem::path& path) -> void {
+  const Seed seed{42};
+  const auto network = need(generate_freedom_system_network(seed));
+  const auto start = need(native_network_new_game(seed));
+  auto station = need(NativeFreedomFlightSession::open(start));
+  check(station.document().origin.network &&
+            station.knowledge()->recipe.version == 4 &&
+            station.docking()->attached && station.walker(),
+        "Explicit four-system new game starts walking on the actual station");
+  need(station.save_as(path));
+  auto station_copy =
+      need(NativeFreedomFlightSession::open(need(native_continue(path))));
+  check(need(station_copy.save_document()) == need(station.save_document()),
+        "Network station start saves and continues with the exact selected "
+        "owner");
+  auto neighbor = fixture(seed, true, true);
+  need(neighbor.select_jump(network.nodes[1].system));
+  leg(neighbor, path);
+  check(
+      neighbor.system().catalog.id == network.nodes[1].system,
+      "The original neighboring catalog remains an actual network destination");
+  auto live = std::move(station_copy);
+  for (unsigned t = 0; t < 1194; ++t)
+    need(live.advance_walk({0, -1, 0}));
+  need(live.begin_boarding());
+  for (unsigned t = 0; t < kGameplayBoardingTicks; ++t)
+    need(live.advance_walk({}));
+  need(live.release_port());
+  NativeFlightControls withdrawal;
+  withdrawal.negative_translation.y = .25;
+  for (unsigned t = 0; t < 720; ++t)
+    need(live.advance(withdrawal));
+  // Existing composed routes own physical departure/braking. Begin the new
+  // three-leg proof from an explicit valid space fixture, retaining the real
+  // boarded pilot, origin history, observed facts and already-spent departure
+  // fuel. This boundary is not an uninterrupted station-to-space flight proof.
+  auto space = need(fixture(seed, true, true).travel_document());
+  auto& flight =
+      std::get<FreedomFlightSaveDocument>(space.voyage.voyage.voyage.base);
+  flight.origin = live.document().origin;
+  flight.model = live.document().model;
+  flight.flight.orientation = live.document().flight.orientation;
+  flight.flight.tick = live.document().flight.tick;
+  space.voyage.voyage.resources = *live.resources();
+  space.voyage.knowledge = *live.knowledge();
+  space.seated_pilot = *live.boarding();
+  live = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(std::move(space)))));
+  const auto home = live.document().origin;
+  for (const auto ordinal : {2U, 3U, 0U}) {
+    const auto destination = network.nodes[ordinal].system;
+    need(live.select_jump(destination));
+    const auto preview = need(live.jump_preview());
+    check(preview.request.version == kFreedomNetworkJumpTargetingVersion &&
+              preview.request.network == home.network &&
+              preview.request.destination == destination,
+          "Native preview authenticates the selected network and actual "
+          "requested leg");
+    leg(live, path);
+    check(live.system() ==
+                  need(resolve_freedom_network_system(network, destination)) &&
+              live.document().origin.network == home.network &&
+              live.document().world->version == 2 &&
+              live.knowledge()->recipe.version == 4,
+          "Actual charged arrival installs the selected catalog without losing "
+          "the network owner");
+    if (ordinal != 0) {
+      const auto saved = need(live.travel_document());
+      check(!live.replenish_resources() && !live.select_port(1) &&
+                need(live.travel_document()) == saved,
+            "Added systems have no invented station or free service");
+    }
+  }
+  check(live.resources()->jump_charges == 0 &&
+            live.travel()->next_attempt == 4 &&
+            live.system().catalog.id == network.nodes[0].system,
+        "Home to A to B to Home spends exactly three real charges");
+  const auto arrival = need(live.travel_document());
+  check(!live.replenish_resources() && need(live.travel_document()) == arrival,
+        "Being in the Home system does not replenish fuel before physical "
+        "docking");
+  // Reuse the established physical return pilot: an intersystem arrival is
+  // not guaranteed to start inside the optional rendezvous aid's approach gate.
+  const auto fuel_before_capture = live.resources()->flight_quanta;
+  const auto capture_ticks = origin_route_reuse_fixture::capture_home(live);
+  check(capture_ticks > 0 &&
+            live.resources()->flight_quanta < fuel_before_capture,
+        "Actual network return flies to the moving station with rated fuelled "
+        "thrusters");
+  check(live.docking()->attached && live.resources()->jump_charges == 0,
+        "Real thrusters and explicit port capture return the empty drive to "
+        "service");
+  need(live.replenish_resources());
+  check(live.resources()->jump_charges == 3 &&
+            live.resources()->flight_quanta == kFreedomFlightCapacityQuanta,
+        "Origin service replenishes the physically docked four-system craft");
+  live = resume(live, path);
+}
 } // namespace
 auto main() -> int {
   const auto directory =
@@ -384,6 +488,7 @@ auto main() -> int {
            std::chrono::steady_clock::now().time_since_epoch().count()));
   try {
     std::filesystem::create_directories(directory);
+    network_roundtrip(directory / "network.json");
     invalid(directory / "phase.json");
     station_selection(directory / "phase.json");
     seated_continuity(directory / "phase.json");

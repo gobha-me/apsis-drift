@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/freedom_resources.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
 namespace apsis_drift {
@@ -13,6 +14,14 @@ namespace apsis_drift {
 [[nodiscard]] auto resolve_freedom_starting_chart(
     const FirstUniverseRoute& route, SystemId current_system,
     const FreedomResources& resources, bool selection_open = true,
+    const FreedomSaveDocument* instance_owner = nullptr)
+    -> std::expected<UniverseNavigationView, UniverseNavigationError>;
+
+// The selected finite network grants anchors only. It does not record visits,
+// expose local body catalogs, spend fuel or choose a multi-leg route.
+[[nodiscard]] auto resolve_freedom_network_chart(
+    const FreedomSystemNetwork&, SystemId current_system,
+    const FreedomResources&, bool selection_open = true,
     const FreedomSaveDocument* instance_owner = nullptr)
     -> std::expected<UniverseNavigationView, UniverseNavigationError>;
 

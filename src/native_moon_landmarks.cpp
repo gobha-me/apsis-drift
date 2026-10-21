@@ -12,7 +12,8 @@ auto supported_moon_landmarks(const std::optional<FreedomKnowledge>& knowledge)
     -> bool {
   return knowledge &&
          (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
-          knowledge->recipe.version == kFreedomTravelKnowledgeVersion);
+          knowledge->recipe.version == kFreedomTravelKnowledgeVersion ||
+          knowledge->recipe.version == kFreedomNetworkKnowledgeVersion);
 }
 auto rotated_moon_landmark(RigidOrientation q, MoonFixedPositionMetres v)
     -> RigidVector3 {

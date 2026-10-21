@@ -572,7 +572,7 @@ func build_ui() -> void:
 	chart_status = hud_text()
 	chart_status.visible = false
 	column.add_child(chart_status)
-	for ordinal in 2:
+	for ordinal in 4:
 		var destination := Button.new()
 		destination.focus_mode = Control.FOCUS_ALL
 		destination.pressed.connect(func(): select_jump_destination(ordinal))

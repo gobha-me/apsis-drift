@@ -592,6 +592,35 @@ auto lineage(Seed seed) -> void {
             !derive_freedom_craft_identity(seed, maximum),
         "Identity wrap excludes zero and refuses before a repeated starter");
 }
+auto network_recovery(const std::filesystem::path& path) -> void {
+  auto live = need(
+      NativeFreedomFlightSession::open(need(native_network_new_game({42}))));
+  const auto owner = live.document().origin;
+  const auto original = need(live.recovery_document());
+  need(live.record_loss(
+      FreedomLossCause::irrecoverable_destruction, owner.state.craft,
+      owner.state.tick,
+      need(freedom_recovery_source_checksum(original.voyage))));
+  need(live.save_as(path));
+  auto copy =
+      need(NativeFreedomFlightSession::open(need(native_continue(path))));
+  need(live.complete_recovery());
+  need(copy.complete_recovery());
+  check(live.document().origin.network == owner.network &&
+            live.document().world->version == 2 &&
+            live.knowledge()->recipe.version == 4 && live.docking()->attached &&
+            live.walker() &&
+            need(copy.recovery_document()) == need(live.recovery_document()),
+        "Network recovery retains the selected map across frozen loss and "
+        "replacement Continue");
+  auto tampered = need(live.recovery_document());
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(tampered.voyage);
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  assembly.journey.voyage.flight.origin.network.reset();
+  check(!validate_freedom_recovery_document(tampered),
+        "Recovery cannot silently replace the selected network with a pair");
+}
 } // namespace
 auto main() -> int {
   const auto path =
@@ -614,6 +643,7 @@ auto main() -> int {
          {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy})
       provider(Seed{42}, FreedomLossCause::recoverable_destruction, false, 0,
                policy);
+    network_recovery(path / "network-recovery.json");
     session_contract(path / "recovery.json");
     landmark_retention();
   } catch (const std::exception& e) {

@@ -11,6 +11,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomJumpTargetingVersion{1};
+inline constexpr std::uint32_t kFreedomNetworkJumpTargetingVersion{2};
 inline constexpr std::uint64_t kFreedomJumpRatedLightSeconds{360'000};
 inline constexpr std::uint64_t kFreedomJumpRatedMetres{
     kFreedomJumpRatedLightSeconds * kMetresPerLightSecond};
@@ -45,6 +46,7 @@ struct FreedomJumpRequest {
   IntersystemRuleProfile profile{IntersystemRuleProfile::assisted};
   std::uint64_t attempt{1};
   std::optional<FreedomCraftLineage> lineage{};
+  std::optional<FreedomNetworkSelection> network{};
   friend auto operator==(const FreedomJumpRequest&, const FreedomJumpRequest&)
       -> bool = default;
 };

@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_travel_save.hpp"
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "freedom_local_travel_save_internal.hpp"
 
 #include <array>
@@ -83,8 +84,19 @@ auto parse(std::string_view text) -> std::expected<Json, SaveSchemaError> {
         SaveSchemaError{SaveSchemaErrorCode::malformed_json, "$", e.what()}};
   }
 }
-auto source_world(Seed seed, SystemId system)
+auto source_world(Seed seed, SystemId system,
+                  const std::optional<FreedomNetworkSelection>& network = {})
     -> std::expected<PhysicalLocalSystem, SaveSchemaError> {
+  if (network) {
+    const auto topology =
+        generate_freedom_system_network(seed, network->version);
+    if (!topology)
+      return std::unexpected{failure("unsupported frozen network")};
+    auto result = resolve_freedom_network_system(*topology, system);
+    if (!result)
+      return std::unexpected{failure("unknown frozen network source")};
+    return std::move(*result);
+  }
   const auto ids = generate_first_intersystem_identities(seed);
   if (system != ids.origin_system && system != ids.target_system)
     return std::unexpected{failure("unknown frozen source world")};
@@ -128,7 +140,8 @@ auto resources_value(const Json& r)
 auto frozen_json(const FrozenFreedomJumpArrival& f)
     -> std::expected<Json, SaveSchemaError> {
   const auto& r = f.preview.request;
-  const auto system = source_world(r.universe_seed, r.source.frame.system);
+  const auto system =
+      source_world(r.universe_seed, r.source.frame.system, r.network);
   if (!system) return std::unexpected{system.error()};
   const auto body =
       encode_rigid_body_state_json(RigidBodyWorldContext{*system}, r.source);
@@ -147,6 +160,8 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
       {"point", {f.point.x, f.point.y, f.point.z}},
       {"arrival_tick", f.preview.arrival_tick},
       {"envelope_radius_metres", *f.preview.distance.envelope_radius_metres}};
+  if (r.network)
+    result["request"]["network"] = {{"version", r.network->version}};
   if (r.lineage)
     result["request"]["craft_lineage"] = {
         {"version", r.lineage->version},
@@ -162,14 +177,30 @@ auto frozen_value(const Json& f)
   const auto& r = f["request"];
   auto shape = r;
   shape.erase("craft_lineage");
+  shape.erase("network");
   if (!fields(shape, {"version", "universe_seed", "craft", "source_system",
                       "source", "destination", "profile", "attempt"}) ||
       !uints(r, {"version", "universe_seed", "craft", "source_system",
                  "destination", "profile", "attempt"}) ||
-      r["version"] != kFreedomJumpTargetingVersion ||
+      (r["version"] != kFreedomJumpTargetingVersion &&
+       r["version"] != kFreedomNetworkJumpTargetingVersion) ||
       r["profile"] > static_cast<unsigned>(IntersystemRuleProfile::pilot))
     return std::unexpected{failure("unsupported frozen request")};
   FreedomJumpRequest request;
+  request.version = r["version"].get<std::uint32_t>();
+  if ((request.version == kFreedomNetworkJumpTargetingVersion) !=
+      r.contains("network"))
+    return std::unexpected{
+        failure("frozen request network selection differs from policy")};
+  if (r.contains("network")) {
+    const auto& network = r["network"];
+    if (!fields(network, {"version"}) || !uints(network, {"version"}) ||
+        network["version"] != kFreedomSystemNetworkVersion)
+      return std::unexpected{
+          failure("invalid closed frozen network selection")};
+    request.network =
+        FreedomNetworkSelection{network["version"].get<std::uint32_t>()};
+  }
   request.universe_seed = {r["universe_seed"].get<std::uint64_t>()};
   request.craft = {r["craft"].get<std::uint64_t>()};
   request.destination = {r["destination"].get<std::uint64_t>()};
@@ -192,8 +223,9 @@ auto frozen_value(const Json& f)
   request.profile =
       static_cast<IntersystemRuleProfile>(r["profile"].get<unsigned>());
   request.attempt = r["attempt"].get<std::uint64_t>();
-  const auto system = source_world(request.universe_seed,
-                                   {r["source_system"].get<std::uint64_t>()});
+  const auto system =
+      source_world(request.universe_seed,
+                   {r["source_system"].get<std::uint64_t>()}, request.network);
   if (!system) return std::unexpected{system.error()};
   const auto source = decode_rigid_body_state_json(
       RigidBodyWorldContext{*system}, r["source"].dump());
@@ -282,7 +314,9 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
   const auto& s = d.travel;
   const auto& ledger = d.voyage.voyage.resources;
   if (!flight.world ||
-      d.voyage.knowledge.recipe.version != kFreedomTravelKnowledgeVersion ||
+      d.voyage.knowledge.recipe.version !=
+          (flight.origin.network ? kFreedomNetworkKnowledgeVersion
+                                 : kFreedomTravelKnowledgeVersion) ||
       s.version != kFreedomTravelStateVersion || !s.next_attempt ||
       (!d.craft_binding ||
        *d.craft_binding != NativeStartingAssemblySelection{}))
@@ -318,9 +352,20 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
           failure("saved pilot route differs from canonical entry")};
   }
 
+  std::optional<FreedomSystemNetwork> topology;
+  if (flight.origin.network) {
+    auto generated = generate_freedom_system_network(
+        flight.origin.recipe.universe_seed, flight.origin.network->version);
+    if (!generated || !find_freedom_system_network_node(*generated, current))
+      return std::unexpected{
+          failure("current network world is unauthenticated")};
+    topology = *generated;
+  }
   if (s.selected &&
       (*s.selected == current ||
-       (*s.selected != route.origin && *s.selected != route.destination)))
+       (topology ? !find_freedom_system_network_node(*topology, *s.selected)
+                 : (*s.selected != route.origin &&
+                    *s.selected != route.destination))))
     return std::unexpected{
         failure("selected destination is not the other known endpoint")};
   if (s.committed.has_value() != s.commitment_resources.has_value())
@@ -333,6 +378,7 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
         !f.preview.volume->clear() || !f.point_assessment.clear() ||
         f.preview.arrival_tick >=
             std::numeric_limits<SimulationTick>::max() - 2 ||
+        r.network != flight.origin.network ||
         r.universe_seed != flight.origin.recipe.universe_seed ||
         r.craft != ledger.craft || r.lineage != flight.origin.lineage ||
         r.attempt == std::numeric_limits<std::uint64_t>::max() ||
@@ -420,8 +466,11 @@ auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     pilot = Json::parse(*encoded);
   }
   const auto& s = d.travel;
+  const auto network =
+      surface_base_flight(d.voyage.voyage.voyage.base).origin.network;
   const Json root = {
-      {"format_version", kFreedomTravelSaveFormatVersion},
+      {"format_version", network ? kFreedomNetworkTravelSaveFormatVersion
+                                 : kFreedomTravelSaveFormatVersion},
       {"voyage", Json::parse(*voyage)},
       {"travel",
        {{"version", s.version},
@@ -447,11 +496,20 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root) return std::unexpected{root.error()};
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
-  if ((*root)["format_version"] == kFreedomLocalTravelSaveFormatVersion ||
+  const bool network_format =
+      (*root)["format_version"] == kFreedomNetworkTravelSaveFormatVersion;
+  if ((network_format && (*root)["travel"].is_object() &&
+       uints((*root)["travel"], {"version"}) &&
+       ((*root)["travel"]["version"] == kFreedomLocalTravelStateVersion ||
+        (*root)["travel"]["version"] == kFreedomMinorTravelStateVersion ||
+        (*root)["travel"]["version"] ==
+            kFreedomOriginLocalTravelStateVersion)) ||
+      (*root)["format_version"] == kFreedomLocalTravelSaveFormatVersion ||
       (*root)["format_version"] == kFreedomMinorTravelSaveFormatVersion ||
       (*root)["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion)
     return detail::decode_local_travel(*root);
-  if ((*root)["format_version"] != kFreedomTravelSaveFormatVersion)
+  if (!network_format &&
+      (*root)["format_version"] != kFreedomTravelSaveFormatVersion)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::unsupported_format_version,
                         "$.format_version", "unsupported travel format"}};
@@ -468,6 +526,9 @@ auto decode_freedom_travel_document_json(std::string_view text)
   auto voyage =
       decode_freedom_knowledge_document_json((*root)["voyage"].dump());
   if (!voyage) return std::unexpected{voyage.error()};
+  if (surface_base_flight(voyage->voyage.voyage.base)
+          .origin.network.has_value() != network_format)
+    return std::unexpected{failure("travel format/network selection mismatch")};
   FreedomTravelSaveDocument result;
   result.voyage = std::move(*voyage);
   result.travel.phase =

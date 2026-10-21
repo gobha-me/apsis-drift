@@ -1,3 +1,4 @@
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/landed_craft.hpp"
 #include "apsis_drift/native_flight_session.hpp"
@@ -81,11 +82,23 @@ struct Fixture {
   std::uint32_t terrain_policy;
   explicit Fixture(std::uint32_t policy = kFreedomLegacyTerrainPolicy)
       : terrain_policy(policy) {
+    prepare_fixed();
+  }
+  Fixture(PhysicalLocalSystem selected, PlanetId body, std::uint32_t policy)
+      : owner(std::move(selected)),
+        planet((*required(find_local_system_planet(owner, body))).descriptor),
+        rotation(required(generate_planet_rotation_recipe(owner, body))),
+        context(owner), terrain_policy(policy) {
+    prepare_fixed();
+  }
+  auto prepare_fixed(CubeFace face = CubeFace::positive_x,
+                     std::uint32_t tile_x = 4000, std::uint32_t tile_y = 4000)
+      -> void {
     auto cache = required(TerrainTileCache::create(1));
     const auto triangle =
         required(godot_spike::detail::build_selected_contact_triangle(
             owner, planet, *godot_spike::saved_contact_recipe(terrain_policy),
-            {planet.id, CubeFace::positive_x, 4000, 4000, 12, 13, 0}, cache));
+            {planet.id, face, tile_x, tile_y, 12, 13, 0}, cache));
     const auto a = triangle.vertices[0], b = triangle.vertices[1],
                c = triangle.vertices[2];
     const V center{a.x + .3 * ((b.x - a.x) + (c.x - a.x)),
@@ -1610,6 +1623,175 @@ auto surface_walk_session(const Fixture& f,
                                                   session.document().flight))
             << '\n';
 }
+// Actual station entry and charged system arrivals supply the owners, pilot,
+// resources and receipts. Each surface branch below is an explicitly placed
+// near-ground fixture on ONE unchanged canonical facet, not a flown descent.
+auto network_surface_walks() -> void {
+  const auto network = required(generate_freedom_system_network(Seed{42}));
+  auto route = required(NativeFreedomFlightSession::open(
+      required(native_network_new_game(Seed{42}))));
+  for (unsigned tick = 0; tick < 1194; ++tick)
+    required(route.advance_walk({0, -1, 0}));
+  required(route.begin_boarding());
+  for (unsigned tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    required(route.advance_walk({}));
+  required(route.release_port());
+  NativeFlightControls withdraw;
+  withdraw.negative_translation.y = .25;
+  for (unsigned tick = 0; tick < 720; ++tick)
+    required(route.advance(withdraw));
+  required(route.select_jump(network.nodes[1].system));
+  const auto bytes = [](const NativeFreedomFlightSession& session) {
+    return required(
+        encode_native_save_document_json(required(session.save_document())));
+  };
+  for (std::size_t ordinal = 0; ordinal < network.nodes.size(); ++ordinal) {
+    if (ordinal) {
+      required(route.select_jump(network.nodes[ordinal].system));
+      required(route.begin_jump());
+      for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+           ++tick)
+        required(route.advance({}));
+    }
+    check(route.system() == required(resolve_freedom_network_system(
+                                network, network.nodes[ordinal].system)) &&
+              route.document().world->version ==
+                  kFreedomNetworkActiveWorldVersion &&
+              route.resources()->jump_charges == kFreedomJumpCapacity - ordinal,
+          "Actual network arrival supplies the genuine surface world and "
+          "charged history");
+    const auto route_before = bytes(route);
+    auto selected = required(route.travel_document());
+    const auto pilot = *route.boarding();
+    auto flight = route.document();
+    Fixture fixture{route.system(), flight.world->planet,
+                    flight.model.terrain_policy};
+    // Qualify a site on this actual generated planet, rather than assuming
+    // Home's footprint also fits its water, slopes and finest triangles.
+    // Fixed finite candidates: the historical point, then four faces x four
+    // interior tiles. No seed reroll, terrain change or unknown-as-safe policy.
+    constexpr std::array faces{CubeFace::positive_x, CubeFace::negative_x,
+                               CubeFace::positive_z, CubeFace::negative_z};
+    constexpr std::array<std::array<std::uint32_t, 2>, 4> tiles{
+        {{2000, 2000}, {2000, 6000}, {6000, 2000}, {6000, 6000}}};
+    bool supported{};
+    unsigned support_refusals{}, hatch_refusals{}, site{};
+    for (; site < 17; ++site) {
+      if (site) {
+        const auto& tile = tiles[(site - 1) % tiles.size()];
+        fixture.prepare_fixed(faces[(site - 1) / tiles.size()], tile[0],
+                              tile[1]);
+      }
+      auto fixed = fixture.fixed;
+      // This explicit placement follows arrival by one tick, not a simulated
+      // descent or a same-tick improvement of an arrival observation.
+      fixed.tick = route.document().flight.tick + 1;
+      const auto source = fixture.source(fixed);
+      const auto anchor = prepare_landed_craft(
+          fixture.owner, fixture.rotation, source, true,
+          required(rigid_body_state_checksum(fixture.context, source)),
+          fixture.terrain_policy);
+      if (!anchor) {
+        ++support_refusals;
+        continue;
+      }
+      auto terrain = PlanetSurfaceWalkTerrain::create(
+          fixture.owner, fixture.rotation, *anchor, fixed.tick);
+      if (!terrain || !terrain->entry()) {
+        ++hatch_refusals;
+        continue;
+      }
+      flight.origin.state.tick = fixed.tick;
+      selected.voyage.voyage.resources.tick = fixed.tick;
+      flight.flight = source;
+      supported = true;
+      break;
+    }
+    std::cout << "Network site qualification ordinal=" << ordinal
+              << " candidate=" << site
+              << " support_refusals=" << support_refusals
+              << " hatch_refusals=" << hatch_refusals << '\n';
+    if (!supported)
+      throw std::runtime_error(
+          "No supported network site in 17 fixed candidates");
+    // Flatten only the current port owner for this contact fixture; retain the
+    // genuine boarding route, craft binding, travel receipts and all knowledge.
+    selected.voyage.voyage.voyage.base = flight;
+    selected.voyage.voyage.voyage.surface = {};
+    selected.seated_pilot = pilot;
+    auto session = required(NativeFreedomFlightSession::open(
+        required(native_select_save_document(selected))));
+    const auto initial_tick = session.document().flight.tick;
+    const auto resources = session.resources();
+    const auto receipt = *session.travel();
+    required(session.set_landing_gear(true));
+    const auto deployed = bytes(session);
+    const auto checksum = required(
+        rigid_body_state_checksum(fixture.context, session.document().flight));
+    check(!session.commit_touchdown(checksum ^ 1) && bytes(session) == deployed,
+          "Each network world refuses a stale touchdown without mutating its "
+          "complete Save");
+    required(session.commit_touchdown(checksum));
+    check(session.surface()->landed &&
+              session.surface()->landed->fixed.frame.system ==
+                  network.nodes[ordinal].system &&
+              session.surface()->landed->fixed.frame.planet ==
+                  flight.world->planet &&
+              session.document().flight.tick == initial_tick &&
+              session.resources() == resources && *session.travel() == receipt,
+          "Each actual native touchdown binds its own contact owner at the "
+          "same resource clock");
+    const auto anchor = session.surface()->landed;
+    required(session.begin_surface_walk());
+    const auto foot = *session.surface_walker();
+    check(foot.frame == anchor->fixed.frame &&
+              required(session.surface_return_access()).within_reach &&
+              session.document().origin.network == FreedomNetworkSelection{} &&
+              session.knowledge()->recipe.version ==
+                  kFreedomNetworkKnowledgeVersion,
+          "Each supported network surface transfers the actual seated actor "
+          "without owner aliases");
+    for (unsigned tick = 0; tick < 12; ++tick)
+      required(session.advance_surface_walk({-1, 0, 0}));
+    check(!session.surface_walk_blockage() &&
+              session.surface_walker()->foot_position_metres !=
+                  foot.foot_position_metres &&
+              session.document().flight.tick == initial_tick + 12 &&
+              session.resources()->tick == initial_tick + 12 &&
+              session.resources()->flight_quanta == resources->flight_quanta &&
+              session.resources()->jump_charges == resources->jump_charges &&
+              session.surface()->landed == anchor &&
+              *session.travel() == receipt,
+          "A real supported walk advances the one clock without fuel, charge "
+          "or receipt changes");
+    const auto saved = bytes(session);
+    auto continued = required(
+        NativeFreedomFlightSession::open(required(native_select_save_document(
+            required(decode_native_save_document_json(saved))))));
+    check(bytes(continued) == saved &&
+              continued.surface_walker() == session.surface_walker() &&
+              continued.system() == fixture.owner,
+          "Each network on-foot Save/Continue retains complete typed actor, "
+          "terrain and voyage");
+    required(session.advance_surface_walk({}));
+    required(continued.advance_surface_walk({}));
+    check(bytes(session) == bytes(continued),
+          "The next genuine supported tick is identical after network surface "
+          "Continue");
+    required(session.return_from_surface_walk());
+    check(!session.surface_walker() && session.surface()->landed == anchor &&
+              session.boarding()->phase == FreedomBoardingPhase::seated &&
+              session.document().flight.tick == initial_tick + 13 &&
+              bytes(route) == route_before,
+          "Network actor reboards the same craft while the separate actual "
+          "flight route stays untouched");
+    std::cout << "Network contact fixture ordinal=" << ordinal
+              << " system=" << fixture.owner.catalog.id.value
+              << " planet=" << fixture.planet.id.value
+              << " tick=" << initial_tick
+              << " supported_walk_ticks=13 (placed near-ground fixture)\n";
+  }
+}
 auto sea_datum_dry_walking() -> void {
   const Fixture raw{kFreedomLocalDetailTerrainPolicy};
   const Fixture sea{kSeaDatumTerrainPolicy};
@@ -2097,6 +2279,7 @@ auto main(int argc, char** argv) -> int {
       std::filesystem::create_directories(directory);
       daynight_snapshots(f, directory);
     } else if (argc == 2 && std::string_view{argv[1]} == "--local-detail") {
+      network_surface_walks();
       sea_datum_dry_walking();
       hull_and_idle(f);
       persistence_and_session(f);

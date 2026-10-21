@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_jump_targeting.hpp"
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 
 #include <algorithm>
@@ -351,9 +352,93 @@ auto invalid_contract() -> void {
   check(!preview_freedom_jump(r),
         "NaN source refuses before vector arithmetic");
 }
+auto network_contract() -> void {
+  const Seed seed{42};
+  const auto topology = need(generate_freedom_system_network(seed));
+  for (const auto& from : topology.nodes) {
+    const auto owner =
+        need(resolve_freedom_network_system(topology, from.system));
+    for (const auto& to : topology.nodes) {
+      if (from.system == to.system) continue;
+      auto request = fixture(seed);
+      request.version = kFreedomNetworkJumpTargetingVersion;
+      request.network = FreedomNetworkSelection{1};
+      request.source.frame.system = from.system;
+      request.source.frame.planet = owner.catalog.planets.front().descriptor.id;
+      request.source.position_metres = {
+          0, 0,
+          owner.catalog.planets.front().descriptor.radius.value * 12000.0};
+      request.destination = to.system;
+      const auto preview = need(preview_freedom_jump(request));
+      const auto frozen = need(freeze_freedom_jump_arrival(request));
+      const auto destination =
+          need(resolve_freedom_network_system(topology, to.system));
+      const long double x =
+          static_cast<long double>(to.position.x - from.position.x) +
+          (static_cast<long double>(preview.nominal_arrival.x) -
+           preview.source_position.x);
+      const long double y =
+          static_cast<long double>(to.position.y - from.position.y) +
+          (static_cast<long double>(preview.nominal_arrival.y) -
+           preview.source_position.y);
+      const long double z =
+          static_cast<long double>(to.position.z - from.position.z) +
+          (static_cast<long double>(preview.nominal_arrival.z) -
+           preview.source_position.z);
+      const auto distance = std::sqrt(x * x + y * y + z * z);
+      check(std::abs(static_cast<long double>(preview.distance_metres) -
+                     distance) < distance * 1e-14L,
+            "Policy2 uses actual full3D source/arrival geometry, not one "
+            "legacy distance");
+      check(preview.request == request && frozen.preview == preview &&
+                validate_frozen_freedom_jump_arrival(frozen).has_value() &&
+                frozen.point_assessment ==
+                    need(assess_freedom_arrival_volume(
+                        destination, preview.arrival_tick, frozen.point, 0)),
+            "All12 directed network legs retain authenticated source, "
+            "destination and frozen policy");
+      auto bad = request;
+      bad.network.reset();
+      check(!preview_freedom_jump(bad),
+            "Policy2 cannot lose its explicit selector");
+      bad = request;
+      bad.version = kFreedomJumpTargetingVersion;
+      check(!preview_freedom_jump(bad),
+            "Oldrequest1 cannot acquire a selector implicitly");
+      bad = request;
+      bad.network->version = 2;
+      check(!preview_freedom_jump(bad), "Unsupported network selector refuses");
+      bad = request;
+      bad.destination = from.system;
+      check(!preview_freedom_jump(bad), "Network same-world targeting refuses");
+      bad = request;
+      bad.source.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+      check(!preview_freedom_jump(bad), "Network nonfinite source refuses");
+      bad = request;
+      bad.source.frame.system = SystemId{0};
+      check(!preview_freedom_jump(bad), "Network unknown source refuses");
+      auto changed = frozen;
+      changed.preview.request.network.reset();
+      check(!validate_frozen_freedom_jump_arrival(changed),
+            "Frozen network selector cannot be stripped");
+      changed = frozen;
+      ++changed.preview.request.attempt;
+      check(!validate_frozen_freedom_jump_arrival(changed),
+            "Frozen network attempt cannot change");
+      if (from.ordinal >= 2 || to.ordinal >= 2) {
+        bad = request;
+        bad.version = kFreedomJumpTargetingVersion;
+        bad.network.reset();
+        check(!preview_freedom_jump(bad),
+              "Oldpair policy refuses added system IDs");
+      }
+    }
+  }
+}
 } // namespace
 auto main() -> int {
   try {
+    network_contract();
     distance_contract();
     alignment_contract();
     volume_contract();

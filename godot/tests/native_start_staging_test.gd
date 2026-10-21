@@ -181,6 +181,48 @@ func run() -> void:
 	shell.damage = ""
 	await check_boarding(shell, bridge)
 	await check_load(shell, bridge, args)
+	check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "network": true, "assets": args[0]}), "Four-system staged New Game refused: " + shell.error)
+	var network_state: Dictionary = bridge.get_freedom_flight_state()
+	check(shell.current_view is WalkView and network_state.chart.rows.size() == 4 and network_state.resources.jump_charges == 3, "Selected network lost actual station or finite drive")
+	for row in network_state.chart.rows:
+		check(row.confidence == "resolved" and row.known and row.valid, "Network chart invented visits or lost anchor grants")
+	check(network_state.chart.observed_facts == 0 and network_state.chart.observation_transitions == 0, "Network initialization invented sensor observations")
+	var network_save: String = args[1].get_base_dir().path_join("network-start.json")
+	check(bridge.save_freedom_as(network_save), "Network start Save As refused")
+	var network_hash := FileAccess.get_sha256(network_save)
+	check(shell.select_start(bridge, {"mode": "continue", "value": network_save, "assets": args[0]}), "Network station Continue refused: " + shell.error)
+	check(shell.current_view is WalkView and shell.current_view.paused and bridge.get_freedom_flight_state().chart == network_state.chart, "Network Continue lost paused actual station chart")
+	check(bridge.save_freedom_as(network_save) and FileAccess.get_sha256(network_save) == network_hash, "Network Continue changed complete saved owner bytes")
+	# Use actual station walking and completed boarding before admitting the
+	# flight scene; only chart selection is under test here, with no jump bill.
+	# Batch presentation calls at 30 Hz, retaining every authoritative 120 Hz tick.
+	for frame in 298:
+		check(bridge.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, -1.0, 0.0])), "Network station walking refused")
+	check(bridge.advance_freedom_walk(1.0 / 60.0, PackedFloat64Array([0.0, -1.0, 0.0])), "Network final station walking ticks refused")
+	check(bridge.begin_freedom_boarding(), "Network actual boarding refused")
+	for frame in 360:
+		check(bridge.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])), "Network boarding tick refused")
+	check(bridge.get_freedom_boarding_state().get("seated", false), "Network pilot did not reach the seat")
+	var boarded_save: String = args[1].get_base_dir().path_join("network-boarded.json")
+	check(bridge.save_freedom_as(boarded_save), "Network seated save refused")
+	check(shell.select_start(bridge, {"mode": "continue", "value": boarded_save, "assets": args[0]}), "Network seated scene staging refused: " + shell.error)
+	if shell.current_view is FlightView:
+		var network_flight: Control = shell.current_view
+		network_flight.set_process(false)
+		network_flight.controls_menu.hide_menu()
+		network_flight.chart_button.button_pressed = true
+		network_flight._process(0.0)
+		check(network_flight.jump_destinations.size() == 4, "Flight scene lost network chart actions")
+		var before_choice: Dictionary = bridge.get_freedom_flight_state()
+		var before_facts: Dictionary = bridge.get_freedom_observations()
+		for ordinal in [1, 2, 3]:
+			check(not network_flight.jump_destinations[ordinal].disabled, "Known network destination action is disabled")
+			network_flight.jump_destinations[ordinal].pressed.emit()
+			var chosen: Dictionary = bridge.get_freedom_flight_state()
+			check(chosen.jump.selected == chosen.chart.rows[ordinal].system_id and chosen.jump.phase == "idle", "Actual network chart button selected the wrong destination")
+			check(chosen.tick == before_choice.tick and chosen.resources == before_choice.resources and bridge.get_freedom_observations() == before_facts, "Chart choice changed clock, resources or knowledge")
+	else:
+		check(false, "A seated network Continue did not create the actual flight view")
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

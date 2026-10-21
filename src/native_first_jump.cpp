@@ -89,9 +89,18 @@ auto NativeFreedomFlightSession::jump_selection_available(
     return std::unexpected{"A resolved system location is required"};
   const auto route =
       generate_first_universe_route(document_.origin.recipe.universe_seed);
-  if (destination == document_.flight.frame.system ||
-      (destination != route.origin && destination != route.destination))
-    return std::unexpected{"Select the other known system"};
+  bool known_destination =
+      destination == route.origin || destination == route.destination;
+  if (document_.origin.network) {
+    const auto network =
+        generate_freedom_system_network(document_.origin.recipe.universe_seed,
+                                        document_.origin.network->version);
+    known_destination =
+        network &&
+        find_freedom_system_network_node(*network, destination).has_value();
+  }
+  if (destination == document_.flight.frame.system || !known_destination)
+    return std::unexpected{"Select another known system"};
   const auto body = relative_state();
   if (!body || body->frame.kind != RigidFrameKind::planet_relative_inertial ||
       body->frame.system != system_.catalog.id || !body->frame.planet ||
@@ -136,6 +145,7 @@ auto NativeFreedomFlightSession::jump_selection_available(
           request.universe_seed != document_.origin.recipe.universe_seed ||
           request.craft != document_.origin.state.craft ||
           request.lineage != document_.origin.lineage ||
+          request.network != document_.origin.network ||
           !validate_freedom_resources(bill) || !bill.jump_charges ||
           bill.craft != request.craft || bill.frame != request.source.craft ||
           bill.tick != request.source.tick)
@@ -183,11 +193,14 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
     // Shared admission already qualified this as the ordinary home selection.
     candidate.travel_ = FreedomTravelState{};
     candidate.document_.world = FreedomActiveWorldSelection{
-        1, document_.flight.frame.system, *document_.flight.frame.planet};
-    candidate.knowledge_->recipe.version = kFreedomTravelKnowledgeVersion;
-    candidate.knowledge_->recipe.observation_policy =
-        kFreedomLocalObservationPolicy;
-    candidate.knowledge_->recipe.world_domain = 1;
+        document_.origin.network ? 2U : 1U, document_.flight.frame.system,
+        *document_.flight.frame.planet};
+    if (!document_.origin.network) {
+      candidate.knowledge_->recipe.version = kFreedomTravelKnowledgeVersion;
+      candidate.knowledge_->recipe.observation_policy =
+          kFreedomLocalObservationPolicy;
+      candidate.knowledge_->recipe.world_domain = 1;
+    }
   }
   candidate.travel_->selected = destination;
   if (auto v = candidate.travel_document(); !v)
@@ -227,6 +240,8 @@ auto NativeFreedomFlightSession::jump_preview() const
   request.universe_seed = document_.origin.recipe.universe_seed;
   request.craft = document_.origin.state.craft;
   request.lineage = document_.origin.lineage;
+  request.network = document_.origin.network;
+  if (request.network) request.version = kFreedomNetworkJumpTargetingVersion;
   request.source = document_.flight;
   request.destination = *travel_->selected;
   request.attempt = travel_->next_attempt;
@@ -411,10 +426,23 @@ auto NativeFreedomFlightSession::advance_jump(
       const auto& request = frozen.preview.request;
       const auto ids =
           generate_first_intersystem_identities(request.universe_seed);
-      auto system =
-          request.destination == ids.origin_system
-              ? generate_physical_origin_system(request.universe_seed, 2)
-              : generate_physical_local_system(ids.target_system_seed, 2);
+      auto system = [&]()
+          -> std::expected<PhysicalLocalSystem, PhysicalLocalSystemError> {
+        if (request.network) {
+          const auto network = generate_freedom_system_network(
+              request.universe_seed, request.network->version);
+          if (!network)
+            return std::unexpected{PhysicalLocalSystemError::invalid_context};
+          auto selected =
+              resolve_freedom_network_system(*network, request.destination, 2);
+          if (!selected)
+            return std::unexpected{PhysicalLocalSystemError::invalid_context};
+          return std::move(*selected);
+        }
+        return request.destination == ids.origin_system
+                   ? generate_physical_origin_system(request.universe_seed, 2)
+                   : generate_physical_local_system(ids.target_system_seed, 2);
+      }();
       if (!system)
         return std::unexpected{"Arrival physical world is unavailable"};
       const auto body =
@@ -440,7 +468,8 @@ auto NativeFreedomFlightSession::advance_jump(
         return std::unexpected{"Arrival rigid handoff is invalid"};
       candidate.document_.flight = *canonical;
       candidate.document_.world = FreedomActiveWorldSelection{
-          1, request.destination, frozen.preview.reference_planet};
+          request.network ? 2U : 1U, request.destination,
+          frozen.preview.reference_planet};
       candidate.document_.model.hold = OrbitHoldRequest{};
       auto hydrated = hydrate_freedom_flight_document(candidate.document_);
       if (!hydrated) return std::unexpected{hydrated.error().detail};

@@ -20,7 +20,8 @@ auto supports_landmarks(const std::optional<FreedomKnowledge>& knowledge)
     -> bool {
   return knowledge &&
          (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
-          knowledge->recipe.version == kFreedomTravelKnowledgeVersion);
+          knowledge->recipe.version == kFreedomTravelKnowledgeVersion ||
+          knowledge->recipe.version == kFreedomNetworkKnowledgeVersion);
 }
 } // namespace
 

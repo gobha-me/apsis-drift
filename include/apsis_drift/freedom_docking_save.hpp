@@ -5,6 +5,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomDockingSaveFormatVersion{19};
+inline constexpr std::uint32_t kFreedomNetworkDockingSaveFormatVersion{51};
 inline constexpr std::uint32_t kFreedomTerrainDockingSaveFormatVersion{32};
 inline constexpr std::uint32_t kFreedomReleaseDockingSaveFormatVersion{37};
 inline constexpr std::uint32_t kFreedomOpticalDockingSaveFormatVersion{40};

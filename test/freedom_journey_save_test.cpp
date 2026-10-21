@@ -32,6 +32,31 @@ auto current(const NativeFreedomFlightSession& session)
     -> FreedomJourneySaveDocument {
   return {{session.document(), *session.docking()}, *session.walker()};
 }
+auto network_roundtrip() -> void {
+  auto source = require(make_freedom_journey_new_game_document(Seed{42}));
+  auto& flight = source.voyage.flight;
+  flight.origin.network = FreedomNetworkSelection{};
+  flight.world = FreedomActiveWorldSelection{2, flight.flight.frame.system,
+                                             *flight.flight.frame.planet};
+  const auto bytes = require(encode_freedom_journey_document_json(source));
+  const auto json = Json::parse(bytes);
+  check(json["format_version"] == kFreedomNetworkJourneySaveFormatVersion &&
+            require(decode_freedom_journey_document_json(bytes)) == source &&
+            require(encode_freedom_journey_document_json(
+                require(decode_freedom_journey_document_json(bytes)))) == bytes,
+        "journey52 retains actual station actor, network and nested50/51 "
+        "selection");
+  for (const auto old : {20U, 33U, 38U, 41U}) {
+    auto bad = json;
+    bad["format_version"] = old;
+    check(!decode_freedom_journey_document_json(bad.dump()),
+          "network journey refuses historical pair envelopes");
+  }
+  auto bad = json;
+  bad.erase("network");
+  check(!decode_freedom_journey_document_json(bad.dump()),
+        "journey52 does not infer network selection");
+}
 auto terrain_nested_roundtrips() -> void {
   auto old = require(make_freedom_journey_new_game_document(Seed{42}));
   const auto old_text = require(encode_freedom_journey_document_json(old));
@@ -502,6 +527,7 @@ int main() {
   try {
     invalid();
     release_frame_nested_roundtrips();
+    network_roundtrip();
     terrain_nested_roundtrips();
     roundtrip();
     std::cout << "Freedom journey save contract passed\n";

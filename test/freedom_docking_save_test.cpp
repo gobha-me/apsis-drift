@@ -63,6 +63,44 @@ struct Fixture {
         {NativeStartup::Mode::freedom, std::move(d), planet, {}}));
   }
 };
+auto network_roundtrips() -> void {
+  const Fixture fixture{Seed{42}, 2};
+  auto detached = fixture.document();
+  detached.flight.origin.network = FreedomNetworkSelection{};
+  detached.flight.world = FreedomActiveWorldSelection{
+      2, fixture.system.catalog.id, fixture.station.orbit.host_planet};
+  auto attached = detached;
+  attached.docking.attached = true;
+  attached.flight.flight = require(release_origin_port(
+      fixture.system, fixture.station, fixture.geometry,
+      {1, detached.docking.target, detached.flight.flight.craft,
+       detached.flight.flight.tick}));
+  auto system = detached;
+  system.flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  system.flight.flight = require(reframe_rigid_body(
+      RigidBodyWorldContext{fixture.system}, detached.flight.flight,
+      {{RigidFrameKind::system_inertial, fixture.system.catalog.id, {}, {}},
+       detached.flight.flight.tick}));
+  for (const auto& source : {detached, attached, system}) {
+    const auto bytes = require(encode_freedom_docking_document_json(source));
+    const auto json = Json::parse(bytes);
+    check(json["format_version"] == kFreedomNetworkDockingSaveFormatVersion &&
+              require(decode_freedom_docking_document_json(bytes)) == source &&
+              require(encode_freedom_docking_document_json(require(
+                  decode_freedom_docking_document_json(bytes)))) == bytes,
+          "docking51 retains explicit network, attachment and canonical frame");
+    for (const auto old : {19U, 32U, 37U, 40U}) {
+      auto bad = json;
+      bad["format_version"] = old;
+      check(!decode_freedom_docking_document_json(bad.dump()),
+            "network docking cannot downgrade into a historical envelope");
+    }
+    auto bad = json;
+    bad.erase("network");
+    check(!decode_freedom_docking_document_json(bad.dump()),
+          "docking51 refuses an omitted selector");
+  }
+}
 auto release_frame_roundtrips() -> void {
   const Fixture fixture{Seed{42}, 2};
   auto detached = fixture.document();
@@ -409,6 +447,7 @@ auto main() -> int {
   std::filesystem::create_directory(dir);
   try {
     invalid();
+    network_roundtrips();
     release_frame_roundtrips();
     lifecycle(dir);
     approach_aid();

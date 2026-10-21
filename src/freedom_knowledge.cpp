@@ -19,16 +19,25 @@ struct KnowledgeWorld {
   OriginStationDescriptor station;
   std::optional<PhysicalLocalSystem> neighbor;
   std::optional<FreedomCraftLineage> craft_lineage;
+  std::optional<FreedomSystemNetwork> network;
+  std::vector<PhysicalLocalSystem> additional;
 };
 auto world(const FreedomKnowledgeRecipe& r)
     -> std::expected<KnowledgeWorld, Error> {
   auto expected = FreedomKnowledgeRecipe{r.version, r.universe_seed};
   if (r.version == kFreedomObservedKnowledgeVersion ||
-      r.version == kFreedomTravelKnowledgeVersion)
+      r.version == kFreedomTravelKnowledgeVersion ||
+      r.version == kFreedomNetworkKnowledgeVersion)
     expected.observation_policy = 1;
   if (r.version == kFreedomTravelKnowledgeVersion) expected.world_domain = 1;
+  if (r.version == kFreedomNetworkKnowledgeVersion) {
+    expected.chart = 2;
+    expected.topology = 2;
+    expected.world_domain = 2;
+  }
   if (r.craft_lineage) {
-    if (r.version != kFreedomTravelKnowledgeVersion ||
+    if ((r.version != kFreedomTravelKnowledgeVersion &&
+         r.version != kFreedomNetworkKnowledgeVersion) ||
         r.craft_lineage->version != kFreedomCraftLineageVersion ||
         !r.craft_lineage->generation ||
         !derive_freedom_craft_identity(r.universe_seed,
@@ -38,24 +47,42 @@ auto world(const FreedomKnowledgeRecipe& r)
   }
   if ((r.version != kFreedomKnowledgeVersion &&
        r.version != kFreedomObservedKnowledgeVersion &&
-       r.version != kFreedomTravelKnowledgeVersion) ||
+       r.version != kFreedomTravelKnowledgeVersion &&
+       r.version != kFreedomNetworkKnowledgeVersion) ||
       r != expected)
     return std::unexpected{Error::unsupported_recipe};
   auto origin =
       generate_physical_origin_system(r.universe_seed, r.physical_catalog);
   if (!origin) return std::unexpected{Error::unsupported_recipe};
   std::optional<PhysicalLocalSystem> neighbor;
-  if (r.version == kFreedomTravelKnowledgeVersion) {
+  if (r.version == kFreedomTravelKnowledgeVersion ||
+      r.version == kFreedomNetworkKnowledgeVersion) {
     const auto ids = generate_first_intersystem_identities(r.universe_seed);
     auto system = generate_physical_local_system(ids.target_system_seed,
                                                  r.physical_catalog);
     if (!system) return std::unexpected{Error::unsupported_recipe};
     neighbor = std::move(*system);
   }
+  std::optional<FreedomSystemNetwork> network;
+  std::vector<PhysicalLocalSystem> additional;
+  if (r.version == kFreedomNetworkKnowledgeVersion) {
+    auto selected = generate_freedom_system_network(r.universe_seed);
+    if (!selected) return std::unexpected{Error::unsupported_recipe};
+    network = *selected;
+    for (std::size_t i = 2; i < network->nodes.size(); ++i) {
+      auto system = resolve_freedom_network_system(
+          *network, network->nodes[i].system, r.physical_catalog);
+      if (!system) return std::unexpected{Error::unsupported_recipe};
+      additional.push_back(std::move(*system));
+    }
+  }
   return KnowledgeWorld{generate_first_universe_route(r.universe_seed),
                         std::move(*origin),
                         generate_origin_station(r.universe_seed),
-                        std::move(neighbor), r.craft_lineage};
+                        std::move(neighbor),
+                        r.craft_lineage,
+                        network,
+                        std::move(additional)};
 }
 auto key(KnowledgeSubject s, KnowledgeFact f) {
   return std::tuple{s.kind, s.system.value, s.identity, f};
@@ -72,7 +99,9 @@ auto system_for(const KnowledgeWorld& w, SystemId id)
     -> const PhysicalLocalSystem* {
   if (id == w.origin.catalog.id) return &w.origin;
   if (w.neighbor && id == w.neighbor->catalog.id) return &*w.neighbor;
-  return nullptr;
+  const auto found = std::ranges::find_if(
+      w.additional, [&](const auto& s) { return s.catalog.id == id; });
+  return found == w.additional.end() ? nullptr : &*found;
 }
 auto planet(const KnowledgeWorld& w, KnowledgeSubject s)
     -> const LocalSystemPlanet* {
@@ -88,7 +117,10 @@ auto valid_subject(const KnowledgeWorld& w, KnowledgeSubject s) -> bool {
   switch (s.kind) {
     case KnowledgeSubjectKind::system:
       return s.identity == s.system.value &&
-             (s.system == w.route.origin || s.system == w.route.destination);
+             (w.network ? find_freedom_system_network_node(*w.network, s.system)
+                              .has_value()
+                        : (s.system == w.route.origin ||
+                           s.system == w.route.destination));
     case KnowledgeSubjectKind::planet: return planet(w, s) != nullptr;
     case KnowledgeSubjectKind::station:
       return s.system == w.route.origin && s.identity == w.station.id.value;
@@ -120,11 +152,17 @@ auto baseline(const KnowledgeWorld& w) -> std::vector<KnowledgeEntry> {
                     f,
                     {{NavigationKnowledgeLevel::resolved,
                       KnowledgeSource::starting_chart,
-                      kFreedomStartingChartVersion,
+                      w.network ? 2U : kFreedomStartingChartVersion,
                       0,
                       {}}}});
   };
-  for (const auto system : std::array{w.route.origin, w.route.destination}) {
+  std::vector<SystemId> anchors{w.route.origin, w.route.destination};
+  if (w.network) {
+    anchors.clear();
+    for (const auto& node : w.network->nodes)
+      anchors.push_back(node.system);
+  }
+  for (const auto system : anchors) {
     const KnowledgeSubject s{KnowledgeSubjectKind::system, system,
                              system.value};
     add(s, KnowledgeFact::identity_type);
@@ -195,12 +233,14 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
               SimulationTick now) -> std::expected<void, Error> {
   if (now == std::numeric_limits<SimulationTick>::max())
     return std::unexpected{Error::invalid_tick};
-  if (k.entries.size() > kMaximumFreedomKnowledgeFacts)
+  if (k.entries.size() > (w.network ? kMaximumFreedomNetworkKnowledgeFacts
+                                    : kMaximumFreedomKnowledgeFacts))
     return std::unexpected{Error::oversized_ledger};
   if (k.orbital_surveys) {
     const auto& surveys = *k.orbital_surveys;
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
-         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+         k.recipe.version != kFreedomTravelKnowledgeVersion &&
+         k.recipe.version != kFreedomNetworkKnowledgeVersion) ||
         surveys.version != kFreedomOrbitalSurveyVersion ||
         surveys.completed.size() > kMaximumFreedomOrbitalSurveys)
       return std::unexpected{Error::invalid_orbital_surveys};
@@ -254,7 +294,8 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
   }
   if (k.surface_marker) {
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
-         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+         k.recipe.version != kFreedomTravelKnowledgeVersion &&
+         k.recipe.version != kFreedomNetworkKnowledgeVersion) ||
         (k.surface_marker->version != kFreedomSurfaceMarkerVersion &&
          k.surface_marker->version != kFreedomMoonSurfaceMarkerVersion))
       return std::unexpected{Error::invalid_surface_marker};
@@ -305,7 +346,8 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
   if (k.surface_landmarks) {
     const auto& landmarks = *k.surface_landmarks;
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
-         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+         k.recipe.version != kFreedomTravelKnowledgeVersion &&
+         k.recipe.version != kFreedomNetworkKnowledgeVersion) ||
         landmarks.version != kFreedomSurfaceLandmarkVersion ||
         landmarks.inspections.size() >
             kMaximumFreedomSurfaceLandmarkInspections)
@@ -333,7 +375,8 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
   if (k.moon_surface_landmarks) {
     const auto& landmarks = *k.moon_surface_landmarks;
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
-         k.recipe.version != kFreedomTravelKnowledgeVersion) ||
+         k.recipe.version != kFreedomTravelKnowledgeVersion &&
+         k.recipe.version != kFreedomNetworkKnowledgeVersion) ||
         landmarks.version != kFreedomMoonSurfaceLandmarkVersion)
       return std::unexpected{Error::invalid_surface_landmarks};
     const auto catalog = generate_secondary_body_catalog(w.origin);
@@ -396,13 +439,28 @@ auto value(const KnowledgeWorld& w, const KnowledgeEntry& e)
       if (p) return KnownIdentity{p->descriptor.display_name};
       if (e.subject.kind == KnowledgeSubjectKind::station)
         return KnownIdentity{"Origin Station"};
+      if (w.network) {
+        const auto node =
+            find_freedom_system_network_node(*w.network, e.subject.system);
+        if (!node) return std::unexpected{Error::invalid_subject};
+        constexpr std::array names{"Home system", "Nearby system", "Waypoint A",
+                                   "Waypoint B"};
+        return KnownIdentity{names[node->ordinal]};
+      }
       return KnownIdentity{
           e.subject.system == w.route.origin ? "Home system" : "Nearby system"};
     case KnowledgeFact::location:
-      if (e.subject.kind == KnowledgeSubjectKind::system)
+      if (e.subject.kind == KnowledgeSubjectKind::system) {
+        if (w.network) {
+          const auto node =
+              find_freedom_system_network_node(*w.network, e.subject.system);
+          if (!node) return std::unexpected{Error::invalid_subject};
+          return node->position;
+        }
         return e.subject.system == w.route.origin
                    ? w.route.origin_position
                    : w.route.destination_position;
+      }
       if (p) {
         const auto& o = p->orbit;
         return KnownOrbit{o.radius_kilometres,    o.period_ticks,
@@ -456,9 +514,15 @@ auto make_freedom_starting_knowledge(Seed seed, std::uint32_t version)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError> {
   FreedomKnowledgeRecipe recipe{version, seed};
   if (version == kFreedomObservedKnowledgeVersion ||
-      version == kFreedomTravelKnowledgeVersion)
+      version == kFreedomTravelKnowledgeVersion ||
+      version == kFreedomNetworkKnowledgeVersion)
     recipe.observation_policy = 1;
   if (version == kFreedomTravelKnowledgeVersion) recipe.world_domain = 1;
+  if (version == kFreedomNetworkKnowledgeVersion) {
+    recipe.chart = 2;
+    recipe.topology = 2;
+    recipe.world_domain = 2;
+  }
   auto w = world(recipe);
   if (!w) return std::unexpected{w.error()};
   return FreedomKnowledge{recipe, baseline(*w)};
@@ -529,9 +593,19 @@ auto resolve_freedom_knowledge_chart(const FreedomKnowledge& k,
     -> std::expected<UniverseNavigationView, FreedomKnowledgeError> {
   if (auto v = validate_freedom_knowledge(k, resources.tick); !v)
     return std::unexpected{v.error()};
-  auto view = resolve_freedom_starting_chart(
-      generate_first_universe_route(k.recipe.universe_seed), current, resources,
-      selection_open, instance_owner);
+  auto view =
+      [&]() -> std::expected<UniverseNavigationView, UniverseNavigationError> {
+    if (k.recipe.version == kFreedomNetworkKnowledgeVersion) {
+      auto network = generate_freedom_system_network(k.recipe.universe_seed);
+      if (!network)
+        return std::unexpected{UniverseNavigationError::invalid_route};
+      return resolve_freedom_network_chart(*network, current, resources,
+                                           selection_open, instance_owner);
+    }
+    return resolve_freedom_starting_chart(
+        generate_first_universe_route(k.recipe.universe_seed), current,
+        resources, selection_open, instance_owner);
+  }();
   if (!view) return std::unexpected{Error::invalid_ledger};
   for (auto& row : view->destinations) {
     const auto presence =

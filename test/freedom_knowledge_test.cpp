@@ -810,6 +810,92 @@ auto native_saves(const std::filesystem::path& dir) -> void {
                                                fuel.tick)) == ktext,
         "Chart projection and selection award no evidence, fuel or time");
 }
+auto network_knowledge() -> void {
+  const Seed seed{42};
+  const auto network = need(generate_freedom_system_network(seed));
+  auto k = need(
+      make_freedom_starting_knowledge(seed, kFreedomNetworkKnowledgeVersion));
+  check(k.recipe.chart == 2 && k.recipe.topology == 2 &&
+            k.recipe.world_domain == 2,
+        "Four-system chart is an explicit recipe selection");
+  const auto initial = k;
+  SimulationTick tick{1};
+  for (const auto& node : network.nodes) {
+    const KnowledgeSubject subject{KnowledgeSubjectKind::system, node.system,
+                                   node.system.value};
+    const auto location = need(
+        query_freedom_knowledge(initial, subject, KnowledgeFact::location, 0));
+    check(location &&
+              std::get<UniversePositionMetres>(location->value) ==
+                  node.position &&
+              location->provenance.source == KnowledgeSource::starting_chart &&
+              location->provenance.source_id == 2 &&
+              !need(query_freedom_knowledge(initial, subject,
+                                            KnowledgeFact::presence, 0)),
+          "Every network anchor is charted without inventing a visit");
+    const auto system =
+        need(resolve_freedom_network_system(network, node.system));
+    for (const auto& body : system.catalog.planets) {
+      const KnowledgeSubject planet{KnowledgeSubjectKind::planet, node.system,
+                                    body.descriptor.id.value};
+      if (node.ordinal != 0)
+        check(!need(query_freedom_knowledge(initial, planet,
+                                            KnowledgeFact::identity_type, 0)),
+              "Charting a remote system does not reveal its body catalog");
+      for (auto fact : {KnowledgeFact::identity_type, KnowledgeFact::location,
+                        KnowledgeFact::physical, KnowledgeFact::atmosphere,
+                        KnowledgeFact::hazards, KnowledgeFact::landing})
+        k = need(apply_freedom_knowledge(
+            k,
+            event(seed, planet, fact, NavigationKnowledgeLevel::resolved, tick),
+            tick));
+      ++tick;
+      k = need(apply_freedom_knowledge(
+          k,
+          event(seed, planet, KnowledgeFact::presence,
+                NavigationKnowledgeLevel::visited, tick),
+          tick));
+      ++tick;
+    }
+    k = need(
+        apply_freedom_knowledge(k,
+                                event(seed, subject, KnowledgeFact::presence,
+                                      NavigationKnowledgeLevel::visited, tick),
+                                tick));
+    ++tick;
+  }
+  const auto encoded = need(encode_freedom_knowledge_json(k, tick));
+  check(need(decode_freedom_knowledge_json(encoded, tick)) == k &&
+            k.entries.size() <= kMaximumFreedomNetworkKnowledgeFacts,
+        "Actual facts from all four catalogs roundtrip within the selected "
+        "capacity");
+  auto padded = need(encode_freedom_knowledge_json(initial, 0));
+  padded.append(kMaximumFreedomKnowledgeBytes, ' ');
+  check(decode_freedom_knowledge_json(padded, 0).has_value(),
+        "Selected network has its own bounded knowledge byte capacity");
+  auto legacy = need(encode_freedom_knowledge_json(
+      need(make_freedom_starting_knowledge(seed, 3)), 0));
+  legacy.append(kMaximumFreedomKnowledgeBytes, ' ');
+  check(!decode_freedom_knowledge_json(legacy, 0),
+        "Legacy byte bound does not widen when network support is added");
+  auto corrupt = Json::parse(encoded);
+  corrupt["recipe"]["version"] = 3U;
+  check(!decode_freedom_knowledge_json(corrupt.dump(), tick),
+        "Network facts cannot be relabeled as the legacy pair domain");
+  auto owner = need(make_freedom_network_new_game_document(seed));
+  owner.state.tick = tick;
+  const FreedomResources fuel{
+      1, owner.state.craft, {kWayfarerFrameId, kWayfarerFrameVersion}, tick};
+  const auto chart = need(resolve_freedom_knowledge_chart(
+      k, network.nodes[2].system, fuel, true, &owner));
+  check(chart.destinations.size() == 4 &&
+            std::ranges::count_if(
+                chart.destinations,
+                [](const auto& row) { return row.selectable; }) == 3,
+        "Away-system chart offers every other finite destination");
+  check(!resolve_freedom_knowledge_chart(k, network.nodes[2].system, fuel),
+        "Four-system chart requires its explicit authenticated origin owner");
+}
 } // namespace
 
 auto main() -> int {
@@ -822,6 +908,7 @@ auto main() -> int {
   try {
     for (auto seed : {Seed{0}, Seed{42}, Seed{UINT64_MAX}})
       fixture(seed);
+    network_knowledge();
     invalid_inputs();
     surface_marker_metadata();
     moon_surface_marker_metadata();

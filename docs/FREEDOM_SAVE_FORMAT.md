@@ -3,7 +3,7 @@
 This page describes the original station-only layer. Current native journeys
 compose the later flight, docking, walking and resource layers; their
 [explicit terrain selection](SELECTED_NATIVE_TERRAIN.md) uses formats 31/32/33
-for policy2 and preserves historical envelopes unchanged.
+for policy 2 and preserves historical envelopes unchanged.
 
 The C++ save owner writes an explicit `mode: "freedom"` document for native New
 Game. `native_continue` selects the saved mode and source path. Existing
@@ -34,3 +34,20 @@ temporary-file, sync and replace path.
 The seed-42 Godot study snapshot is still a fixture. Connecting the selected
 Freedom save and its clock to the Godot bridge is tracked by #291; this format
 does not present a fresh snapshot as a resumed save.
+
+## Explicit four-system envelopes
+
+The optional finite network is a selector on the common origin/history owner:
+`network: {"version": 1}`. The seed regenerates its four-node catalog; mutable
+world copies are not serialized. Absence preserves the original pair contract.
+New flattened envelopes are 49 (origin), 50 (flight), 51 (docking), 52 (station journey),
+54 (Moon flight) and 55 (minor flight). Format 53 contains selected network travel
+with the existing logical travel states 1–4. Existing composed wrappers retain
+their versions while dispatching these explicit nested envelopes.
+
+Network planetary flight requires active-world version 2 and physical catalog/
+ephemeris 2. Targeting request policy 2 carries the same network selector into
+the frozen commitment. Selected knowledge recipe 4 uses chart 2 / topology 2 / domain 2
+and local observation policy 1. All old format, world, targeting and knowledge
+versions keep their previous closed meanings; changing a version number cannot
+upgrade a mismatched document. Recovery retains and compares the selector.

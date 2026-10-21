@@ -121,12 +121,15 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     if (!relative || !relative->frame.planet)
       return std::unexpected{"Local departure reference unavailable"};
     candidate.document_.world = FreedomActiveWorldSelection{
-        1, system_.catalog.id, *relative->frame.planet};
+        candidate.document_.origin.network ? 2U : 1U, system_.catalog.id,
+        *relative->frame.planet};
   }
-  candidate.knowledge_->recipe.version = kFreedomTravelKnowledgeVersion;
-  candidate.knowledge_->recipe.observation_policy =
-      kFreedomLocalObservationPolicy;
-  candidate.knowledge_->recipe.world_domain = 1;
+  if (!candidate.document_.origin.network) {
+    candidate.knowledge_->recipe.version = kFreedomTravelKnowledgeVersion;
+    candidate.knowledge_->recipe.observation_policy =
+        kFreedomLocalObservationPolicy;
+    candidate.knowledge_->recipe.world_domain = 1;
+  }
   if (auto preview = candidate.local_jump_preview(); !preview)
     return std::unexpected{preview.error()};
   if (auto saved = candidate.travel_document(); !saved)
