@@ -62,6 +62,12 @@ scrolling. Existing detail layout stacks its forecast and scrolls at narrow
 widths. The terminal path is retained independently; native pixel layout is
 not an ANSI/Kitty parity requirement.
 
+Moon and asteroid close-inspection views use the same physical text floor.
+Their existing actions scroll vertically when needed, following keyboard or
+controller focus; Pause remains outside the scrolling region. The close and
+distant 3D passes follow the existing physical-window target-size budget.
+Resizing and reviewing controls leave the authoritative journey unchanged.
+
 Saved pause controls use the same physical readability floor: 18-pixel body
 text and 44-pixel interactive heights at the checked window sizes. The action
 and remapping lists stack below 1000 physical pixels wide; each scrolls to the

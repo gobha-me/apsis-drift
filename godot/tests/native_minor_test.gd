@@ -1,6 +1,7 @@
 extends SceneTree
 const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 const CompanionMouseChecks = preload("res://tests/native_companion_mouse_checks.gd")
+const CompanionLayoutChecks = preload("res://tests/native_companion_layout_checks.gd")
 ## Actual C++ inspection route, typed staging and ordinary occupied-craft UI.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
@@ -224,6 +225,8 @@ func check_blocked_chart(owner: Variant, view: Control, output: String) -> void:
 		file.store_string(JSON.stringify(evidence, "\t") + "\n")
 
 func run() -> void:
+	CompanionLayoutChecks.check_inputs(check)
+	if failures: quit(1); return
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
 	var phases := args[0]
@@ -243,6 +246,7 @@ func run() -> void:
 	var view: Control = shell.current_view
 	if not check(view is MinorView and view.paused and view.staged_model.valid_current_pose(), "Actual Continue failed ordinary typed MinorView staging"):
 		shell.free(); quit(1); return
+	await CompanionLayoutChecks.run(self, view, owner, output, "minor-arrival-companion", check)
 	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
 	check_admission(owner, view, output)
 	for index in 2:
