@@ -14,7 +14,8 @@ keeps the saved selection; reading a chart never upgrades an old journey.
 1. Board, depart and reach suitable space flight. Pause with neutral controls.
 2. In Controls, choose **Select planet** for another charted planet in the
    current system. **Current reference** identifies the body used for flight;
-   **visited** comes independently from recorded physical presence.
+   **visited** comes independently from recorded landing presence. Arriving in
+   space around a planet does not claim a surface visit.
 3. Choose **Begin selected jump**, then Resume explicitly. The ordinary
    three-second spool runs physics and flight-fuel accounting. Canceling the
    spool spends no jump charge. Commitment spends one charge; the following

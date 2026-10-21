@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_planet_jump.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
 
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"

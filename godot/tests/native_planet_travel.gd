@@ -191,6 +191,7 @@ func run(tree: SceneTree, trace: String, assets: String) -> int:
 		var target_id: String = report.target_planet_id if leg == 0 else report.home_planet_id
 		target = target_index(packet, target_id)
 		if not check(target >= 0, "Return chart lost its known genuine Home identity"): break
+		var previously_visited: bool = packet.rows[target].visited
 		var before_selection: Dictionary = owner.get_freedom_flight_state()
 		var prior_bytes := save(owner, output.path_join("planet-ui-before-select-%d.json" % leg))
 		await activate(tree, view, view.planet_route_buttons[target], leg == 1)
@@ -233,7 +234,8 @@ func run(tree: SceneTree, trace: String, assets: String) -> int:
 		var current_index := target_index(arrival_packet, target_id)
 		if check(current_index >= 0, "Arrival chart lost its actual body identity"):
 			var row: Dictionary = arrival_packet.rows[current_index]
-			check(row.current and row.visited and not row.selectable, "Planet chart did not distinguish actual physical arrival from starting identity grants")
+			# Existing planet presence records a landing, not an orbital reference change.
+			check(row.current and row.visited == previously_visited and not row.selectable, "Orbital handoff fabricated or lost recorded planetary landing presence")
 	check(records.size() == 10, "Planet phase proof lost one independently ticked boundary")
 	mouse_after_handoff(view, owner, output)
 	check(FileAccess.get_file_as_bytes(source) == source_bytes, "Planet checks modified source fixture")

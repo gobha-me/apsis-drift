@@ -3,6 +3,7 @@
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/planet_surface_walker.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
+#include "apsis_drift/surface_landmarks.hpp"
 
 #include <algorithm>
 #include <array>
@@ -68,6 +69,26 @@ auto initial_source() -> FreedomKnowledgeSaveDocument {
   flight.flight.angular_velocity_radians_per_second = {};
   flight.flight = need(canonicalize_rigid_body_state(
       RigidBodyWorldContext{s.system()}, flight.flight));
+  // Saved metadata fixture for the already qualified seed-42 Home exposure;
+  // this does not claim collection during the station/boarding route above.
+  // The real charged legs must retain a nonempty pouch and first notes.
+  const SurfaceLandmarkCell cell{11251, -263, -263};
+  const auto identity = need(identify_surface_landmark(home->descriptor, cell));
+  check(identity && identity->id == SurfaceLandmarkId{3477446278323237925ULL},
+        "The fixed previously qualified exposure retains its actual identity");
+  document.knowledge.surface_landmarks = FreedomSurfaceLandmarkState{
+      1,
+      {{s.system().catalog.id, home->descriptor.id, cell, identity->id, 2, 7}}};
+  const FreedomFieldSampleRecord note{
+      {s.system().catalog.id, body_id(home->descriptor.id)},
+      cell,
+      identity->id,
+      2,
+      identity->kind,
+      flight.origin.state.craft,
+      20};
+  document.knowledge.field_samples =
+      FreedomFieldSampleState{1, flight.origin.state.craft, {note}, {note}};
   return document;
 }
 auto fixture() -> NativeFreedomFlightSession {
@@ -129,6 +150,11 @@ auto leg(NativeFreedomFlightSession& s) -> void {
   const auto marker = s.knowledge()->surface_marker;
   const auto samples = s.knowledge()->field_samples;
   const auto inspections = s.knowledge()->surface_landmarks;
+  check(samples && samples->carried.size() == 1 &&
+            samples->journal.size() == 1 && inspections &&
+            inspections->inspections.size() == 1,
+        "Every actual travel leg starts with a carried specimen, first note "
+        "and authenticated inspection, not absent metadata");
   need(s.begin_jump());
   auto peer = continued(s);
   for (SimulationTick i = 1; i <= kJumpSpoolTicks + kJumpTransitTicks; ++i) {

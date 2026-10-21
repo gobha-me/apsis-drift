@@ -1286,7 +1286,8 @@ class FreedomBridge : public godot::RefCounted {
             arrival = travel->committed->preview.arrival_tick;
         } else {
           if (composed.selected_body)
-            selected = decimal(composed.selected_body->body.value);
+            selected = godot::String{
+                std::to_string(composed.selected_body->body.value).c_str()};
           if (composed.active == FreedomComposedRouteKind::planet) {
             jump["route_kind"] = "planet";
             if (composed.planet_committed)
@@ -1314,7 +1315,8 @@ class FreedomBridge : public godot::RefCounted {
         }
       } else if (travel->local) {
         if (travel->local->selected)
-          selected = decimal(travel->local->selected->body.value);
+          selected = godot::String{
+              std::to_string(travel->local->selected->body.value).c_str()};
         if (travel->local->committed)
           arrival = travel->local->committed->arrival_tick;
       } else {
@@ -1438,8 +1440,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::Array rows;
     for (const auto& row : *known) {
       godot::Dictionary item;
-      item["system_id"] = decimal(row.target.system.value);
-      item["planet_id"] = decimal(row.target.body.value);
+      item["system_id"] =
+          godot::String{std::to_string(row.target.system.value).c_str()};
+      item["planet_id"] =
+          godot::String{std::to_string(row.target.body.value).c_str()};
       item["name"] = godot::String{row.name.c_str()};
       item["current"] = row.current;
       item["visited"] = row.visited;
