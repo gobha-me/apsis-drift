@@ -21,6 +21,8 @@ inline constexpr std::uint32_t kFreedomOriginLocalRoutesVersion{1};
 inline constexpr std::uint32_t kFreedomComposedTravelSaveFormatVersion{56};
 inline constexpr std::uint32_t kFreedomComposedTravelStateVersion{5};
 inline constexpr std::uint32_t kFreedomComposedRoutesVersion{1};
+inline constexpr std::uint32_t kFreedomRecoveringTravelSaveFormatVersion{57};
+inline constexpr std::uint32_t kFreedomRecoveringTravelStateVersion{6};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
 struct FreedomLocalTravelState {
   std::optional<BodyTarget> selected;

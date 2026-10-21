@@ -20,8 +20,12 @@ auto validate_voyage(const FreedomRecoveryVoyage& voyage)
         if constexpr (std::is_same_v<std::decay_t<decltype(d)>,
                                      FreedomTravelSaveDocument>)
           return validate_freedom_travel_document(d);
-        else
+        else {
+          if (d.voyage.resources.drive && d.voyage.resources.drive->last_use)
+            return std::expected<void, SaveSchemaError>{std::unexpected{
+                failure("A recorded drive use requires its travel57 owner")}};
           return validate_freedom_knowledge_document(d);
+        }
       },
       voyage);
 }
@@ -67,7 +71,8 @@ auto decode_voyage(const Json& j)
       j["format_version"] == kFreedomMinorTravelSaveFormatVersion ||
       j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
       j["format_version"] == kFreedomNetworkTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomComposedTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomRecoveryVoyage{std::move(*d)};
@@ -343,6 +348,19 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
                   "advanceable replacement")};
   } else {
     const auto old_generation = generation(retired.origin);
+    const auto& old_resources =
+        recovery_knowledge(loss.retired).voyage.resources;
+    const auto& current_resources =
+        recovery_knowledge(d.voyage).voyage.resources;
+    if (old_resources.version != current_resources.version ||
+        old_resources.drive.has_value() !=
+            current_resources.drive.has_value() ||
+        (current_resources.drive && current_resources.drive->last_use &&
+         (current_resources.drive->last_use->commit_tick <
+              retired.flight.tick ||
+          current.flight.tick == retired.flight.tick)))
+      return std::unexpected{failure("replacement drive selection or new use "
+                                     "differs from its own craft history")};
     if (old_generation >= std::numeric_limits<std::uint64_t>::max() - 1 ||
         !current.origin.lineage ||
         generation(current.origin) != old_generation + 1 ||
@@ -455,7 +473,12 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
                                                   system->catalog.id,
                                                   station.orbit.host_planet};
   assembly->journey.voyage.docking = {geometry->version, safe->port, true};
-  const FreedomResources resources{1, *identity, body->craft, body->tick};
+  FreedomResources resources{1, *identity, body->craft, body->tick};
+  if (recovery_knowledge(d.voyage).voyage.resources.drive) {
+    resources.version = kFreedomRecoveryResourceVersion;
+    resources.drive = FreedomDriveRecoveryState{
+        kFreedomDriveRecoveryVersion, replacement.origin.lineage, {}};
+  }
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
   if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();
   if (knowledge.field_samples) {

@@ -3,6 +3,7 @@
 #include "apsis_drift/freedom_system_network.hpp"
 #include "freedom_composed_travel_save_internal.hpp"
 #include "freedom_local_travel_save_internal.hpp"
+#include "freedom_resource_save_internal.hpp"
 
 #include <array>
 #include <charconv>
@@ -109,6 +110,8 @@ auto source_world(Seed seed, SystemId system,
   return std::move(*result);
 }
 auto resources_json(const FreedomResources& r) -> Json {
+  if (r.version == kFreedomRecoveryResourceVersion)
+    return detail::resource_json(r);
   return {{"version", r.version},
           {"craft", r.craft.value},
           {"frame_id", r.frame.id.value},
@@ -119,6 +122,10 @@ auto resources_json(const FreedomResources& r) -> Json {
 }
 auto resources_value(const Json& r)
     -> std::expected<FreedomResources, SaveSchemaError> {
+  if (r.is_object() && r.contains("version") &&
+      r["version"].is_number_unsigned() &&
+      r["version"] == kFreedomRecoveryResourceVersion)
+    return detail::resource_value(r);
   if (!fields(r, {"version", "craft", "frame_id", "frame_version", "tick",
                   "flight_quanta", "jump_charges"}) ||
       !uints(r, {"version", "craft", "frame_id", "frame_version", "tick",
@@ -163,6 +170,9 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
       {"envelope_radius_metres", *f.preview.distance.envelope_radius_metres}};
   if (r.network)
     result["request"]["network"] = {{"version", r.network->version}};
+  if (r.recovery)
+    result["request"]["recovery"] = detail::drive_json(*r.recovery);
+  if (f.recovery) result["recovery"] = detail::uncertainty_json(*f.recovery);
   if (r.lineage)
     result["request"]["craft_lineage"] = {
         {"version", r.lineage->version},
@@ -171,26 +181,42 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
 }
 auto frozen_value(const Json& f)
     -> std::expected<FrozenFreedomJumpArrival, SaveSchemaError> {
-  if (!fields(f, {"request", "sample_seed", "point", "arrival_tick",
-                  "envelope_radius_metres"}) ||
+  const bool recovering =
+      f.is_object() && f.contains("request") && f["request"].is_object() &&
+      f["request"].contains("version") &&
+      f["request"]["version"].is_number_unsigned() &&
+      f["request"]["version"] == kFreedomRecoveryJumpTargetingVersion;
+  auto frozen_shape = f;
+  if (recovering) {
+    if (!f.contains("recovery"))
+      return std::unexpected{failure("missing frozen recovery sample")};
+    frozen_shape.erase("recovery");
+  }
+  if (!fields(frozen_shape, {"request", "sample_seed", "point", "arrival_tick",
+                             "envelope_radius_metres"}) ||
       !uints(f, {"sample_seed", "arrival_tick", "envelope_radius_metres"}))
     return std::unexpected{failure("invalid frozen shape")};
   const auto& r = f["request"];
   auto shape = r;
   shape.erase("craft_lineage");
   shape.erase("network");
+  if (recovering) {
+    if (!r.contains("recovery"))
+      return std::unexpected{failure("missing frozen recovery input")};
+    shape.erase("recovery");
+  }
   if (!fields(shape, {"version", "universe_seed", "craft", "source_system",
                       "source", "destination", "profile", "attempt"}) ||
       !uints(r, {"version", "universe_seed", "craft", "source_system",
                  "destination", "profile", "attempt"}) ||
       (r["version"] != kFreedomJumpTargetingVersion &&
-       r["version"] != kFreedomNetworkJumpTargetingVersion) ||
+       r["version"] != kFreedomNetworkJumpTargetingVersion && !recovering) ||
       r["profile"] > static_cast<unsigned>(IntersystemRuleProfile::pilot))
     return std::unexpected{failure("unsupported frozen request")};
   FreedomJumpRequest request;
   request.version = r["version"].get<std::uint32_t>();
-  if ((request.version == kFreedomNetworkJumpTargetingVersion) !=
-      r.contains("network"))
+  if (!recovering && (request.version == kFreedomNetworkJumpTargetingVersion) !=
+                         r.contains("network"))
     return std::unexpected{
         failure("frozen request network selection differs from policy")};
   if (r.contains("network")) {
@@ -232,6 +258,11 @@ auto frozen_value(const Json& f)
       RigidBodyWorldContext{*system}, r["source"].dump());
   if (!source) return std::unexpected{failure("invalid frozen actual source")};
   request.source = *source;
+  if (recovering) {
+    const auto drive = detail::drive_value(r["recovery"], request.source.tick);
+    if (!drive) return std::unexpected{drive.error()};
+    request.recovery = *drive;
+  }
   const auto regenerated = freeze_freedom_jump_arrival(request);
   if (!regenerated)
     return std::unexpected{
@@ -250,6 +281,13 @@ auto frozen_value(const Json& f)
           f["envelope_radius_metres"].get<std::uint64_t>())
     return std::unexpected{failure(
         "stored commitment does not match immutable policy/source binding")};
+  if (recovering) {
+    const auto uncertainty = detail::uncertainty_value(f["recovery"]);
+    if (!uncertainty || !regenerated->recovery ||
+        *regenerated->recovery != *uncertainty)
+      return std::unexpected{
+          failure("stored recovery sample differs from frozen input")};
+  }
   return *regenerated;
 }
 auto binding_json(const NativeStartingAssemblySelection& a) -> Json {
@@ -281,6 +319,11 @@ auto free_pilot(const FreedomSurfaceBaseSave& base) -> bool {
 }
 } // namespace
 namespace detail {
+auto travel_source_world(Seed seed, SystemId system,
+                         const std::optional<FreedomNetworkSelection>& network)
+    -> std::expected<PhysicalLocalSystem, SaveSchemaError> {
+  return source_world(seed, system, network);
+}
 auto travel_frozen_json(const FrozenFreedomJumpArrival& value)
     -> std::expected<nlohmann::ordered_json, SaveSchemaError> {
   return frozen_json(value);
@@ -305,7 +348,8 @@ auto travel_binding_json(const NativeStartingAssemblySelection& value)
 auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
   if (d.travel.composed ||
-      d.travel.version == kFreedomComposedTravelStateVersion)
+      d.travel.version == kFreedomComposedTravelStateVersion ||
+      d.travel.version == kFreedomRecoveringTravelStateVersion)
     return detail::validate_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -317,7 +361,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
   const auto flight = surface_base_flight(voyage.base);
   const auto& s = d.travel;
   const auto& ledger = d.voyage.voyage.resources;
-  if (!flight.world ||
+  if (!flight.world || ledger.version != kFreedomResourceVersion ||
+      ledger.drive ||
       d.voyage.knowledge.recipe.version !=
           (flight.origin.network ? kFreedomNetworkKnowledgeVersion
                                  : kFreedomTravelKnowledgeVersion) ||
@@ -379,7 +424,9 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     const auto& r = f.preview.request;
     const auto& before = *s.commitment_resources;
     if (!validate_frozen_freedom_jump_arrival(f) || !f.preview.volume ||
-        !f.preview.volume->clear() || !f.point_assessment.clear() ||
+        r.version == kFreedomRecoveryJumpTargetingVersion || r.recovery ||
+        f.recovery || !f.preview.volume->clear() ||
+        !f.point_assessment.clear() ||
         f.preview.arrival_tick >=
             std::numeric_limits<SimulationTick>::max() - 2 ||
         r.network != flight.origin.network ||
@@ -387,9 +434,10 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
         r.craft != ledger.craft || r.lineage != flight.origin.lineage ||
         r.attempt == std::numeric_limits<std::uint64_t>::max() ||
         s.next_attempt != r.attempt + 1 ||
-        !validate_freedom_resources(before) || before.craft != r.craft ||
-        before.frame != r.source.craft || before.tick != r.source.tick ||
-        !before.jump_charges)
+        !validate_freedom_resources(before) ||
+        before.version != kFreedomResourceVersion || before.drive ||
+        before.craft != r.craft || before.frame != r.source.craft ||
+        before.tick != r.source.tick || !before.jump_charges)
       return std::unexpected{
           failure("invalid or unqualified committed solution/bill")};
   } else if (s.next_attempt != 1 || current != route.origin)
@@ -447,7 +495,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
 auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
   if (d.travel.composed ||
-      d.travel.version == kFreedomComposedTravelStateVersion)
+      d.travel.version == kFreedomComposedTravelStateVersion ||
+      d.travel.version == kFreedomRecoveringTravelStateVersion)
     return detail::encode_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -503,7 +552,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root) return std::unexpected{root.error()};
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
-  if ((*root)["format_version"] == kFreedomComposedTravelSaveFormatVersion)
+  if ((*root)["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
+      (*root)["format_version"] == kFreedomRecoveringTravelSaveFormatVersion)
     return detail::decode_composed_travel(*root);
   const bool network_format =
       (*root)["format_version"] == kFreedomNetworkTravelSaveFormatVersion;

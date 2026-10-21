@@ -36,6 +36,7 @@ enum class SeedDomain : std::uint64_t {
   moon_surface = 17,
   moon_surface_landmark = 18,
   freedom_system_network = 19,
+  jump_recovery_uncertainty = 20,
 };
 
 // Derives one child seed without consuming or exposing mutable random state.

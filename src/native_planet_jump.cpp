@@ -8,20 +8,34 @@
 namespace apsis_drift {
 auto NativeFreedomFlightSession::prepare_composed_travel()
     -> std::expected<void, std::string> {
-  if (!knowledge_ ||
-      knowledge_->recipe.version != kFreedomPlanetaryKnowledgeVersion ||
-      !document_.origin.network)
-    return std::unexpected{
-        "Planetary travel requires its explicitly selected chart"};
+  const bool recovering = resources_ && resources_->drive;
+  if (!knowledge_ || (!recovering && (knowledge_->recipe.version !=
+                                          kFreedomPlanetaryKnowledgeVersion ||
+                                      !document_.origin.network)))
+    return std::unexpected{"Travel requires its explicitly selected chart"};
+  const auto version = recovering ? kFreedomRecoveringTravelStateVersion
+                                  : kFreedomComposedTravelStateVersion;
   if (travel_) {
-    if (travel_->version != kFreedomComposedTravelStateVersion ||
-        !travel_->composed)
+    if (travel_->version != version || !travel_->composed)
       return std::unexpected{
           "Historical travel cannot silently adopt a new policy"};
   } else {
     travel_.emplace();
-    travel_->version = kFreedomComposedTravelStateVersion;
+    travel_->version = version;
     travel_->composed.emplace();
+    if (recovering) {
+      const auto relative = relative_state();
+      if (!relative || !relative->frame.planet)
+        return std::unexpected{"Travel source reference is unavailable"};
+      document_.world = FreedomActiveWorldSelection{
+          document_.origin.network ? 2U : 1U, document_.flight.frame.system,
+          *relative->frame.planet};
+      if (!document_.origin.network) {
+        knowledge_->recipe.version = kFreedomTravelKnowledgeVersion;
+        knowledge_->recipe.observation_policy = kFreedomLocalObservationPolicy;
+        knowledge_->recipe.world_domain = 1;
+      }
+    }
   }
   return {};
 }
@@ -53,7 +67,8 @@ auto NativeFreedomFlightSession::planet_jump_selection_available(
   if (moon_ || minor_ || document_.moon || document_.minor)
     return std::unexpected{
         "Return to Origin home before selecting an ordinary planet"};
-  if (travel_ && (travel_->version != kFreedomComposedTravelStateVersion ||
+  if (travel_ && ((travel_->version != kFreedomComposedTravelStateVersion &&
+                   travel_->version != kFreedomRecoveringTravelStateVersion) ||
                   !travel_->composed))
     return std::unexpected{
         "Historical travel cannot silently adopt a new policy"};
@@ -101,9 +116,13 @@ auto NativeFreedomFlightSession::planet_jump_preview() const
     return *route.planet_committed;
   if (!route.selected_body)
     return std::unexpected{"Select a known ordinary planet first"};
-  const auto frozen = freeze_freedom_planet_jump_arrival(
-      {kFreedomPlanetJumpVersion, document_, *route.selected_body,
-       travel_->next_attempt});
+  FreedomPlanetJumpRequest request{kFreedomPlanetJumpVersion, document_,
+                                   *route.selected_body, travel_->next_attempt};
+  if (resources_ && resources_->drive) {
+    request.version = kFreedomRecoveryPlanetJumpVersion;
+    request.recovery = resources_->drive;
+  }
+  const auto frozen = freeze_freedom_planet_jump_arrival(request);
   if (!frozen) {
     if (frozen.error() == FreedomPlanetJumpError::unclear_departure)
       return std::unexpected{"Departure volume is obstructed. Fly clear of "
@@ -303,6 +322,20 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
           slot.commitment_resources = *candidate.resources_;
           if (!local->request.source.moon && !local->request.source.minor)
             slot.outbound = *local;
+        }
+        if (candidate.resources_->drive) {
+          const auto kind = planetary ? FreedomJumpRecoveryKind::planet
+                            : composed.active == FreedomComposedRouteKind::moon
+                                ? FreedomJumpRecoveryKind::moon
+                                : FreedomJumpRecoveryKind::minor;
+          const auto checksum =
+              planetary ? planet->source_checksum : local->source_checksum;
+          const auto stamp = make_freedom_jump_recovery_stamp(
+              kind, state.next_attempt, checksum,
+              candidate.document_.flight.tick);
+          if (!stamp)
+            return std::unexpected{"Recovery commitment clock refused"};
+          candidate.resources_->drive->last_use = *stamp;
         }
         --candidate.resources_->jump_charges;
         ++state.next_attempt;

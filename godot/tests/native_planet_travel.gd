@@ -110,9 +110,12 @@ func mouse_after_handoff(view: Control, owner: Variant, output: String) -> void:
 	check(save(owner, output.path_join("planet-ui-mouse-after.json")) == save(peer, output.path_join("planet-ui-mouse-peer.json")) and not before.is_empty(), "Post-handoff mouse full Save differs from direct C++ peer")
 	view.pause_controls("Planet travel test complete")
 
-func run(tree: SceneTree, trace: String, assets: String) -> int:
+func run(tree: SceneTree, trace: String, assets: String, recovering: bool = false) -> int:
 	var output := trace.get_base_dir()
-	var prefix := trace + ".planet"
+	if recovering:
+		output = output.path_join("recovery-ui")
+		DirAccess.make_dir_recursive_absolute(output)
+	var prefix := trace + (".recovery" if recovering else ".planet")
 	var report: Variant = JSON.parse_string(FileAccess.get_file_as_string(prefix + ".report.json"))
 	if not check(report is Dictionary and report.get("version") == 1 and report.get("completed") == true, "Independent C++ planet trace sidecars missing/incomplete"): return failures
 	var station: Variant = restore(prefix + ".station.json")
@@ -144,6 +147,9 @@ func run(tree: SceneTree, trace: String, assets: String) -> int:
 	view.update_view(0.0)
 	view.refresh_planet_routes()
 	var initial: Dictionary = owner.get_freedom_flight_state()
+	check(initial.jump.has("recovery") == recovering, "Drive recovery selection was lost or silently added to historical voyage")
+	if recovering:
+		check(initial.jump.recovery.ready and initial.jump.recovery.remaining_seconds == 0.0 and initial.jump.recovery.extra_radius_metres == 0.0, "Selected fresh drive is not ready")
 	var packet: Dictionary = owner.get_freedom_planet_destinations()
 	check(view.paused and view.planet_route_packet == packet and save(owner, output.path_join("planet-ui-before.json")) == source_bytes, "Planet Continue changed complete source or hid the actual paused controls")
 	var size_before: Vector2 = tree.root.size
@@ -203,6 +209,8 @@ func run(tree: SceneTree, trace: String, assets: String) -> int:
 		chosen.travel.composed.active = previous.travel.composed.active
 		chosen.travel.composed.selected_body = previous.travel.composed.selected_body
 		check(chosen == previous, "Planet target selection changed more than its explicit route/target metadata")
+		if recovering and leg == 1:
+			check("early" in view.planet_jump_button.text.to_lower() and "arrival" in view.planet_jump_button.tooltip_text.to_lower(), "Early planet jump lacks visible uncertainty warning")
 		await activate(tree, view, view.planet_jump_button, leg == 1)
 		check(view.paused and owner.get_freedom_flight_state().jump.phase == "spool", "Actual keyboard/controller Begin did not arm paused3s spool")
 		if leg == 0:
@@ -223,6 +231,9 @@ func run(tree: SceneTree, trace: String, assets: String) -> int:
 				var state: Dictionary = owner.get_freedom_flight_state()
 				check(FlightView.valid_state(state) and state.system_id == initial.system_id and state.resources.jump_charges == charges - (1 if offset >= 360 else 0), "Planet leg lost actual same-system identity/one-charge phase")
 				check(not state.jump.has("point") and not state.jump.has("nominal_arrival") and not state.jump.has("reference_planet"), "Planet UI exposed unresolved arrival placement")
+				if recovering:
+					check(state.jump.recovery.pending_arrival == (offset >= 360 and offset < 600), "Recovery arrival state differs from actual commitment")
+					if offset == 600: check(state.jump.recovery.remaining_seconds == 45.0 and state.jump.recovery.extra_radius_metres == 2000.0 and not state.jump.recovery.ready, "Actual arrival does not start full recovery")
 				view.state = state
 				view.update_view(0.0)
 				phase(owner, prefix + ".leg%d.%d.json" % [leg, offset], output.path_join("planet-ui-leg%d-%d.json" % [leg, offset]), records)

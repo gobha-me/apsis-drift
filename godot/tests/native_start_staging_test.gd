@@ -223,6 +223,15 @@ func run() -> void:
 			check(chosen.tick == before_choice.tick and chosen.resources == before_choice.resources and bridge.get_freedom_observations() == before_facts, "Chart choice changed clock, resources or knowledge")
 	else:
 		check(false, "A seated network Continue did not create the actual flight view")
+	for chart in 3:
+		check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "network": chart > 0, "planetary": chart == 2, "drive_recovery": true, "assets": args[0]}), "Independent drive/chart staging refused: " + shell.error)
+		var selected_drive: Dictionary = bridge.get_freedom_flight_state()
+		check(shell.current_view is WalkView and selected_drive.tick == "0" and selected_drive.chart.rows.size() == (2 if chart == 0 else 4) and selected_drive.jump.recovery.ready and selected_drive.jump.recovery.remaining_seconds == 0.0, "Drive choice changed chart selection or failed ready station start")
+		var drive_save: String = args[1].get_base_dir().path_join("recovery-start-%d.json" % chart)
+		check(bridge.save_freedom_as(drive_save), "Selected drive station Save refused")
+		var drive_hash := FileAccess.get_sha256(drive_save)
+		check(shell.select_start(bridge, {"mode": "continue", "value": drive_save, "assets": args[0]}) and shell.current_view.paused, "Selected drive Continue failed actual station staging")
+		check(bridge.save_freedom_as(drive_save) and FileAccess.get_sha256(drive_save) == drive_hash, "Selected drive Continue changed complete station Save")
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

@@ -71,6 +71,7 @@ func run() -> void:
 	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and shell.current_view == null, "Title generated a world before selection")
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
 	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 3 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
+	check(title.recovery_choice != null and not title.recovery_choice.button_pressed and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive recovery lost independent opt-in or keyboard access")
 	title.open_settings()
 	var settings: Control = title.settings_view
 	title.begin_new()
@@ -107,7 +108,7 @@ func run() -> void:
 	for size in [Vector2i(1280, 720), Vector2i(800, 450)]:
 		root.size = size
 		await settle()
-		for control in [title.seed, title.new_button, title.continue_button, title.reference_button, title.settings_button, title.quit_button]:
+		for control in [title.seed, title.network_choice, title.recovery_choice, title.new_button, title.continue_button, title.reference_button, title.settings_button, title.quit_button]:
 			control.grab_focus()
 			await settle()
 			check(title.scroll.get_global_rect().encloses(control.get_global_rect()), "Title focused action cannot scroll into view: " + str(size))

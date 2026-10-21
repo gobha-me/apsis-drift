@@ -1,4 +1,5 @@
 #include "freedom_local_travel_save_internal.hpp"
+#include "freedom_resource_save_internal.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -34,21 +35,37 @@ auto frozen_json(const FrozenLocalBodyJumpArrival& f)
   const auto target = encode_body_target(f.request.destination);
   if (!source || !arrival || !target)
     return std::unexpected{failure("Local frozen owner cannot encode")};
-  return Json{{"version", f.version},
+  Json result{{"version", f.version},
               {"source", Json::parse(*source)},
               {"destination", Json::parse(*target)},
               {"attempt", f.request.attempt},
               {"source_checksum", f.source_checksum},
               {"arrival_tick", f.arrival_tick},
               {"arrival", Json::parse(*arrival)}};
+  if (f.request.recovery)
+    result["recovery_input"] = drive_json(*f.request.recovery);
+  if (f.recovery) result["recovery"] = uncertainty_json(*f.recovery);
+  return result;
 }
 auto frozen_value(const Json& j)
     -> std::expected<FrozenLocalBodyJumpArrival, SaveSchemaError> {
-  if (!fields(j, {"version", "source", "destination", "attempt",
-                  "source_checksum", "arrival_tick", "arrival"}) ||
+  const bool recovering =
+      j.is_object() && j.contains("version") &&
+      j["version"].is_number_unsigned() &&
+      (j["version"] == kFreedomRecoveryLocalBodyJumpVersion ||
+       j["version"] == kFreedomRecoveryMinorLocalBodyJumpVersion);
+  auto shape = j;
+  if (recovering) {
+    if (!j.contains("recovery_input") || !j.contains("recovery"))
+      return std::unexpected{failure("Missing local recovery input/sample")};
+    shape.erase("recovery_input");
+    shape.erase("recovery");
+  }
+  if (!fields(shape, {"version", "source", "destination", "attempt",
+                      "source_checksum", "arrival_tick", "arrival"}) ||
       !uints(j, {"version", "attempt", "source_checksum", "arrival_tick"}) ||
       (j["version"] != kFreedomLocalBodyJumpVersion &&
-       j["version"] != kFreedomMinorLocalBodyJumpVersion))
+       j["version"] != kFreedomMinorLocalBodyJumpVersion && !recovering))
     return std::unexpected{failure("Invalid closed local commitment")};
   auto source = decode_freedom_flight_document_json(j["source"].dump());
   auto arrival = decode_freedom_flight_document_json(j["arrival"].dump());
@@ -57,14 +74,27 @@ auto frozen_value(const Json& j)
     return std::unexpected{failure("Invalid local commitment owner")};
   const auto home_model =
       (source->moon || source->minor) ? arrival->model : source->model;
-  const auto regenerated = freeze_local_body_jump_arrival(
-      {j["version"].get<std::uint32_t>(), std::move(*source), *target,
-       j["attempt"].get<std::uint64_t>(), home_model});
+  FreedomLocalBodyJumpRequest request{
+      j["version"].get<std::uint32_t>(), std::move(*source), *target,
+      j["attempt"].get<std::uint64_t>(), home_model};
+  if (recovering) {
+    const auto input =
+        drive_value(j["recovery_input"], request.source.flight.tick);
+    if (!input) return std::unexpected{input.error()};
+    request.recovery = *input;
+  }
+  const auto regenerated = freeze_local_body_jump_arrival(request);
   if (!regenerated || regenerated->arrival != *arrival ||
       regenerated->arrival_tick != j["arrival_tick"].get<SimulationTick>() ||
       regenerated->source_checksum != j["source_checksum"].get<std::uint64_t>())
     return std::unexpected{
         failure("Local commitment differs from its immutable solution")};
+  if (recovering) {
+    const auto sample = uncertainty_value(j["recovery"]);
+    if (!sample || !regenerated->recovery || *regenerated->recovery != *sample)
+      return std::unexpected{
+          failure("Local recovery sample differs from its input")};
+  }
   return *regenerated;
 }
 auto same_history(const FreedomFlightSaveDocument& a,
@@ -162,7 +192,8 @@ auto prior_history(const FreedomTravelSaveDocument& d,
   const auto ids = generate_first_intersystem_identities(
       first_source.origin.recipe.universe_seed);
   return validate_frozen_freedom_jump_arrival(f).has_value() &&
-         f.preview.volume && f.preview.volume->clear() &&
+         r.version != kFreedomRecoveryJumpTargetingVersion && !r.recovery &&
+         !f.recovery && f.preview.volume && f.preview.volume->clear() &&
          f.point_assessment.clear() &&
          r.universe_seed == first_source.origin.recipe.universe_seed &&
          r.craft == first_source.origin.state.craft &&
@@ -313,6 +344,27 @@ auto route_policy(FreedomLocalRouteKind kind) -> std::uint32_t {
 }
 auto empty_receipts(const FreedomLocalTravelState& local) -> bool {
   return !local.committed && !local.commitment_resources && !local.outbound;
+}
+auto legacy_resources_only(const FreedomTravelSaveDocument& d) -> bool {
+  const auto legacy = [](const std::optional<FreedomResources>& value) {
+    return !value ||
+           (value->version == kFreedomResourceVersion && !value->drive);
+  };
+  const auto& s = d.travel;
+  if (d.voyage.voyage.resources.version != kFreedomResourceVersion ||
+      d.voyage.voyage.resources.drive || !legacy(s.commitment_resources) ||
+      (s.local && !legacy(s.local->commitment_resources)) ||
+      (s.prior_moon && !legacy(s.prior_moon->local.commitment_resources)))
+    return false;
+  if (s.origin_routes) {
+    const auto& r = *s.origin_routes;
+    if (!legacy(r.inactive.local.commitment_resources) ||
+        !legacy(r.legacy.local.commitment_resources) ||
+        (r.legacy.prior_moon &&
+         !legacy(r.legacy.prior_moon->local.commitment_resources)))
+      return false;
+  }
+  return true;
 }
 auto validate_origin_local(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
@@ -666,6 +718,9 @@ auto travel_target_of(const FreedomFlightSaveDocument& d)
 }
 auto validate_local_travel(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (!legacy_resources_only(d))
+    return std::unexpected{
+        failure("Drive recovery requires explicit travel57")};
   if (d.travel.composed)
     return std::unexpected{
         failure("Composed routes require explicit version5")};

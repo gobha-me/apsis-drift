@@ -99,6 +99,27 @@ auto sample_seed(const FreedomJumpPreview& p) -> Seed {
   if (r.network) hash_word(ordinal, r.network->version);
   return derive_seed(r.universe_seed, SeedDomain::jump_arrival, ordinal);
 }
+auto recovery_for(const FreedomJumpRequest& request,
+                  const FreedomJumpPreview& preview)
+    -> std::expected<FrozenFreedomJumpUncertainty, Error> {
+  if (!request.recovery) return std::unexpected{Error::unsupported_policy};
+  const auto from = world(request.universe_seed, request.source.frame.system,
+                          request.network);
+  if (!from || !request.source.frame.planet)
+    return std::unexpected{Error::invalid_owner};
+  const auto checksum =
+      rigid_body_state_checksum(RigidBodyWorldContext{*from}, request.source);
+  if (!checksum) return std::unexpected{Error::invalid_source};
+  const auto result = freeze_freedom_jump_uncertainty(
+      request.universe_seed, request.craft, request.source.craft,
+      request.lineage, *checksum, FreedomJumpRecoveryKind::system,
+      request.source.tick,
+      {request.source.frame.system, body_id(*request.source.frame.planet)},
+      {request.destination, body_id(preview.reference_planet)}, request.attempt,
+      *request.recovery);
+  if (!result) return std::unexpected{Error::invalid_source};
+  return *result;
+}
 } // namespace
 auto assess_freedom_jump_distance(double metres,
                                   IntersystemArrivalQuality quality)
@@ -152,6 +173,33 @@ auto assess_freedom_arrival_volume(const PhysicalLocalSystem& system,
 }
 auto preview_freedom_jump(const FreedomJumpRequest& r)
     -> std::expected<FreedomJumpPreview, FreedomJumpTargetingError> {
+  if (r.version == kFreedomRecoveryJumpTargetingVersion) {
+    if (!r.recovery) return std::unexpected{Error::unsupported_policy};
+    auto baseline = r;
+    baseline.version = r.network ? kFreedomNetworkJumpTargetingVersion
+                                 : kFreedomJumpTargetingVersion;
+    baseline.recovery.reset();
+    auto preview = preview_freedom_jump(baseline);
+    if (!preview) return std::unexpected{preview.error()};
+    const auto recovery = recovery_for(r, *preview);
+    if (!recovery) return std::unexpected{recovery.error()};
+    preview->request = r;
+    if (preview->distance.envelope_radius_metres) {
+      // Keep the original Domain14 point distribution; this displayed bound
+      // additionally encloses the independent recovery displacement.
+      *preview->distance.envelope_radius_metres +=
+          (recovery->extra_radius_millimetres + 999) / 1000;
+      const auto destination = world(r.universe_seed, r.destination, r.network);
+      if (!destination) return std::unexpected{destination.error()};
+      auto volume = assess_freedom_arrival_volume(
+          *destination, preview->arrival_tick, preview->nominal_arrival,
+          *preview->distance.envelope_radius_metres);
+      if (!volume) return std::unexpected{volume.error()};
+      preview->volume = std::move(*volume);
+    }
+    return preview;
+  }
+  if (r.recovery) return std::unexpected{Error::unsupported_policy};
   if ((r.version != kFreedomJumpTargetingVersion &&
        r.version != kFreedomNetworkJumpTargetingVersion) ||
       (r.version == kFreedomNetworkJumpTargetingVersion) !=
@@ -284,6 +332,37 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
 }
 auto freeze_freedom_jump_arrival(const FreedomJumpRequest& r)
     -> std::expected<FrozenFreedomJumpArrival, FreedomJumpTargetingError> {
+  if (r.version == kFreedomRecoveryJumpTargetingVersion) {
+    auto preview = preview_freedom_jump(r);
+    if (!preview) return std::unexpected{preview.error()};
+    if (!preview->distance.envelope_radius_metres)
+      return std::unexpected{Error::beyond_qualified_policy};
+    if (!preview->volume || !preview->volume->clear())
+      return std::unexpected{Error::invalid_geometry};
+    auto baseline = r;
+    baseline.version = r.network ? kFreedomNetworkJumpTargetingVersion
+                                 : kFreedomJumpTargetingVersion;
+    baseline.recovery.reset();
+    auto frozen = freeze_freedom_jump_arrival(baseline);
+    if (!frozen) return std::unexpected{frozen.error()};
+    const auto recovery = recovery_for(r, *preview);
+    if (!recovery) return std::unexpected{recovery.error()};
+    if (recovery->extra_radius_millimetres) {
+      frozen->point.x += recovery->offset_metres.x;
+      frozen->point.y += recovery->offset_metres.y;
+      frozen->point.z += recovery->offset_metres.z;
+    }
+    const auto destination = world(r.universe_seed, r.destination, r.network);
+    if (!destination) return std::unexpected{destination.error()};
+    const auto assessment = assess_freedom_arrival_volume(
+        *destination, preview->arrival_tick, frozen->point, 0);
+    if (!assessment || !assessment->clear())
+      return std::unexpected{Error::invalid_geometry};
+    frozen->preview = std::move(*preview);
+    frozen->point_assessment = *assessment;
+    frozen->recovery = *recovery;
+    return frozen;
+  }
   auto p = preview_freedom_jump(r);
   if (!p) return std::unexpected{p.error()};
   if (!p->distance.envelope_radius_metres)

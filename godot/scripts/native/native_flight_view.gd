@@ -1140,8 +1140,12 @@ func refresh_planet_routes() -> void:
 	if jump.get("destination_name") is String and not jump.destination_name.is_empty():
 		planet_route_label.text += "\nSelected · " + jump.destination_name
 	planet_jump_button.text = "Cancel jump spool · no charge spent" if phase == "spool" else "Begin selected jump"
+	if phase == "idle" and jump.get("recovery") is Dictionary and not jump.recovery.ready:
+		planet_jump_button.text = "Jump early · 1 charge + arrival uncertainty"
 	planet_jump_button.disabled = surface_walking() or phase == "transit" or (phase == "idle" and not jump.get("available", false))
 	planet_jump_button.tooltip_text = "Committed transit cannot be canceled." if phase == "transit" else str(jump.get("refusal", "")) if planet_jump_button.disabled else "Spooling advances after explicit Resume; one charge commits after three seconds."
+	if phase == "idle" and jump.get("recovery") is Dictionary and not jump.recovery.ready and not planet_jump_button.disabled:
+		planet_jump_button.tooltip_text += " Early arrival has up to %.0f m extra spread; spooling reduces this bound." % jump.recovery.extra_radius_metres
 
 
 func select_planet_destination(index: int) -> void:
@@ -2199,6 +2203,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		jump_status.text += "\n%.1f light-hours · %s arrival envelope %.0f m\nHeading %.1f° · drift %.1f%%" % [jump.distance_light_hours, str(jump.quality), jump.envelope_radius_metres, jump.heading_error_degrees, jump.drift_percent]
 	elif phase == "idle" and not jump.has("destination_name"): jump_status.text += "\nSelect a chart destination"
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
+	if jump.get("recovery") is Dictionary:
+		var recovery: Dictionary = jump.recovery
+		jump_status.text += "\nRecovery starts on arrival." if recovery.pending_arrival else "\nDrive ready." if recovery.ready else "\nRecovery %.1f s · extra spread ≤ %.0f m.\nEarly jump available for 1 charge; spooling reduces this bound." % [recovery.remaining_seconds, recovery.extra_radius_metres]
+		if phase == "idle" and not recovery.ready: jump_button.text = "Jump early · 1 charge + arrival uncertainty"
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	var home_target := home_navigation_target(state, station_geometry)

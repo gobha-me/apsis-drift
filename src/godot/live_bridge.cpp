@@ -330,6 +330,10 @@ class FreedomBridge : public godot::RefCounted {
                         "universe_seed"),
         &FreedomBridge::stage_freedom_planetary_network_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_jump_recovery_new_game", "universe_seed",
+                        "chart_kind"),
+        &FreedomBridge::stage_freedom_jump_recovery_new_game);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_continue", "save_path"),
         &FreedomBridge::stage_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("stage_freedom_recovery"),
@@ -798,6 +802,24 @@ class FreedomBridge : public godot::RefCounted {
       const godot::String& universe_seed) -> bool {
     return stage_freedom_new_game_selection(universe_seed,
                                             native_planetary_network_new_game);
+  }
+  auto stage_freedom_jump_recovery_new_game(const godot::String& universe_seed,
+                                            std::int64_t chart_kind) -> bool {
+    if (chart_kind < 0 || chart_kind > 2) {
+      last_error = "Unsupported starting chart choice";
+      return false;
+    }
+    if (chart_kind == 0)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_recovery_new_game(seed, 0); });
+    if (chart_kind == 1)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_recovery_new_game(seed, 1); });
+    return stage_freedom_new_game_selection(
+        universe_seed,
+        +[](Seed seed) { return native_jump_recovery_new_game(seed, 2); });
   }
   auto stage_freedom_new_game_selection(
       const godot::String& universe_seed,
@@ -1339,6 +1361,20 @@ class FreedomBridge : public godot::RefCounted {
       remaining = (*arrival - tick) / 120.0;
     }
     jump["remaining_seconds"] = remaining;
+    if (session.resources() && session.resources()->drive) {
+      const auto reading =
+          freedom_jump_recovery_reading(*session.resources()->drive, tick);
+      if (!reading)
+        throw std::runtime_error("Drive recovery clock is unavailable");
+      godot::Dictionary recovery;
+      recovery["version"] = 1;
+      recovery["remaining_seconds"] = reading->remaining_ticks / 120.0;
+      recovery["extra_radius_metres"] =
+          reading->extra_radius_millimetres / 1000.0;
+      recovery["ready"] = reading->ready;
+      recovery["pending_arrival"] = reading->pending_arrival;
+      jump["recovery"] = recovery;
+    }
     if (!session.moon() && !session.minor()) {
       if (const auto preview = session.jump_preview(); preview) {
         jump["distance_light_hours"] =

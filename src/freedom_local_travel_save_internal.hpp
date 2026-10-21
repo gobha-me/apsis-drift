@@ -37,4 +37,7 @@ namespace apsis_drift::detail {
 [[nodiscard]] auto travel_free_pilot(const FreedomTravelSaveDocument&) -> bool;
 [[nodiscard]] auto travel_target_of(const FreedomFlightSaveDocument&)
     -> std::optional<BodyTarget>;
+[[nodiscard]] auto travel_source_world(
+    Seed, SystemId, const std::optional<FreedomNetworkSelection>&)
+    -> std::expected<PhysicalLocalSystem, SaveSchemaError>;
 } // namespace apsis_drift::detail

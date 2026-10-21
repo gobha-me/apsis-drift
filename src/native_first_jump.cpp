@@ -153,9 +153,10 @@ auto NativeFreedomFlightSession::jump_selection_available(
                                "receipt, bill and attempt"};
     }
   } else if (travel_->version != kFreedomTravelStateVersion &&
-             !(knowledge_->recipe.version ==
-                   kFreedomPlanetaryKnowledgeVersion &&
-               travel_->version == kFreedomComposedTravelStateVersion &&
+             !((travel_->version == kFreedomRecoveringTravelStateVersion ||
+                (knowledge_->recipe.version ==
+                     kFreedomPlanetaryKnowledgeVersion &&
+                 travel_->version == kFreedomComposedTravelStateVersion)) &&
                travel_->composed)) {
     return std::unexpected{"Unsupported native travel selection"};
   }
@@ -187,8 +188,9 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
     return {};
   }
   auto candidate = *this;
-  if (candidate.knowledge_->recipe.version ==
-      kFreedomPlanetaryKnowledgeVersion) {
+  if ((candidate.resources_ && candidate.resources_->drive) ||
+      candidate.knowledge_->recipe.version ==
+          kFreedomPlanetaryKnowledgeVersion) {
     if (const auto prepared = candidate.prepare_composed_travel(); !prepared)
       return prepared;
     candidate.travel_->composed->active = FreedomComposedRouteKind::system;
@@ -256,6 +258,10 @@ auto NativeFreedomFlightSession::jump_preview() const
   request.lineage = document_.origin.lineage;
   request.network = document_.origin.network;
   if (request.network) request.version = kFreedomNetworkJumpTargetingVersion;
+  if (resources_->drive) {
+    request.version = kFreedomRecoveryJumpTargetingVersion;
+    request.recovery = resources_->drive;
+  }
   request.source = document_.flight;
   request.destination = *travel_->selected;
   request.attempt = travel_->next_attempt;
@@ -435,6 +441,16 @@ auto NativeFreedomFlightSession::advance_jump(
           return std::unexpected{"Frozen arrival is not qualified"};
         candidate.travel_->committed = *frozen;
         candidate.travel_->commitment_resources = *candidate.resources_;
+        if (candidate.resources_->drive) {
+          if (!frozen->recovery)
+            return std::unexpected{"Recovery jump has no frozen uncertainty"};
+          const auto stamp = make_freedom_jump_recovery_stamp(
+              FreedomJumpRecoveryKind::system, preview->request.attempt,
+              frozen->recovery->source_checksum, preview->request.source.tick);
+          if (!stamp)
+            return std::unexpected{"Recovery commitment clock refused"};
+          candidate.resources_->drive->last_use = *stamp;
+        }
         --candidate.resources_->jump_charges;
         ++candidate.travel_->next_attempt;
         candidate.travel_->phase = FreedomJumpPhase::transit;

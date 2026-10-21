@@ -22,6 +22,7 @@ var seed_label: Label
 var seed: LineEdit
 var new_button: Button
 var network_choice: OptionButton
+var recovery_choice: CheckButton
 var continue_button: Button
 var reference_button: Button
 var settings_button: Button
@@ -97,6 +98,10 @@ func _ready() -> void:
 	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
+	recovery_choice = CheckButton.new()
+	recovery_choice.text = "Drive recovery · early jumps add arrival uncertainty"
+	recovery_choice.tooltip_text = "45 seconds after each arrival. Early jumps still cost one charge, with up to 2 km extra arrival spread. Existing saves keep their drive rules."
+	column.add_child(recovery_choice)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -159,7 +164,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return
@@ -225,7 +230,7 @@ func layout_title() -> void:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
-	for button in [seed, network_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
+	for button in [seed, network_choice, recovery_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
 	if chooser.visible: chooser.popup_centered_ratio(0.75)
 
