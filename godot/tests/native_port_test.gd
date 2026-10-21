@@ -1,6 +1,7 @@
 extends SceneTree
 ## Real native capture/constraint/release/Save As trace against independent C++.
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
+const Navigation = preload("res://scripts/native/home_navigation.gd")
 var failures := 0
 
 
@@ -12,6 +13,100 @@ func check(ok: bool, message: String) -> void:
 
 func _initialize() -> void:
 	call_deferred("run")
+
+
+func check_port_targets(source: Dictionary, geometry: Dictionary) -> void:
+	# These are presentation observations, never provider pose/selection writes.
+	var value := source.duplicate(true)
+	value.station_position = Vector3(120, -40, -600)
+	value.station_available = true
+	value.attached = false
+	# Exact quarter turn: (x,y,z) -> (z,y,-x), independent of craft attitude.
+	value.station_basis = Basis(Vector3(0, 0, -1), Vector3.UP, Vector3.RIGHT)
+	value.body_basis = Basis.IDENTITY
+	for ordinal in [1, 2]:
+		value.target_port = ordinal
+		var before := value.duplicate(true)
+		var original_geometry := geometry.duplicate(true)
+		var local: PackedFloat64Array = geometry.ports[ordinal - 1].position_metres
+		var expected: Vector3 = value.station_position + Vector3(local[2], local[1], -local[0])
+		var target: Dictionary = FlightView.home_navigation_target(value, geometry)
+		check(target.get("label") == "D%d" % ordinal and target.get("position") is Vector3 and target.position.is_equal_approx(expected), "Selected port bearing lost the actual station-frame collar")
+		value.body_basis = Basis(Vector3.RIGHT, PI * 0.5)
+		var shifted := geometry.duplicate(true)
+		shifted.asset_offset_metres = PackedFloat64Array([117, 9, -42])
+		check(FlightView.home_navigation_target(value, shifted) == target, "Port bearing reapplied the GLB offset or used craft attitude")
+		value.body_basis = before.body_basis
+		check(value == before and geometry == original_geometry, "Port bearing query mutated its observation or geometry")
+	var home := {"position": value.station_position, "label": "HOME"}
+	for ordinal in [null, -1, 0, 3, 1.0, "1", 4294967297]:
+		var invalid := value.duplicate(true)
+		invalid.target_port = ordinal
+		check(FlightView.home_navigation_target(invalid, geometry) == home, "Unknown or malformed selection invented a precision port bearing")
+	for field in ["attached", "station_available", "station_basis"]:
+		var invalid := value.duplicate(true)
+		invalid[field] = true if field == "attached" else false if field == "station_available" else Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
+		check(FlightView.home_navigation_target(invalid, geometry) == home, "Unavailable or singular station presentation retained a precision bearing: " + field)
+	var invalid_basis := value.duplicate(true)
+	invalid_basis.station_basis = Basis(Vector3(NAN, 0, 0), Vector3.UP, Vector3.BACK)
+	check(FlightView.home_navigation_target(invalid_basis, geometry) == home, "Nonfinite station basis reached a precision bearing")
+	for distance in [999.0, 1000.0, 1001.0]:
+		var ranged := value.duplicate(true)
+		ranged.station_position = Vector3(0, 0, -distance)
+		var target: Dictionary = FlightView.home_navigation_target(ranged, geometry)
+		check(target.get("label") == ("D2" if distance < 1000.0 else "HOME"), "Port bearing changed the established strict near-station boundary")
+		if distance >= 1000.0: check(target.get("position") == ranged.station_position, "Distant HOME no longer points to the station centre")
+	var malformed: Array = [null, {}, {"ports": []}]
+	for field in ["station_id", "version", "ports"]:
+		var invalid := geometry.duplicate(true)
+		invalid[field] = "foreign" if field == "station_id" else 2 if field == "version" else []
+		malformed.append(invalid)
+	for field in ["station_id", "ordinal", "position_metres"]:
+		var invalid := geometry.duplicate(true)
+		invalid.ports[1][field] = "foreign" if field == "station_id" else 1 if field == "ordinal" else PackedFloat64Array([0, INF, 0])
+		malformed.append(invalid)
+	for invalid in malformed:
+		check(FlightView.home_navigation_target(value, invalid) == home, "Malformed or foreign port geometry did not fall back to HOME")
+	var missing := value.duplicate(true)
+	missing.erase("station_position")
+	check(FlightView.home_navigation_target(missing, geometry).is_empty(), "Missing station position invented a HOME target")
+	for point in [null, [], Vector3(NAN, 0, 0), Vector3(0, INF, 0)]:
+		var invalid := value.duplicate(true)
+		invalid.station_position = point
+		check(FlightView.home_navigation_target(invalid, geometry).is_empty(), "Invalid station position reached projection")
+
+
+func check_selected_port_bearings(view: Control, owner: Variant, directory: String) -> void:
+	var original: Dictionary = owner.get_freedom_flight_state()
+	var original_port: int = original.target_port
+	var restored_path := directory.path_join("port-bearing-restored.json")
+	check(owner.save_freedom_as(restored_path), "Original port-bearing Save refused")
+	var original_bytes := FileAccess.get_file_as_bytes(restored_path)
+	for ordinal in [2, 1]:
+		check(owner.select_freedom_port(ordinal), "Real precision-bearing port selection refused")
+		var selected: Dictionary = owner.get_freedom_flight_state()
+		for field in ["tick", "checksum", "position_metres", "velocity_metres_per_second", "orientation_wxyz", "angular_velocity_body", "resources"]:
+			check(selected.get(field) == original.get(field), "Selecting a precision bearing changed authoritative " + field)
+		var before_path := directory.path_join("port-bearing-d%d-before.json" % ordinal)
+		var after_path := directory.path_join("port-bearing-d%d-after.json" % ordinal)
+		check(owner.save_freedom_as(before_path), "Selected port-bearing Save refused")
+		var before := FileAccess.get_file_as_bytes(before_path)
+		view.state = selected
+		for refresh in 2: view.update_view(0.0)
+		var point: Vector3 = view.station.port_markers[ordinal - 1].global_position
+		var target: Dictionary = FlightView.home_navigation_target(selected, view.station_geometry)
+		check(target.get("label") == "D%d" % ordinal and target.get("position") is Vector3 and target.position.is_equal_approx(point), "Precision bearing diverged from the rendered selected port")
+		var expected := Navigation.project(view.camera, point, view.home_marker.size, Navigation.INSET * view.home_marker.render_scale)
+		var actual: Dictionary = view.home_marker.cue
+		check(view.home_marker.label_text == "D%d" % ordinal and view.home_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and not expected.is_empty() and not actual.is_empty(), "Selected port marker was absent, mislabeled or intercepted input (label %s, bounds %s, scale %.2f)" % [view.home_marker.label_text, view.home_marker.size, view.home_marker.render_scale])
+		if not expected.is_empty() and not actual.is_empty():
+			check(actual.in_view == expected.in_view and actual.behind == expected.behind and actual.position.distance_to(expected.position) < 0.01 and actual.direction.is_equal_approx(expected.direction), "Selected port marker did not follow the actual camera projection")
+		check(owner.get_freedom_flight_state() == selected and owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == before, "View-only port-bearing refresh changed complete state or Save bytes")
+	check(owner.select_freedom_port(original_port), "Restoring original port selection refused")
+	check(owner.save_freedom_as(restored_path) and FileAccess.get_file_as_bytes(restored_path) == original_bytes, "Restoring original port changed saved flight or resources")
+	# Selection commands can legitimately update transient aid notes.
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
 
 
 func check_port_camera(view: Control, owner: Variant, source: Dictionary) -> void:
@@ -142,6 +237,10 @@ func run() -> void:
 		push_error("Expected approach, attached, trace, far saves and prepared assets")
 		quit(1)
 		return
+	# The headless default is a 64px window. Use a real supported UI size before
+	# testing physical-pixel marker insets; no world exists during this layout.
+	root.size = Vector2i(1280, 720)
+	for frame in 2: await process_frame
 	GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	check(not owner.select_freedom_port(1) and not owner.capture_freedom_port() and not owner.release_freedom_port() and not owner.begin_freedom_port_docking() and not owner.cancel_freedom_port_docking(), "Uninitialized port actions accepted")
@@ -154,6 +253,7 @@ func run() -> void:
 	check(owner.get_freedom_flight_state() == far, "Failed distant capture changed clock/pose/target")
 	check(owner.initialize_freedom_continue(args[0]), "Approach Continue refused")
 	var start: Dictionary = owner.get_freedom_flight_state()
+	check_port_targets(start, owner.get_freedom_station_geometry())
 	for separation in [null, "100", 100, [], NAN, INF, -INF, -0.001]:
 		var invalid_observation := start.duplicate(true)
 		invalid_observation.docking.separation = separation
@@ -180,6 +280,8 @@ func run() -> void:
 	check(view.station != null and view.station.camera == null and view.station.port_markers.size() == 2, "Close view lost real station or introduced inspection camera")
 	check(view.station.transform == Transform3D(start.station_basis, start.station_position), "Rendered station differs from C++ same-tick projection")
 	check(not view.capture_button.disabled and view.release_button.disabled, "Ready approach UI disagrees with capture gate")
+	check_selected_port_bearings(view, owner, args[0].get_base_dir())
+	start = owner.get_freedom_flight_state()
 	check_port_camera(view, owner, start)
 	view.port_command("capture_freedom_port")
 	var captured: Dictionary = owner.get_freedom_flight_state()

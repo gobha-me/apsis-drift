@@ -1802,6 +1802,27 @@ func apply_camera_depth(relation: Transform3D, minimum_far: float) -> bool:
 	return true
 
 
+static func home_navigation_target(value: Dictionary, geometry: Variant) -> Dictionary:
+	var centre: Variant = value.get("station_position")
+	if not centre is Vector3 or not centre.is_finite(): return {}
+	var result := {"position": centre, "label": "HOME"}
+	if not value.get("station_available", true) or value.get("attached", false) or centre.length() >= 1000.0: return result
+	var ordinal: Variant = value.get("target_port")
+	var frame: Variant = value.get("station_basis")
+	var station_id: Variant = value.get("station_id")
+	if not ordinal is int or ordinal < 1 or ordinal > 2 or not station_id is String or not frame is Basis or not frame.is_finite(): return result
+	var determinant: float = frame.determinant()
+	if not is_finite(determinant) or absf(determinant) < 0.000001 or not StationPresentation.valid_geometry(geometry, station_id): return result
+	# Registered collar coordinates already include the authored station datum.
+	# This is the same transform as the station's physical port markers; the
+	# imported asset offset and the craft's attitude do not belong here.
+	var point: Vector3 = centre + frame * StationPresentation.vector(geometry.ports[ordinal - 1].position_metres)
+	if point.is_finite():
+		result.position = point
+		result.label = "D%d" % ordinal
+	return result
+
+
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not valid_state(state) and error.is_empty():
 		pause_on_error("Saved flight observation is invalid")
@@ -1980,16 +2001,18 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
-	home_marker.label_text = "HOME"
+	var home_target := home_navigation_target(state, station_geometry)
+	home_marker.label_text = home_target.get("label", "HOME")
 	home_marker.visible = state.get("station_available", true)
 	home_cue.visible = home_marker.visible
-	if home_marker.visible: home_marker.update_cue(camera, target, state.attached)
+	if home_marker.visible: home_marker.update_cue(camera, home_target.get("position", target), state.attached)
 	var navigation: Dictionary = home_marker.cue
-	var direction := " · behind you" if navigation.get("behind", false) else (" · follow HOME marker" if not navigation.get("in_view", false) else " · ahead")
+	var direction := " · behind you" if navigation.get("behind", false) else (" · follow %s marker" % home_marker.label_text if not navigation.get("in_view", false) else " · ahead")
 	if navigation.is_empty(): direction = " · direction unavailable"
 	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
-	home_cue.tooltip_text = "Station " + state.station_id + " · HOME marks its projected direction. It does not steer or certify a route."
+	var bearing_description := "the selected port collar" if home_marker.label_text != "HOME" else "the station centre"
+	home_cue.tooltip_text = "Station %s · %s marks %s. Range is to the station centre. Bearing only; use live port readings for alignment and capture." % [state.station_id, home_marker.label_text, bearing_description]
 	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)
 	if rendezvous_button != null:
 		var rendezvous: Dictionary = state.get("port_rendezvous", {})

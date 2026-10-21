@@ -6,6 +6,14 @@ also identifies a target behind the current view. Range stays visible without a
 long numeric identifier. The marker follows the cockpit or exterior camera,
 including free look, and hides while the craft is attached.
 
+Within one kilometre of the station centre, a valid selected port changes this
+same cue to **D1** or **D2** and points it at that collar. The range text still
+measures distance to the station centre. Use the live collar offsets and
+assessment to align and dock; the bearing does not certify a clear approach.
+At distance or without valid selected-port geometry, the cue remains HOME.
+Edge bearings can overlap the compact status card; screen-space avoidance is
+still a presentation refinement under #244.
+
 On foot, a separate **SHIP** marker uses the same projection to point toward the
 landed craft centre. HOME stays hidden during surface walking. The bearing helps
 reacquire the ship; the existing aft-access reach check still controls reboarding.
@@ -22,7 +30,11 @@ reasons. The distant flight HUD leaves room for the world; its scrollable backin
 fits the remaining content. Continue remains paused until an explicit neutral
 resume, and ordinary controls and applied exhaust keep their existing behavior.
 
-Godot projects the existing C++ station position and reference-planet geometry.
+Godot projects the existing C++ station position, registered port geometry and
+reference-planet geometry. Close port bearings use the current station transform,
+matching the station model's port markers; craft attitude and the imported mesh
+offset do not move those registered targets. Geometry must match the current
+station owner before a port is used.
 It neither changes state nor generates a destination, chart, discovery or flight
 command. Invalid dimensions, non-finite positions, coincident targets and
 collapsed camera transforms refuse projection. Render-pixel and logical UI
@@ -32,5 +44,7 @@ sizes are handled separately, including narrow and stretched windows.
 behind-camera bearings, viewport scaling, rotated cameras, globe occlusion and
 invalid inputs. Existing saved-flight tests check near/distant/attached HUDs,
 controller actions, layout/scrolling and unchanged authoritative saved bytes.
+The actual port tests also check D1/D2 selection against the model's registered
+markers, invalid/foreign geometry fallback and view-only Save-byte invariance.
 The planetary checkpoint captures remain presentation evidence, separate from
 continuous manual/controller play and display-performance qualification.

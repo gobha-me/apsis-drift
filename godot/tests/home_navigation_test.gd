@@ -73,7 +73,7 @@ func run() -> void:
 		ship_marker.size = bounds
 		for scale in [0.5, 1.0, 2.0]:
 			ship_marker.render_scale = scale
-			for label in ["HOME", "SHIP", "RETURN"]:
+			for label in ["HOME", "D1", "D2", "SHIP", "RETURN"]:
 				ship_marker.label_text = label
 				for point in [Vector2(1, 1), Vector2(bounds.x - 1, 1), Vector2(1, bounds.y - 1), bounds - Vector2.ONE]:
 					var backing: Rect2 = ship_marker.label_bounds(point)
