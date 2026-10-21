@@ -24,7 +24,8 @@ auto NativeFreedomFlightSession::orbital_survey_conditions() const
     -> std::expected<void, std::string> {
   if (!knowledge_ ||
       (knowledge_->recipe.version != kFreedomObservedKnowledgeVersion &&
-       knowledge_->recipe.version != kFreedomTravelKnowledgeVersion))
+       knowledge_->recipe.version != kFreedomTravelKnowledgeVersion &&
+       knowledge_->recipe.version != kFreedomNetworkKnowledgeVersion))
     return std::unexpected{"This journey has no supported ship observations"};
   if (recovery_pending())
     return std::unexpected{"Survey held: recovery pending"};

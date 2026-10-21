@@ -101,3 +101,19 @@ selection. `first_jump_test.gd` compares the real bridge/UI route with independe
 C++ phase saves, checks neighbor asset staging, craft continuity, chart presence,
 terrain retirement and removal/restoration of station cues. Headless checks do
 not establish GPU appearance, hardware controls or play balance.
+
+## Four-system selection
+
+Select **Four charted systems** before New Game to add Waypoint A and Waypoint B
+to the existing Home/nearby region. The chart offers every other known system
+from the current one; each button selects only that leg. Check the remaining
+charges before departure. Neither an arrival in the Home system nor choosing
+a port refuels the ship: approach and capture the actual station, then request
+free replenishment. The original two-system New Game remains the default.
+
+The selected region follows the origin history through Save/Continue, planetary
+landing/walking, Origin Moon/minor trips and standard recovery. Old saves do
+not acquire additional destinations. Frozen request policy 2 binds the explicit
+network selector as well as the existing source, attempt and lineage. Its
+full three-dimensional leg uses the actual source and nominal arrival, preserving
+the existing alignment, clearance, charge and arrival rules.

@@ -109,7 +109,9 @@ auto encode_freedom_journey_document_json(
   const auto encoded = encode_freedom_docking_document_json(document.voyage);
   if (!encoded) return std::unexpected{encoded.error()};
   auto root = Json::parse(*encoded);
-  root["format_version"] = document.voyage.flight.model.optics
+  root["format_version"] = document.voyage.flight.origin.network
+                               ? kFreedomNetworkJourneySaveFormatVersion
+                           : document.voyage.flight.model.optics
                                ? kFreedomOpticalJourneySaveFormatVersion
                            : document.voyage.flight.model.frame_policy ==
                                    kFreedomReleaseSystemFramePolicy
@@ -176,6 +178,8 @@ auto decode_freedom_journey_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool network =
+      root["format_version"] == kFreedomNetworkJourneySaveFormatVersion;
   const bool optical =
       root["format_version"] == kFreedomOpticalJourneySaveFormatVersion;
   const bool release =
@@ -183,11 +187,16 @@ auto decode_freedom_journey_document_json(std::string_view text)
   const bool selected =
       root["format_version"] == kFreedomTerrainJourneySaveFormatVersion;
   if (root["format_version"] != kFreedomJourneySaveFormatVersion && !selected &&
-      !release && !optical)
+      !release && !optical && !network)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom journey save version"}};
   auto shape = root;
+  if (network) {
+    if (!root.contains("network"))
+      return std::unexpected{failure("$.network", "network selection missing")};
+    shape.erase("network");
+  }
   if (root.contains("world_owner")) shape.erase("craft_lineage");
   shape.erase("world_owner");
   if (!exact_fields(shape, {"application", "application_version",
@@ -226,7 +235,8 @@ auto decode_freedom_journey_document_json(std::string_view text)
   const OriginWalkerState actor{1, *actor_id, *foot, *velocity,
                                 a["heading_radians"].get<double>()};
   root.erase("actor");
-  root["format_version"] = optical    ? kFreedomOpticalDockingSaveFormatVersion
+  root["format_version"] = network    ? kFreedomNetworkDockingSaveFormatVersion
+                           : optical  ? kFreedomOpticalDockingSaveFormatVersion
                            : release  ? kFreedomReleaseDockingSaveFormatVersion
                            : selected ? kFreedomTerrainDockingSaveFormatVersion
                                       : kFreedomDockingSaveFormatVersion;

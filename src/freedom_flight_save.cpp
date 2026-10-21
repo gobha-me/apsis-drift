@@ -4,6 +4,7 @@
 
 #include "freedom_moon_flight_save_internal.hpp"
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
@@ -109,6 +110,26 @@ auto resolve_world(const FreedomSaveDocument& origin,
                    const std::optional<FreedomActiveWorldSelection>& world)
     -> std::expected<PhysicalLocalSystem, SaveSchemaError> {
   const auto seed = origin.recipe.universe_seed;
+  if (origin.network) {
+    if (!world || world->version != kFreedomNetworkActiveWorldVersion ||
+        model.physical_catalog != 2 || model.physical_ephemeris != 2)
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::incompatible_generator_version, "$.world_owner",
+          "network requires explicit active-world2 and physical recipe2")};
+    const auto network =
+        generate_freedom_system_network(seed, origin.network->version);
+    if (!network)
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                     "$.network",
+                                     "selected system network refused")};
+    auto system = resolve_freedom_network_system(*network, world->system,
+                                                 model.physical_catalog);
+    if (!system)
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_state, "$.world_owner.system_id",
+                  "active world is outside selected network")};
+    return std::move(*system);
+  }
   if (world && (world->version != kFreedomActiveWorldVersion ||
                 model.physical_catalog != 2 || model.physical_ephemeris != 2))
     return std::unexpected{failure(
@@ -356,7 +377,8 @@ auto encode_freedom_flight_document_json(
                                    "rigid state cannot be encoded")};
   Json root = Json::parse(*origin);
   root["format_version"] =
-      document.model.optics ? kFreedomOpticalFlightSaveFormatVersion
+      document.origin.network ? kFreedomNetworkFlightSaveFormatVersion
+      : document.model.optics ? kFreedomOpticalFlightSaveFormatVersion
       : document.model.frame_policy == kFreedomReleaseSystemFramePolicy
           ? kFreedomReleaseFlightSaveFormatVersion
       : document.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
@@ -391,12 +413,15 @@ auto encode_freedom_flight_document_json(
       {"atmosphere", model.atmosphere.version},
       {"orbit_hold", {{"version", model.hold.version}, {"target", target}}},
       {"assistance", model.assistance}};
-  if (model.terrain_policy == kFreedomLocalDetailTerrainPolicy ||
+  if (document.origin.network ||
+      model.terrain_policy == kFreedomLocalDetailTerrainPolicy ||
       model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
     root["flight_model"]["terrain_policy"] = model.terrain_policy;
-  if (model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
+  if (document.origin.network ||
+      model.frame_policy == kFreedomReleaseSystemFramePolicy || model.optics)
     root["flight_model"]["frame_policy"] = model.frame_policy;
-  if (model.optics) root["flight_model"]["optics"] = model.optics;
+  if (document.origin.network || model.optics)
+    root["flight_model"]["optics"] = model.optics;
   if (model.companions) root["flight_model"]["companions"] = model.companions;
   auto encoded = root.dump(2) + '\n';
   if (encoded.size() > kMaximumSaveDocumentBytes)
@@ -444,10 +469,12 @@ auto decode_flight(std::string_view text, bool system_import)
                                    "$.format_version",
                                    "expected unsigned save version")};
   if (!system_import &&
-      root["format_version"] == kFreedomMinorFlightSaveFormatVersion)
+      (root["format_version"] == kFreedomMinorFlightSaveFormatVersion ||
+       root["format_version"] == kFreedomNetworkMinorFlightSaveFormatVersion))
     return detail::decode_minor_flight(root);
   if (!system_import &&
-      root["format_version"] == kFreedomMoonFlightSaveFormatVersion)
+      (root["format_version"] == kFreedomMoonFlightSaveFormatVersion ||
+       root["format_version"] == kFreedomNetworkMoonFlightSaveFormatVersion))
     return detail::decode_moon_flight(root);
   const bool importing =
       system_import &&
@@ -456,9 +483,13 @@ auto decode_flight(std::string_view text, bool system_import)
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported system-flight import version")};
-  const bool optical =
+  const bool network =
       !system_import &&
-      root["format_version"] == kFreedomOpticalFlightSaveFormatVersion;
+      root["format_version"] == kFreedomNetworkFlightSaveFormatVersion;
+  // Network50 explicitly carries all presentation policies, including optics0.
+  const bool optical =
+      network || (!system_import && root["format_version"] ==
+                                        kFreedomOpticalFlightSaveFormatVersion);
   const bool release =
       !system_import &&
       (root["format_version"] == kFreedomReleaseFlightSaveFormatVersion ||
@@ -470,7 +501,7 @@ auto decode_flight(std::string_view text, bool system_import)
       optical || release || importing ||
       root["format_version"] == kFreedomTerrainFlightSaveFormatVersion;
   const bool active =
-      release || importing ||
+      network || release || importing ||
       root["format_version"] == kFreedomActiveFlightSaveFormatVersion ||
       (selected && root.contains("world_owner"));
   if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active &&
@@ -481,6 +512,13 @@ auto decode_flight(std::string_view text, bool system_import)
   auto shape_root = root;
   // A bare full-flight import cannot carry an unqualified recovery lineage.
   if (active && !importing) shape_root.erase("craft_lineage");
+  if (network) {
+    if (!root.contains("network"))
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::missing_field, "$.network",
+                  "network flight requires explicit selection")};
+    shape_root.erase("network");
+  }
   auto shape =
       active ? fields(shape_root,
                       {"application", "application_version", "format_version",
@@ -500,7 +538,8 @@ auto decode_flight(std::string_view text, bool system_import)
         !valid)
       return std::unexpected{valid.error()};
     if (!w["version"].is_number_unsigned() ||
-        w["version"] != kFreedomActiveWorldVersion)
+        w["version"] != (network ? kFreedomNetworkActiveWorldVersion
+                                 : kFreedomActiveWorldVersion))
       return std::unexpected{
           failure(SaveSchemaErrorCode::incompatible_generator_version,
                   "$.world_owner.version", "unsupported active-world owner")};
@@ -508,8 +547,11 @@ auto decode_flight(std::string_view text, bool system_import)
          planet = decimal(w["planet_id"], "$.world_owner.planet_id");
     if (!system) return std::unexpected{system.error()};
     if (!planet) return std::unexpected{planet.error()};
-    selection = FreedomActiveWorldSelection{
-        kFreedomActiveWorldVersion, {*system}, {*planet}};
+    selection =
+        FreedomActiveWorldSelection{network ? kFreedomNetworkActiveWorldVersion
+                                            : kFreedomActiveWorldVersion,
+                                    {*system},
+                                    {*planet}};
   }
   if (!root["state"].is_object() || !root["state"].contains("location") ||
       root["state"]["location"] !=
@@ -528,7 +570,8 @@ auto decode_flight(std::string_view text, bool system_import)
   origin.erase("flight");
   origin.erase("flight_model");
   origin.erase("world_owner");
-  origin["format_version"] = origin.contains("craft_lineage")
+  origin["format_version"] = network ? kFreedomNetworkSaveFormatVersion
+                             : origin.contains("craft_lineage")
                                  ? kFreedomCraftLineageSaveFormatVersion
                                  : kFreedomSaveFormatVersion;
   origin["state"]["location"] = "docked_at_origin";
@@ -551,14 +594,19 @@ auto decode_flight(std::string_view text, bool system_import)
                   "$.flight_model.companions",
                   "unsupported distant companion selection")};
     if (!m.contains("optics") || !m["optics"].is_number_unsigned() ||
-        m["optics"] != kPlanetOpticsVersion || !m.contains("frame_policy") ||
+        (m["optics"] != kPlanetOpticsVersion &&
+         !(network && m["optics"] == 0U)) ||
+        !m.contains("frame_policy") ||
         !m["frame_policy"].is_number_unsigned() ||
         (m["frame_policy"] != kFreedomRelativeFramePolicy &&
          m["frame_policy"] != kFreedomReleaseSystemFramePolicy))
       return std::unexpected{failure(
           SaveSchemaErrorCode::incompatible_generator_version,
           "$.flight_model.optics",
-          "optical save requires optics1 and an explicit frame policy")};
+          network
+              ? "network save requires supported optics and an explicit frame "
+                "policy"
+              : "optical save requires optics1 and an explicit frame policy")};
   }
   if (release &&
       (!m.contains("frame_policy") || !m["frame_policy"].is_number_unsigned() ||
@@ -620,7 +668,7 @@ auto decode_flight(std::string_view text, bool system_import)
   model.frame_policy = optical   ? m["frame_policy"].get<std::uint32_t>()
                        : release ? kFreedomReleaseSystemFramePolicy
                                  : kFreedomRelativeFramePolicy;
-  model.optics = optical ? kPlanetOpticsVersion : 0;
+  model.optics = optical ? m["optics"].get<std::uint32_t>() : 0;
   model.companions = optical && m.contains("companions") ? 1U : 0U;
   const auto& target = hold["target"];
   if (!target.is_null()) {

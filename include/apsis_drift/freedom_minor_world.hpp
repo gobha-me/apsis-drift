@@ -4,6 +4,7 @@
 #include "apsis_drift/physical_minor_rotation.hpp"
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomMinorFlightSaveFormatVersion{46};
+inline constexpr std::uint32_t kFreedomNetworkMinorFlightSaveFormatVersion{55};
 inline constexpr std::uint32_t kFreedomMinorWorldVersion{1};
 struct FreedomMinorWorldSelection {
   std::uint32_t version{kFreedomMinorWorldVersion};

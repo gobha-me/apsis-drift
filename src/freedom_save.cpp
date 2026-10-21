@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/version.hpp"
 
 namespace apsis_drift {
@@ -164,6 +165,15 @@ auto make_freedom_new_game_document(Seed universe_seed) -> FreedomSaveDocument {
        .tick = 0}};
 }
 
+auto make_freedom_network_new_game_document(Seed universe_seed)
+    -> std::expected<FreedomSaveDocument, SaveSchemaError> {
+  auto document = make_freedom_new_game_document(universe_seed);
+  document.network = FreedomNetworkSelection{};
+  if (auto valid = validate_freedom_save_document(document); !valid)
+    return std::unexpected{valid.error()};
+  return document;
+}
+
 auto validate_freedom_save_document(const FreedomSaveDocument& document)
     -> std::expected<void, SaveSchemaError> {
   const auto& recipe = document.recipe;
@@ -180,6 +190,12 @@ auto validate_freedom_save_document(const FreedomSaveDocument& document)
   if (recipe != make_save_recipe(recipe.universe_seed))
     return std::unexpected{error(SaveSchemaErrorCode::identity_mismatch,
                                  "$.recipe", "recipe does not match its seed")};
+  if (document.network &&
+      (document.network->version != kFreedomNetworkSelectionVersion ||
+       !generate_freedom_system_network(recipe.universe_seed,
+                                        document.network->version)))
+    return std::unexpected{error(SaveSchemaErrorCode::invalid_state,
+                                 "$.network", "unsupported system network")};
   if (document.lineage &&
       (document.lineage->version != kFreedomCraftLineageVersion ||
        !document.lineage->generation))
@@ -238,7 +254,8 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
   Json root = {
       {"application", kSaveApplication},
       {"application_version", kApplicationVersion},
-      {"format_version", document.lineage
+      {"format_version", document.network ? kFreedomNetworkSaveFormatVersion
+                         : document.lineage
                              ? kFreedomCraftLineageSaveFormatVersion
                              : kFreedomSaveFormatVersion},
       {"mode", "freedom"},
@@ -261,6 +278,8 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
     root["craft_lineage"] = {
         {"version", document.lineage->version},
         {"generation", std::to_string(document.lineage->generation)}};
+  if (document.network)
+    root["network"] = {{"version", document.network->version}};
   auto encoded = root.dump(2);
   encoded.push_back('\n');
   if (encoded.size() > kMaximumSaveDocumentBytes)
@@ -301,20 +320,32 @@ auto decode_freedom_save_document_json(std::string_view json_text)
   if (duplicate)
     return std::unexpected{error(SaveSchemaErrorCode::duplicate_key, "$",
                                  "JSON objects cannot repeat a key")};
+  const bool network =
+      root.is_object() && root.contains("format_version") &&
+      root["format_version"].is_number_unsigned() &&
+      root["format_version"] == kFreedomNetworkSaveFormatVersion;
   const bool lineage =
       root.is_object() && root.contains("format_version") &&
       root["format_version"].is_number_unsigned() &&
-      root["format_version"] == kFreedomCraftLineageSaveFormatVersion;
+      (root["format_version"] == kFreedomCraftLineageSaveFormatVersion ||
+       (network && root.contains("craft_lineage")));
+  auto shape = root;
+  if (network && lineage) shape.erase("craft_lineage");
   const auto fields =
-      lineage ? exact_fields(root,
-                             {"application", "application_version",
-                              "format_version", "mode", "recipe", "state",
-                              "craft_lineage"},
-                             "$")
-              : exact_fields(root,
-                             {"application", "application_version",
-                              "format_version", "mode", "recipe", "state"},
-                             "$");
+      network   ? exact_fields(shape,
+                               {"application", "application_version",
+                                "format_version", "mode", "recipe", "state",
+                                "network"},
+                               "$")
+      : lineage ? exact_fields(root,
+                               {"application", "application_version",
+                                "format_version", "mode", "recipe", "state",
+                                "craft_lineage"},
+                               "$")
+                : exact_fields(root,
+                               {"application", "application_version",
+                                "format_version", "mode", "recipe", "state"},
+                               "$");
   if (!fields) return std::unexpected{fields.error()};
   if (!root.at("application").is_string() ||
       root.at("application") != kSaveApplication ||
@@ -323,7 +354,8 @@ auto decode_freedom_save_document_json(std::string_view json_text)
                                  "application or mode is not Freedom")};
   if (!root.at("format_version").is_number_unsigned() ||
       (root.at("format_version") != kFreedomSaveFormatVersion &&
-       root.at("format_version") != kFreedomCraftLineageSaveFormatVersion))
+       root.at("format_version") != kFreedomCraftLineageSaveFormatVersion &&
+       root.at("format_version") != kFreedomNetworkSaveFormatVersion))
     return std::unexpected{
         error(SaveSchemaErrorCode::unsupported_format_version,
               "$.format_version", "unsupported Freedom save version")};
@@ -389,6 +421,17 @@ auto decode_freedom_save_document_json(std::string_view json_text)
     return std::unexpected{error(SaveSchemaErrorCode::invalid_value, "$.recipe",
                                  "Freedom station ordinals are invalid")};
   auto document = make_freedom_new_game_document(Seed{*seed});
+  if (network) {
+    const auto& selected = root.at("network");
+    if (auto valid = exact_fields(selected, {"version"}, "$.network"); !valid)
+      return std::unexpected{valid.error()};
+    if (!selected.at("version").is_number_unsigned() ||
+        selected.at("version") != kFreedomNetworkSelectionVersion)
+      return std::unexpected{
+          error(SaveSchemaErrorCode::unsupported_format_version,
+                "$.network.version", "unsupported network selection")};
+    document.network = FreedomNetworkSelection{};
+  }
   if (lineage) {
     const auto& selected = root.at("craft_lineage");
     if (auto shape = exact_fields(selected, {"version", "generation"},

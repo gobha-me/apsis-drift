@@ -170,10 +170,21 @@ auto query_known_craft_environment(const PhysicalLocalSystem& system,
   if (!validate_freedom_knowledge(knowledge, tick))
     return std::unexpected{Error::invalid_knowledge};
   if (recipe.catalog_kind == LocalSystemKind::procedural) {
-    const auto ids = generate_first_intersystem_identities(owner.universe_seed);
-    if (owner.version != kFreedomTravelKnowledgeVersion ||
-        recipe.system_seed != ids.target_system_seed)
-      return std::unexpected{Error::owner_mismatch};
+    if (owner.version == kFreedomNetworkKnowledgeVersion) {
+      const auto network = generate_freedom_system_network(owner.universe_seed);
+      if (!network) return std::unexpected{Error::owner_mismatch};
+      const auto node =
+          find_freedom_system_network_node(*network, recipe.system);
+      if (!node || node->ordinal == 0 ||
+          node->system_seed != recipe.system_seed)
+        return std::unexpected{Error::owner_mismatch};
+    } else {
+      const auto ids =
+          generate_first_intersystem_identities(owner.universe_seed);
+      if (owner.version != kFreedomTravelKnowledgeVersion ||
+          recipe.system_seed != ids.target_system_seed)
+        return std::unexpected{Error::owner_mismatch};
+    }
   }
   const KnowledgeSubject subject{KnowledgeSubjectKind::planet, recipe.system,
                                  recipe.planet.value};

@@ -938,6 +938,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME freedom-starting-chart-contract COMMAND apsis-drift-freedom-starting-chart-tests)
   set_tests_properties(freedom-starting-chart-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-freedom-system-network-tests test/freedom_system_network_test.cpp)
+  target_link_libraries(apsis-drift-freedom-system-network-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-freedom-system-network-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME freedom-system-network-contract COMMAND apsis-drift-freedom-system-network-tests)
+  set_tests_properties(freedom-system-network-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-freedom-knowledge-tests test/freedom_knowledge_test.cpp)
   target_link_libraries(apsis-drift-freedom-knowledge-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-knowledge-tests PRIVATE

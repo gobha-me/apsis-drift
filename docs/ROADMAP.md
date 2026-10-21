@@ -83,6 +83,15 @@ in actual stable orbital flight, retained partial progress and a coarse terrain
 model with survey provenance. It does not activate probes, survey payment,
 missions, full mapping coverage or the broader #207 network horizon.
 
+The owner then selected **four charted systems with unexplored planets**
+([#229](https://github.com/gobha-me/apsis-drift/issues/229)). The
+[optional finite region](FREEDOM_TOPOLOGY.md#optional-four-system-region) keeps
+the existing pair and adds two seeded destinations. It grants system anchors;
+planetary knowledge still comes from observation. Manual single-leg jumps retain
+three charges and free service after physical docking at Origin. Existing saves
+and the default two-system New Game keep their current selection. Larger
+networks, automatic routing, missions and the economy remain separate scope.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

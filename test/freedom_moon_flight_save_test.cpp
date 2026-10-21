@@ -48,6 +48,66 @@ auto fixture() -> FreedomFlightSaveDocument {
   document.flight.linear_velocity_metres_per_second = {0, 0, 100};
   return document;
 }
+auto network_companion_roundtrips() -> void {
+  auto moon_source = fixture();
+  const auto system = need(generate_physical_origin_system(Seed{42}, 2));
+  const auto catalog = need(generate_secondary_body_catalog(system));
+  const auto minor = need(
+      generate_physical_minor_descriptor(catalog, catalog.bodies[1].node.id));
+  auto minor_source = moon_source;
+  minor_source.moon.reset();
+  minor_source.minor =
+      FreedomMinorWorldSelection{1, {system.catalog.id, minor.body}};
+  minor_source.flight.frame.body = minor.body;
+  minor_source.flight.position_metres = {minor.radius_metres + 50000.0, 100, 0};
+  for (auto source : {moon_source, minor_source}) {
+    const auto old_bytes = need(encode_freedom_flight_document_json(source));
+    const auto old_format = source.moon ? kFreedomMoonFlightSaveFormatVersion
+                                        : kFreedomMinorFlightSaveFormatVersion;
+    const auto selected_format =
+        source.moon ? kFreedomNetworkMoonFlightSaveFormatVersion
+                    : kFreedomNetworkMinorFlightSaveFormatVersion;
+    source.origin.network = FreedomNetworkSelection{};
+    for (const bool lineage : {false, true}) {
+      if (lineage) {
+        source.origin.lineage = FreedomCraftLineage{1, 1};
+        source.origin.state.craft =
+            need(derive_freedom_craft_identity(Seed{42}, 1));
+      }
+      const auto bytes = need(encode_freedom_flight_document_json(source));
+      const auto json = Json::parse(bytes);
+      const auto restored = need(decode_freedom_flight_document_json(bytes));
+      const auto owner = need(hydrate_freedom_flight_document(restored));
+      check(json["format_version"] == selected_format && restored == source &&
+                need(encode_freedom_flight_document_json(restored)) == bytes &&
+                owner.system == system &&
+                need(relative_freedom_flight_state(restored, system)) ==
+                    source.flight,
+            "network54/55 retain genuine typed companion state, selector and "
+            "lineage");
+      auto bad = json;
+      bad["format_version"] = old_format;
+      check(!decode_freedom_flight_document_json(bad.dump()),
+            "old42/46 cannot admit a network descriptor");
+      bad = json;
+      bad.erase("network");
+      check(!decode_freedom_flight_document_json(bad.dump()),
+            "new54/55 cannot infer an absent selector");
+      bad = json;
+      bad["network"]["version"] = 2U;
+      check(!decode_freedom_flight_document_json(bad.dump()),
+            "typed companion saves authenticate the network recipe");
+      bad = json;
+      bad["world_owner"]["target"]["system"] = "0";
+      check(!decode_freedom_flight_document_json(bad.dump()),
+            "selected network does not extend companion routes to a foreign "
+            "owner");
+    }
+    check(need(encode_freedom_flight_document_json(need(
+              decode_freedom_flight_document_json(old_bytes)))) == old_bytes,
+          "old typed companion bytes remain exactly repeatable");
+  }
+}
 auto continuation(FreedomFlightSaveDocument document)
     -> FreedomFlightSaveDocument {
   const auto owner = need(hydrate_freedom_moon_flight_document(document));
@@ -325,6 +385,7 @@ int main() {
     check(resumed.document() == session.document() &&
               resumed.moon() == session.moon(),
           "Native Save/Continue retains actual moon state and selected owner");
+    network_companion_roundtrips();
     surface_saves();
     suspension_landing();
     invalid_documents(document);

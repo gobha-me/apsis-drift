@@ -306,7 +306,7 @@ func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
 	return candidate
 
 func select_start(owner: Variant, options: Dictionary) -> bool:
-	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_profile(options.value) if options.mode == "profile" else owner.stage_freedom_continue(options.value)
+	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_network_new_game(options.value) if options.mode == "new_game" and options.get("network", false) else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_profile(options.value) if options.mode == "profile" else owner.stage_freedom_continue(options.value)
 	if not staged:
 		error = str(owner.get_last_error())
 		return false

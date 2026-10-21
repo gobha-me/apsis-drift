@@ -1,3 +1,4 @@
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
@@ -80,6 +81,130 @@ auto document(Seed seed, double altitude = 1000) -> FreedomFlightSaveDocument {
   state.position_metres = {planet.radius.value * 1000.0 + altitude, 0, 0};
   state.linear_velocity_metres_per_second = {0, 0, -100};
   return {origin, state, {}};
+}
+auto network_roundtrips() -> void {
+  const Seed seed{42};
+  const auto legacy = make_freedom_new_game_document(seed);
+  const auto legacy_bytes = required(encode_freedom_save_document_json(legacy));
+  auto origin = required(make_freedom_network_new_game_document(seed));
+  check(origin.recipe == legacy.recipe && origin.state == legacy.state &&
+            !legacy.network && origin.network == FreedomNetworkSelection{},
+        "opt-in network retains the exact original recipe and starter state");
+  for (const bool lineage : {false, true}) {
+    if (lineage) {
+      origin.lineage = FreedomCraftLineage{1, 1};
+      origin.state.craft = required(derive_freedom_craft_identity(seed, 1));
+    }
+    const auto bytes = required(encode_freedom_save_document_json(origin));
+    const auto json = Json::parse(bytes);
+    check(
+        json["format_version"] == kFreedomNetworkSaveFormatVersion &&
+            required(decode_freedom_save_document_json(bytes)) == origin &&
+            required(encode_freedom_save_document_json(
+                required(decode_freedom_save_document_json(bytes)))) == bytes,
+        "origin49 preserves the explicit network and optional lineage exactly");
+    for (const auto old : {17U, 28U}) {
+      auto bad = json;
+      bad["format_version"] = old;
+      check(!decode_freedom_save_document_json(bad.dump()),
+            "network descriptor cannot enter historical origin envelopes");
+    }
+    for (const auto& selection :
+         {Json(nullptr), Json::object(), Json{{"version", true}},
+          Json{{"version", 2U}}, Json{{"version", 1U}, {"seed", "42"}}}) {
+      auto bad = json;
+      bad["network"] = selection;
+      check(!decode_freedom_save_document_json(bad.dump()),
+            "origin network descriptor is closed and versioned");
+    }
+    auto bad = json;
+    bad.erase("network");
+    check(!decode_freedom_save_document_json(bad.dump()),
+          "origin49 cannot infer a missing selector");
+  }
+  check(required(encode_freedom_save_document_json(legacy)) == legacy_bytes,
+        "opt-in construction does not mutate the legacy origin");
+  const auto network = required(generate_freedom_system_network(seed));
+  for (const auto& node : network.nodes) {
+    const auto system =
+        required(resolve_freedom_network_system(network, node.system));
+    const auto& planet = system.catalog.planets.front().descriptor;
+    auto d = document(seed, 500000);
+    d.origin.network = FreedomNetworkSelection{};
+    if (node.ordinal == 2) {
+      d.origin.lineage = FreedomCraftLineage{1, 1};
+      d.origin.state.craft = required(derive_freedom_craft_identity(seed, 1));
+    }
+    d.world = FreedomActiveWorldSelection{2, node.system, planet.id};
+    d.model.physical_catalog = 2;
+    d.model.physical_ephemeris = 2;
+    d.flight.craft = wayfarer_frame().recipe;
+    d.flight.frame = {
+        RigidFrameKind::planet_relative_inertial, node.system, planet.id, {}};
+    d.flight.position_metres = {planet.radius.value * 1000.0 + 500000, 0, 0};
+    for (const bool optical : {false, true}) {
+      d.model.optics = optical ? 1U : 0U;
+      d.model.terrain_policy =
+          optical ? kFreedomSeaDatumTerrainPolicy : kFreedomLegacyTerrainPolicy;
+      d.model.companions = optical ? 1U : 0U;
+      for (const bool system_frame : {false, true}) {
+        auto source = d;
+        source.model.frame_policy = system_frame
+                                        ? kFreedomReleaseSystemFramePolicy
+                                        : kFreedomRelativeFramePolicy;
+        if (system_frame)
+          source.flight = required(reframe_rigid_body(
+              RigidBodyWorldContext{system}, d.flight,
+              {{RigidFrameKind::system_inertial, node.system, {}, {}},
+               d.flight.tick}));
+        const auto bytes =
+            required(encode_freedom_flight_document_json(source));
+        const auto json = Json::parse(bytes);
+        const auto restored =
+            required(decode_freedom_flight_document_json(bytes));
+        check(
+            json["format_version"] == kFreedomNetworkFlightSaveFormatVersion &&
+                restored == source &&
+                required(encode_freedom_flight_document_json(restored)) ==
+                    bytes &&
+                required(hydrate_freedom_flight_document(restored)).system ==
+                    system &&
+                bits(required(relative_freedom_flight_state(restored, system)),
+                     required(relative_freedom_flight_state(source, system))),
+            "each network world preserves actual owner, full state and "
+            "explicit policies");
+        for (const auto old : {18U, 26U, 31U, 36U, 39U}) {
+          auto bad = json;
+          bad["format_version"] = old;
+          check(!decode_freedom_flight_document_json(bad.dump()),
+                "network flight cannot masquerade as a historical pair save");
+        }
+        for (const auto key : {"network", "world_owner"}) {
+          auto bad = json;
+          bad.erase(key);
+          check(!decode_freedom_flight_document_json(bad.dump()),
+                "network flight requires both explicit selectors");
+        }
+      }
+    }
+    auto bad = d;
+    bad.world->version = 1;
+    check(!encode_freedom_flight_document_json(bad),
+          "network origin cannot use the old pair world policy");
+    bad = d;
+    bad.origin.network.reset();
+    check(!encode_freedom_flight_document_json(bad),
+          "world2 cannot enter an unselected legacy origin");
+    bad = d;
+    bad.world->system =
+        required(generate_physical_origin_system(Seed{43}, 2)).catalog.id;
+    check(!encode_freedom_flight_document_json(bad),
+          "network refuses an authentic but foreign system");
+    bad = d;
+    bad.world->planet = PlanetId{0};
+    check(!encode_freedom_flight_document_json(bad),
+          "network refuses a planet absent from its genuine physical owner");
+  }
 }
 auto release_frame_selection() -> void {
   const auto system = required(generate_physical_origin_system(Seed{42}, 2));
@@ -714,6 +839,7 @@ auto terrain_selection(const std::filesystem::path& directory) -> void {
 int main() {
   try {
     invalid();
+    network_roundtrips();
     release_frame_selection();
     const auto directory =
         std::filesystem::temp_directory_path() /

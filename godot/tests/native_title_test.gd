@@ -70,6 +70,7 @@ func run() -> void:
 	await settle()
 	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and shell.current_view == null, "Title generated a world before selection")
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
+	check(title.network_choice != null and not title.network_choice.button_pressed and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional four-system choice changed default New Game or lost keyboard access")
 	title.open_settings()
 	var settings: Control = title.settings_view
 	title.begin_new()

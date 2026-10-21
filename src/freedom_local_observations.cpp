@@ -46,7 +46,8 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
       !validate_freedom_surface_document(voyage))
     return std::unexpected{Error::invalid_ledger};
   if ((knowledge.recipe.version != kFreedomObservedKnowledgeVersion &&
-       knowledge.recipe.version != kFreedomTravelKnowledgeVersion) ||
+       knowledge.recipe.version != kFreedomTravelKnowledgeVersion &&
+       knowledge.recipe.version != kFreedomNetworkKnowledgeVersion) ||
       knowledge.recipe.observation_policy != kFreedomLocalObservationPolicy)
     return std::unexpected{Error::unsupported_recipe};
   if (knowledge.recipe.universe_seed != flight.origin.recipe.universe_seed ||
@@ -66,7 +67,8 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
       (event == LocalObservationEvent::system_arrival &&
        (!pilot.aboard || pilot.attached || voyage.surface.landed ||
         !flight.world ||
-        knowledge.recipe.version != kFreedomTravelKnowledgeVersion)))
+        (knowledge.recipe.version != kFreedomTravelKnowledgeVersion &&
+         knowledge.recipe.version != kFreedomNetworkKnowledgeVersion))))
     return std::unexpected{Error::invalid_source};
   if (!pilot.aboard ||
       (event == LocalObservationEvent::sensor_tick &&

@@ -167,6 +167,7 @@ auto prior_history(const FreedomTravelSaveDocument& d,
          r.universe_seed == first_source.origin.recipe.universe_seed &&
          r.craft == first_source.origin.state.craft &&
          r.lineage == first_source.origin.lineage &&
+         r.network == first_source.origin.network &&
          r.destination == ids.origin_system &&
          f.preview.arrival_tick <= first_source.flight.tick &&
          r.attempt < std::numeric_limits<std::uint64_t>::max() &&
@@ -323,7 +324,10 @@ auto validate_origin_local(const FreedomTravelSaveDocument& d)
       !s.local || s.selected || s.prior_moon || !s.next_attempt ||
       !d.craft_binding ||
       *d.craft_binding != NativeStartingAssemblySelection{} ||
-      d.voyage.knowledge.recipe.version != kFreedomTravelKnowledgeVersion)
+      d.voyage.knowledge.recipe.version !=
+          (surface_base_flight(d.voyage.voyage.voyage.base).origin.network
+               ? kFreedomNetworkKnowledgeVersion
+               : kFreedomTravelKnowledgeVersion))
     return std::unexpected{failure(
         "Origin routes require explicit version, binding and knowledge")};
   const auto& routes = *s.origin_routes;
@@ -655,7 +659,10 @@ auto validate_local_travel(const FreedomTravelSaveDocument& d)
       (!minor_route && s.prior_moon) || !s.local || s.selected ||
       !s.next_attempt || !d.craft_binding ||
       *d.craft_binding != NativeStartingAssemblySelection{} ||
-      d.voyage.knowledge.recipe.version != kFreedomTravelKnowledgeVersion)
+      d.voyage.knowledge.recipe.version !=
+          (surface_base_flight(d.voyage.voyage.voyage.base).origin.network
+               ? kFreedomNetworkKnowledgeVersion
+               : kFreedomTravelKnowledgeVersion))
     return std::unexpected{failure("Local travel requires explicit version, "
                                    "knowledge and actual craft binding")};
   const auto& local = *s.local;
@@ -812,11 +819,14 @@ auto encode_local_travel(const FreedomTravelSaveDocument& d)
     pilot = Json::parse(*encoded);
   }
   Json root{
-      {"format_version", s.version == kFreedomOriginLocalTravelStateVersion
-                             ? kFreedomOriginLocalTravelSaveFormatVersion
-                         : s.version == kFreedomMinorTravelStateVersion
-                             ? kFreedomMinorTravelSaveFormatVersion
-                             : kFreedomLocalTravelSaveFormatVersion},
+      {"format_version",
+       surface_base_flight(d.voyage.voyage.voyage.base).origin.network
+           ? kFreedomNetworkTravelSaveFormatVersion
+       : s.version == kFreedomOriginLocalTravelStateVersion
+           ? kFreedomOriginLocalTravelSaveFormatVersion
+       : s.version == kFreedomMinorTravelStateVersion
+           ? kFreedomMinorTravelSaveFormatVersion
+           : kFreedomLocalTravelSaveFormatVersion},
       {"voyage", Json::parse(*voyage)},
       {"travel",
        {{"version", s.version},
@@ -871,10 +881,16 @@ auto decode_local_travel(const Json& root)
                      "seated_pilot"}))
     return std::unexpected{failure("Invalid closed local travel root")};
   const auto& s = root["travel"];
+  const bool network_format =
+      root["format_version"] == kFreedomNetworkTravelSaveFormatVersion;
   const bool minor_route =
-      root["format_version"] == kFreedomMinorTravelSaveFormatVersion;
+      root["format_version"] == kFreedomMinorTravelSaveFormatVersion ||
+      (network_format && s.is_object() && uints(s, {"version"}) &&
+       s["version"] == kFreedomMinorTravelStateVersion);
   const bool origin_route =
-      root["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion;
+      root["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
+      (network_format && s.is_object() && uints(s, {"version"}) &&
+       s["version"] == kFreedomOriginLocalTravelStateVersion);
   const auto version = origin_route
                            ? kFreedomOriginLocalTravelStateVersion
                            : (minor_route ? kFreedomMinorTravelStateVersion
@@ -916,6 +932,10 @@ auto decode_local_travel(const Json& root)
           failure("Unsupported authored local craft binding")};
   auto voyage = decode_freedom_knowledge_document_json(root["voyage"].dump());
   if (!voyage) return std::unexpected{voyage.error()};
+  if (surface_base_flight(voyage->voyage.voyage.base)
+          .origin.network.has_value() != network_format)
+    return std::unexpected{
+        failure("local travel format/network selection mismatch")};
   FreedomTravelSaveDocument d;
   d.voyage = std::move(*voyage);
   d.craft_binding = NativeStartingAssemblySelection{};

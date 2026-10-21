@@ -101,3 +101,17 @@ subjects, facts, sources, clocks, JSON and forged native owners while preserving
 saved bytes. Native startup, boarding and resource-only compatibility remain
 covered independently. Headless chart text/focus tests do not imply GPU visual,
 controller hardware, actual survey-trigger or neighboring-flight acceptance.
+
+## Selected four-system knowledge
+
+Recipe 4 selects the finite [four-system region](FREEDOM_TOPOLOGY.md), chart 2,
+topology 2, world domain 2 and the existing local observation policy 1. It grants
+four system identities/positions and the existing Home infrastructure only.
+Registering remote physical catalogs supplies validation truth, never observed
+planet rows. Actual local sensors, arrivals and surveys still supply evidence.
+
+This selected recipe allows 256 fact entries and 262144 encoded bytes, enough
+for the finite catalogs and their histories. Legacy recipes retain 128 facts
+and 65536 bytes. Transition, inspection and survey bounds remain unchanged.
+The document validator binds recipe 4 to the explicit selected origin; a pair
+save cannot borrow it to disclose extra destinations.

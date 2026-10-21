@@ -80,7 +80,8 @@ auto encode_freedom_docking_document_json(
   if (!encoded) return std::unexpected{encoded.error()};
   Json root = Json::parse(*encoded);
   root["format_version"] =
-      document.flight.model.optics ? kFreedomOpticalDockingSaveFormatVersion
+      document.flight.origin.network ? kFreedomNetworkDockingSaveFormatVersion
+      : document.flight.model.optics ? kFreedomOpticalDockingSaveFormatVersion
       : document.flight.model.frame_policy == kFreedomReleaseSystemFramePolicy
           ? kFreedomReleaseDockingSaveFormatVersion
       : document.flight.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
@@ -137,6 +138,8 @@ auto decode_freedom_docking_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool network =
+      root["format_version"] == kFreedomNetworkDockingSaveFormatVersion;
   const bool optical =
       root["format_version"] == kFreedomOpticalDockingSaveFormatVersion;
   const bool release =
@@ -144,11 +147,16 @@ auto decode_freedom_docking_document_json(std::string_view text)
   const bool selected =
       root["format_version"] == kFreedomTerrainDockingSaveFormatVersion;
   if (root["format_version"] != kFreedomDockingSaveFormatVersion && !selected &&
-      !release && !optical)
+      !release && !optical && !network)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
   auto shape = root;
+  if (network) {
+    if (!root.contains("network"))
+      return std::unexpected{failure("$.network", "network selection missing")};
+    shape.erase("network");
+  }
   if (root.contains("world_owner")) shape.erase("craft_lineage");
   shape.erase("world_owner");
   if (!exact_fields(shape, {"application", "application_version",
@@ -173,11 +181,11 @@ auto decode_freedom_docking_document_json(std::string_view text)
                                   {OriginStationId{*station_id},
                                    d["target"]["ordinal"].get<std::uint32_t>()},
                                   d["attached"].get<bool>()};
-  const bool system = (release || optical) && root["flight"].is_object() &&
-                      root["flight"].contains("frame") &&
-                      root["flight"]["frame"].is_object() &&
-                      root["flight"]["frame"].contains("kind") &&
-                      root["flight"]["frame"]["kind"] == "system_inertial";
+  const bool system =
+      (network || release || optical) && root["flight"].is_object() &&
+      root["flight"].contains("frame") && root["flight"]["frame"].is_object() &&
+      root["flight"]["frame"].contains("kind") &&
+      root["flight"]["frame"]["kind"] == "system_inertial";
   if (!root["state"].is_object() || !root["state"].contains("location") ||
       root["state"]["location"] != (state.attached ? "docked_at_origin_port"
                                     : system       ? "system_flight"
@@ -185,7 +193,8 @@ auto decode_freedom_docking_document_json(std::string_view text)
     return std::unexpected{
         failure("$.state.location", "attachment/location mismatch")};
   root.erase("docking");
-  root["format_version"] = optical    ? kFreedomOpticalFlightSaveFormatVersion
+  root["format_version"] = network    ? kFreedomNetworkFlightSaveFormatVersion
+                           : optical  ? kFreedomOpticalFlightSaveFormatVersion
                            : release  ? kFreedomReleaseFlightSaveFormatVersion
                            : selected ? kFreedomTerrainFlightSaveFormatVersion
                            : root.contains("world_owner")

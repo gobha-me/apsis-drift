@@ -491,7 +491,9 @@ auto NativeFreedomFlightSession::relative_state() const
   const auto& world = document_.world;
   const auto& source = document_.flight;
   if (model.frame_policy != kFreedomReleaseSystemFramePolicy || !world ||
-      world->version != kFreedomActiveWorldVersion ||
+      world->version != (document_.origin.network
+                             ? kFreedomNetworkActiveWorldVersion
+                             : kFreedomActiveWorldVersion) ||
       world->system != system_.catalog.id ||
       source.frame.kind != RigidFrameKind::system_inertial ||
       source.frame.system != world->system ||
@@ -926,7 +928,8 @@ auto NativeFreedomFlightSession::advance_craft_tick(
   std::optional<FreedomKnowledge> learned;
   if (knowledge_ &&
       (knowledge_->recipe.version == kFreedomObservedKnowledgeVersion ||
-       knowledge_->recipe.version == kFreedomTravelKnowledgeVersion) &&
+       knowledge_->recipe.version == kFreedomTravelKnowledgeVersion ||
+       knowledge_->recipe.version == kFreedomNetworkKnowledgeVersion) &&
       candidate.flight.tick % kFreedomLocalObservationInterval == 0) {
     auto observed = *this;
     observed.document_ = candidate;

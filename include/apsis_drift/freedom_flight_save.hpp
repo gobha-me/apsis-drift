@@ -23,6 +23,8 @@ inline constexpr std::uint32_t kFreedomLocalDetailTerrainPolicy{2};
 // Explicit optics1 envelopes may select the triangulated sea-datum top.
 inline constexpr std::uint32_t kFreedomSeaDatumTerrainPolicy{3};
 inline constexpr std::uint32_t kFreedomActiveWorldVersion{1};
+inline constexpr std::uint32_t kFreedomNetworkActiveWorldVersion{2};
+inline constexpr std::uint32_t kFreedomNetworkFlightSaveFormatVersion{50};
 // Explicit new owner selection. Absence retains the strict historical home
 // frame contract; a foreign frame can never opt itself into another world.
 struct FreedomActiveWorldSelection {

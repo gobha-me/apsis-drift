@@ -6,6 +6,7 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomKnowledgeSaveFormatVersion{25};
 inline constexpr std::size_t kMaximumFreedomKnowledgeBytes{65'536};
+inline constexpr std::size_t kMaximumFreedomNetworkKnowledgeBytes{262'144};
 struct FreedomKnowledgeSaveDocument {
   FreedomResourceSaveDocument voyage;
   FreedomKnowledge knowledge;

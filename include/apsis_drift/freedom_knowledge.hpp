@@ -11,6 +11,7 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomKnowledgeVersion{1};
 inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
+inline constexpr std::uint32_t kFreedomNetworkKnowledgeVersion{4};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
@@ -18,6 +19,7 @@ inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceLandmarkVersion{1};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
+inline constexpr std::size_t kMaximumFreedomNetworkKnowledgeFacts{256};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyVersion{1};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyTicks{3600};
@@ -77,7 +79,8 @@ struct FreedomKnowledgeRecipe {
   // Version 1 stays unselected; version 2 explicitly selects local sensors.
   std::uint32_t observation_policy{};
   // Version 3 registers the same seeded neighbor's planets. Earlier domains
-  // stay origin-only; registration itself grants no observations.
+  // stay origin-only; registration itself grants no observations. Version4
+  // selects the explicit four-system domain2/chart2/topology2.
   std::uint32_t world_domain{};
   // Explicit recovery selection bounds historical craft provenance to the
   // admitted generations. Absence retains the exact starter-only contract.

@@ -77,7 +77,10 @@ auto decode_base(const Json& j)
       version == kFreedomTerrainFlightSaveFormatVersion ||
       version == kFreedomReleaseFlightSaveFormatVersion ||
       version == kFreedomOpticalFlightSaveFormatVersion ||
-      version == kFreedomMinorFlightSaveFormatVersion) {
+      version == kFreedomMinorFlightSaveFormatVersion ||
+      version == kFreedomNetworkFlightSaveFormatVersion ||
+      version == kFreedomNetworkMoonFlightSaveFormatVersion ||
+      version == kFreedomNetworkMinorFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
@@ -85,7 +88,8 @@ auto decode_base(const Json& j)
   if (version == kFreedomDockingSaveFormatVersion ||
       version == kFreedomTerrainDockingSaveFormatVersion ||
       version == kFreedomReleaseDockingSaveFormatVersion ||
-      version == kFreedomOpticalDockingSaveFormatVersion) {
+      version == kFreedomOpticalDockingSaveFormatVersion ||
+      version == kFreedomNetworkDockingSaveFormatVersion) {
     auto d = decode_freedom_docking_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
@@ -93,7 +97,8 @@ auto decode_base(const Json& j)
   if (version == kFreedomJourneySaveFormatVersion ||
       version == kFreedomTerrainJourneySaveFormatVersion ||
       version == kFreedomReleaseJourneySaveFormatVersion ||
-      version == kFreedomOpticalJourneySaveFormatVersion) {
+      version == kFreedomOpticalJourneySaveFormatVersion ||
+      version == kFreedomNetworkJourneySaveFormatVersion) {
     auto d = decode_freedom_journey_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};

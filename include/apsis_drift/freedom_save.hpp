@@ -14,6 +14,14 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomSaveFormatVersion{17};
 inline constexpr std::uint32_t kFreedomCraftLineageSaveFormatVersion{28};
 inline constexpr std::uint32_t kFreedomCraftLineageVersion{1};
+inline constexpr std::uint32_t kFreedomNetworkSaveFormatVersion{49};
+inline constexpr std::uint32_t kFreedomNetworkSelectionVersion{1};
+// Explicit opt-in descriptor; the bounded catalog is regenerated from the seed.
+struct FreedomNetworkSelection {
+  std::uint32_t version{kFreedomNetworkSelectionVersion};
+  friend auto operator==(const FreedomNetworkSelection&,
+                         const FreedomNetworkSelection&) -> bool = default;
+};
 struct FreedomCraftLineage {
   std::uint32_t version{kFreedomCraftLineageVersion};
   std::uint64_t generation{};
@@ -43,6 +51,7 @@ struct FreedomSaveDocument {
   SaveRecipe recipe;
   FreedomStationState state;
   std::optional<FreedomCraftLineage> lineage{};
+  std::optional<FreedomNetworkSelection> network{};
 
   friend auto operator==(const FreedomSaveDocument&, const FreedomSaveDocument&)
       -> bool = default;
@@ -55,6 +64,8 @@ struct FreedomSaveDocument {
 
 [[nodiscard]] auto make_freedom_new_game_document(Seed universe_seed)
     -> FreedomSaveDocument;
+[[nodiscard]] auto make_freedom_network_new_game_document(Seed universe_seed)
+    -> std::expected<FreedomSaveDocument, SaveSchemaError>;
 [[nodiscard]] auto validate_freedom_save_document(
     const FreedomSaveDocument& document)
     -> std::expected<void, SaveSchemaError>;

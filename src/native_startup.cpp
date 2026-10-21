@@ -292,6 +292,27 @@ auto native_new_game(Seed universe_seed)
       std::nullopt);
 }
 
+auto native_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string> {
+  auto start = native_new_game(universe_seed);
+  if (!start) return std::unexpected{start.error()};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  auto& flight = assembly.journey.voyage.flight;
+  auto origin = make_freedom_network_new_game_document(universe_seed);
+  if (!origin) return std::unexpected{origin.error().detail};
+  flight.origin = std::move(*origin);
+  flight.world = FreedomActiveWorldSelection{2, flight.flight.frame.system,
+                                             flight.origin.recipe.home_planet};
+  auto knowledge = make_freedom_starting_knowledge(
+      universe_seed, kFreedomNetworkKnowledgeVersion);
+  if (!knowledge) return std::unexpected{"Four-system chart rejected"};
+  knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
+  voyage.knowledge = std::move(*knowledge);
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);

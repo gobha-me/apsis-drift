@@ -177,7 +177,8 @@ auto freeze_minor_local_body_jump_arrival(
     arrival.flight = *canonical;
     arrival.model = request.home_model;
     arrival.minor.reset();
-    arrival.world = FreedomActiveWorldSelection{1, system->catalog.id, home};
+    arrival.world = FreedomActiveWorldSelection{source.origin.network ? 2U : 1U,
+                                                system->catalog.id, home};
   }
   const auto destination_owner = hydrate_freedom_flight_document(arrival);
   if (!destination_owner)
@@ -323,7 +324,8 @@ auto freeze_local_body_jump_arrival(const FreedomLocalBodyJumpRequest& request)
     arrival.flight = *canonical;
     arrival.model = request.home_model;
     arrival.moon.reset();
-    arrival.world = FreedomActiveWorldSelection{1, system->catalog.id, home};
+    arrival.world = FreedomActiveWorldSelection{source.origin.network ? 2U : 1U,
+                                                system->catalog.id, home};
   }
   const auto destination_owner = hydrate_freedom_flight_document(arrival);
   if (!destination_owner)

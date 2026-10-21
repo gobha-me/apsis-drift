@@ -21,6 +21,7 @@ var heading: Label
 var seed_label: Label
 var seed: LineEdit
 var new_button: Button
+var network_choice: CheckButton
 var continue_button: Button
 var reference_button: Button
 var settings_button: Button
@@ -86,6 +87,11 @@ func _ready() -> void:
 	seed.accessibility_name = "Universe seed"
 	column.add_child(seed)
 	seed.text_submitted.connect(func(_value: String): begin_new())
+	network_choice = CheckButton.new()
+	network_choice.text = "Four charted systems"
+	network_choice.tooltip_text = "Optional larger map. Three jump charges; return to Origin Station for free replenishment. Existing saves keep their own map."
+	network_choice.focus_mode = Control.FOCUS_ALL
+	column.add_child(network_choice)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -148,7 +154,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return
@@ -214,7 +220,7 @@ func layout_title() -> void:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
-	for button in [seed, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
+	for button in [seed, network_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
 	if chooser.visible: chooser.popup_centered_ratio(0.75)
 

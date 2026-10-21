@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_recovery_save.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/freedom_travel_save.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 
@@ -45,13 +46,15 @@ auto roundtrip(const FreedomTravelSaveDocument& d) -> void {
   const auto decoded = need(decode_freedom_travel_document_json(encoded));
   check(d == before && decoded == d &&
             need(encode_freedom_travel_document_json(decoded)) == encoded &&
-            Json::parse(encoded)["format_version"] == 45,
+            Json::parse(encoded)["format_version"] ==
+                (flight_of(d).origin.network ? 53 : 45),
         "Explicit45 Continue preserves one owner, proof, actual binding and "
         "charge exactly");
 }
-auto fixture() -> FreedomTravelSaveDocument {
+auto fixture(bool network = false) -> FreedomTravelSaveDocument {
   const Seed seed{42};
-  auto history = make_freedom_new_game_document(seed);
+  auto history = network ? need(make_freedom_network_new_game_document(seed))
+                         : make_freedom_new_game_document(seed);
   const auto physical = need(generate_physical_origin_system(seed, 2));
   const auto station = generate_origin_station(seed);
   const auto geometry = need(origin_station_geometry(station));
@@ -66,6 +69,7 @@ auto fixture() -> FreedomTravelSaveDocument {
       {},
       FreedomActiveWorldSelection{1, physical.catalog.id,
                                   history.recipe.home_planet}};
+  if (network) flight.world->version = kFreedomNetworkActiveWorldVersion;
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
   flight.model.terrain_policy = 3;
@@ -97,7 +101,7 @@ auto fixture() -> FreedomTravelSaveDocument {
                                    3};
   const FreedomResourceSaveDocument fueled{surface, resources};
   const FreedomKnowledgeSaveDocument mapped{
-      fueled, need(make_freedom_starting_knowledge(seed, 3))};
+      fueled, need(make_freedom_starting_knowledge(seed, network ? 4 : 3))};
   FreedomTravelSaveDocument d{
       mapped, {}, NativeStartingAssemblySelection{}, pilot};
   d.travel.version = kFreedomLocalTravelStateVersion;
@@ -107,12 +111,12 @@ auto fixture() -> FreedomTravelSaveDocument {
       BodyTarget{physical.catalog.id, catalog.bodies[0].node.id};
   return d;
 }
-auto commit(FreedomTravelSaveDocument& d, FreedomFlightModel home_model)
-    -> void {
+auto commit(FreedomTravelSaveDocument& d, FreedomFlightModel home_model,
+            std::uint32_t policy = kFreedomLocalBodyJumpVersion) -> void {
   const auto source = flight_of(d);
-  const auto frozen =
-      need(freeze_local_body_jump_arrival({1, source, *d.travel.local->selected,
-                                           d.travel.next_attempt, home_model}));
+  const auto frozen = need(
+      freeze_local_body_jump_arrival({policy, source, *d.travel.local->selected,
+                                      d.travel.next_attempt, home_model}));
   auto& local = *d.travel.local;
   local.committed = frozen;
   local.commitment_resources = d.voyage.voyage.resources;
@@ -285,11 +289,139 @@ auto run() -> void {
                 "{\"format_version\":45,\"format_version\":45}"),
         "Depth and duplicate-key checks run before45 dispatch");
 }
+auto network_contract() -> void {
+  auto d = fixture(true);
+  const auto home = flight_of(d);
+  const auto topology =
+      need(generate_freedom_system_network(home.origin.recipe.universe_seed));
+  roundtrip(d);
+  auto wrong_outer = Json::parse(need(encode_freedom_travel_document_json(d)));
+  for (const auto format : {27, 45, 47, 48}) {
+    wrong_outer["format_version"] = format;
+    check(!decode_freedom_travel_document_json(wrong_outer.dump()),
+          "Network origin cannot hide inside old pair/local travel formats");
+  }
+  auto old_pair =
+      Json::parse(need(encode_freedom_travel_document_json(fixture())));
+  old_pair["format_version"] = 53;
+  check(!decode_freedom_travel_document_json(old_pair.dump()),
+        "Format53 cannot implicitly select topology for an old pair origin");
+  // All logical state versions keep the same explicit network envelope.
+  auto minor = d;
+  minor.travel.version = kFreedomMinorTravelStateVersion;
+  const auto catalog = need(generate_secondary_body_catalog(need(
+      generate_physical_origin_system(home.origin.recipe.universe_seed, 2))));
+  minor.travel.local->selected =
+      BodyTarget{home.world->system, catalog.bodies[1].node.id};
+  roundtrip(minor);
+  auto routes = minor;
+  routes.travel.version = kFreedomOriginLocalTravelStateVersion;
+  routes.travel.origin_routes = FreedomOriginLocalRoutes{};
+  routes.travel.origin_routes->legacy = {
+      minor.travel.version, *minor.travel.local, {}, minor.travel.next_attempt};
+  routes.travel.local = d.travel.local;
+  roundtrip(routes);
+  minor.travel.phase = FreedomJumpPhase::spool;
+  minor.travel.spool_tick = home.flight.tick;
+  set_tick(minor, home.flight.tick + kJumpSpoolTicks);
+  commit(minor, home.model, kFreedomMinorLocalBodyJumpVersion);
+  roundtrip(minor);
+  arrive(minor);
+  roundtrip(minor);
+  check(flight_of(minor).origin.network == home.origin.network &&
+            Json::parse(need(encode_freedom_flight_document_json(
+                flight_of(minor))))["format_version"] == 55,
+        "Actual frozen minor arrival retains origin49 through typed minor55");
+  // The unchanged local-Moon physics retains the selector through actual frozen
+  // outbound/return records. These are codec fixtures, not flown-route claims.
+  d.travel.phase = FreedomJumpPhase::spool;
+  d.travel.spool_tick = home.flight.tick;
+  set_tick(d, home.flight.tick + kJumpSpoolTicks);
+  commit(d, home.model);
+  roundtrip(d);
+  const auto first = *d.travel.local->outbound;
+  arrive(d);
+  roundtrip(d);
+  check(flight_of(d).origin.network == home.origin.network &&
+            Json::parse(need(encode_freedom_flight_document_json(
+                flight_of(d))))["format_version"] == 54,
+        "Frozen Moon arrival retains explicit origin49 through lunar54");
+  d.travel.local->selected =
+      BodyTarget{home.world->system, body_id(home.world->planet)};
+  d.travel.phase = FreedomJumpPhase::spool;
+  d.travel.spool_tick = flight_of(d).flight.tick;
+  set_tick(d, flight_of(d).flight.tick + kJumpSpoolTicks);
+  commit(d, home.model);
+  roundtrip(d);
+  arrive(d);
+  roundtrip(d);
+  check(d.travel.local->outbound == first &&
+            flight_of(d).origin.network == home.origin.network,
+        "Moon return preserves first proof and network selection, not an old "
+        "pair profile");
+  // Separate logical1 metadata fixture exercises request2 serialization and its
+  // source pose/one-charge bill during transit, before any arrival application.
+  auto intersystem = fixture(true);
+  intersystem.travel = {};
+  intersystem.travel.selected = topology.nodes[2].system;
+  intersystem.travel.phase = FreedomJumpPhase::spool;
+  intersystem.travel.spool_tick = home.flight.tick;
+  set_tick(intersystem, home.flight.tick + kJumpSpoolTicks);
+  const auto source = flight_of(intersystem);
+  FreedomJumpRequest request{2,
+                             home.origin.recipe.universe_seed,
+                             home.origin.state.craft,
+                             source.flight,
+                             topology.nodes[2].system,
+                             IntersystemRuleProfile::assisted,
+                             1,
+                             home.origin.lineage,
+                             home.origin.network};
+  intersystem.travel.committed = need(freeze_freedom_jump_arrival(request));
+  intersystem.travel.commitment_resources = intersystem.voyage.voyage.resources;
+  --intersystem.voyage.voyage.resources.jump_charges;
+  intersystem.travel.next_attempt = 2;
+  intersystem.travel.phase = FreedomJumpPhase::transit;
+  const auto encoded = need(encode_freedom_travel_document_json(intersystem));
+  check(need(decode_freedom_travel_document_json(encoded)) == intersystem,
+        "Policy2 transit53 preserves exact source, receipt, clock and billed "
+        "charge");
+  const auto root = Json::parse(encoded);
+  check(root["format_version"] == 53 && root["travel"]["version"] == 1 &&
+            root["travel"]["committed"]["request"]["version"] == 2 &&
+            root["travel"]["committed"]["request"]["network"] ==
+                Json{{"version", 1}},
+        "Network envelope does not invent logical state5 or flatten the "
+        "request selector");
+  for (unsigned damage = 0; damage < 7; ++damage) {
+    auto bad = root;
+    auto& frozen_request = bad["travel"]["committed"]["request"];
+    switch (damage) {
+      case 0: frozen_request.erase("network"); break;
+      case 1: frozen_request["network"] = nullptr; break;
+      case 2: frozen_request["network"]["version"] = 2; break;
+      case 3: frozen_request["network"]["extra"] = 1; break;
+      case 4: frozen_request["version"] = 1; break;
+      case 5: bad["travel"]["next_attempt"] = 3; break;
+      case 6: bad["travel"]["commitment_resources"]["jump_charges"] = 0; break;
+    }
+    check(!decode_freedom_travel_document_json(bad.dump()),
+          "Malformed policy/selector/attempt/bill refuses before network "
+          "transit adoption");
+  }
+  auto wrong_selection = intersystem;
+  wrong_selection.travel.committed->preview.request.network.reset();
+  check(!validate_freedom_travel_document(wrong_selection),
+        "Current network origin cannot authenticate a receipt with absent "
+        "selector");
+}
+
 } // namespace
 
 auto main() -> int {
   try {
     run();
+    network_contract();
   } catch (const std::exception& error) {
     std::cerr << "FAIL: " << error.what() << '\n';
     return 1;

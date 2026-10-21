@@ -5,6 +5,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomJourneySaveFormatVersion{20};
+inline constexpr std::uint32_t kFreedomNetworkJourneySaveFormatVersion{52};
 inline constexpr std::uint32_t kFreedomTerrainJourneySaveFormatVersion{33};
 inline constexpr std::uint32_t kFreedomReleaseJourneySaveFormatVersion{38};
 // Actor coordinates belong to the Origin station. Only the nested voyage owns

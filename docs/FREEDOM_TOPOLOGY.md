@@ -97,3 +97,27 @@ selection without effects; and invalid owners/versions/geometry/overflow.
 The retained navigation acceptance and resource round-trip tests remain
 independent evidence. Native travel, risk outcomes and recovery are subsequent
 implementation, not completion claims of this research decision.
+
+## Optional four-system region
+
+New Game offers **Four charted systems** as an explicit choice. Leaving it off
+preserves the original pair. Continue always retains the saved selection. The
+new finite network recipe 1 keeps Home and the original neighbor exactly, then
+adds Waypoint A and Waypoint B on the same integer light-second coordinate grid.
+It uses the appended seed domain 19; existing streams and catalogs do not change.
+
+For legacy separation D, let h=floor(D/2), q=floor(D/4), e be its signed cardinal
+axis and p the next positive cyclic axis. Home is 0, the neighbor D×e, A=h×e+q×p,
+and B=h×e−q×p. Every leg is within the existing starter drive rating. The
+application authenticates the entire regenerated network before lookup. Chart
+distances use an exact integer ceiling in metres; actual jump targeting also
+includes the craft's source position and destination arrival offset.
+
+The starting grant supplies four resolved anchors, with no remote planetary
+catalog, visit or sensor reading. Travel remains one selected leg at a time.
+Three charges support Home → A → B → Home; a tour of all four systems returning Home
+requires four jumps. Origin remains the only station and free replenishment
+requires physical attachment. There are no extra services, missions or upgrades.
+
+The larger network, hidden contacts and automatic routing remain separate
+[scope decisions](https://github.com/gobha-me/apsis-drift/issues/229).

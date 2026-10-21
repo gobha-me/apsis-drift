@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_jump_targeting.hpp"
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 
 #include <algorithm>
@@ -21,8 +22,17 @@ auto finite(V v) -> bool {
 auto difference(SystemPositionMetres a, SystemPositionMetres b) -> V {
   return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
-auto world(Seed seed, SystemId id)
+auto world(Seed seed, SystemId id,
+           const std::optional<FreedomNetworkSelection>& network = {})
     -> std::expected<PhysicalLocalSystem, Error> {
+  if (network) {
+    const auto topology =
+        generate_freedom_system_network(seed, network->version);
+    if (!topology) return std::unexpected{Error::invalid_owner};
+    auto selected = resolve_freedom_network_system(*topology, id);
+    if (!selected) return std::unexpected{Error::invalid_owner};
+    return std::move(*selected);
+  }
   const auto ids = generate_first_intersystem_identities(seed);
   if (id != ids.origin_system && id != ids.target_system)
     return std::unexpected{Error::invalid_owner};
@@ -86,6 +96,7 @@ auto sample_seed(const FreedomJumpPreview& p) -> Seed {
         r.source.angular_velocity_radians_per_second.z})
     hash_word(ordinal, std::bit_cast<std::uint64_t>(value));
   hash_word(ordinal, r.source.frame.planet->value);
+  if (r.network) hash_word(ordinal, r.network->version);
   return derive_seed(r.universe_seed, SeedDomain::jump_arrival, ordinal);
 }
 } // namespace
@@ -141,7 +152,11 @@ auto assess_freedom_arrival_volume(const PhysicalLocalSystem& system,
 }
 auto preview_freedom_jump(const FreedomJumpRequest& r)
     -> std::expected<FreedomJumpPreview, FreedomJumpTargetingError> {
-  if (r.version != kFreedomJumpTargetingVersion)
+  if ((r.version != kFreedomJumpTargetingVersion &&
+       r.version != kFreedomNetworkJumpTargetingVersion) ||
+      (r.version == kFreedomNetworkJumpTargetingVersion) !=
+          r.network.has_value() ||
+      (r.network && r.network->version != kFreedomSystemNetworkVersion))
     return std::unexpected{Error::unsupported_policy};
   if (!r.attempt) return std::unexpected{Error::invalid_attempt};
   if (r.profile != IntersystemRuleProfile::assisted &&
@@ -156,15 +171,25 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
     return std::unexpected{Error::invalid_owner};
   const auto route = generate_first_universe_route(r.universe_seed);
   const auto current = r.source.frame.system;
-  if ((current != route.origin && current != route.destination) ||
-      r.destination == current ||
-      (r.destination != route.origin && r.destination != route.destination))
+  std::optional<FreedomSystemNetworkRoute> network_route;
+  if (r.network) {
+    const auto topology =
+        generate_freedom_system_network(r.universe_seed, r.network->version);
+    if (!topology) return std::unexpected{Error::invalid_owner};
+    const auto selected =
+        resolve_freedom_system_network_route(*topology, current, r.destination);
+    if (!selected) return std::unexpected{Error::invalid_destination};
+    network_route = *selected;
+  } else if ((current != route.origin && current != route.destination) ||
+             r.destination == current ||
+             (r.destination != route.origin &&
+              r.destination != route.destination))
     return std::unexpected{Error::invalid_destination};
   if (r.source.tick >
       std::numeric_limits<SimulationTick>::max() - kJumpTransitTicks - 1)
     return std::unexpected{Error::tick_overflow};
-  auto from = world(r.universe_seed, current);
-  auto to = world(r.universe_seed, r.destination);
+  auto from = world(r.universe_seed, current, r.network);
+  auto to = world(r.universe_seed, r.destination, r.network);
   if (!from || !to) return std::unexpected{Error::invalid_owner};
   if (!validate_rigid_body_state(RigidBodyWorldContext{*from}, r.source) ||
       r.source.craft !=
@@ -227,11 +252,16 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
   const auto to_anchor = r.destination == route.origin
                              ? route.origin_position
                              : route.destination_position;
-  const V leg{static_cast<double>(to_anchor.x - from_anchor.x) +
+  const auto displacement =
+      network_route ? network_route->displacement
+                    : UniversePositionMetres{to_anchor.x - from_anchor.x,
+                                             to_anchor.y - from_anchor.y,
+                                             to_anchor.z - from_anchor.z};
+  const V leg{static_cast<double>(displacement.x) +
                   (p.nominal_arrival.x - p.source_position.x),
-              static_cast<double>(to_anchor.y - from_anchor.y) +
+              static_cast<double>(displacement.y) +
                   (p.nominal_arrival.y - p.source_position.y),
-              static_cast<double>(to_anchor.z - from_anchor.z) +
+              static_cast<double>(displacement.z) +
                   (p.nominal_arrival.z - p.source_position.z)};
   p.distance_metres = norm(leg);
   if (!finite(leg) || p.distance_metres <= 0)
@@ -267,7 +297,7 @@ auto freeze_freedom_jump_arrival(const FreedomJumpRequest& r)
   const SystemPositionMetres point{p->nominal_arrival.x + component(0),
                                    p->nominal_arrival.y + component(16),
                                    p->nominal_arrival.z + component(32)};
-  auto destination = world(r.universe_seed, r.destination);
+  auto destination = world(r.universe_seed, r.destination, r.network);
   if (!destination) return std::unexpected{destination.error()};
   auto assessment =
       assess_freedom_arrival_volume(*destination, p->arrival_tick, point, 0);

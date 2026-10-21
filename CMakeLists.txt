@@ -143,6 +143,7 @@ add_library(apsis_drift_core STATIC
   src/coordinates.cpp
   src/craft_frame.cpp
   src/freedom_save.cpp
+  src/freedom_system_network.cpp
   src/freedom_flight_save.cpp
   src/freedom_moon_flight_save.cpp
   src/freedom_docking_save.cpp

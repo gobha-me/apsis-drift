@@ -108,7 +108,9 @@ auto encode_minor_flight(const FreedomFlightSaveDocument& document)
     return std::unexpected{
         failure("$.flight", "minor state or target cannot encode")};
   Json root = Json::parse(*origin);
-  root["format_version"] = kFreedomMinorFlightSaveFormatVersion;
+  root["format_version"] = document.origin.network
+                               ? kFreedomNetworkMinorFlightSaveFormatVersion
+                               : kFreedomMinorFlightSaveFormatVersion;
   root["state"]["location"] = "minor_flight";
   root["world_owner"] = {{"version", document.minor->version},
                          {"target", Json::parse(*target)},
@@ -129,13 +131,22 @@ auto encode_minor_flight(const FreedomFlightSaveDocument& document)
 
 auto decode_minor_flight(const Json& root)
     -> std::expected<FreedomFlightSaveDocument, SaveSchemaError> {
+  const bool network =
+      root.is_object() && root.contains("format_version") &&
+      selected_version(root["format_version"],
+                       kFreedomNetworkMinorFlightSaveFormatVersion);
   auto shape = root;
   shape.erase("craft_lineage");
+  if (network) {
+    if (!root.contains("network"))
+      return std::unexpected{failure("$.network", "network selection missing")};
+    shape.erase("network");
+  }
   if (!fields(shape,
               {"application", "application_version", "format_version", "mode",
                "recipe", "state", "world_owner", "flight_model", "flight"}) ||
-      !selected_version(root["format_version"],
-                        kFreedomMinorFlightSaveFormatVersion))
+      !(network || selected_version(root["format_version"],
+                                    kFreedomMinorFlightSaveFormatVersion)))
     return std::unexpected{
         failure("$", "unexpected or missing minor flight field")};
   const auto& world = root["world_owner"];
@@ -165,7 +176,8 @@ auto decode_minor_flight(const Json& root)
   origin.erase("flight");
   origin.erase("flight_model");
   origin.erase("world_owner");
-  origin["format_version"] = origin.contains("craft_lineage")
+  origin["format_version"] = network ? kFreedomNetworkSaveFormatVersion
+                             : origin.contains("craft_lineage")
                                  ? kFreedomCraftLineageSaveFormatVersion
                                  : kFreedomSaveFormatVersion;
   origin["state"]["location"] = "docked_at_origin";

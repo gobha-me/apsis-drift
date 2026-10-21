@@ -127,9 +127,11 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
               {"ambient", r.ambient}}},
             {"entries", std::move(entries)}};
   if (r.version == kFreedomObservedKnowledgeVersion ||
-      r.version == kFreedomTravelKnowledgeVersion)
+      r.version == kFreedomTravelKnowledgeVersion ||
+      r.version == kFreedomNetworkKnowledgeVersion)
     root["recipe"]["observation_policy"] = r.observation_policy;
-  if (r.version == kFreedomTravelKnowledgeVersion)
+  if (r.version == kFreedomTravelKnowledgeVersion ||
+      r.version == kFreedomNetworkKnowledgeVersion)
     root["recipe"]["world_domain"] = r.world_domain;
   if (r.craft_lineage)
     root["recipe"]["craft_lineage"] = {
@@ -216,13 +218,16 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                                {"completed", std::move(completed)}};
   }
   auto text = root.dump(2) + '\n';
-  if (text.size() > kMaximumFreedomKnowledgeBytes)
+  const auto limit = r.version == kFreedomNetworkKnowledgeVersion
+                         ? kMaximumFreedomNetworkKnowledgeBytes
+                         : kMaximumFreedomKnowledgeBytes;
+  if (text.size() > limit)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
   return text;
 }
 auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     -> std::expected<FreedomKnowledge, SaveSchemaError> {
-  auto root = parse(text, kMaximumFreedomKnowledgeBytes);
+  auto root = parse(text, kMaximumFreedomNetworkKnowledgeBytes);
   if (!root) return std::unexpected{root.error()};
   const bool marker_selected =
       root->is_object() && root->contains("surface_marker");
@@ -241,9 +246,16 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
   const auto& r = (*root)["recipe"];
-  const bool travel = r.contains("version") &&
-                      r["version"].is_number_unsigned() &&
-                      r["version"] == kFreedomTravelKnowledgeVersion;
+  const bool network = r.contains("version") &&
+                       r["version"].is_number_unsigned() &&
+                       r["version"] == kFreedomNetworkKnowledgeVersion;
+  if (!network && text.size() > kMaximumFreedomKnowledgeBytes)
+    return std::unexpected{
+        SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
+                        "knowledge document exceeds limit"}};
+  const bool travel =
+      r.contains("version") && r["version"].is_number_unsigned() &&
+      (r["version"] == kFreedomTravelKnowledgeVersion || network);
   const bool observed =
       r.contains("version") && r["version"].is_number_unsigned() &&
       (r["version"] == kFreedomObservedKnowledgeVersion || travel);
@@ -278,9 +290,10 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                      {}};
   if (observed) k.recipe.observation_policy = 1;
   if (travel) {
-    if (!r["world_domain"].is_number_unsigned() || r["world_domain"] != 1)
+    if (!r["world_domain"].is_number_unsigned() ||
+        r["world_domain"] != (network ? 2U : 1U))
       return std::unexpected{failure("unsupported travel knowledge domain")};
-    k.recipe.world_domain = 1;
+    k.recipe.world_domain = network ? 2U : 1U;
   }
   if (r.contains("craft_lineage")) {
     const auto& l = r["craft_lineage"];
@@ -451,7 +464,9 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     k.orbital_surveys = std::move(state);
   }
   const auto& entries = (*root)["entries"];
-  if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
+  const auto maximum_facts = network ? kMaximumFreedomNetworkKnowledgeFacts
+                                     : kMaximumFreedomKnowledgeFacts;
+  if (!entries.is_array() || entries.size() > maximum_facts)
     return std::unexpected{failure("invalid or oversized fact array")};
   for (const auto& e : entries) {
     if (!fields(e, {"kind", "system", "identity", "fact", "transitions"}) ||
@@ -502,9 +517,13 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
       r.ephemeris != flight.model.physical_ephemeris ||
       r.craft_lineage != flight.origin.lineage ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
-      (r.version == kFreedomTravelKnowledgeVersion) !=
-          (flight.world.has_value() || flight.moon.has_value() ||
-           flight.minor.has_value()))
+      (r.version == kFreedomNetworkKnowledgeVersion) !=
+          flight.origin.network.has_value() ||
+      (flight.origin.network
+           ? (r.world_domain != 2 || r.chart != 2 || r.topology != 2)
+           : ((r.version == kFreedomTravelKnowledgeVersion) !=
+              (flight.world.has_value() || flight.moon.has_value() ||
+               flight.minor.has_value()))))
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
   if (d.knowledge.orbital_surveys && d.knowledge.orbital_surveys->active) {

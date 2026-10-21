@@ -65,7 +65,8 @@ auto decode_voyage(const Json& j)
   if (j["format_version"] == kFreedomTravelSaveFormatVersion ||
       j["format_version"] == kFreedomLocalTravelSaveFormatVersion ||
       j["format_version"] == kFreedomMinorTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomNetworkTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomRecoveryVoyage{std::move(*d)};
@@ -315,6 +316,7 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
         !current.origin.lineage ||
         generation(current.origin) != old_generation + 1 ||
         current.origin.recipe != retired.origin.recipe ||
+        current.origin.network != retired.origin.network ||
         current.origin.state.station != retired.origin.state.station ||
         current.origin.state.craft == retired.origin.state.craft ||
         !retains(current.origin.state.discoveries,
@@ -418,7 +420,8 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   if (!body)
     return std::unexpected{failure("safe replacement constraint refused")};
   replacement.flight = *body;
-  replacement.world = FreedomActiveWorldSelection{1, system->catalog.id,
+  replacement.world = FreedomActiveWorldSelection{old.origin.network ? 2U : 1U,
+                                                  system->catalog.id,
                                                   station.orbit.host_planet};
   assembly->journey.voyage.docking = {geometry->version, safe->port, true};
   const FreedomResources resources{1, *identity, body->craft, body->tick};
