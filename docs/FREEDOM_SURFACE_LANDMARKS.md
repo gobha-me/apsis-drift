@@ -88,3 +88,37 @@ cells, site IDs, terrain recipe and first-inspection ticks. The combined Moon
 and planetary inspection history is bounded to64 records; historical planetary
 JSON and seed domains remain unchanged. Enabling and inspecting are zero-time,
 transactional metadata actions; Continue and recovery retain both histories.
+
+
+## Hand specimens
+
+After inspecting an exposure, choose **Collect hand specimen** in paused
+Controls while still within eight metres on supported ground. The same action
+works at planetary and Moon exposures. Collection adds one specimen to a
+four-slot pouch and records its source in your field notes. It leaves the clock,
+resources and personal marker unchanged. An already-carried specimen or a full
+pouch refuses collection; no specimen is silently replaced.
+
+**Sample pouch** opens a read-only list of carried specimens and first collection
+notes. Back returns to paused Controls. The **Discard** actions free a pouch
+slot and retain its first collection note. You can collect again from that site;
+the new specimen records the current collection, while its first note stays
+unchanged. The journal holds up to64 distinct sites. If full, it still permits
+recollection from a previously recorded site.
+
+Save and Continue preserve the pouch and notes through walking, boarding and
+travel. Standard craft replacement clears the carried specimens, binds the
+empty pouch to the replacement craft and keeps the notes. The retired voyage
+snapshot retains its old pouch; this does not imply a rendered wreck or a
+retrieval mechanic. This increment has no specimen sale, assay, deposit,
+extraction, flight-mass change or collection animation.
+
+C++ owns collection, discard and validation. Optional version1 `field_samples`
+metadata in voyage knowledge stores the current carrier, up to four carried
+records and up to64 first notes. Each record names the typed body target, cell,
+site, terrain recipe, appearance kind, collecting craft and authoritative tick.
+The validator authenticates generated sites, prior inspections, collector
+lineage, ordering, capacity and clocks. Commands validate the complete Save
+before committing; refusal leaves the session unchanged. Historical absence
+stays absent until a successful collection. The feature adds no seed domain or
+navigation knowledge.

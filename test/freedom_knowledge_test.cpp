@@ -8,6 +8,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <numbers>
+#include <tuple>
 #include <type_traits>
 
 namespace {
@@ -810,6 +811,324 @@ auto native_saves(const std::filesystem::path& dir) -> void {
                                                fuel.tick)) == ktext,
         "Chart projection and selection award no evidence, fuel or time");
 }
+auto field_sample_metadata() -> void {
+  const Seed seed{42};
+  const auto origin = need(generate_physical_origin_system(seed, 2));
+  const auto craft = need(derive_freedom_craft_identity(seed, 0));
+  const auto key = [](const FreedomFieldSampleRecord& r) {
+    return std::tuple{r.target.system.value,
+                      static_cast<unsigned>(r.target.body.kind),
+                      r.target.body.value, r.site.value};
+  };
+  // Source identity fixtures only: these are not claimed as flown collection
+  // or terrain/support certificates. Native tests own the actual actor action.
+  const auto records = [&](BodyTarget target, double radius, std::size_t count,
+                           std::uint32_t terrain, const auto& identify) {
+    std::vector<FreedomFieldSampleRecord> result;
+    for (unsigned sample = 0; sample < 512 && result.size() < count; ++sample) {
+      const auto angle = 2 * std::numbers::pi * sample / 512;
+      const SurfaceLandmarkCell base{
+          static_cast<std::int32_t>(std::floor(radius * std::cos(angle) / 512)),
+          static_cast<std::int32_t>(std::floor(radius * std::sin(angle) / 512)),
+          0};
+      for (std::int32_t x = -1; x <= 1; ++x)
+        for (std::int32_t y = -1; y <= 1; ++y)
+          for (std::int32_t z = -1; z <= 1; ++z) {
+            const SurfaceLandmarkCell cell{base.x + x, base.y + y, base.z + z};
+            const auto identity = need(identify(cell));
+            if (!identity || result.size() == count ||
+                std::ranges::any_of(result, [&](const auto& r) {
+                  return r.site == identity->id;
+                }))
+              continue;
+            result.push_back({target, cell, identity->id, terrain,
+                              identity->kind, craft, 8});
+          }
+    }
+    if (result.size() != count)
+      throw std::runtime_error("Sample identity fixtures unavailable");
+    std::ranges::sort(result, {}, key);
+    return result;
+  };
+  const auto& body = origin.catalog.planets.front().descriptor;
+  const auto planetary = records({origin.catalog.id, body_id(body.id)},
+                                 static_cast<double>(body.radius.value) * 1000,
+                                 65, 3, [&](SurfaceLandmarkCell cell) {
+                                   return identify_surface_landmark(body, cell);
+                                 });
+  const auto catalog = need(generate_secondary_body_catalog(origin));
+  const auto moon = need(generate_physical_moon_descriptor(
+      catalog, catalog.bodies.front().node.id));
+  const auto lunar =
+      records({origin.catalog.id, moon.body}, moon.radius_metres, 1, 1,
+              [&](SurfaceLandmarkCell cell) {
+                return identify_moon_surface_landmark(moon, cell);
+              });
+  const auto with_sources = [&](std::uint32_t version) {
+    auto k = need(make_freedom_starting_knowledge(seed, version));
+    k.surface_landmarks = FreedomSurfaceLandmarkState{};
+    for (std::size_t i = 0; i < 5; ++i) {
+      const auto& r = planetary[i];
+      k.surface_landmarks->inspections.push_back(
+          {r.target.system, body.id, r.cell, r.site, r.terrain_recipe, 7});
+    }
+    k.moon_surface_landmarks = FreedomMoonSurfaceLandmarkState{};
+    const auto& r = lunar.front();
+    k.moon_surface_landmarks->inspections.push_back(
+        {r.target, r.cell, r.site, r.terrain_recipe, 7});
+    return k;
+  };
+  for (auto version : {1U, 2U, 3U, 4U}) {
+    auto initial = need(make_freedom_starting_knowledge(seed, version));
+    const auto old = need(encode_freedom_knowledge_json(initial, 12));
+    check(!Json::parse(old).contains("field_samples") &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(old, 12)), 12)) == old,
+          "Unselected samples preserve every legacy and network knowledge "
+          "encoding");
+    initial.field_samples = FreedomFieldSampleState{1, craft, {}, {}};
+    if (version == 1) {
+      auto j = Json::parse(old);
+      j["field_samples"] = {{"version", 1U},
+                            {"carrier", std::to_string(craft.value)},
+                            {"carried", Json::array()},
+                            {"journal", Json::array()}};
+      check(!validate_freedom_knowledge(initial, 12) &&
+                !decode_freedom_knowledge_json(j.dump(), 12),
+            "Chart-only recipes cannot select even an empty physical pouch");
+      continue;
+    }
+    check(need(decode_freedom_knowledge_json(
+              need(encode_freedom_knowledge_json(initial, 12)), 12)) == initial,
+          "Explicit empty pouch retains its carrier/version without inventing "
+          "collections");
+    auto k = with_sources(version);
+    const auto facts = k.entries;
+    k.field_samples = FreedomFieldSampleState{
+        1,
+        craft,
+        {planetary[0], planetary[1], planetary[2], lunar[0]},
+        {planetary[0], planetary[1], planetary[2], planetary[3], planetary[4],
+         lunar[0]}};
+    std::ranges::sort(k.field_samples->carried, {}, key);
+    std::ranges::sort(k.field_samples->journal, {}, key);
+    const auto encoded = need(encode_freedom_knowledge_json(k, 12));
+    check(need(decode_freedom_knowledge_json(encoded, 12)) == k &&
+              k.entries == facts,
+          "Mixed typed planet/Moon pouch and first notes roundtrip without "
+          "sensor grants");
+    auto recollected = k;
+    recollected.field_samples->carried.front().tick = 12;
+    check(validate_freedom_knowledge(recollected, 12).has_value() &&
+              recollected.field_samples->journal == k.field_samples->journal,
+          "Recollection retains the exact first note while carrying a newer "
+          "specimen");
+    auto discarded = k;
+    discarded.field_samples->carried.clear();
+    check(
+        need(decode_freedom_knowledge_json(
+            need(encode_freedom_knowledge_json(discarded, 12)), 12)) ==
+            discarded,
+        "Discarded specimens leave independent first-collection notes intact");
+  }
+  auto selected = with_sources(3);
+  selected.field_samples =
+      FreedomFieldSampleState{1, craft, {planetary[0]}, {planetary[0]}};
+  const auto encoded = need(encode_freedom_knowledge_json(selected, 12));
+  for (unsigned fault = 0; fault < 26; ++fault) {
+    auto bad = selected;
+    auto& s = *bad.field_samples;
+    auto& r = s.carried.front();
+    switch (fault) {
+      case 0: s.version = 2; break;
+      case 1: s.carrier = {}; break;
+      case 2: s.carrier = need(derive_freedom_craft_identity(seed, 1)); break;
+      case 3: r.craft = {}; break;
+      case 4: r.craft = need(derive_freedom_craft_identity(seed, 1)); break;
+      case 5: r.tick = 13; break;
+      case 6: r.tick = 6; break;
+      case 7: r.target.system = {}; break;
+      case 8: r.target.body.version = 2; break;
+      case 9: r.target.body.kind = BodyKind::minor; break;
+      case 10: r.target.body.value = 0; break;
+      case 11: r.cell.x = 32768; break;
+      case 12: r.site.value ^= 1; break;
+      case 13: r.kind = static_cast<SurfaceLandmarkKind>(255); break;
+      case 14: r.terrain_recipe = 0; break;
+      case 15: r.terrain_recipe = 2; break;
+      case 16: bad.surface_landmarks.reset(); break;
+      case 17: s.journal.clear(); break;
+      case 18: s.journal.front().tick = 9; break;
+      case 19: s.journal.push_back(s.journal.front()); break;
+      case 20: s.carried.push_back(r); break;
+      case 21:
+        s.carried.assign(planetary.begin(), planetary.begin() + 5);
+        break;
+      case 22: s.journal.assign(65, s.journal.front()); break;
+      case 23: bad.surface_landmarks->inspections.front().tick = 9; break;
+      case 24:
+        s.journal.front().kind = static_cast<SurfaceLandmarkKind>(255);
+        break;
+      case 25:
+        r.kind = static_cast<SurfaceLandmarkKind>(
+            (static_cast<unsigned>(r.kind) + 1) % 3);
+        break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 12) &&
+              !encode_freedom_knowledge_json(bad, 12),
+          "Sample owner/source/inspection/time/unique/capacity corruption "
+          "refuses before encoding");
+  }
+  auto reversed = selected;
+  reversed.field_samples->journal = {planetary[1], planetary[0]};
+  check(!validate_freedom_knowledge(reversed, 12),
+        "Sample notes must retain strict canonical source order");
+  reversed = selected;
+  reversed.field_samples->carried = {planetary[1], planetary[0]};
+  reversed.field_samples->journal = {planetary[0], planetary[1]};
+  check(!validate_freedom_knowledge(reversed, 12),
+        "Carried specimens also require canonical unique source order");
+  for (unsigned fault = 0; fault < 6; ++fault) {
+    auto bad = with_sources(3);
+    bad.field_samples =
+        FreedomFieldSampleState{1, craft, {lunar[0]}, {lunar[0]}};
+    auto& r = bad.field_samples->carried.front();
+    switch (fault) {
+      case 0: r.target.system = {r.target.system.value ^ 1}; break;
+      case 1: r.target.body.version = 2; break;
+      case 2: r.target.body = catalog.bodies[1].node.id; break;
+      case 3: r.terrain_recipe = 2; break;
+      case 4: bad.moon_surface_landmarks.reset(); break;
+      case 5:
+        r.kind = static_cast<SurfaceLandmarkKind>(
+            (static_cast<unsigned>(r.kind) + 1) % 3);
+        break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 12),
+          "Moon sample binding rejects foreign owners, wrong body "
+          "kinds/versions, recipes, inspection and appearance");
+  }
+  auto limit = selected;
+  limit.surface_landmarks->inspections.clear();
+  for (std::size_t i = 0; i < 64; ++i) {
+    const auto& r = planetary[i];
+    limit.surface_landmarks->inspections.push_back(
+        {r.target.system, body.id, r.cell, r.site, 3, 7});
+  }
+  limit.moon_surface_landmarks.reset();
+  limit.field_samples->journal.assign(planetary.begin(),
+                                      planetary.begin() + 64);
+  check(need(decode_freedom_knowledge_json(
+            need(encode_freedom_knowledge_json(limit, 12)), 12)) == limit,
+        "Exactly64 authenticated first notes retain the existing bounded "
+        "knowledge codec");
+  auto recovered = selected;
+  recovered.recipe.craft_lineage = FreedomCraftLineage{1, 1};
+  recovered.field_samples->carrier =
+      need(derive_freedom_craft_identity(seed, 1));
+  recovered.field_samples->carried.clear();
+  check(validate_freedom_knowledge(recovered, 12).has_value(),
+        "Rebound empty pouch authenticates retained older-lineage notes");
+  auto next = planetary[0];
+  next.craft = recovered.field_samples->carrier;
+  next.tick = 12;
+  recovered.field_samples->carried.push_back(next);
+  check(need(decode_freedom_knowledge_json(
+            need(encode_freedom_knowledge_json(recovered, 12)), 12)) ==
+            recovered,
+        "Current replacement can recollect a specimen without rewriting its "
+        "original collector");
+  recovered.field_samples->journal.front().craft =
+      need(derive_freedom_craft_identity(seed, 2));
+  check(!validate_freedom_knowledge(recovered, 12),
+        "Future-lineage notes cannot impersonate an earlier collector");
+  for (unsigned fault = 0; fault < 38; ++fault) {
+    auto j = Json::parse(encoded);
+    auto& s = j["field_samples"];
+    auto& r = s["carried"][0];
+    switch (fault) {
+      case 0: s = nullptr; break;
+      case 1: s["version"] = 2U; break;
+      case 2: s["version"] = 1.0; break;
+      case 3: s["extra"] = 0; break;
+      case 4: s.erase("journal"); break;
+      case 5: s["carried"] = nullptr; break;
+      case 6: s["journal"] = Json::object(); break;
+      case 7: s["carrier"] = craft.value; break;
+      case 8: s["carrier"] = "0"; break;
+      case 9: s["carrier"] = "01"; break;
+      case 10: s["carrier"] = "18446744073709551616"; break;
+      case 11: r = nullptr; break;
+      case 12: r["extra"] = 0; break;
+      case 13: r.erase("kind"); break;
+      case 14: r["craft"] = "-1"; break;
+      case 15: r["craft"] = " 1"; break;
+      case 16: r["craft"] = "+1"; break;
+      case 17: r["craft"] = "1e3"; break;
+      case 18: r["tick"] = 1.0; break;
+      case 19: r["tick"] = -1; break;
+      case 20: r["site"] = "1"; break;
+      case 21: r["site"] = 1.0; break;
+      case 22: r["kind"] = 3U; break;
+      case 23: r["kind"] = 0.0; break;
+      case 24: r["terrain_recipe"] = UINT64_MAX; break;
+      case 25: r["cell"] = Json::array({0, 0}); break;
+      case 26: r["cell"][0] = 1.0; break;
+      case 27: r["cell"][0] = UINT64_MAX; break;
+      case 28: r["cell"][0] = INT64_MIN; break;
+      case 29: r["target"]["kind"] = "minor"; break;
+      case 30: r["target"]["system"] = "01"; break;
+      case 31: r["target"]["version"] = 2U; break;
+      case 32: s["carried"].push_back(r); break;
+      case 33: s["journal"].clear(); break;
+      case 34: s["carried"] = Json::array({r, r, r, r, r}); break;
+      case 35:
+        s["journal"] = Json::array();
+        for (unsigned i = 0; i < 65; ++i)
+          s["journal"].push_back(r);
+        break;
+      case 36: r["target"]["extra"] = 1; break;
+      case 37: s["carrier"] = ""; break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(j.dump(), 12),
+          "Closed sample codec refuses malformed IDs/types/shapes/bounds and "
+          "semantic corruption");
+  }
+  auto duplicate = encoded;
+  const auto offset = duplicate.find("\"field_samples\":");
+  duplicate.insert(offset, "\"field_samples\":null,");
+  check(!decode_freedom_knowledge_json(duplicate, 12) &&
+            need(encode_freedom_knowledge_json(selected, 12)) == encoded,
+        "Duplicate sample extension refuses and all failed reads preserve "
+        "accepted source bytes");
+  const auto network = need(generate_freedom_system_network(seed));
+  const auto remote =
+      need(resolve_freedom_network_system(network, network.nodes[2].system));
+  const auto& remote_body = remote.catalog.planets.front().descriptor;
+  const auto remote_records =
+      records({remote.catalog.id, body_id(remote_body.id)},
+              static_cast<double>(remote_body.radius.value) * 1000, 1, 3,
+              [&](SurfaceLandmarkCell cell) {
+                return identify_surface_landmark(remote_body, cell);
+              });
+  auto remote_k = need(make_freedom_starting_knowledge(seed, 4));
+  const auto& rr = remote_records.front();
+  remote_k.surface_landmarks = FreedomSurfaceLandmarkState{
+      1, {{rr.target.system, remote_body.id, rr.cell, rr.site, 3, 7}}};
+  remote_k.field_samples = FreedomFieldSampleState{1, craft, {rr}, {rr}};
+  check(need(decode_freedom_knowledge_json(
+            need(encode_freedom_knowledge_json(remote_k, 12)), 12)) == remote_k,
+        "Selected network authenticates carried specimens from an actual "
+        "additional catalog");
+  remote_k.recipe = need(make_freedom_starting_knowledge(seed, 3)).recipe;
+  check(!validate_freedom_knowledge(remote_k, 12),
+        "Added-system source cannot be smuggled into the unchanged pair "
+        "knowledge domain");
+}
+
 auto network_knowledge() -> void {
   const Seed seed{42};
   const auto network = need(generate_freedom_system_network(seed));
@@ -913,6 +1232,7 @@ auto main() -> int {
     surface_marker_metadata();
     moon_surface_marker_metadata();
     surface_landmark_metadata();
+    field_sample_metadata();
     native_saves(dir);
     check(fingerprint == 2913154867708375063ULL,
           "Version1 ordered ledger and observation sequence retain their "

@@ -3,6 +3,7 @@ const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const PositionStatus = preload("res://scripts/native/native_status.gd")
 const Landmarks = preload("res://scripts/native/native_surface_landmarks.gd")
+const FieldSamples = preload("res://tests/native_field_samples.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
 
@@ -388,6 +389,9 @@ func check_surface_landmarks(source: String, assets: String, output: String) -> 
 		shell.free()
 		return
 	check_landmark_packet(initial)
+	if not check(FieldSamples.uninspected(owner, site.id, output), "Uninspected actual planetary foot admitted a specimen or read adopted sample state"):
+		shell.free()
+		return
 	check(view.landmark_inspect_button.visible and not view.landmark_inspect_button.disabled and site.label in view.primary_status.text and "RETURN" in view.primary_status.text, "Nearby exposure lost its actual prompt or displaced RETURN")
 	var invalid_before: Dictionary = owner.get_freedom_flight_state()
 	var invalid_path := output.path_join("landmark-invalid-id-before.json")
@@ -437,6 +441,8 @@ func check_surface_landmarks(source: String, assets: String, output: String) -> 
 	view = shell.current_view
 	check(view.paused and view.state.surface_landmarks == repeat_before.surface_landmarks and view.state.surface_marker == repeat_before.surface_marker and owner.get_freedom_observations() == repeat_records, "Continue lost exposure inspection or independent marker/fact provenance")
 	check(owner.save_freedom_as(repeat_path + ".continued.json") and FileAccess.get_file_as_bytes(repeat_path + ".continued.json") == repeat_bytes, "Inspected exposure Continue rewrote its complete save")
+	var sample_failures: int = await FieldSamples.run(self, shell, owner, assets, output, site.id, Callable(self, "activate_marker_button"))
+	check(sample_failures == 0, "Actual planetary field-sample Controls checks failed")
 	shell.free()
 
 func surface_context_event(view: Control, event: InputEvent) -> void:

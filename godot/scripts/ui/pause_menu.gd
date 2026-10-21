@@ -495,11 +495,12 @@ func close_observations() -> void:
 		left_scroll.ensure_control_visible(observations_button)
 		ensure_entry_focus_visible()
 
-func show_surface_reference(text: String, invoking: Button) -> void:
+func show_surface_reference(text: String, invoking: Button, title := "SURFACE CONDITIONS") -> void:
 	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return
 	entry_focus_frames = 0
 	surface_reference_invoker = weakref(invoking) if is_instance_valid(invoking) else null
 	surface_reference_view.reference_text = text
+	surface_reference_view.reference_title = title
 	menu_margin.hide()
 	surface_reference_view.open()
 

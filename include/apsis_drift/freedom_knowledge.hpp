@@ -24,6 +24,8 @@ inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyVersion{1};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyTicks{3600};
 inline constexpr std::size_t kMaximumFreedomOrbitalSurveys{16};
+inline constexpr std::uint32_t kFreedomFieldSamplesVersion{1};
+inline constexpr std::size_t kFreedomFieldSampleCapacity{4};
 
 // Preserve the existing typed identities. Future BodyId hierarchy adds an
 // explicit subject kind/version; it never silently reinterprets PlanetId.
@@ -180,6 +182,27 @@ struct FreedomOrbitalSurveyState {
   friend auto operator==(const FreedomOrbitalSurveyState&,
                          const FreedomOrbitalSurveyState&) -> bool = default;
 };
+// Physical pouch contents and first-collection notes are separate. Source
+// authentication is not a composition assay or a navigation fact.
+struct FreedomFieldSampleRecord {
+  BodyTarget target;
+  SurfaceLandmarkCell cell;
+  SurfaceLandmarkId site;
+  std::uint32_t terrain_recipe{};
+  SurfaceLandmarkKind kind{};
+  StarterCraftId craft;
+  SimulationTick tick{};
+  friend auto operator==(const FreedomFieldSampleRecord&,
+                         const FreedomFieldSampleRecord&) -> bool = default;
+};
+struct FreedomFieldSampleState {
+  std::uint32_t version{kFreedomFieldSamplesVersion};
+  StarterCraftId carrier;
+  std::vector<FreedomFieldSampleRecord> carried;
+  std::vector<FreedomFieldSampleRecord> journal;
+  friend auto operator==(const FreedomFieldSampleState&,
+                         const FreedomFieldSampleState&) -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
@@ -190,6 +213,7 @@ struct FreedomKnowledge {
   std::optional<FreedomMoonSurfaceLandmarkState> moon_surface_landmarks{};
   // Explicit player-selected acquisition; absence preserves historical bytes.
   std::optional<FreedomOrbitalSurveyState> orbital_surveys{};
+  std::optional<FreedomFieldSampleState> field_samples{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -209,7 +233,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   oversized_ledger,
   invalid_surface_marker,
   invalid_surface_landmarks,
-  invalid_orbital_surveys
+  invalid_orbital_surveys,
+  invalid_field_samples
 };
 
 struct KnownIdentity {

@@ -1,6 +1,7 @@
 extends "res://scripts/flight/flight_basics.gd"
 ## One paused snapshot; no queries, policy or simulation ownership.
 var reference_text := ""
+var reference_title := "SURFACE CONDITIONS"
 
 func open() -> void:
 	page = 0
@@ -11,7 +12,7 @@ func open() -> void:
 
 func refresh() -> void:
 	if not is_instance_valid(heading): return
-	heading.text = "SURFACE CONDITIONS"
+	heading.text = reference_title
 	_paused.text = "PAUSED / READ-ONLY REFERENCE"
 	_hint.text = "Up / down: scroll text\nB / Circle / Esc / Start: back to controls"
 	body.text = reference_text

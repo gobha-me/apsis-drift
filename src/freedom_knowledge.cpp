@@ -229,6 +229,73 @@ auto validate_evidence(const KnowledgeWorld& w, const KnowledgeEvidence& e,
     return std::unexpected{Error::invalid_transition};
   return {};
 }
+auto sample_key(const FreedomFieldSampleRecord& r) {
+  return std::tuple{r.target.system.value,
+                    static_cast<unsigned>(r.target.body.kind),
+                    r.target.body.value, r.site.value};
+}
+auto same_sample_source(const FreedomFieldSampleRecord& a,
+                        const FreedomFieldSampleRecord& b) -> bool {
+  return a.target == b.target && a.cell == b.cell && a.site == b.site &&
+         a.terrain_recipe == b.terrain_recipe && a.kind == b.kind;
+}
+auto valid_sample_craft(const KnowledgeWorld& w, StarterCraftId craft) -> bool {
+  const auto starter = derive_freedom_craft_identity(w.route.universe_seed, 0);
+  if (!starter || !starter->value || !craft.value) return false;
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  const auto generation = craft.value >= starter->value
+                              ? craft.value - starter->value
+                              : maximum - starter->value + craft.value;
+  const auto derived =
+      derive_freedom_craft_identity(w.route.universe_seed, generation);
+  return generation <= (w.craft_lineage ? w.craft_lineage->generation : 0) &&
+         derived && *derived == craft;
+}
+auto valid_sample_source(const FreedomKnowledge& k, const KnowledgeWorld& w,
+                         const FreedomFieldSampleRecord& r, SimulationTick now)
+    -> bool {
+  if (r.tick > now || !valid_sample_craft(w, r.craft)) return false;
+  if (r.target.body.kind == BodyKind::planet) {
+    const auto* body = planet(w, {KnowledgeSubjectKind::planet, r.target.system,
+                                  r.target.body.value});
+    if (!body || r.target.body != body_id(body->descriptor.id) ||
+        !k.surface_landmarks || r.terrain_recipe < 1 || r.terrain_recipe > 3)
+      return false;
+    const auto identity = identify_surface_landmark(body->descriptor, r.cell,
+                                                    kSurfaceLandmarkVersion);
+    if (!identity || !*identity || (*identity)->id != r.site ||
+        (*identity)->kind != r.kind)
+      return false;
+    return std::ranges::any_of(
+        k.surface_landmarks->inspections, [&](const auto& inspection) {
+          return inspection.system == r.target.system &&
+                 inspection.planet == body->descriptor.id &&
+                 inspection.cell == r.cell && inspection.site == r.site &&
+                 inspection.terrain_policy == r.terrain_recipe &&
+                 inspection.tick <= r.tick;
+        });
+  }
+  if (r.target.body.kind != BodyKind::moon ||
+      r.target.system != w.origin.catalog.id || !k.moon_surface_landmarks ||
+      r.terrain_recipe != kMoonTerrainRecipeVersion)
+    return false;
+  const auto catalog = generate_secondary_body_catalog(w.origin);
+  if (!catalog) return false;
+  const auto moon = generate_physical_moon_descriptor(*catalog, r.target.body);
+  if (!moon) return false;
+  const auto identity = identify_moon_surface_landmark(
+      *moon, r.cell, kMoonSurfaceLandmarkVersion);
+  if (!identity || !*identity || (*identity)->id != r.site ||
+      (*identity)->kind != r.kind)
+    return false;
+  return std::ranges::any_of(
+      k.moon_surface_landmarks->inspections, [&](const auto& inspection) {
+        return inspection.target == r.target && inspection.cell == r.cell &&
+               inspection.site == r.site &&
+               inspection.terrain_recipe == r.terrain_recipe &&
+               inspection.tick <= r.tick;
+      });
+}
 auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
               SimulationTick now) -> std::expected<void, Error> {
   if (now == std::numeric_limits<SimulationTick>::max())
@@ -401,6 +468,38 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
           *moon, inspection.cell, landmarks.version);
       if (!identity || !*identity || (*identity)->id != inspection.site)
         return std::unexpected{Error::invalid_surface_landmarks};
+    }
+  }
+  if (k.field_samples) {
+    const auto& samples = *k.field_samples;
+    const auto carrier = derive_freedom_craft_identity(
+        w.route.universe_seed,
+        w.craft_lineage ? w.craft_lineage->generation : 0);
+    if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
+         k.recipe.version != kFreedomTravelKnowledgeVersion &&
+         k.recipe.version != kFreedomNetworkKnowledgeVersion) ||
+        samples.version != kFreedomFieldSamplesVersion || !carrier ||
+        samples.carrier != *carrier || !samples.carrier.value ||
+        samples.carried.size() > kFreedomFieldSampleCapacity ||
+        samples.journal.size() > kMaximumFreedomSurfaceLandmarkInspections)
+      return std::unexpected{Error::invalid_field_samples};
+    const auto valid_records = [&](const auto& records) {
+      for (std::size_t i = 0; i < records.size(); ++i)
+        if (!valid_sample_source(k, w, records[i], now) ||
+            (i && !(sample_key(records[i - 1]) < sample_key(records[i]))))
+          return false;
+      return true;
+    };
+    if (!valid_records(samples.journal) || !valid_records(samples.carried))
+      return std::unexpected{Error::invalid_field_samples};
+    for (const auto& specimen : samples.carried) {
+      const auto note =
+          std::ranges::find_if(samples.journal, [&](const auto& r) {
+            return same_sample_source(r, specimen);
+          });
+      if (specimen.craft != samples.carrier || note == samples.journal.end() ||
+          note->tick > specimen.tick)
+        return std::unexpected{Error::invalid_field_samples};
     }
   }
   for (std::size_t i = 0; i < k.entries.size(); ++i) {

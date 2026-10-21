@@ -435,6 +435,18 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("inspect_freedom_surface_landmark", "id"),
         &FreedomBridge::inspect_freedom_surface_landmark);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_field_samples"),
+                                &FreedomBridge::get_freedom_field_samples);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_field_sample_availability", "site_id"),
+        &FreedomBridge::get_freedom_field_sample_availability);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("collect_freedom_field_sample", "site_id"),
+        &FreedomBridge::collect_freedom_field_sample);
+    godot::ClassDB::bind_method(godot::D_METHOD("discard_freedom_field_sample",
+                                                "system_id", "body_kind",
+                                                "body_id", "site_id"),
+                                &FreedomBridge::discard_freedom_field_sample);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_surface_walk",
                                                 "elapsed", "controls",
                                                 "paused"),
@@ -1401,6 +1413,123 @@ class FreedomBridge : public godot::RefCounted {
     return change_freedom_port([&](NativeFreedomFlightSession& session) {
       return session.inspect_surface_landmark(SurfaceLandmarkId{value});
     });
+  }
+  static auto field_sample_word(const godot::String& value)
+      -> std::expected<std::uint64_t, std::string> {
+    const auto utf8 = value.utf8();
+    const std::string_view text{utf8.get_data(),
+                                static_cast<std::size_t>(utf8.length())};
+    std::uint64_t word{};
+    const auto parsed =
+        std::from_chars(text.data(), text.data() + text.size(), word);
+    if (text.empty() || text.size() > 20 || parsed.ec != std::errc{} ||
+        parsed.ptr != text.data() + text.size() || std::to_string(word) != text)
+      return std::unexpected{
+          "Sample identity must be a canonical unsigned word"};
+    return word;
+  }
+  auto get_freedom_field_sample_availability(const godot::String& id) const
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    result["available"] = false;
+    const auto site = field_sample_word(id);
+    if (!site || !saved_flight) {
+      result["reason"] = !site ? godot::String{site.error().c_str()}
+                               : godot::String{"Select a journey first"};
+      return result;
+    }
+    const auto available =
+        saved_flight->session.field_sample_collection_available(
+            SurfaceLandmarkId{*site});
+    result["available"] = available.has_value();
+    result["reason"] =
+        available ? godot::String{} : godot::String{available.error().c_str()};
+    return result;
+  }
+  auto collect_freedom_field_sample(const godot::String& id) -> bool {
+    return change_freedom_port([&](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      const auto site = field_sample_word(id);
+      if (!site) return std::unexpected{site.error()};
+      return session.collect_field_sample(SurfaceLandmarkId{*site});
+    });
+  }
+  auto discard_freedom_field_sample(const godot::String& system,
+                                    const godot::String& kind,
+                                    const godot::String& body,
+                                    const godot::String& id) -> bool {
+    return change_freedom_port([&](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      const auto system_word = field_sample_word(system);
+      const auto body_word = field_sample_word(body);
+      const auto site = field_sample_word(id);
+      if (!system_word || !body_word || !site ||
+          (kind != "planet" && kind != "moon"))
+        return std::unexpected{"Select an actual carried specimen"};
+      const BodyTarget target{
+          SystemId{*system_word},
+          {kBodyIdentityVersion,
+           kind == "planet" ? BodyKind::planet : BodyKind::moon, *body_word}};
+      return session.discard_field_sample(target, SurfaceLandmarkId{*site});
+    });
+  }
+  auto get_freedom_field_samples() const -> godot::Dictionary {
+    godot::Dictionary result;
+    result["selected"] = false;
+    result["capacity"] = static_cast<std::int64_t>(kFreedomFieldSampleCapacity);
+    result["carried"] = godot::Array{};
+    result["journal"] = godot::Array{};
+    if (!saved_flight || !saved_flight->session.knowledge()) return result;
+    const auto& knowledge = *saved_flight->session.knowledge();
+    if (!knowledge.field_samples) return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    const auto project = [&](const FreedomFieldSampleRecord& sample) {
+      godot::Dictionary row;
+      row["system_id"] = decimal(sample.target.system.value);
+      row["body_kind"] =
+          sample.target.body.kind == BodyKind::planet ? "planet" : "moon";
+      row["body_id"] = decimal(sample.target.body.value);
+      row["site_id"] = decimal(sample.site.value);
+      row["craft_id"] = decimal(sample.craft.value);
+      row["tick"] = decimal(sample.tick);
+      row["kind"] = static_cast<std::int64_t>(sample.kind);
+      const char* label = "Pale specimen";
+      switch (sample.kind) {
+        case SurfaceLandmarkKind::pale_exposure: break;
+        case SurfaceLandmarkKind::ochre_exposure:
+          label = "Ochre specimen";
+          break;
+        case SurfaceLandmarkKind::dark_exposure: label = "Dark specimen"; break;
+      }
+      row["label"] = label;
+      godot::String source =
+          sample.target.body.kind == BodyKind::moon ? "Moon" : "Planet";
+      if (sample.target.body.kind == BodyKind::planet) {
+        const auto identity = query_freedom_knowledge(
+            knowledge,
+            {KnowledgeSubjectKind::planet, sample.target.system,
+             sample.target.body.value},
+            KnowledgeFact::identity_type,
+            saved_flight->session.document().flight.tick);
+        if (identity && *identity &&
+            std::holds_alternative<KnownIdentity>((*identity)->value))
+          source = godot::String{
+              std::get<KnownIdentity>((*identity)->value).name.c_str()};
+      }
+      row["source_name"] = source;
+      return row;
+    };
+    godot::Array carried, journal;
+    for (const auto& sample : knowledge.field_samples->carried)
+      carried.append(project(sample));
+    for (const auto& sample : knowledge.field_samples->journal)
+      journal.append(project(sample));
+    result["selected"] = true;
+    result["carried"] = carried;
+    result["journal"] = journal;
+    return result;
   }
   auto advance_freedom_surface_walk(double elapsed,
                                     const godot::PackedFloat64Array& controls,
