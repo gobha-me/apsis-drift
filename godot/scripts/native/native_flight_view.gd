@@ -907,6 +907,7 @@ func update_compact_hud() -> void:
 	if context_source != null:
 		context_action.text = context_source.text
 		if surface_walking() or landed_hatch_available(): context_action.text += " · " + surface_interaction_binding()
+		elif player_input != null and player_input.last_device != "pad": context_action.text += " · left click"
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
 

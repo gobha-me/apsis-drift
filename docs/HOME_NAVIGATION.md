@@ -29,6 +29,9 @@ pause menu retains these actions at every distance and uses the same C++ refusal
 reasons. The distant flight HUD leaves room for the world; its scrollable backing
 fits the remaining content. Continue remains paused until an explicit neutral
 resume, and ordinary controls and applied exhaust keep their existing behavior.
+For keyboard/mouse play, the live contextual action also displays its existing
+captured-left-click binding. The captured-pointer shortcut stays inactive while
+paused; the normal paused commands remain available.
 
 Godot projects the existing C++ station position, registered port geometry and
 reference-planet geometry. Close port bearings use the current station transform,

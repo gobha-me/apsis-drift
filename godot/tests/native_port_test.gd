@@ -283,7 +283,15 @@ func run() -> void:
 	check_selected_port_bearings(view, owner, args[0].get_base_dir())
 	start = owner.get_freedom_flight_state()
 	check_port_camera(view, owner, start)
-	view.port_command("capture_freedom_port")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	view._input(click)
+	check(owner.get_freedom_flight_state() == start, "Paused mouse action captured a port or advanced time")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.toggle_pause()
+	check(not view.paused and view.mouse_look.active and view.context_source == view.capture_button and not view.context_action.disabled and "left click" in view.context_action.text, "Live mouse capture action was unavailable or its binding was hidden")
+	view._input(click)
 	var captured: Dictionary = owner.get_freedom_flight_state()
 	check(captured.attached and captured.tick == start.tick and captured.target_port == 1, "UI capture did not apply the actual port constraint")
 	check(view.capture_button.disabled and not view.release_button.disabled and view.port_buttons[0].disabled, "Attachment UI permits ambiguous recapture/target")
