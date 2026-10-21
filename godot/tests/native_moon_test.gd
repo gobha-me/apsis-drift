@@ -9,6 +9,7 @@ const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const MoonExposures = preload("res://tests/native_moon_exposures.gd")
 const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
+const CompanionMouseChecks = preload("res://tests/native_companion_mouse_checks.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -352,6 +353,7 @@ func check_outside(phases: String, assets: String, output: String) -> void:
 	check(save_bytes(owner, output.path_join("outside-resumed.json")) == save_bytes(peer, output.path_join("outside-peer.json")), "Actual Moon UI neutral continuation differs from complete direct next Save")
 	peer_shell.free()
 	await process_frame
+	CompanionMouseChecks.outside(view, owner, output, check)
 	var before := save_bytes(owner, output.path_join("outside-held-before.json"))
 	key(KEY_W, true)
 	view.request_surface_interaction()
@@ -592,6 +594,7 @@ func run() -> void:
 	if not check(ClassDB.class_exists("FreedomBridge"), "Actual native Moon bridge unavailable"): quit(1); return
 	var originals := {}
 	for label in PHASES: originals[label] = FileAccess.get_file_as_bytes(phases.path_join(label + ".json"))
+	await CompanionMouseChecks.run(self, phases.path_join("arrival.json"), assets, output.path_join("mouse"), "moon", check)
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var shell := Shell.new()
 	shell.presentation_only = true

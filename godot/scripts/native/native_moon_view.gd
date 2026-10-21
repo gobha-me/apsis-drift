@@ -116,6 +116,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	return error.is_empty()
 
 func build_ui() -> void:
+	setup_flight_mouse()
 	# The same direction cue used on planets; targets remain C++ observations.
 	home_marker = HomeNavigation.new()
 	home_marker.visible = false
@@ -385,7 +386,7 @@ func _process(delta: float) -> void:
 	if not focused: return
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
-	var demand := actuator_fractions(resolved.thrust_axes)
+	var demand := flight_demand(resolved.thrust_axes)
 	if state.surface.landed: demand.fill(0.0)
 	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
 	if not accepted:

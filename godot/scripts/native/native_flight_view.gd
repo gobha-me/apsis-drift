@@ -512,11 +512,15 @@ static func set_ship_layer(node: Node) -> void:
 		set_ship_layer(child)
 
 
-func build_ui() -> void:
+func setup_flight_mouse() -> void:
 	flight_mouse = FlightMouse.new()
 	add_child(flight_mouse)
 	flight_mouse.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flight_mouse.hide()
+
+
+func build_ui() -> void:
+	setup_flight_mouse()
 	var backing := StyleBoxFlat.new()
 	backing.bg_color = Color(0.01, 0.015, 0.025, 0.94)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
@@ -1701,6 +1705,18 @@ func hide_exhaust() -> void:
 		exhaust.update_applied({}, 0.0, true)
 
 
+func flight_demand(axes: PackedFloat64Array) -> PackedFloat64Array:
+	# Planet and companion views apply the same mouse intent before the existing
+	# actuator mapping; presentation never supplies a separate flight force law.
+	var flight_axes := axes.duplicate()
+	if mouse_steering_available() and flight_mouse != null:
+		var steering: Vector2 = flight_mouse.demands(player_input.settings)
+		flight_axes[2] = clampf(flight_axes[2] + steering.x, -1.0, 1.0)
+		flight_axes[3] = clampf(flight_axes[3] + steering.y, -1.0, 1.0)
+	else: clear_flight_mouse()
+	return actuator_fractions(flight_axes)
+
+
 func pause_on_error(message: String) -> void:
 	error = message
 	if impact_overlay != null: impact_overlay.visible = false
@@ -1727,13 +1743,7 @@ func _process(delta: float) -> void:
 		return
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
-	var flight_axes: PackedFloat64Array = resolved.thrust_axes.duplicate()
-	if mouse_steering_available() and flight_mouse != null:
-		var steering: Vector2 = flight_mouse.demands(player_input.settings)
-		flight_axes[2] = clampf(flight_axes[2] + steering.x, -1.0, 1.0)
-		flight_axes[3] = clampf(flight_axes[3] + steering.y, -1.0, 1.0)
-	else: clear_flight_mouse()
-	var demand := actuator_fractions(flight_axes)
+	var demand := flight_demand(resolved.thrust_axes)
 	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
 	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
