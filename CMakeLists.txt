@@ -195,6 +195,7 @@ add_library(apsis_drift_core STATIC
   src/native_surface_maneuver.cpp
   src/native_surface_walk.cpp
   src/native_surface_landmarks.cpp
+  src/native_field_samples.cpp
   src/freedom_resources.cpp
   src/freedom_resource_save.cpp
   src/freedom_surface_save.cpp
@@ -332,7 +333,7 @@ target_link_libraries(apsis_drift_boarding_research
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/physical_minor.cpp src/physical_minor_rotation.cpp src/native_minor_flight.cpp src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/physical_moon_rotation.cpp src/moon_terrain.cpp src/moon_surface_contact.cpp src/moon_landed_craft.cpp src/moon_surface_walker.cpp src/moon_terrain_impact.cpp src/native_moon_surface.cpp src/native_moon_walk.cpp src/freedom_local_jump.cpp src/native_local_jump.cpp src/native_moon_flight.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/moon_surface_landmarks.cpp src/native_moon_landmarks.cpp src/native_surface_landmarks.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/physical_minor.cpp src/physical_minor_rotation.cpp src/native_minor_flight.cpp src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/physical_moon_rotation.cpp src/moon_terrain.cpp src/moon_surface_contact.cpp src/moon_landed_craft.cpp src/moon_surface_walker.cpp src/moon_terrain_impact.cpp src/native_moon_surface.cpp src/native_moon_walk.cpp src/freedom_local_jump.cpp src/native_local_jump.cpp src/native_moon_flight.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/moon_surface_landmarks.cpp src/native_moon_landmarks.cpp src/native_surface_landmarks.cpp src/native_field_samples.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)

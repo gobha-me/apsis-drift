@@ -253,6 +253,7 @@ func setup_controls() -> void:
 	add_child(controls_menu)
 	setup_frame_diagnostics(controls_menu.save_button.get_parent())
 	add_body_controls(controls_menu.save_button.get_parent())
+	setup_field_sample_controls(controls_menu.save_button.get_parent())
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func(): pause_controls("Controls changed. Release controls, then resume."))

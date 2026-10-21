@@ -212,6 +212,278 @@ auto supported_session() -> NativeFreedomFlightSession {
   need(session.begin_surface_walk());
   return session;
 }
+using V = RigidVector3;
+auto sample_sub(V a, V b) -> V {
+  return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+auto sample_scale(V a, double k) -> V {
+  return {k * a.x, k * a.y, k * a.z};
+}
+auto sample_dot(V a, V b) -> double {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+auto sample_length(V a) -> double {
+  return std::hypot(a.x, a.y, a.z);
+}
+auto sample_rotate(RigidOrientation q, V v) -> V {
+  const V u{q.x, q.y, q.z};
+  const auto cross = [](V a, V b) -> V {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x};
+  };
+  const auto a = cross(u, v), b = cross(u, a);
+  const auto k = 2 / (q.w * q.w + sample_dot(u, u));
+  return {v.x + k * (q.w * a.x + b.x), v.y + k * (q.w * a.y + b.y),
+          v.z + k * (q.w * a.z + b.z)};
+}
+auto sample_walk_tick(NativeFreedomFlightSession& session, V target) -> void {
+  const auto foot = session.surface_walker()->foot_position_metres;
+  const auto delta = sample_sub(target, foot);
+  const auto distance = sample_length(delta);
+  check(std::isfinite(distance) && distance > .000001,
+        "Moon specimen walk has a finite nonzero actual bearing");
+  const auto up = sample_scale(foot, 1 / sample_length(foot));
+  const auto craft_right = sample_rotate(
+      session.surface()->moon_landed->fixed.orientation, {1, 0, 0});
+  const auto projected =
+      sample_sub(craft_right, sample_scale(up, sample_dot(craft_right, up)));
+  const auto right = sample_scale(projected, 1 / sample_length(projected));
+  const V back{right.y * up.z - right.z * up.y, right.z * up.x - right.x * up.z,
+               right.x * up.y - right.y * up.x};
+  need(session.advance_surface_walk({-sample_dot(delta, back) / distance,
+                                     sample_dot(delta, right) / distance, 0}));
+  check(!session.surface_walk_blockage(),
+        "Moon specimen foot route remains genuinely supported");
+}
+auto field_samples(
+    const std::vector<FreedomMoonSurfaceLandmarkInspection>& records) -> void {
+  // Keep the existing supported-contact unit fixture and actual charged route.
+  // It is not the separately qualified continuous Moon descent. From its real
+  // hatch, walk toward ONE nearest existing generated exposure; no site/actor
+  // relocation, alternate centre selection or terrain changes.
+  auto session = supported_session();
+  need(session.enable_surface_landmarks());
+  const auto initial_view = need(session.moon_surface_landmarks_view());
+  check(!initial_view.sites.empty(),
+        "Supported Moon fixture has a real nearby specimen exposure");
+  const auto site = initial_view.sites.front().site;
+  const auto id = site.identity.id;
+  const V point{site.position_metres.x, site.position_metres.y,
+                site.position_metres.z};
+  bool reached{};
+  for (unsigned step = 0; step < 24000; ++step) {
+    if (sample_length(sample_sub(
+            point, session.surface_walker()->foot_position_metres)) <= 7.5) {
+      reached = true;
+      break;
+    }
+    sample_walk_tick(session, point);
+  }
+  check(
+      reached,
+      "Actual supported Moon walking reaches the fixed exposure within8metres");
+  const auto before_inspect = bytes(session);
+  check(!session.field_sample_collection_available(id) &&
+            !session.collect_field_sample(id) &&
+            bytes(session) == before_inspect &&
+            !session.knowledge()->field_samples,
+        "Reachable Moon collection requires inspection and cannot silently "
+        "select sample state");
+  need(session.inspect_surface_landmark(id));
+  const BodyTarget target{session.system().catalog.id, session.moon()->body};
+  const auto tick = session.document().flight.tick;
+  const auto before_collect = bytes(session);
+  check(session.field_sample_collection_available(id).has_value() &&
+            session.field_sample_collection_available(id).has_value() &&
+            bytes(session) == before_collect,
+        "Actual Moon collection availability is repeatable and complete-save "
+        "neutral");
+  // Explicit authenticated retained-metadata fixture supplies a full pouch;
+  // these four remote specimens are NOT claimed as physically collected here.
+  auto full_document = need(session.surface_walk_document());
+  auto& full_knowledge =
+      std::get<FreedomTravelSaveDocument>(full_document.voyage.voyage)
+          .voyage.knowledge;
+  FreedomFieldSampleState full_samples{kFreedomFieldSamplesVersion,
+                                       session.document().origin.state.craft,
+                                       {},
+                                       {}};
+  for (const auto& inspection : records) {
+    if (inspection.site == id) continue;
+    if (full_samples.carried.size() == kFreedomFieldSampleCapacity) break;
+    const auto identity =
+        need(identify_moon_surface_landmark(*session.moon(), inspection.cell));
+    check(identity.has_value(),
+          "Retained pouch source authenticates to the actual Moon field");
+    full_knowledge.moon_surface_landmarks->inspections.push_back(inspection);
+    const FreedomFieldSampleRecord record{
+        inspection.target, inspection.cell,
+        inspection.site,   inspection.terrain_recipe,
+        identity->kind,    full_samples.carrier,
+        inspection.tick};
+    full_samples.carried.push_back(record);
+    full_samples.journal.push_back(record);
+  }
+  std::ranges::sort(full_knowledge.moon_surface_landmarks->inspections, {},
+                    [](const auto& record) { return record.site.value; });
+  full_knowledge.field_samples = full_samples;
+  auto full = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(NativeSaveDocument{full_document}))));
+  const auto full_before = bytes(full);
+  const auto available = full.field_sample_collection_available(id);
+  check(!available && available.error().find("full") != std::string::npos &&
+            !full.collect_field_sample(id) && bytes(full) == full_before,
+        "A genuinely reachable inspected Moon site refuses the labelled "
+        "full-pouch fixture atomically");
+  need(full.discard_field_sample(full_samples.carried.front().target,
+                                 full_samples.carried.front().site));
+  need(full.collect_field_sample(id));
+  check(full.knowledge()->field_samples->carried.size() ==
+                kFreedomFieldSampleCapacity &&
+            full.knowledge()->field_samples->journal.size() ==
+                kFreedomFieldSampleCapacity + 1,
+        "Discarded slot admits actual local collection without deleting any "
+        "first notes");
+
+  need(session.collect_field_sample(id));
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
+  const auto collected = *session.knowledge()->field_samples;
+  check(
+      collected.carried.size() == 1 && collected.journal == collected.carried &&
+          collected.carrier == session.document().origin.state.craft &&
+          collected.carried.front() ==
+              FreedomFieldSampleRecord{target, site.identity.cell, id,
+                                       session.document().moon->terrain_recipe,
+                                       site.identity.kind, collected.carrier,
+                                       tick},
+      "Actual Moon specimen records exact typed site/kind/current "
+      "terrain/craft and first tick");
+  auto without_samples = need(session.surface_walk_document());
+  std::get<FreedomTravelSaveDocument>(without_samples.voyage.voyage)
+      .voyage.knowledge.field_samples.reset();
+  check(need(encode_native_save_document_json(
+            NativeSaveDocument{without_samples})) == before_collect,
+        "Moon collection changes only optional sample metadata, preserving all "
+        "actor/resources/facts/receipt bytes");
+  const auto saved = bytes(session);
+  auto foreign = target;
+  ++foreign.body.version;
+  check(!session.collect_field_sample(id) &&
+            !session.field_sample_collection_available(id) &&
+            !session.collect_field_sample({}) &&
+            !session.discard_field_sample(foreign, id) &&
+            bytes(session) == saved,
+        "Moon duplicate/foreign/unknown commands refuse without Save mutation");
+  auto resumed = continued(session);
+  need(session.advance_surface_walk({}));
+  need(resumed.advance_surface_walk({}));
+  check(bytes(session) == bytes(resumed) &&
+            session.knowledge()->field_samples == collected,
+        "Moon complete Continue and a genuine supported tick retain all "
+        "specimen provenance");
+  need(session.discard_field_sample(target, id));
+  check(session.knowledge()->field_samples->carried.empty() &&
+            session.knowledge()->field_samples->journal == collected.journal &&
+            session.document().flight.tick == tick + 1,
+        "Moon discard keeps the first journal record without advancing time");
+  need(session.collect_field_sample(id));
+  check(session.knowledge()->field_samples->carried.front().tick == tick + 1 &&
+            session.knowledge()->field_samples->journal == collected.journal,
+        "Moon recollection records the new actual tick without rewriting first "
+        "notes");
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
+  const auto pouch = *session.knowledge()->field_samples;
+  bool returned{};
+  for (unsigned step = 0; step < 24000; ++step) {
+    const auto access = need(session.surface_return_access());
+    if (access.within_reach) {
+      returned = true;
+      break;
+    }
+    sample_walk_tick(session, access.foot_position_metres);
+  }
+  check(returned, "Moon specimen returns by actual supported foot movement to "
+                  "its original hatch");
+  need(session.return_from_surface_walk());
+  const auto aboard = bytes(session);
+  check(session.knowledge()->field_samples == pouch &&
+            !session.collect_field_sample(id) &&
+            !session.field_sample_collection_available(id) &&
+            bytes(session) == aboard,
+        "Moon reboarding retains the pouch and refuses seated collection "
+        "atomically");
+  {
+    // Clone the genuinely collected/recollected specimen voyage. Reuse the
+    // existing Moon marker contract's physical ascent, not a space placement;
+    // the original session remains aboard for its independent discard proof.
+    auto homebound = session;
+    const auto original = bytes(session);
+    const auto craft = homebound.document().origin.state.craft;
+    const auto ascent_tick = homebound.document().flight.tick;
+    const auto ascent_fuel = homebound.resources()->flight_quanta;
+    const auto charges = homebound.resources()->jump_charges;
+    const auto attempt = homebound.travel()->next_attempt;
+    need(homebound.release_surface());
+    const double departure_radius =
+        homebound.moon()->radius_metres + kMoonTerrainMaximumReliefMetres + 100;
+    NativeFlightControls ascent;
+    ascent.positive_translation.y = .5;
+    bool clear{};
+    for (unsigned step = 0; step < 18000; ++step) {
+      const auto& position = homebound.document().flight.position_metres;
+      if (std::hypot(position.x, position.y, position.z) > departure_radius) {
+        clear = true;
+        break;
+      }
+      const auto applied = need(homebound.advance(ascent));
+      check(!applied.propulsion_refused && !homebound.surface()->moon_landed,
+            "Present specimen ascends through actual paid Moon thrust without "
+            "recapture");
+    }
+    check(clear && homebound.document().flight.tick > ascent_tick &&
+              homebound.resources()->flight_quanta < ascent_fuel &&
+              homebound.resources()->jump_charges == charges &&
+              homebound.travel()->next_attempt == attempt &&
+              homebound.knowledge()->field_samples == pouch,
+          "Actual bounded Moon ascent retains exact carried specimens/first "
+          "notes and spends only flight fuel");
+    homebound = continued(homebound);
+    const auto departure_tick = homebound.document().flight.tick;
+    need(homebound.select_local_jump(
+        minor_route_fixture::home_target(homebound)));
+    minor_route_fixture::leg(homebound);
+    check(!homebound.moon() && !homebound.minor() &&
+              homebound.document().world &&
+              homebound.document().world->system == target.system &&
+              homebound.document().world->planet ==
+                  homebound.document().origin.recipe.home_planet &&
+              homebound.document().flight.tick ==
+                  departure_tick + kJumpSpoolTicks + kJumpTransitTicks &&
+              homebound.document().origin.state.craft == craft &&
+              craft == pouch.carrier && homebound.resources()->craft == craft &&
+              homebound.resources()->jump_charges == charges - 1 &&
+              homebound.travel()->next_attempt == attempt + 1 &&
+              homebound.resources()->flight_quanta < ascent_fuel &&
+              homebound.knowledge()->field_samples == pouch,
+          "Actual charged Moon-to-Home spool/transit/arrival keeps the same "
+          "carrier, specimens and first notes without refill");
+    const auto arrived = bytes(homebound);
+    homebound = continued(homebound);
+    check(bytes(homebound) == arrived &&
+              homebound.knowledge()->field_samples == pouch &&
+              bytes(session) == original,
+          "Present specimens survive exact Home Continue while the original "
+          "aboard-discard voyage remains unchanged");
+  }
+  need(session.discard_field_sample(target, id));
+  check(
+      session.knowledge()->field_samples->carried.empty() &&
+          session.knowledge()->field_samples->journal == collected.journal,
+      "Moon samples can be discarded aboard without deleting the first notes");
+  resumed = continued(session);
+  check(bytes(resumed) == bytes(session),
+        "Empty Moon pouch with retained notes survives complete Continue");
+}
 auto native_commands(
     const std::vector<FreedomMoonSurfaceLandmarkInspection>& records) -> void {
   auto session = supported_session();
@@ -314,6 +586,7 @@ int main() {
     const auto records = identities(fixture.moon);
     metadata(fixture.moon, records);
     native_commands(records);
+    field_samples(records);
     std::cout << "PASS native Moon landmarks " << checks << " checks\n";
     return 0;
   } catch (const std::exception& error) {

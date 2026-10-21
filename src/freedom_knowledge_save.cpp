@@ -36,6 +36,58 @@ auto bounded_cell_coordinate(const Json& coordinate) -> bool {
   return value >= std::numeric_limits<std::int32_t>::min() &&
          value <= std::numeric_limits<std::int32_t>::max();
 }
+auto sample_craft(const Json& value)
+    -> std::expected<StarterCraftId, SaveSchemaError> {
+  if (!value.is_string())
+    return std::unexpected{failure("canonical sample craft identity required")};
+  const auto& text = value.get_ref<const std::string&>();
+  std::uint64_t id{};
+  const auto result =
+      std::from_chars(text.data(), text.data() + text.size(), id);
+  if (text.empty() || text.size() > 20 || !id || result.ec != std::errc{} ||
+      result.ptr != text.data() + text.size() || std::to_string(id) != text)
+    return std::unexpected{failure("invalid sample craft identity")};
+  return StarterCraftId{id};
+}
+auto sample_record_json(const FreedomFieldSampleRecord& r)
+    -> std::expected<Json, SaveSchemaError> {
+  const auto target = encode_body_target(r.target);
+  if (!target) return std::unexpected{failure("invalid sample target")};
+  return Json{{"target", Json::parse(*target)},
+              {"cell", Json::array({r.cell.x, r.cell.y, r.cell.z})},
+              {"site", r.site.value},
+              {"terrain_recipe", r.terrain_recipe},
+              {"kind", static_cast<unsigned>(r.kind)},
+              {"craft", std::to_string(r.craft.value)},
+              {"tick", r.tick}};
+}
+auto sample_record_value(const Json& j)
+    -> std::expected<FreedomFieldSampleRecord, SaveSchemaError> {
+  if (!fields(j, {"target", "cell", "site", "terrain_recipe", "kind", "craft",
+                  "tick"}) ||
+      !unsigned_fields(j, {"site", "terrain_recipe", "kind", "tick"}) ||
+      j["terrain_recipe"] > std::numeric_limits<std::uint32_t>::max() ||
+      j["kind"] > static_cast<unsigned>(SurfaceLandmarkKind::dark_exposure) ||
+      !j["cell"].is_array() || j["cell"].size() != 3)
+    return std::unexpected{failure("invalid closed field sample record")};
+  const auto target = decode_body_target(j["target"].dump());
+  const auto craft = sample_craft(j["craft"]);
+  if (!target || !craft)
+    return std::unexpected{failure("invalid field sample owner")};
+  const auto& cell = j["cell"];
+  for (const auto& coordinate : cell)
+    if (!bounded_cell_coordinate(coordinate))
+      return std::unexpected{failure("bounded sample cell required")};
+  return FreedomFieldSampleRecord{
+      *target,
+      {cell[0].get<std::int32_t>(), cell[1].get<std::int32_t>(),
+       cell[2].get<std::int32_t>()},
+      {j["site"].get<std::uint64_t>()},
+      j["terrain_recipe"].get<std::uint32_t>(),
+      static_cast<SurfaceLandmarkKind>(j["kind"].get<unsigned>()),
+      *craft,
+      j["tick"].get<SimulationTick>()};
+}
 auto bounded_nesting(std::string_view text) -> bool {
   std::array<char, 64> stack{};
   std::size_t depth{};
@@ -217,6 +269,24 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                                {"active", std::move(active)},
                                {"completed", std::move(completed)}};
   }
+  if (k.field_samples) {
+    Json carried = Json::array(), journal = Json::array();
+    for (const auto& r : k.field_samples->carried) {
+      auto item = sample_record_json(r);
+      if (!item) return std::unexpected{item.error()};
+      carried.push_back(std::move(*item));
+    }
+    for (const auto& r : k.field_samples->journal) {
+      auto item = sample_record_json(r);
+      if (!item) return std::unexpected{item.error()};
+      journal.push_back(std::move(*item));
+    }
+    root["field_samples"] = {
+        {"version", k.field_samples->version},
+        {"carrier", std::to_string(k.field_samples->carrier.value)},
+        {"carried", std::move(carried)},
+        {"journal", std::move(journal)}};
+  }
   auto text = root.dump(2) + '\n';
   const auto limit = r.version == kFreedomNetworkKnowledgeVersion
                          ? kMaximumFreedomNetworkKnowledgeBytes
@@ -237,11 +307,14 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("moon_surface_landmarks");
   const bool surveys_selected =
       root->is_object() && root->contains("orbital_surveys");
+  const bool samples_selected =
+      root->is_object() && root->contains("field_samples");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
   if (moon_landmarks_selected) root_shape.erase("moon_surface_landmarks");
   if (surveys_selected) root_shape.erase("orbital_surveys");
+  if (samples_selected) root_shape.erase("field_samples");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -462,6 +535,32 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                                  item["completed_tick"].get<SimulationTick>()});
     }
     k.orbital_surveys = std::move(state);
+  }
+  if (samples_selected) {
+    const auto& samples = (*root)["field_samples"];
+    if (!observed ||
+        !fields(samples, {"version", "carrier", "carried", "journal"}) ||
+        !unsigned_fields(samples, {"version"}) ||
+        samples["version"] != kFreedomFieldSamplesVersion ||
+        !samples["carried"].is_array() || !samples["journal"].is_array() ||
+        samples["carried"].size() > kFreedomFieldSampleCapacity ||
+        samples["journal"].size() > kMaximumFreedomSurfaceLandmarkInspections)
+      return std::unexpected{failure("invalid field sample state")};
+    const auto carrier = sample_craft(samples["carrier"]);
+    if (!carrier) return std::unexpected{carrier.error()};
+    FreedomFieldSampleState state;
+    state.carrier = *carrier;
+    for (const auto& j : samples["carried"]) {
+      auto r = sample_record_value(j);
+      if (!r) return std::unexpected{r.error()};
+      state.carried.push_back(*r);
+    }
+    for (const auto& j : samples["journal"]) {
+      auto r = sample_record_value(j);
+      if (!r) return std::unexpected{r.error()};
+      state.journal.push_back(*r);
+    }
+    k.field_samples = std::move(state);
   }
   const auto& entries = (*root)["entries"];
   const auto maximum_facts = network ? kMaximumFreedomNetworkKnowledgeFacts

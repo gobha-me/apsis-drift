@@ -114,6 +114,10 @@ Keep fuel for ascent and clear the Moon's departure envelope before jumping home
 On foot, release walking and look controls and use **E**, captured **left click**
 or selected-pad **A/Cross** for the nearby hatch or geological inspection. The
 hatch takes priority when within reach; inspection opens a paused reader.
+Back in paused Controls, **Collect hand specimen** carries one sample from an
+inspected exposure. **Sample pouch** shows its source and retained field notes;
+Discard frees one of four slots. See [hand specimens](FREEDOM_SURFACE_LANDMARKS.md#hand-specimens)
+for persistence and replacement rules.
 
 ## Save and report problems
 

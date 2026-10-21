@@ -990,8 +990,8 @@ auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
 }
 auto surface_metadata_capacity(const NativeFreedomFlightSession& source,
                                const Fixture& f,
-                               std::optional<SurfaceLandmarkId> landmark = {})
-    -> void {
+                               std::optional<SurfaceLandmarkId> landmark = {},
+                               bool collect = false) -> void {
   auto document = required(source.surface_walk_document());
   auto& knowledge =
       std::get<FreedomKnowledgeSaveDocument>(document.voyage.voyage);
@@ -1025,8 +1025,9 @@ auto surface_metadata_capacity(const NativeFreedomFlightSession& source,
   auto bounded = required(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, document, f.planet, {}}));
   const auto prior_knowledge = bounded.knowledge();
-  const auto changed = landmark ? bounded.inspect_surface_landmark(*landmark)
-                                : bounded.mark_surface_marker();
+  const auto changed = collect    ? bounded.collect_field_sample(*landmark)
+                       : landmark ? bounded.inspect_surface_landmark(*landmark)
+                                  : bounded.mark_surface_marker();
   check(!changed && bounded.knowledge() == prior_knowledge &&
             required(encode_freedom_surface_walk_document_json(
                 required(bounded.surface_walk_document()))) == prior,
@@ -1186,6 +1187,228 @@ auto surface_marker_session(NativeFreedomFlightSession session,
         "fact history and clock");
 }
 
+// Run on a clone of the genuinely walked/inspected planet exposure. The
+// existing exported route remains specimen-absent and byte-identical.
+auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
+                          SurfaceLandmarkId site) -> void {
+  const auto saved = [](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  const auto initial = saved(session);
+  const auto tick = session.document().flight.tick;
+  const BodyTarget target{f.owner.catalog.id, body_id(f.planet.id)};
+  check(!session.knowledge()->field_samples &&
+            session.field_sample_collection_available(site).has_value() &&
+            session.field_sample_collection_available(site).has_value() &&
+            saved(session) == initial,
+        "Actual inspected planet exposure availability is read-only and sample "
+        "state remains opt-in");
+  surface_metadata_capacity(session, f, site, true);
+  required(session.collect_field_sample(site));
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
+  const auto collected = *session.knowledge()->field_samples;
+  const auto& record = collected.carried.at(0);
+  const auto view = required(session.surface_landmarks_view());
+  const auto found = std::ranges::find_if(view.sites, [&](const auto& item) {
+    return item.site.identity.id == site;
+  });
+  check(found != view.sites.end() && collected.carried.size() == 1 &&
+            collected.journal == collected.carried && record.target == target &&
+            record.cell == found->site.identity.cell &&
+            record.kind == found->site.identity.kind && record.site == site &&
+            record.terrain_recipe == f.terrain_policy && record.tick == tick &&
+            record.craft == session.document().origin.state.craft &&
+            collected.carrier == record.craft,
+        "Planet collection records actual generated kind, typed source and "
+        "authoritative collector clock");
+  auto without_samples = required(session.surface_walk_document());
+  std::get<FreedomKnowledgeSaveDocument>(without_samples.voyage.voyage)
+      .knowledge.field_samples.reset();
+  check(required(encode_native_save_document_json(
+            NativeSaveDocument{without_samples})) == initial,
+        "Removing only sample metadata restores the complete pre-collection "
+        "actor/resources/facts/history bytes");
+  const auto first = saved(session);
+  auto foreign = target;
+  ++foreign.body.version;
+  check(!session.field_sample_collection_available(site) &&
+            !session.collect_field_sample(site) &&
+            !session.collect_field_sample({}) &&
+            !session.discard_field_sample(foreign, site) &&
+            saved(session) == first,
+        "Duplicate, foreign and unknown planet sample actions refuse without "
+        "changing the complete Save");
+  auto continued = required(
+      NativeFreedomFlightSession::open(required(native_select_save_document(
+          required(decode_native_save_document_json(first))))));
+  check(saved(continued) == first &&
+            continued.knowledge()->field_samples == collected,
+        "Collected planet specimen and first note survive complete "
+        "Save/Continue");
+  required(session.advance_surface_walk({}));
+  required(continued.advance_surface_walk({}));
+  check(saved(session) == saved(continued) &&
+            session.knowledge()->field_samples == collected,
+        "A genuine supported foot tick preserves samples and matches continued "
+        "full state");
+  required(session.discard_field_sample(target, site));
+  check(session.knowledge()->field_samples->carried.empty() &&
+            session.knowledge()->field_samples->journal == collected.journal &&
+            session.document().flight.tick == tick + 1,
+        "Discard frees the planet pouch while retaining its first note without "
+        "advancing time");
+  required(session.collect_field_sample(site));
+  check(session.knowledge()->field_samples->carried.size() == 1 &&
+            session.knowledge()->field_samples->carried.front().tick ==
+                tick + 1 &&
+            session.knowledge()->field_samples->journal == collected.journal,
+        "Planet recollection uses the current tick and preserves the original "
+        "first collection");
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Immutability
+  const auto pouch = *session.knowledge()->field_samples;
+  // Return to the existing terrain-supported hatch with actual foot commands.
+  bool returned{};
+  for (unsigned step = 0; step < 1200; ++step) {
+    const auto access = required(session.surface_return_access());
+    if (access.within_reach) {
+      returned = true;
+      break;
+    }
+    const auto foot = session.surface_walker()->foot_position_metres;
+    const auto delta = sub(access.foot_position_metres, foot);
+    const auto distance = norm(delta);
+    const auto up = mul(foot, 1 / norm(foot));
+    const auto craft_right =
+        rotate(session.surface()->landed->fixed.orientation, {1, 0, 0});
+    const auto dot = [](V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+    const auto projected = sub(craft_right, mul(up, dot(craft_right, up)));
+    const auto right = mul(projected, 1 / norm(projected));
+    const V back{right.y * up.z - right.z * up.y,
+                 right.z * up.x - right.x * up.z,
+                 right.x * up.y - right.y * up.x};
+    required(session.advance_surface_walk(
+        {-dot(delta, back) / distance, dot(delta, right) / distance, 0}));
+    if (session.surface_walk_blockage()) break;
+  }
+  check(returned, "Collected planet specimen reaches its genuine hatch through "
+                  "supported walking");
+  if (!returned) throw std::runtime_error("Collected planet return blocked");
+  required(session.return_from_surface_walk());
+  const auto aboard = saved(session);
+  check(!session.surface_walker() &&
+            session.knowledge()->field_samples == pouch &&
+            !session.field_sample_collection_available(site) &&
+            !session.collect_field_sample(site) && saved(session) == aboard,
+        "Reboarding retains the actual pouch and seated collection refuses "
+        "atomically");
+  {
+    // Explicit valid saved-space fixture, NOT a flown surface-to-space ascent.
+    // Retain the genuinely collected specimen, first note, actual seated pilot,
+    // whole origin/model/knowledge and already-spent fuel at this exact clock.
+    // Only current position and the incompatible ground constraint change.
+    auto space = required(session.surface_walk_document());
+    auto& knowledge =
+        std::get<FreedomKnowledgeSaveDocument>(space.voyage.voyage);
+    auto& surface = knowledge.voyage.voyage;
+    auto& boarding = std::get<FreedomBoardingSaveDocument>(surface.base);
+    boarding.voyage.flight.flight = required(session.relative_state());
+    boarding.voyage.flight.flight.position_metres = {
+        0, 0, static_cast<double>(f.planet.radius.value) * 10000.0};
+    surface.surface = {};
+    auto traveler = required(NativeFreedomFlightSession::open(
+        required(native_select_save_document(NativeSaveDocument{space}))));
+    check(
+        traveler.document().origin == session.document().origin &&
+            traveler.document().model == session.document().model &&
+            traveler.document().flight.orientation ==
+                session.document().flight.orientation &&
+            traveler.document().flight.linear_velocity_metres_per_second ==
+                session.document().flight.linear_velocity_metres_per_second &&
+            traveler.boarding() == session.boarding() &&
+            traveler.resources() == session.resources() &&
+            traveler.knowledge() == session.knowledge() && !traveler.travel(),
+        "Labelled space fixture retains every actual collection/pilot/resource "
+        "owner without manufacturing local travel history");
+    const auto resume_jump = [&](const NativeFreedomFlightSession& live) {
+      const auto prior = saved(live);
+      auto next = required(
+          NativeFreedomFlightSession::open(required(native_select_save_document(
+              required(decode_native_save_document_json(prior))))));
+      check(saved(next) == prior && next.knowledge()->field_samples == pouch,
+            "Ordinary jump boundary Continue preserves complete bytes and "
+            "present specimens/first notes");
+      return next;
+    };
+    const auto ids = generate_first_intersystem_identities(
+        traveler.document().origin.recipe.universe_seed);
+    required(traveler.select_jump(ids.target_system));
+    check(traveler.travel() && !traveler.travel()->local &&
+              traveler.knowledge()->field_samples == pouch,
+          "Present actual planet specimens enter the ordinary intersystem "
+          "owner without local proof deletion");
+    required(traveler.begin_jump());
+    traveler = resume_jump(traveler);
+    const auto source_tick = traveler.document().flight.tick;
+    const auto charges = traveler.resources()->jump_charges;
+    const auto attempt = traveler.travel()->next_attempt;
+    unsigned commitments{}, arrivals{};
+    for (SimulationTick step = 1; step <= kJumpSpoolTicks + kJumpTransitTicks;
+         ++step) {
+      const auto applied = required(traveler.advance({}));
+      commitments += applied.jump_committed ? 1U : 0U;
+      arrivals += applied.jump_arrived ? 1U : 0U;
+      check(traveler.knowledge()->field_samples == pouch &&
+                traveler.document().origin.state.craft == pouch.carrier &&
+                traveler.resources()->craft == pouch.carrier &&
+                traveler.document().flight.tick == source_tick + step &&
+                traveler.resources()->tick == source_tick + step,
+            "Actual ordinary jump keeps present specimens, original collector "
+            "provenance and one authoritative clock");
+      if (step < kJumpSpoolTicks)
+        check(
+            traveler.resources()->jump_charges == charges &&
+                traveler.travel()->next_attempt == attempt &&
+                !applied.jump_committed,
+            "Ordinary specimen spool cannot spend an early charge or attempt");
+      if (step == kJumpSpoolTicks)
+        check(applied.jump_committed && traveler.travel()->committed &&
+                  traveler.resources()->jump_charges == charges - 1 &&
+                  traveler.travel()->next_attempt == attempt + 1,
+              "Ordinary specimen jump commits one actual charge and immutable "
+              "receipt");
+      if (step > kJumpSpoolTicks)
+        check(applied.fuel_debit_quanta == 0 &&
+                  traveler.resources()->flight_quanta ==
+                      traveler.travel()->commitment_resources->flight_quanta &&
+                  traveler.resources()->jump_charges == charges - 1,
+              "Ordinary specimen transit preserves its actual commitment fuel "
+              "bill without refill");
+      if (step == 1 || step == kJumpSpoolTicks - 1 || step == kJumpSpoolTicks ||
+          step == kJumpSpoolTicks + 1 ||
+          step == kJumpSpoolTicks + kJumpTransitTicks - 1 ||
+          step == kJumpSpoolTicks + kJumpTransitTicks)
+        traveler = resume_jump(traveler);
+    }
+    check(commitments == 1 && arrivals == 1 &&
+              traveler.system().catalog.id == ids.target_system &&
+              traveler.document().world->system == ids.target_system &&
+              traveler.travel()->phase == FreedomJumpPhase::idle &&
+              !traveler.travel()->local &&
+              traveler.resources()->jump_charges == charges - 1 &&
+              traveler.travel()->next_attempt == attempt + 1 &&
+              traveler.knowledge()->field_samples == pouch &&
+              saved(session) == aboard,
+          "Actual charged intersystem arrival retains the exact carried "
+          "specimen and first notes while the independent aboard-discard "
+          "branch stays unchanged");
+  }
+  required(session.discard_field_sample(target, site));
+  check(session.knowledge()->field_samples->carried.empty() &&
+            session.knowledge()->field_samples->journal == collected.journal,
+        "Owned specimens may be discarded aboard while first notes stay "
+        "retained");
+}
 auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
                               const Fixture& f,
                               const std::filesystem::path& directory) -> void {
@@ -1343,6 +1566,12 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
   const auto resources = session.resources();
   const auto actor = session.surface_walker();
   const auto tick = session.document().flight.tick;
+  const auto uninspected = saved(session);
+  check(!session.field_sample_collection_available(requested) &&
+            !session.collect_field_sample(requested) &&
+            saved(session) == uninspected,
+        "Genuine reachable planet exposure requires actual inspection before "
+        "collection");
   required(session.inspect_surface_landmark(requested));
   const auto recorded = session.knowledge()->surface_landmarks;
   check(recorded && recorded->inspections.size() == 1 &&
@@ -1357,6 +1586,7 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
             session.document().flight.tick == tick,
         "Inspection records the actual owner's site and first tick without "
         "awarding sensor facts, fuel, motion or time");
+  field_sample_session(session, f, requested);
   required(session.advance_surface_walk({}));
   const auto inspected = saved(session);
   required(session.inspect_surface_landmark(requested));

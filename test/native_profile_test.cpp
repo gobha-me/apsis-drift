@@ -308,7 +308,11 @@ auto jump_phases(Seed seed) -> void {
   // with real session transitions rather than forged spool/transit fields.
   const auto system = need(generate_physical_origin_system(seed, 2));
   const auto& body = system.catalog.planets[0].descriptor;
-  FreedomFlightSaveDocument flight;
+  // Build the active flight directly in its final owner. GCC13 otherwise
+  // diagnoses inactive nested variant alternatives while moving the wrappers.
+  FreedomTravelSaveDocument travel{};
+  auto& flight =
+      travel.voyage.voyage.voyage.base.emplace<FreedomFlightSaveDocument>();
   flight.origin = make_freedom_new_game_document(seed);
   flight.origin.state.tick = 240;
   flight.model.physical_catalog = 2;
@@ -319,15 +323,11 @@ auto jump_phases(Seed seed) -> void {
   flight.flight.tick = 240;
   flight.flight.position_metres = {0, 0, body.radius.value * 10000.0};
   flight.world = FreedomActiveWorldSelection{1, system.catalog.id, body.id};
-  const FreedomResources resources{1, flight.origin.state.craft,
-                                   flight.flight.craft, 240};
-  auto knowledge = need(
+  travel.voyage.voyage.resources = {1, flight.origin.state.craft,
+                                    flight.flight.craft, 240};
+  travel.voyage.knowledge = need(
       make_freedom_starting_knowledge(seed, kFreedomTravelKnowledgeVersion));
-  FreedomSurfaceSaveDocument surface{std::move(flight), {}};
-  FreedomResourceSaveDocument fueled{std::move(surface), resources};
-  FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(knowledge)};
-  const FreedomTravelSaveDocument travel{
-      std::move(mapped), {}, NativeStartingAssemblySelection{}, std::nullopt};
+  travel.craft_binding = NativeStartingAssemblySelection{};
   round_trip(travel, NativeProfileLocation::flight);
   auto live = need(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, travel, body, {}}));

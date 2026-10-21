@@ -92,6 +92,13 @@ three charges and free service after physical docking at Origin. Existing saves
 and the default two-system New Game keep their current selection. Larger
 networks, automatic routing, missions and the economy remain separate scope.
 
+The owner next selected **carried geological specimens with retained discovery
+notes** ([#660](https://github.com/gobha-me/apsis-drift/issues/660)). The bounded
+[hand-specimen increment](FREEDOM_SURFACE_LANDMARKS.md#hand-specimens) uses existing
+inspected planet/Moon sites, a four-slot pouch, explicit discard and first notes
+that survive specimen loss. It adds no sale, extraction, probes or missions;
+the wider #207 horizon remains separate.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

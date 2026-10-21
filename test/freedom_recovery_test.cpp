@@ -271,6 +271,81 @@ auto landmark_retention() -> void {
   selection->inspections.front().tick = loss_tick - 1;
   check(!encode_freedom_recovery_document_json(adopted),
         "Historical adoption cannot invent inspections before its loss");
+
+  // Identity-only persistence fixtures. Actual supported collection is covered
+  // by the planet/Moon session routes, not by this constructed history.
+  auto sampled = source;
+  auto& sample_knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(sampled.voyage).knowledge;
+  sample_knowledge.surface_landmarks = FreedomSurfaceLandmarkState{1, records};
+  const auto old_craft = recovery_flight(sampled.voyage).origin.state.craft;
+  const auto specimen = [&](std::size_t index, StarterCraftId collector,
+                            SimulationTick tick) {
+    const auto& inspection = records[index];
+    const auto identity =
+        need(identify_surface_landmark(planet, inspection.cell));
+    if (!identity) throw std::runtime_error("Sample identity unavailable");
+    return FreedomFieldSampleRecord{{owner.catalog.id, body_id(planet.id)},
+                                    inspection.cell,
+                                    inspection.site,
+                                    inspection.terrain_policy,
+                                    identity->kind,
+                                    collector,
+                                    tick};
+  };
+  const std::vector notes{specimen(0, old_craft, 20),
+                          specimen(1, old_craft, 21)};
+  sample_knowledge.field_samples =
+      FreedomFieldSampleState{1, old_craft, notes, notes};
+  const auto loss = need(record_freedom_loss(
+      sampled, FreedomLossCause::recoverable_destruction, old_craft, loss_tick,
+      need(freedom_recovery_source_checksum(sampled.voyage))));
+  auto replaced = need(complete_freedom_recovery(loss));
+  const auto new_craft = recovery_flight(replaced.voyage).origin.state.craft;
+  const auto& retained = recovery_knowledge(replaced.recovery.latest->retired)
+                             .knowledge.field_samples;
+  const auto& replacement_samples =
+      recovery_knowledge(replaced.voyage).knowledge.field_samples;
+  check(retained == sample_knowledge.field_samples && replacement_samples &&
+            replacement_samples->carrier == new_craft &&
+            replacement_samples->carried.empty() &&
+            replacement_samples->journal == notes,
+        "Replacement clears carried specimens, rebinds the pouch and retains "
+        "first collection notes and the complete retired specimen snapshot");
+  const auto sample_text =
+      need(encode_freedom_recovery_document_json(replaced));
+  check(need(decode_freedom_recovery_document_json(sample_text)) == replaced &&
+            need(freedom_recovery_explanation(replaced))
+                .contains("collection notes are retained"),
+        "Sample loss and retained notes survive the actual recovery envelope "
+        "and are explained to the player");
+  for (unsigned fault = 0; fault < 5; ++fault) {
+    auto forged = replaced;
+    auto& state = std::get<FreedomKnowledgeSaveDocument>(forged.voyage)
+                      .knowledge.field_samples;
+    switch (fault) {
+      case 0: state.reset(); break;
+      case 1: state->journal.erase(state->journal.begin()); break;
+      case 2: ++state->journal.front().tick; break;
+      case 3: state->carried = {specimen(0, new_craft, loss_tick - 1)}; break;
+      case 4:
+        state->journal.push_back(specimen(2, new_craft, loss_tick - 1));
+        break;
+      default: break;
+    }
+    check(!encode_freedom_recovery_document_json(forged),
+          "Replacement refuses dropped/rewritten notes and backdated new "
+          "specimens or collection history");
+  }
+  auto& recollected = std::get<FreedomKnowledgeSaveDocument>(replaced.voyage)
+                          .knowledge.field_samples;
+  recollected->carried = {specimen(0, new_craft, loss_tick)};
+  recollected->journal.push_back(specimen(2, new_craft, loss_tick));
+  check(need(decode_freedom_recovery_document_json(need(
+            encode_freedom_recovery_document_json(replaced)))) == replaced &&
+            recollected->journal.front() == notes.front(),
+        "A later valid specimen can reuse an old source while its first note "
+        "remains exact; new notes obey the replacement clock and collector");
 }
 auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
               std::uint32_t optics = 1,

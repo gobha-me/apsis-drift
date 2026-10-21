@@ -364,6 +364,12 @@ class NativeFreedomFlightSession {
       -> std::expected<FreedomSurfaceLandmarksView, std::string>;
   [[nodiscard]] auto moon_surface_landmarks_view() const
       -> std::expected<FreedomMoonSurfaceLandmarksView, std::string>;
+  [[nodiscard]] auto field_sample_collection_available(SurfaceLandmarkId) const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto collect_field_sample(SurfaceLandmarkId)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto discard_field_sample(BodyTarget, SurfaceLandmarkId)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto last_gear_clearance() const
       -> std::optional<TerrainPadGapSample>;
@@ -379,6 +385,8 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto field_sample_collection_source(SurfaceLandmarkId) const
+      -> std::expected<FreedomFieldSampleRecord, std::string>;
   [[nodiscard]] auto advance_flight(const NativeFlightControls&,
                                     SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;

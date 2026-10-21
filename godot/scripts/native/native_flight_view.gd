@@ -148,6 +148,11 @@ var show_surface_marker_button: Button
 var show_personal_marker := false
 var landmark_enable_button: Button
 var landmark_inspect_button: Button
+var sample_collect_button: Button
+var sample_pouch_button: Button
+var sample_discard_buttons: Array[Button] = []
+var sample_packet: Dictionary = {}
+var sample_collection_id := ""
 
 
 func surface_walking() -> bool:
@@ -954,6 +959,7 @@ func setup_controls() -> void:
 	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
 	landmark_enable_button = controls_menu.add_button(survey_column, "Enable local landmarks", enable_surface_landmarks)
 	landmark_inspect_button = controls_menu.add_button(survey_column, "Inspect exposure", inspect_surface_landmark)
+	setup_field_sample_controls(survey_column)
 	for index in DistantContacts.MAX_CONTACTS:
 		contact_buttons.append(controls_menu.add_button(survey_column, "Track optical contact %d" % (index + 1), select_distant_contact.bind(index)))
 	contact_clear_button = controls_menu.add_button(survey_column, "Stop tracking optical contact", clear_distant_contact)
@@ -1059,7 +1065,92 @@ func inspect_surface_landmark() -> void:
 	if not error.is_empty(): return
 	var notice := "Exposure inspection already recorded." if site.inspected else "Exposure inspected and recorded."
 	report_action_status(notice)
-	controls_menu.show_surface_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button)
+	refresh_field_samples()
+	controls_menu.show_surface_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nBack to controls to collect a hand specimen.\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button)
+
+
+func setup_field_sample_controls(column: Node) -> void:
+	sample_collect_button = controls_menu.add_button(column, "Collect hand specimen", collect_field_sample)
+	sample_pouch_button = controls_menu.add_button(column, "Sample pouch · 0 / 4", show_field_samples)
+	for index in 4:
+		sample_discard_buttons.append(controls_menu.add_button(column, "Discard specimen", discard_field_sample.bind(index)))
+	refresh_field_samples()
+
+
+func refresh_field_samples() -> void:
+	if sample_pouch_button == null: return
+	sample_packet = {}
+	sample_collection_id = ""
+	if bridge != null and bridge.has_method("get_freedom_field_samples"):
+		sample_packet = bridge.get_freedom_field_samples()
+	var carried: Array = sample_packet.get("carried", [])
+	sample_pouch_button.text = "Sample pouch · %d / %d" % [carried.size(), sample_packet.get("capacity", 4)]
+	sample_pouch_button.disabled = sample_packet.is_empty()
+	sample_pouch_button.tooltip_text = "Review carried specimens and retained collection notes. Discard frees a slot; standard craft replacement loses carried specimens and keeps the notes."
+	for index in sample_discard_buttons.size():
+		var button: Button = sample_discard_buttons[index]
+		button.visible = index < carried.size()
+		if index < carried.size():
+			button.text = "Discard %d · %s · %s" % [index + 1, carried[index].label, carried[index].source_name]
+			button.tooltip_text = "Discard this carried specimen; keep its first collection note."
+	var site := SurfaceLandmarks.nearest_nearby(state)
+	sample_collect_button.visible = surface_walking() and not site.is_empty()
+	sample_collect_button.disabled = true
+	sample_collect_button.text = "Collect hand specimen"
+	if site.is_empty(): return
+	sample_collection_id = str(site.id)
+	if bridge == null or not bridge.has_method("get_freedom_field_sample_availability"): return
+	var availability: Dictionary = bridge.get_freedom_field_sample_availability(sample_collection_id)
+	sample_collect_button.disabled = not availability.get("available", false)
+	sample_collect_button.tooltip_text = str(availability.get("reason", "Inspect the exposure first.")) if sample_collect_button.disabled else "Collect one specimen from this inspected exposure. Collection keeps the game paused."
+	if carried.size() >= int(sample_packet.get("capacity", 4)):
+		sample_collect_button.text = "Collect specimen · pouch full"
+
+
+func collect_field_sample() -> void:
+	if not marker_controls_available() or sample_collection_id.is_empty(): return
+	if not bridge.collect_freedom_field_sample(sample_collection_id):
+		report_action_status(str(bridge.get_last_error()))
+		refresh_field_samples()
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	refresh_field_samples()
+	report_action_status("Specimen collected. Its source is recorded in your field notes.")
+	sample_pouch_button.grab_focus()
+
+
+func discard_field_sample(index: int) -> void:
+	if not marker_controls_available(): return
+	var carried: Array = sample_packet.get("carried", [])
+	if index < 0 or index >= carried.size(): return
+	# Use the displayed typed identity, never a name-based body lookup.
+	var specimen: Dictionary = carried[index]
+	if not bridge.discard_freedom_field_sample(specimen.system_id, specimen.body_kind, specimen.body_id, specimen.site_id):
+		report_action_status(str(bridge.get_last_error()))
+		refresh_field_samples()
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	refresh_field_samples()
+	report_action_status("Specimen discarded. Its collection note is retained.")
+	sample_pouch_button.grab_focus()
+
+
+func show_field_samples() -> void:
+	if not marker_controls_available(): return
+	refresh_field_samples()
+	var carried: Array = sample_packet.get("carried", [])
+	var journal: Array = sample_packet.get("journal", [])
+	var text := "SAMPLE POUCH · %d / %d\n" % [carried.size(), sample_packet.get("capacity", 4)]
+	if carried.is_empty(): text += "No specimens carried.\n"
+	for index in carried.size():
+		text += "%d. %s · %s\n" % [index + 1, carried[index].label, carried[index].source_name]
+	text += "\nFIELD NOTES · %d sites\n" % journal.size()
+	for index in journal.size():
+		text += "%d. %s · %s\n" % [index + 1, journal[index].label, journal[index].source_name]
+	text += "\nInspect an exposure, then collect within 8 metres on supported ground. Discard from controls to free a slot. Collection notes survive discarded or lost specimens. Specimens have no sale value or material analysis in this slice."
+	controls_menu.show_surface_reference(text, sample_pouch_button, "FIELD SAMPLES")
 
 
 func surface_interaction_binding() -> String:
@@ -1390,6 +1481,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		controls_menu.sync_saved_state(state, not error.is_empty())
 		if show_menu and not journey_dialog_open and not recovery_notified:
 			controls_menu.show_menu(reason)
+		refresh_field_samples()
 	if save_status != null and error.is_empty():
 		save_status.text = reason
 	update_compact_hud()

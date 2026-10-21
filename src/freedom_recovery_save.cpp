@@ -109,6 +109,36 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  const auto same_sample = [](const auto& a, const auto& b) {
+    return a.target == b.target && a.site == b.site;
+  };
+  if (old.field_samples) {
+    if (!now.field_samples ||
+        now.field_samples->version != old.field_samples->version)
+      return false;
+    for (const auto& record : old.field_samples->journal) {
+      const auto& journal = now.field_samples->journal;
+      const auto found = std::ranges::find_if(
+          journal, [&](const auto& item) { return same_sample(item, record); });
+      if (found == journal.end() || *found != record) return false;
+    }
+  }
+  if (now.field_samples) {
+    if (now.field_samples->carrier != current) return false;
+    for (const auto& record : now.field_samples->journal) {
+      const bool retained =
+          old.field_samples &&
+          std::ranges::any_of(
+              old.field_samples->journal,
+              [&](const auto& item) { return same_sample(item, record); });
+      if (!retained && (record.craft != current || record.tick < loss_tick))
+        return false;
+    }
+    // Replacement starts with an empty pouch. A later collection must belong
+    // to the new carrier and cannot be backdated before its loss boundary.
+    for (const auto& record : now.field_samples->carried)
+      if (record.craft != current || record.tick < loss_tick) return false;
+  }
   if (old.orbital_surveys) {
     if (!now.orbital_surveys ||
         now.orbital_surveys->version != old.orbital_surveys->version)
@@ -427,6 +457,10 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   const FreedomResources resources{1, *identity, body->craft, body->tick};
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
   if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();
+  if (knowledge.field_samples) {
+    knowledge.field_samples->carried.clear();
+    knowledge.field_samples->carrier = *identity;
+  }
   if (knowledge.recipe.version == kFreedomObservedKnowledgeVersion) {
     knowledge.recipe.version = kFreedomTravelKnowledgeVersion;
     knowledge.recipe.world_domain = 1;
@@ -463,6 +497,11 @@ auto freedom_recovery_explanation(const FreedomRecoverySaveDocument& d)
               : "Replacement delivered once; the lost craft remains retired. ";
   text += "Your universe, discoveries and world changes are retained. No fee "
           "or wreck retrieval is required.";
+  if (const auto& samples = recovery_knowledge(d.recovery.latest->retired)
+                                .knowledge.field_samples;
+      samples && !samples->carried.empty())
+    text += " Carried specimens are lost with this replacement; your "
+            "collection notes are retained.";
   return text;
 }
 auto encode_freedom_recovery_document_json(const FreedomRecoverySaveDocument& d)

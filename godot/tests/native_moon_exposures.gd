@@ -3,6 +3,7 @@ extends RefCounted
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const MoonView = preload("res://scripts/native/native_moon_view.gd")
 const Landmarks = preload("res://scripts/native/native_surface_landmarks.gd")
+const FieldSamples = preload("res://tests/native_field_samples.gd")
 const WALK_CAP := 24000
 const EYE_HEIGHT := 1.70 # Existing canonical origin/surface walker eye height.
 var failures := 0
@@ -231,6 +232,7 @@ func exercise(shell: Control, owner: Variant, assets: String) -> void:
 	var near_site := find_site(near, target.id)
 	if not check(not near_site.is_empty() and near_site.can_inspect and not near.surface_walk.return_access.within_reach and near.resources == enabled.resources, "Bounded actual walk did not reach a supported inspectable centre away from hatch"): return
 	var near_bytes := save_bytes(owner, "reached-before-inspection")
+	if not check(FieldSamples.uninspected(owner, target.id, output), "Uninspected actual Moon foot admitted a specimen or read adopted sample state"): return
 	var records: Dictionary = owner.get_freedom_observations()
 	for gate in ["movement", "look", "unarmed", "modal", "echo"]:
 		if view.paused and not resume(view): return
@@ -280,6 +282,11 @@ func exercise(shell: Control, owner: Variant, assets: String) -> void:
 	view = shell.current_view
 	view.set_process(false)
 	if not check(view.paused and save_bytes(owner, "inspected-continued") == repeat_before, "Inspected outside Continue changed full saved bytes"): return
+	failures += await FieldSamples.run(tree, shell, owner, assets, output, target.id, Callable(self, "activate"))
+	if failures: return
+	view = shell.current_view
+	view.set_process(false)
+	var samples: Dictionary = owner.get_freedom_field_samples()
 	# Reverse only the commands actually executed on the genuine outward path.
 	for i in mini(commands.size(), WALK_CAP):
 		var state: Dictionary = owner.get_freedom_flight_state()
@@ -291,11 +298,13 @@ func exercise(shell: Control, owner: Variant, assets: String) -> void:
 	refresh(view, owner)
 	report.return_gap_metres = view.state.surface_walk.return_access.distance_metres
 	if not check(view.state.surface_walk.return_access.within_reach and metadata(save_bytes(owner, "returned-foot")) == first_metadata and view.state.resources == enabled.resources, "Recorded actual walk did not return to hatch with metadata/resources retained"): return
+	if not check(owner.get_freedom_field_samples() == samples, "Actual return walk lost carried specimen or first collection notes"): return
 	if not resume(view): return
 	context_event(view, true)
 	context_event(view, false)
 	var aboard: Dictionary = owner.get_freedom_flight_state()
 	check(not view.surface_walking() and view.paused and aboard.surface.landed and metadata(save_bytes(owner, "reboarded")) == first_metadata, "Actual contextual reboarding lost first inspection record")
+	check(owner.get_freedom_field_samples() == samples, "Actual contextual reboarding lost carried specimen or first collection notes")
 	report.completed = failures == 0
 
 func run_actual(phases: String, assets: String) -> void:
