@@ -143,9 +143,13 @@ including opposing keys held together. Right-stick look uses the same saved
 speed and vertical inversion, retaining its default1.8 rad/s rate and per-axis
 shaping. Mouse look uses the saved look speed and vertical inversion too.
 
-The suited convention has **no oxygen timer**. Pack attachment, exposure damage,
-instantaneous weather and a saved outside-operation hazard policy remain open
-in #199/#102/#253. The shared **Surface conditions** reference remains available,
+The selected #199 component covers supported-ground movement and return, with
+the same blocked-step feedback on the planet and Moon. It does not select a
+suit-survivability policy. The suited convention has **no oxygen timer**. Pack
+attachment and excursion endurance belong to the later embodiment and field
+logistics discussion (#210/#250); shared hazard assessment and a saved
+outside-operation policy remain separate work under #102. The shared
+**Surface conditions** reference remains available,
 with unknown readings retained; potential environmental maxima do not become
 fabricated current hazards. Stable landed support is checked, but it is not a
 claim that the atmosphere, temperature or radiation is survivable outside.

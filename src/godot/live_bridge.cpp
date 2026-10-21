@@ -1427,6 +1427,24 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  static auto project_surface_walk_blockage(
+      const NativeFreedomFlightSession& session) -> godot::Variant {
+    const auto blocked = session.surface_walk_blockage();
+    if (!blocked) return {};
+    switch (*blocked) {
+      case PlanetSurfaceWalkStatus::terrain_unresolved:
+        return "terrain_unresolved";
+      case PlanetSurfaceWalkStatus::water: return "water";
+      case PlanetSurfaceWalkStatus::slope: return "slope";
+      case PlanetSurfaceWalkStatus::step: return "step";
+      case PlanetSurfaceWalkStatus::craft_obstruction:
+        return "craft_obstruction";
+      case PlanetSurfaceWalkStatus::supported:
+        throw std::invalid_argument("Supported step cannot be a blockage");
+      default: throw std::invalid_argument("Unknown surface movement result");
+    }
+  }
+
   static auto project_moon_surface_walk_actor(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
@@ -1485,6 +1503,7 @@ class FreedomBridge : public godot::RefCounted {
       access["within_reach"] = returned->within_reach;
     }
     result["return_access"] = access;
+    result["movement_blockage"] = project_surface_walk_blockage(session);
     return result;
   }
 
@@ -1937,29 +1956,7 @@ class FreedomBridge : public godot::RefCounted {
       access["within_reach"] = returned->within_reach;
     }
     result["return_access"] = access;
-    result["movement_blockage"] = godot::Variant{};
-    if (const auto blocked = session.surface_walk_blockage()) {
-      switch (*blocked) {
-        case PlanetSurfaceWalkStatus::terrain_unresolved:
-          result["movement_blockage"] = "terrain_unresolved";
-          break;
-        case PlanetSurfaceWalkStatus::water:
-          result["movement_blockage"] = "water";
-          break;
-        case PlanetSurfaceWalkStatus::slope:
-          result["movement_blockage"] = "slope";
-          break;
-        case PlanetSurfaceWalkStatus::step:
-          result["movement_blockage"] = "step";
-          break;
-        case PlanetSurfaceWalkStatus::craft_obstruction:
-          result["movement_blockage"] = "craft_obstruction";
-          break;
-        case PlanetSurfaceWalkStatus::supported:
-          throw std::invalid_argument("Supported step cannot be a blockage");
-        default: throw std::invalid_argument("Unknown surface movement result");
-      }
-    }
+    result["movement_blockage"] = project_surface_walk_blockage(session);
     result["heading"] = actor.heading_radians;
     result["version"] = static_cast<std::int64_t>(actor.version);
     return result;

@@ -284,8 +284,11 @@ func refresh_control_hint() -> void:
 func update_compact_hud() -> void:
 	if primary_status == null: return
 	var resources: Dictionary = state.get("resources", {})
-	primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
-	primary_status.text += "\n" + MoonState.gear_clearance_text(state)
+	if surface_walking():
+		primary_status.text = "AIRLESS MOON\nOn foot · Suit equipped\n%s / left stick walk · Mouse / look keys / right stick look" % (player_input.foot_keyboard_label() if player_input != null else "WASD")
+	else:
+		primary_status.text = "AIRLESS MOON\nDatum altitude %.1f m · radial %+.1f m/s\nSurface speed %.1f m/s\nLat %+.3f° · lon %+.3f°\nFuel %.1f%% · jump charges %d" % [state.get("altitude", 0.0), state.get("radial_rate", 0.0), state.get("surface_speed", 0.0), rad_to_deg(state.latitude), rad_to_deg(state.longitude), float(resources.get("fraction", 0.0)) * 100.0, int(resources.get("jump_charges", 0))]
+		primary_status.text += "\n" + MoonState.gear_clearance_text(state)
 	var marker: Dictionary = state.surface_marker
 	if marker.get("present", false):
 		if show_personal_marker and marker.current_body:
@@ -294,7 +297,10 @@ func update_compact_hud() -> void:
 			primary_status.text += "\nMARK retained · %s / %s · another body" % [marker.system_name, SurfaceMarker.body_name(marker)]
 	if surface_walking() and state.surface_walk.return_access.get("available", false):
 		primary_status.text += "\nHatch · %.1f m" % state.surface_walk.return_access.distance_metres
-	primary_status.tooltip_text = "Signed terrain-normal gaps beneath all deployed gear pads. Negative values indicate gear-stroke overlap. This does not certify hull clearance or a safe landing; it is not radar altitude."
+	if surface_walking():
+		var blocked := Status.movement_feedback(state.surface_walk.movement_blockage)
+		if not blocked.is_empty(): primary_status.text += "\n" + blocked
+	primary_status.tooltip_text = primary_status.text if surface_walking() else "Signed terrain-normal gaps beneath all deployed gear pads. Negative values indicate gear-stroke overlap. This does not certify hull clearance or a safe landing; it is not radar altitude."
 	var landed: bool = state.get("surface", {}).get("landed", false)
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	assist_button.set_pressed_no_signal(state.assistance)
@@ -310,6 +316,7 @@ func update_compact_hud() -> void:
 	if not exposure.is_empty(): primary_status.text += "\n%s · %.1f m%s" % [exposure.label, exposure.distance_metres, " · recorded" if exposure.inspected else ""]
 	if landed_hatch_available(): primary_status.text += "\n" + hatch_binding + ": leave Wayfarer · suit"
 	context_action.disabled = surface_walking() and not within_return and not can_inspect
+	if surface_walking() and not context_action.disabled: context_action.text += " · " + surface_interaction_binding()
 	landing_button.disabled = landed or surface_walking() or jumping
 	stow_gear_button.disabled = landed or surface_walking() or jumping or not state.get("surface", {}).get("gear_deployed", false)
 	liftoff_button.disabled = not landed or surface_walking() or jumping

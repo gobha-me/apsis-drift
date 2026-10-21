@@ -81,6 +81,9 @@ static func valid_companion(value: Dictionary, kind: String) -> bool:
 	if not valid_gear_clearance(value) or not value.has("surface_marker") or not SurfaceMarker.valid(value): return false
 	var walk: Dictionary = value.surface_walk
 	if not walk.is_empty():
+		if not walk.has("movement_blockage"): return false
+		var blockage: Variant = walk.movement_blockage
+		if blockage != null and (not blockage is String or blockage not in ["terrain_unresolved", "water", "slope", "step", "craft_obstruction"]): return false
 		if walk.get("version") != 1 or not walk.get("eye_position") is Vector3 or not walk.eye_position.is_finite() or not rigid(walk.get("basis")): return false
 		if not walk.get("heading") is float or not is_finite(walk.heading) or absf(walk.heading) > PI: return false
 		var access: Variant = walk.get("return_access")
