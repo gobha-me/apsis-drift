@@ -1,6 +1,7 @@
 #include "apsis_drift/freedom_travel_save.hpp"
 
 #include "apsis_drift/freedom_system_network.hpp"
+#include "freedom_composed_travel_save_internal.hpp"
 #include "freedom_local_travel_save_internal.hpp"
 
 #include <array>
@@ -303,6 +304,9 @@ auto travel_binding_json(const NativeStartingAssemblySelection& value)
 } // namespace detail
 auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (d.travel.composed ||
+      d.travel.version == kFreedomComposedTravelStateVersion)
+    return detail::validate_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
       d.travel.version == kFreedomMinorTravelStateVersion ||
@@ -442,6 +446,9 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
 }
 auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
+  if (d.travel.composed ||
+      d.travel.version == kFreedomComposedTravelStateVersion)
+    return detail::encode_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
       d.travel.version == kFreedomMinorTravelStateVersion ||
@@ -496,6 +503,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root) return std::unexpected{root.error()};
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
+  if ((*root)["format_version"] == kFreedomComposedTravelSaveFormatVersion)
+    return detail::decode_composed_travel(*root);
   const bool network_format =
       (*root)["format_version"] == kFreedomNetworkTravelSaveFormatVersion;
   if ((network_format && (*root)["travel"].is_object() &&

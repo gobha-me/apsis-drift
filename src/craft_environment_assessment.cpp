@@ -170,7 +170,7 @@ auto query_known_craft_environment(const PhysicalLocalSystem& system,
   if (!validate_freedom_knowledge(knowledge, tick))
     return std::unexpected{Error::invalid_knowledge};
   if (recipe.catalog_kind == LocalSystemKind::procedural) {
-    if (owner.version == kFreedomNetworkKnowledgeVersion) {
+    if (freedom_knowledge_uses_network(owner.version)) {
       const auto network = generate_freedom_system_network(owner.universe_seed);
       if (!network) return std::unexpected{Error::owner_mismatch};
       const auto node =

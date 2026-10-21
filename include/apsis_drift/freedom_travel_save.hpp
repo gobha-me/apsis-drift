@@ -3,6 +3,7 @@
 #include "apsis_drift/freedom_jump_targeting.hpp"
 #include "apsis_drift/freedom_knowledge_save.hpp"
 #include "apsis_drift/freedom_local_jump.hpp"
+#include "apsis_drift/freedom_planet_jump.hpp"
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
 
 namespace apsis_drift {
@@ -17,6 +18,9 @@ inline constexpr std::uint32_t kFreedomMinorTravelStateVersion{3};
 inline constexpr std::uint32_t kFreedomOriginLocalTravelSaveFormatVersion{48};
 inline constexpr std::uint32_t kFreedomOriginLocalTravelStateVersion{4};
 inline constexpr std::uint32_t kFreedomOriginLocalRoutesVersion{1};
+inline constexpr std::uint32_t kFreedomComposedTravelSaveFormatVersion{56};
+inline constexpr std::uint32_t kFreedomComposedTravelStateVersion{5};
+inline constexpr std::uint32_t kFreedomComposedRoutesVersion{1};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
 struct FreedomLocalTravelState {
   std::optional<BodyTarget> selected;
@@ -60,6 +64,32 @@ struct FreedomOriginLocalRoutes {
   friend auto operator==(const FreedomOriginLocalRoutes&,
                          const FreedomOriginLocalRoutes&) -> bool = default;
 };
+enum class FreedomComposedRouteKind : std::uint8_t {
+  system,
+  planet,
+  moon,
+  minor
+};
+struct FreedomComposedLocalCheckpoint {
+  std::optional<FrozenLocalBodyJumpArrival> committed;
+  std::optional<FreedomResources> commitment_resources;
+  // The current actual home departure, refreshed only on a real outbound
+  // commitment. Its home model owns the matching companion return.
+  std::optional<FrozenLocalBodyJumpArrival> outbound;
+  friend auto operator==(const FreedomComposedLocalCheckpoint&,
+                         const FreedomComposedLocalCheckpoint&)
+      -> bool = default;
+};
+struct FreedomComposedTravelState {
+  std::uint32_t version{kFreedomComposedRoutesVersion};
+  FreedomComposedRouteKind active{FreedomComposedRouteKind::system};
+  std::optional<BodyTarget> selected_body;
+  std::optional<FrozenFreedomPlanetJumpArrival> planet_committed;
+  std::optional<FreedomResources> planet_commitment_resources;
+  FreedomComposedLocalCheckpoint moon, minor;
+  friend auto operator==(const FreedomComposedTravelState&,
+                         const FreedomComposedTravelState&) -> bool = default;
+};
 struct FreedomTravelState {
   std::uint32_t version{kFreedomTravelStateVersion};
   FreedomJumpPhase phase{FreedomJumpPhase::idle};
@@ -75,6 +105,9 @@ struct FreedomTravelState {
   std::optional<FreedomLocalTravelState> local{};
   std::optional<FreedomLocalMoonHistory> prior_moon{};
   std::optional<FreedomOriginLocalRoutes> origin_routes{};
+  // Explicit recipe5 journeys only. Fixed independent route receipts share
+  // the phase and attempt counter above; old formats never adopt this state.
+  std::optional<FreedomComposedTravelState> composed{};
   friend auto operator==(const FreedomTravelState&, const FreedomTravelState&)
       -> bool = default;
 };

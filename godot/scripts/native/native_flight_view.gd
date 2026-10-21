@@ -153,6 +153,10 @@ var sample_pouch_button: Button
 var sample_discard_buttons: Array[Button] = []
 var sample_packet: Dictionary = {}
 var sample_collection_id := ""
+var planet_route_label: Label
+var planet_route_buttons: Array[Button] = []
+var planet_route_packet: Dictionary = {}
+var planet_jump_button: Button
 
 
 func surface_walking() -> bool:
@@ -954,6 +958,7 @@ func setup_controls() -> void:
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
 	controls_menu.add_button(survey_column, "Select asteroid inspection jump", select_minor_jump)
+	setup_planet_route_controls(survey_column)
 	surface_marker_button = controls_menu.add_button(survey_column, "Mark this spot", func(): surface_marker_command("replace_freedom_surface_marker" if state.get("surface_marker", {}).get("present", false) else "mark_freedom_surface_marker"))
 	clear_surface_marker_button = controls_menu.add_button(survey_column, "Clear marker", func(): surface_marker_command("clear_freedom_surface_marker"))
 	show_surface_marker_button = controls_menu.add_button(survey_column, "Show personal marker: Off", toggle_surface_marker)
@@ -1075,6 +1080,95 @@ func setup_field_sample_controls(column: Node) -> void:
 	for index in 4:
 		sample_discard_buttons.append(controls_menu.add_button(column, "Discard specimen", discard_field_sample.bind(index)))
 	refresh_field_samples()
+
+
+static func valid_planet_destinations(value: Variant, system_id := "") -> bool:
+	if not value is Dictionary or value.size() != 4 or typeof(value.get("version")) != TYPE_INT or value.version != 1: return false
+	if not value.get("selected") is bool or not value.get("rows") is Array or value.rows.size() > 6: return false
+	if not value.get("reason") is String or value.reason.length() > 1024: return false
+	if not value.selected: return value.rows.is_empty()
+	var seen := {}
+	var current := 0
+	for row in value.rows:
+		if not row is Dictionary or row.size() != 7: return false
+		for field in ["system_id", "planet_id"]:
+			if not MoonState.decimal(row.get(field)): return false
+		if not system_id.is_empty() and row.system_id != system_id: return false
+		if not row.get("name") is String or row.name.is_empty() or row.name.length() > 128: return false
+		if not row.get("reason") is String or row.reason.length() > 1024: return false
+		for field in ["current", "visited", "selectable"]:
+			if not row.get(field) is bool: return false
+		var key: String = row.system_id + "/" + row.planet_id
+		if seen.has(key) or (row.current and row.selectable): return false
+		seen[key] = true
+		if row.current: current += 1
+	return current == 1
+
+
+func setup_planet_route_controls(column: Node) -> void:
+	planet_route_label = Label.new()
+	planet_route_label.text = "Planetary routes · charted locations"
+	planet_route_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(planet_route_label)
+	for index in 6:
+		planet_route_buttons.append(controls_menu.add_button(column, "Planet target", select_planet_destination.bind(index)))
+	planet_jump_button = controls_menu.add_button(column, "Begin selected jump", request_planet_jump)
+	refresh_planet_routes()
+
+
+func refresh_planet_routes() -> void:
+	if planet_route_label == null: return
+	planet_route_packet = {}
+	if bridge != null and bridge.has_method("get_freedom_planet_destinations"):
+		var packet: Variant = bridge.get_freedom_planet_destinations()
+		if valid_planet_destinations(packet, str(state.get("system_id", ""))): planet_route_packet = packet
+	var shown: bool = planet_route_packet.get("selected", false)
+	planet_route_label.visible = shown
+	var rows: Array = planet_route_packet.get("rows", [])
+	for index in planet_route_buttons.size():
+		var button := planet_route_buttons[index]
+		button.visible = shown and index < rows.size()
+		if not button.visible: continue
+		var row: Dictionary = rows[index]
+		button.text = ("Current reference · " if row.current else "Select planet · ") + row.name + (" · visited" if row.visited else " · charted")
+		button.disabled = not row.selectable or surface_walking()
+		button.tooltip_text = row.reason if button.disabled else "Select this charted planet. Selection spends nothing; a jump uses one charge after spooling. Descent and landing remain manual."
+	var jump: Dictionary = state.get("jump", {})
+	var phase: String = jump.get("phase", "idle")
+	planet_jump_button.visible = shown and jump.get("route_kind") == "planet" and not str(jump.get("selected", "")).is_empty()
+	planet_route_label.text = "Planetary routes · charted locations"
+	if jump.get("destination_name") is String and not jump.destination_name.is_empty():
+		planet_route_label.text += "\nSelected · " + jump.destination_name
+	planet_jump_button.text = "Cancel jump spool · no charge spent" if phase == "spool" else "Begin selected jump"
+	planet_jump_button.disabled = surface_walking() or phase == "transit" or (phase == "idle" and not jump.get("available", false))
+	planet_jump_button.tooltip_text = "Committed transit cannot be canceled." if phase == "transit" else str(jump.get("refusal", "")) if planet_jump_button.disabled else "Spooling advances after explicit Resume; one charge commits after three seconds."
+
+
+func select_planet_destination(index: int) -> void:
+	if not marker_controls_available() or mode_change_pending or surface_walking(): return
+	var rows: Array = planet_route_packet.get("rows", [])
+	if index < 0 or index >= rows.size() or not rows[index].selectable: return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release flight controls before selecting a planet.")
+		return
+	var row: Dictionary = rows[index]
+	if not bridge.select_freedom_planet_jump(row.system_id, row.planet_id):
+		report_action_status(str(bridge.get_last_error()))
+		refresh_planet_routes()
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	refresh_planet_routes()
+	report_action_status("Planet target selected · %s. Begin selected jump when ready; one charge commits after spooling." % row.name)
+	planet_jump_button.grab_focus()
+
+
+func request_planet_jump() -> void:
+	if not marker_controls_available() or mode_change_pending: return
+	if state.get("jump", {}).get("route_kind") != "planet": return
+	jump_requested()
+	refresh_planet_routes()
 
 
 func refresh_field_samples() -> void:
@@ -1482,6 +1576,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		if show_menu and not journey_dialog_open and not recovery_notified:
 			controls_menu.show_menu(reason)
 		refresh_field_samples()
+		refresh_planet_routes()
 	if save_status != null and error.is_empty():
 		save_status.text = reason
 	update_compact_hud()
@@ -2098,9 +2193,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	jump_button.tooltip_text = str(jump.get("refusal", "Select a destination first"))
 	jump_status.text = "Jump drive · %s" % phase.capitalize()
 	if phase != "idle": jump_status.text += " · %.1f s" % jump.get("remaining_seconds", 0.0)
+	if jump.get("destination_name") is String and not jump.destination_name.is_empty():
+		jump_status.text += "\nPlanet target · " + jump.destination_name + "\nHigh space arrival; descent and landing remain manual."
 	if jump.has("distance_light_hours"):
 		jump_status.text += "\n%.1f light-hours · %s arrival envelope %.0f m\nHeading %.1f° · drift %.1f%%" % [jump.distance_light_hours, str(jump.quality), jump.envelope_radius_metres, jump.heading_error_degrees, jump.drift_percent]
-	elif phase == "idle": jump_status.text += "\nSelect a chart destination"
+	elif phase == "idle" and not jump.has("destination_name"): jump_status.text += "\nSelect a chart destination"
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position

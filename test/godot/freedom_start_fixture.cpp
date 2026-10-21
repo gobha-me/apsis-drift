@@ -139,6 +139,106 @@ auto orbital_readout(const std::filesystem::path& path, std::uint64_t seed,
 } // namespace
 
 namespace {
+auto planet_travel_trace(const std::filesystem::path& prefix,
+                         apsis_drift::Seed seed,
+                         apsis_drift::SimulationTick tick) -> bool {
+  using namespace apsis_drift;
+  auto selected = native_planetary_network_new_game(seed);
+  if (!selected) return false;
+  auto boarding = NativeFreedomFlightSession::open(std::move(*selected));
+  if (!boarding || !boarding->save_as(prefix.string() + ".station.json"))
+    return false;
+  for (unsigned i = 0; i < 1194; ++i)
+    if (!boarding->advance_walk({0, -1, 0})) return false;
+  if (!boarding->begin_boarding()) return false;
+  for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
+    if (!boarding->advance_walk({})) return false;
+  if (!boarding->resources() || !boarding->knowledge() || !boarding->boarding())
+    return false;
+  // Explicit saved-space fixture after a genuine station entry/seat. This
+  // placement is NOT a flown ascent/descent; all subsequent jump ticks and
+  // receipts are independently produced by the real native C++ session.
+  auto flight = boarding->document();
+  tick = tick < flight.flight.tick ? flight.flight.tick : tick;
+  flight.flight.tick = tick;
+  flight.origin.state.tick = tick;
+  const auto system = generate_physical_origin_system(seed, 2);
+  if (!system) return false;
+  const auto home =
+      find_local_system_planet(*system, flight.origin.recipe.home_planet);
+  if (!home) return false;
+  flight.world = FreedomActiveWorldSelection{2, system->catalog.id,
+                                             flight.origin.recipe.home_planet};
+  flight.flight.frame = {RigidFrameKind::planet_relative_inertial,
+                         system->catalog.id,
+                         flight.origin.recipe.home_planet,
+                         {}};
+  flight.flight.position_metres = {
+      0, 0, static_cast<double>((*home)->descriptor.radius.value) * 10000};
+  flight.flight.linear_velocity_metres_per_second = {};
+  auto resources = *boarding->resources();
+  resources.tick = tick;
+  const FreedomSurfaceSaveDocument surface{flight, {}};
+  const FreedomResourceSaveDocument fueled{surface, resources};
+  FreedomTravelSaveDocument source{{fueled, *boarding->knowledge()},
+                                   {},
+                                   NativeStartingAssemblySelection{},
+                                   boarding->boarding()};
+  source.travel.version = kFreedomComposedTravelStateVersion;
+  source.travel.composed.emplace();
+  auto session = NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, source, (*home)->descriptor, {}});
+  if (!session || !session->save_as(prefix.string() + ".start.json"))
+    return false;
+  const auto destination = system->catalog.planets[1].descriptor.id;
+  const BodyTarget targets[] = {
+      {system->catalog.id, body_id(destination)},
+      {system->catalog.id, body_id(flight.origin.recipe.home_planet)}};
+  SimulationTick arrivals[2]{};
+  for (unsigned leg = 0; leg < 2; ++leg) {
+    if (!session->planet_jump_selection_available(targets[leg]) ||
+        !session->select_planet_jump(targets[leg]) || !session->begin_jump())
+      return false;
+    const auto checkpoint = [&](SimulationTick offset) {
+      return session
+          ->save_as(prefix.string() + ".leg" + std::to_string(leg) + "." +
+                    std::to_string(offset) + ".json")
+          .has_value();
+    };
+    if (!checkpoint(0)) return false;
+    for (SimulationTick t = 1; t <= kJumpSpoolTicks + kJumpTransitTicks; ++t) {
+      const auto step = session->advance({});
+      if (!step) {
+        std::cerr << "Planet fixture tick refused: " << step.error() << '\n';
+        return false;
+      }
+      if ((t == 1 || t == kJumpSpoolTicks || t == kJumpSpoolTicks + 1 ||
+           t == kJumpSpoolTicks + kJumpTransitTicks) &&
+          !checkpoint(t))
+        return false;
+    }
+    arrivals[leg] = session->document().flight.tick;
+    if (session->document().world->planet !=
+            PlanetId{targets[leg].body.value} ||
+        session->resources()->jump_charges != resources.jump_charges - leg - 1)
+      return false;
+  }
+  std::ofstream report(prefix.string() + ".report.json");
+  if (!report) return false;
+  report
+      << "{\"version\":1,\"completed\":true,\"scope\":\"Explicit5 genuine "
+         "station/boarding plus labelled saved-space placement; actual C++ "
+         "charged ordinary-planet outward and home ticks, no landing claim\","
+      << "\"system_id\":\"" << system->catalog.id.value << "\","
+      << "\"home_planet_id\":\"" << flight.origin.recipe.home_planet.value
+      << "\","
+      << "\"target_planet_id\":\"" << destination.value << "\","
+      << "\"start_tick\":\"" << tick << "\","
+      << "\"outward_arrival_tick\":\"" << arrivals[0] << "\","
+      << "\"home_arrival_tick\":\"" << arrivals[1] << "\"}\n";
+  report.close();
+  return !report.fail();
+}
 auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
                   apsis_drift::SimulationTick tick) -> bool {
   using namespace apsis_drift;
@@ -206,7 +306,8 @@ auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
         return false;
     }
   }
-  return true;
+  // New sidecars only. Every existing pair trace path and byte stays intact.
+  return planet_travel_trace(path.string() + ".planet", seed, tick);
 }
 } // namespace
 

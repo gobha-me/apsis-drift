@@ -100,8 +100,10 @@ implementation, not completion claims of this research decision.
 
 ## Optional four-system region
 
-New Game offers **Four charted systems** as an explicit choice. Leaving it off
-preserves the original pair. Continue always retains the saved selection. The
+New Game offers **Four charted systems** under **Starting charts**; **Nearby
+systems** preserves the original pair. The separate
+[planetary-chart choice](FREEDOM_PLANET_TRAVEL.md) adds navigation facts over
+these same generated systems. Continue always retains the saved selection. The
 new finite network recipe 1 keeps Home and the original neighbor exactly, then
 adds Waypoint A and Waypoint B on the same integer light-second coordinate grid.
 It uses the appended seed domain 19; existing streams and catalogs do not change.

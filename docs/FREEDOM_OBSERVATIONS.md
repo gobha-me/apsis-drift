@@ -78,8 +78,8 @@ planet models, not live weather, certified engineering safety, a complete survey
 qualified landing pads or a guaranteed route. #102/#202/#253 retain those
 assessment/contact/consequence responsibilities. The optional [orbital terrain survey](FREEDOM_ORBITAL_SURVEY.md) can resolve
 this coarse landing model after deliberate orbital acquisition, without
-changing these automatic sensor rules. Sample collection and detailed surface
-mapping remain future scope.
+changing these automatic sensor rules. [Hand specimens](FREEDOM_SURFACE_LANDMARKS.md#hand-specimens)
+retain inspected source notes; detailed surface mapping remains later work.
 
 ## Actual presence and transactions
 

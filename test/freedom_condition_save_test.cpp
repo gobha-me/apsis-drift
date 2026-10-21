@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_condition_save.hpp"
+#include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/save_file.hpp"
 
 #include <iostream>
@@ -14,6 +15,55 @@ auto check(bool good, const char* message) -> void {
 template <class T, class E> auto need(std::expected<T, E> v) -> T {
   if (!v) throw std::runtime_error("Condition save fixture refused");
   return std::move(*v);
+}
+auto composed_wrappers() -> void {
+  // Wrapper metadata fixture at the actual starting station, not a flown jump.
+  const auto startup = need(native_planetary_network_new_game({42}));
+  const auto& knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(startup.document);
+  FreedomTravelSaveDocument travel{
+      knowledge, {}, NativeStartingAssemblySelection{}, {}};
+  travel.travel.version = kFreedomComposedTravelStateVersion;
+  travel.travel.composed.emplace();
+  const auto inner = need(encode_freedom_travel_document_json(travel));
+  FreedomConditionSaveDocument document{
+      1,
+      travel,
+      need(make_craft_condition(
+          surface_base_flight(knowledge.voyage.voyage.base))),
+      {}};
+  const auto direct = need(encode_freedom_condition_document_json(document));
+  check(Json::parse(direct)["voyage"] == Json::parse(inner) &&
+            need(decode_freedom_condition_document_json(direct)) == document &&
+            need(encode_freedom_condition_document_json(need(
+                decode_freedom_condition_document_json(direct)))) == direct,
+        "Condition34 preserves the complete explicitly selected composed56 "
+        "voyage");
+  document.voyage = FreedomRecoverySaveDocument{travel, {}};
+  const auto nested = need(encode_freedom_condition_document_json(document));
+  check(need(decode_freedom_condition_document_json(nested)) == document &&
+            std::get<FreedomConditionSaveDocument>(
+                need(decode_native_save_document_json(nested))) == document,
+        "Condition34 through recovery29 admits composed56 without flattening "
+        "owners");
+  for (unsigned fault = 0; fault < 4; ++fault) {
+    auto bad = Json::parse(nested);
+    auto& voyage = bad["voyage"]["voyage"];
+    switch (fault) {
+      case 0: voyage["format_version"] = 57U; break;
+      case 1:
+        voyage["format_version"] = kFreedomNetworkTravelSaveFormatVersion;
+        break;
+      case 2: voyage["travel"]["composed"]["version"] = 2U; break;
+      case 3: voyage["travel"]["version"] = 4U; break;
+      default: break;
+    }
+    check(!decode_freedom_condition_document_json(bad.dump()),
+          "Nested condition/recovery rejects unknown or mismatched composed "
+          "policy");
+  }
+  check(need(encode_freedom_travel_document_json(travel)) == inner,
+        "Wrapper reads leave the underlying selected travel bytes untouched");
 }
 auto run() -> void {
   const auto assembly =
@@ -180,6 +230,7 @@ auto run() -> void {
 int main() {
   try {
     run();
+    composed_wrappers();
     std::cout << "Freedom condition save contract passed\n";
     return 0;
   } catch (const std::exception& e) {

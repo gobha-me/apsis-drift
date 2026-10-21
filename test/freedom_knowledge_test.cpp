@@ -1129,6 +1129,221 @@ auto field_sample_metadata() -> void {
         "knowledge domain");
 }
 
+auto planetary_knowledge() -> void {
+  const Seed seed{42};
+  const auto fingerprint_before = fingerprint;
+  const auto network = need(generate_freedom_system_network(seed));
+  const auto initial = need(
+      make_freedom_starting_knowledge(seed, kFreedomPlanetaryKnowledgeVersion));
+  const auto original = need(encode_freedom_knowledge_json(initial, 0));
+  check(initial.recipe.version == 5 && initial.recipe.chart == 3 &&
+            initial.recipe.topology == 2 && initial.recipe.world_domain == 2 &&
+            initial.recipe.observation_policy == 1 &&
+            initial.recipe.physical_catalog == 2 &&
+            initial.recipe.ephemeris == 2 && !initial.field_samples &&
+            !initial.orbital_surveys && !initial.surface_landmarks &&
+            !initial.moon_surface_landmarks,
+        "Explicit planetary chart chooses only its declared recipe and no "
+        "exploration history");
+  for (std::uint32_t version = 0; version < 8; ++version)
+    check(freedom_knowledge_uses_network(version) ==
+              (version == 4 || version == 5),
+          "Network recipe predicate admits exactly existing4 and explicit5");
+  for (const auto& entry : initial.entries)
+    check(entry.transitions == std::vector{KnowledgeTransition{
+                                   NavigationKnowledgeLevel::resolved,
+                                   KnowledgeSource::starting_chart,
+                                   3,
+                                   0,
+                                   {}}},
+          "Every recipe5 starting grant names chart3 at tick0 without a flight "
+          "or visit");
+  auto expanded = initial;
+  std::size_t planet_count{};
+  for (const auto& node : network.nodes) {
+    const auto system =
+        need(resolve_freedom_network_system(network, node.system));
+    planet_count += system.catalog.planets.size();
+    const BodyTarget current{
+        node.system, body_id(system.catalog.planets.front().descriptor.id)};
+    const auto rows = need(resolve_freedom_known_planets(initial, current, 0));
+    check(rows.size() == system.catalog.planets.size() &&
+              rows.size() <= kMaximumLocalSystemPlanets,
+          "Known-planet projection lists exactly the current authentic bounded "
+          "catalog");
+    for (std::size_t i = 0; i < system.catalog.planets.size(); ++i) {
+      const auto& body = system.catalog.planets[i];
+      const KnowledgeSubject subject{KnowledgeSubjectKind::planet, node.system,
+                                     body.descriptor.id.value};
+      const auto identity = need(query_freedom_knowledge(
+          initial, subject, KnowledgeFact::identity_type, 0));
+      const auto location = need(query_freedom_knowledge(
+          initial, subject, KnowledgeFact::location, 0));
+      const auto& orbit = body.orbit;
+      check(identity && location &&
+                std::get<KnownIdentity>(identity->value).name ==
+                    body.descriptor.display_name &&
+                std::get<KnownOrbit>(location->value) ==
+                    KnownOrbit{orbit.radius_kilometres,
+                               orbit.period_ticks,
+                               orbit.epoch_phase_turns,
+                               orbit.inclination_microdegrees,
+                               orbit.ascending_node_turns,
+                               {}},
+            "Granted name and orbit use the genuine generated planet, not a "
+            "second catalog");
+      check(i < rows.size() &&
+                rows[i] == FreedomKnownPlanetRow{{node.system,
+                                                  body_id(body.descriptor.id)},
+                                                 body.descriptor.display_name,
+                                                 i == 0,
+                                                 false},
+            "Admitted rows preserve actual orbital order and current is "
+            "independent of visited");
+      for (const auto fact : {KnowledgeFact::physical,
+                              KnowledgeFact::atmosphere, KnowledgeFact::hazards,
+                              KnowledgeFact::landing, KnowledgeFact::presence})
+        check(!need(query_freedom_knowledge(initial, subject, fact, 0)),
+              "Planet chart grants no physical/environment/surface model or "
+              "presence");
+      // Metadata evidence fixtures exercise capacity/provenance, not a claim
+      // that this test flew sensor or surface observations in these worlds.
+      for (const auto fact :
+           {KnowledgeFact::physical, KnowledgeFact::atmosphere,
+            KnowledgeFact::hazards, KnowledgeFact::landing})
+        expanded = need(apply_freedom_knowledge(
+            expanded,
+            event(seed, subject, fact, NavigationKnowledgeLevel::resolved, 1),
+            1));
+    }
+    const auto& visited_body = system.catalog.planets[1].descriptor;
+    auto visited = need(apply_freedom_knowledge(
+        initial,
+        event(
+            seed,
+            {KnowledgeSubjectKind::planet, node.system, visited_body.id.value},
+            KnowledgeFact::presence, NavigationKnowledgeLevel::visited, 1),
+        1));
+    const auto visited_rows =
+        need(resolve_freedom_known_planets(visited, current, 1));
+    check(visited_rows[0].current && !visited_rows[0].visited &&
+              !visited_rows[1].current && visited_rows[1].visited,
+          "Actual presence metadata never makes another planet current or "
+          "visits the current chart row");
+    const auto changed_current = need(resolve_freedom_known_planets(
+        initial, {node.system, body_id(visited_body.id)}, 0));
+    check(changed_current[1].current && !changed_current[1].visited &&
+              !changed_current[0].current,
+          "Changing a truthful current-body argument changes no presence "
+          "evidence");
+  }
+  check(initial.entries.size() == 8 + 2 * planet_count + 3,
+        "Four system anchor pairs, planet identity/orbit pairs and existing "
+        "station grants are the complete baseline");
+  check(need(decode_freedom_knowledge_json(original, 0)) == initial &&
+            need(encode_freedom_knowledge_json(initial, 0)) == original &&
+            need(decode_freedom_knowledge_json(
+                need(encode_freedom_knowledge_json(expanded, 1)), 1)) ==
+                expanded &&
+            kMaximumFreedomNetworkKnowledgeFacts == 256 &&
+            kMaximumFreedomKnowledgeFacts == 128 &&
+            kMaximumFreedomKnowledgeBytes == 65536,
+        "New grants/actual finite fact fixtures retain selected256 and "
+        "unchanged legacy128/65536 bounds");
+  auto padded = original;
+  padded.append(kMaximumFreedomKnowledgeBytes, ' ');
+  check(decode_freedom_knowledge_json(padded, 0).has_value(),
+        "Recipe5 explicitly uses the existing larger network byte budget");
+  auto oversized = Json::parse(original);
+  oversized["entries"] = Json::array();
+  for (unsigned i = 0; i < 257; ++i)
+    oversized["entries"].push_back(Json::parse(original)["entries"][0]);
+  check(!decode_freedom_knowledge_json(oversized.dump(), 0),
+        "Recipe5 rejects a fact array beyond its bounded256 capacity");
+  const auto system =
+      need(resolve_freedom_network_system(network, network.nodes[0].system));
+  const BodyTarget current{system.catalog.id,
+                           body_id(system.catalog.planets[0].descriptor.id)};
+  for (unsigned fault = 0; fault < 13; ++fault) {
+    auto bad = initial;
+    switch (fault) {
+      case 0: bad.recipe.chart = 2; break;
+      case 1: bad.recipe.topology = 1; break;
+      case 2: bad.recipe.world_domain = 1; break;
+      case 3: bad.recipe.observation_policy = 0; break;
+      case 4: bad.recipe.version = 4; break;
+      case 5: bad.entries.erase(bad.entries.begin()); break;
+      case 6: bad.entries.front().transitions.front().source_id = 2; break;
+      case 7: bad.entries.front().transitions.front().tick = 1; break;
+      case 8:
+        bad.entries.front().transitions.front().flight =
+            make_freedom_new_game_document(seed).state.craft;
+        break;
+      case 9: bad.entries.front().subject.system = {}; break;
+      case 10: bad.entries.front().subject.identity = 0; break;
+      case 11:
+        bad.entries.front().transitions.front().level =
+            NavigationKnowledgeLevel::visited;
+        break;
+      case 12:
+        bad.entries.front().transitions.front().source =
+            KnowledgeSource::physical_arrival;
+        break;
+      default: break;
+    }
+    check(!validate_freedom_knowledge(bad, 1) &&
+              !encode_freedom_knowledge_json(bad, 1) &&
+              !resolve_freedom_known_planets(bad, current, 1),
+          "Malformed recipe, forged subject or altered mandatory chart grant "
+          "refuses before projection");
+  }
+  for (unsigned fault = 0; fault < 6; ++fault) {
+    auto malformed = Json::parse(original);
+    switch (fault) {
+      case 0: malformed["recipe"]["chart"] = 3.0; break;
+      case 1: malformed["recipe"]["version"] = 5.0; break;
+      case 2: malformed["recipe"]["world_domain"] = 1U; break;
+      case 3: malformed["recipe"]["topology"] = 1U; break;
+      case 4: malformed["entries"].erase(0); break;
+      case 5:
+        malformed["entries"][0]["transitions"][0]["source_id"] = 2U;
+        break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(malformed.dump(), 0),
+          "Recipe5 closed decoder rejects malformed versions and "
+          "forged/missing mandatory grants");
+  }
+  for (unsigned fault = 0; fault < 5; ++fault) {
+    auto target = current;
+    switch (fault) {
+      case 0: target.system = {}; break;
+      case 1: target.body.value = 0; break;
+      case 2: target.body.version = 2; break;
+      case 3: target.body.kind = BodyKind::moon; break;
+      case 4: target.system = network.nodes[1].system; break;
+      default: break;
+    }
+    check(!resolve_freedom_known_planets(initial, target, 0),
+          "Current-body projection rejects unknown, foreign, nonplanet or "
+          "unsupported typed identity");
+  }
+  check(!resolve_freedom_known_planets(initial, current, UINT64_MAX),
+        "Planet chart cannot read at an invalid clock");
+  for (auto version : {1U, 2U, 3U, 4U}) {
+    const auto old = need(make_freedom_starting_knowledge(seed, version));
+    const auto text = need(encode_freedom_knowledge_json(old, 0));
+    check(!resolve_freedom_known_planets(old, current, 0) &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(text, 0)), 0)) == text &&
+              old.recipe.chart == (version == 4 ? 2U : 1U),
+          "Existing recipes retain their exact charts/bytes and cannot "
+          "silently adopt planetary rows");
+  }
+  check(fingerprint == fingerprint_before,
+        "Recipe5 checks do not enter the retained legacy fingerprint");
+}
+
 auto network_knowledge() -> void {
   const Seed seed{42};
   const auto network = need(generate_freedom_system_network(seed));
@@ -1228,6 +1443,7 @@ auto main() -> int {
     for (auto seed : {Seed{0}, Seed{42}, Seed{UINT64_MAX}})
       fixture(seed);
     network_knowledge();
+    planetary_knowledge();
     invalid_inputs();
     surface_marker_metadata();
     moon_surface_marker_metadata();

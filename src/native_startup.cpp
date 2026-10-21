@@ -313,6 +313,19 @@ auto native_network_new_game(Seed universe_seed)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_planetary_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string> {
+  auto start = native_network_new_game(universe_seed);
+  if (!start) return std::unexpected{start.error()};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
+  auto knowledge = make_freedom_starting_knowledge(
+      universe_seed, kFreedomPlanetaryKnowledgeVersion);
+  if (!knowledge) return std::unexpected{"Planetary navigation chart rejected"};
+  knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
+  voyage.knowledge = std::move(*knowledge);
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);

@@ -180,10 +180,10 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
             {"entries", std::move(entries)}};
   if (r.version == kFreedomObservedKnowledgeVersion ||
       r.version == kFreedomTravelKnowledgeVersion ||
-      r.version == kFreedomNetworkKnowledgeVersion)
+      freedom_knowledge_uses_network(r.version))
     root["recipe"]["observation_policy"] = r.observation_policy;
   if (r.version == kFreedomTravelKnowledgeVersion ||
-      r.version == kFreedomNetworkKnowledgeVersion)
+      freedom_knowledge_uses_network(r.version))
     root["recipe"]["world_domain"] = r.world_domain;
   if (r.craft_lineage)
     root["recipe"]["craft_lineage"] = {
@@ -288,7 +288,7 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"journal", std::move(journal)}};
   }
   auto text = root.dump(2) + '\n';
-  const auto limit = r.version == kFreedomNetworkKnowledgeVersion
+  const auto limit = freedom_knowledge_uses_network(r.version)
                          ? kMaximumFreedomNetworkKnowledgeBytes
                          : kMaximumFreedomKnowledgeBytes;
   if (text.size() > limit)
@@ -321,7 +321,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   const auto& r = (*root)["recipe"];
   const bool network = r.contains("version") &&
                        r["version"].is_number_unsigned() &&
-                       r["version"] == kFreedomNetworkKnowledgeVersion;
+                       (r["version"] == kFreedomNetworkKnowledgeVersion ||
+                        r["version"] == kFreedomPlanetaryKnowledgeVersion);
   if (!network && text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
@@ -616,10 +617,14 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
       r.ephemeris != flight.model.physical_ephemeris ||
       r.craft_lineage != flight.origin.lineage ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
-      (r.version == kFreedomNetworkKnowledgeVersion) !=
+      (freedom_knowledge_uses_network(r.version)) !=
           flight.origin.network.has_value() ||
       (flight.origin.network
-           ? (r.world_domain != 2 || r.chart != 2 || r.topology != 2)
+           ? (r.world_domain != 2 ||
+              r.chart != (r.version == kFreedomPlanetaryKnowledgeVersion
+                              ? kFreedomPlanetaryStartingChartVersion
+                              : 2) ||
+              r.topology != 2)
            : ((r.version == kFreedomTravelKnowledgeVersion) !=
               (flight.world.has_value() || flight.moon.has_value() ||
                flight.minor.has_value()))))

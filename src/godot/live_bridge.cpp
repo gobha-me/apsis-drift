@@ -326,6 +326,10 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("stage_freedom_network_new_game", "universe_seed"),
         &FreedomBridge::stage_freedom_network_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_planetary_network_new_game",
+                        "universe_seed"),
+        &FreedomBridge::stage_freedom_planetary_network_new_game);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_continue", "save_path"),
         &FreedomBridge::stage_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("stage_freedom_recovery"),
@@ -380,6 +384,12 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_jump", "system_id"),
         &FreedomBridge::select_freedom_jump);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_planet_destinations"),
+        &FreedomBridge::get_freedom_planet_destinations);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("select_freedom_planet_jump", "system_id", "planet_id"),
+        &FreedomBridge::select_freedom_planet_jump);
     godot::ClassDB::bind_method(godot::D_METHOD("select_freedom_minor_jump"),
                                 &FreedomBridge::select_freedom_minor_jump);
     godot::ClassDB::bind_method(
@@ -777,14 +787,21 @@ class FreedomBridge : public godot::RefCounted {
     return true;
   }
   auto stage_freedom_new_game(const godot::String& universe_seed) -> bool {
-    return stage_freedom_new_game_selection(universe_seed, false);
+    return stage_freedom_new_game_selection(universe_seed, native_new_game);
   }
   auto stage_freedom_network_new_game(const godot::String& universe_seed)
       -> bool {
-    return stage_freedom_new_game_selection(universe_seed, true);
+    return stage_freedom_new_game_selection(universe_seed,
+                                            native_network_new_game);
   }
-  auto stage_freedom_new_game_selection(const godot::String& universe_seed,
-                                        bool network) -> bool {
+  auto stage_freedom_planetary_network_new_game(
+      const godot::String& universe_seed) -> bool {
+    return stage_freedom_new_game_selection(universe_seed,
+                                            native_planetary_network_new_game);
+  }
+  auto stage_freedom_new_game_selection(
+      const godot::String& universe_seed,
+      std::expected<NativeStartup, std::string> (*factory)(Seed)) -> bool {
     try {
       if (pending)
         throw std::invalid_argument("A Freedom start is already pending");
@@ -798,8 +815,7 @@ class FreedomBridge : public godot::RefCounted {
           (digits.size() > 1 && digits.front() == '0') ||
           read.ec != std::errc{} || read.ptr != digits.data() + digits.size())
         throw std::invalid_argument("New Game requires canonical decimal seed");
-      auto selected =
-          network ? native_network_new_game(seed) : native_new_game(seed);
+      auto selected = factory(seed);
       if (!selected) throw std::runtime_error(selected.error());
       return stage_selected(std::move(*selected));
     } catch (const std::exception& e) {
@@ -1246,6 +1262,102 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  static auto project_saved_jump(const NativeFreedomFlightSession& session,
+                                 SimulationTick tick) -> godot::Dictionary {
+    godot::Dictionary jump;
+    const auto& travel = session.travel();
+    const auto available = session.jump_available();
+    jump["available"] = available.has_value();
+    jump["refusal"] =
+        available ? godot::String{} : godot::String{available.error().c_str()};
+    jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle ? "idle"
+                    : travel->phase == FreedomJumpPhase::spool         ? "spool"
+                                                               : "transit";
+    godot::String selected;
+    std::optional<SimulationTick> arrival;
+    if (travel) {
+      if (travel->composed) {
+        const auto& composed = *travel->composed;
+        if (composed.active == FreedomComposedRouteKind::system) {
+          if (travel->selected)
+            selected =
+                godot::String{system_id_string(*travel->selected).c_str()};
+          if (travel->committed)
+            arrival = travel->committed->preview.arrival_tick;
+        } else {
+          if (composed.selected_body)
+            selected = decimal(composed.selected_body->body.value);
+          if (composed.active == FreedomComposedRouteKind::planet) {
+            jump["route_kind"] = "planet";
+            if (composed.planet_committed)
+              arrival = composed.planet_committed->arrival_tick;
+            if (composed.selected_body && session.knowledge()) {
+              const auto target = *composed.selected_body;
+              const auto identity =
+                  query_freedom_knowledge(*session.knowledge(),
+                                          {KnowledgeSubjectKind::planet,
+                                           target.system, target.body.value},
+                                          KnowledgeFact::identity_type, tick);
+              if (identity && *identity &&
+                  std::holds_alternative<KnownIdentity>((*identity)->value))
+                jump["destination_name"] = godot::String{
+                    std::get<KnownIdentity>((*identity)->value).name.c_str()};
+            }
+          } else {
+            const auto& checkpoint =
+                composed.active == FreedomComposedRouteKind::moon
+                    ? composed.moon
+                    : composed.minor;
+            if (checkpoint.committed)
+              arrival = checkpoint.committed->arrival_tick;
+          }
+        }
+      } else if (travel->local) {
+        if (travel->local->selected)
+          selected = decimal(travel->local->selected->body.value);
+        if (travel->local->committed)
+          arrival = travel->local->committed->arrival_tick;
+      } else {
+        if (travel->selected && !session.moon() && !session.minor())
+          selected = godot::String{system_id_string(*travel->selected).c_str()};
+        if (travel->committed)
+          arrival = travel->committed->preview.arrival_tick;
+      }
+    }
+    jump["selected"] = selected;
+    double remaining{};
+    if (travel && travel->phase == FreedomJumpPhase::spool) {
+      if (tick < travel->spool_tick ||
+          tick - travel->spool_tick > kJumpSpoolTicks)
+        throw std::runtime_error("Jump spool clock is unavailable");
+      remaining = (kJumpSpoolTicks - (tick - travel->spool_tick)) / 120.0;
+    } else if (travel && travel->phase == FreedomJumpPhase::transit) {
+      if (!arrival || *arrival < tick)
+        throw std::runtime_error("Committed jump arrival clock is unavailable");
+      remaining = (*arrival - tick) / 120.0;
+    }
+    jump["remaining_seconds"] = remaining;
+    if (!session.moon() && !session.minor()) {
+      if (const auto preview = session.jump_preview(); preview) {
+        jump["distance_light_hours"] =
+            preview->distance_metres / (kMetresPerLightSecond * 3600.0);
+        jump["heading_error_degrees"] =
+            preview->alignment.heading_error_millidegrees / 1000.0;
+        jump["drift_percent"] =
+            preview->alignment.velocity_error_basis_points / 100.0;
+        jump["quality"] = godot::String{
+            intersystem_arrival_quality_name(preview->alignment.quality)
+                .data()};
+        jump["envelope_radius_metres"] =
+            preview->distance.envelope_radius_metres
+                ? godot::Variant{static_cast<std::int64_t>(
+                      *preview->distance.envelope_radius_metres)}
+                : godot::Variant{};
+      }
+    }
+    return jump;
+  }
+
   auto select_freedom_moon_jump() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
@@ -1295,6 +1407,65 @@ class FreedomBridge : public godot::RefCounted {
           system_id_string(id) != text)
         return std::unexpected{"Invalid chart destination"};
       return session.select_jump(id);
+    });
+  }
+  auto get_freedom_planet_destinations() const -> godot::Dictionary {
+    godot::Dictionary result;
+    result["version"] = 1;
+    result["selected"] = false;
+    result["rows"] = godot::Array{};
+    result["reason"] = "Planetary charts are not selected for this journey";
+    if (!saved_flight) return result;
+    const auto& session = saved_flight->session;
+    if (!session.knowledge() || session.knowledge()->recipe.version !=
+                                    kFreedomPlanetaryKnowledgeVersion)
+      return result;
+    if (session.moon() || session.minor()) {
+      result["reason"] = "Return to planetary space before selecting a planet";
+      return result;
+    }
+    const auto& document = session.document();
+    const auto planet = document.world ? std::optional{document.world->planet}
+                                       : document.flight.frame.planet;
+    if (!planet) return result;
+    const auto known = resolve_freedom_known_planets(
+        *session.knowledge(), {session.system().catalog.id, body_id(*planet)},
+        document.flight.tick);
+    if (!known) {
+      result["reason"] = "Planetary navigation records are unavailable";
+      return result;
+    }
+    godot::Array rows;
+    for (const auto& row : *known) {
+      godot::Dictionary item;
+      item["system_id"] = decimal(row.target.system.value);
+      item["planet_id"] = decimal(row.target.body.value);
+      item["name"] = godot::String{row.name.c_str()};
+      item["current"] = row.current;
+      item["visited"] = row.visited;
+      const auto available =
+          session.planet_jump_selection_available(row.target);
+      item["selectable"] = available.has_value();
+      item["reason"] = available ? godot::String{}
+                                 : godot::String{available.error().c_str()};
+      rows.append(item);
+    }
+    result["selected"] = true;
+    result["rows"] = rows;
+    result["reason"] = godot::String{};
+    return result;
+  }
+  auto select_freedom_planet_jump(const godot::String& system,
+                                  const godot::String& planet) -> bool {
+    const auto system_word = identity_word(system);
+    const auto planet_word = identity_word(planet);
+    if (!system_word || !planet_word) {
+      last_error = "Planet destination requires canonical unsigned identities";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.select_planet_jump(
+          {SystemId{*system_word}, body_id(PlanetId{*planet_word})});
     });
   }
   auto begin_freedom_jump() -> bool {
@@ -1414,7 +1585,7 @@ class FreedomBridge : public godot::RefCounted {
       return session.inspect_surface_landmark(SurfaceLandmarkId{value});
     });
   }
-  static auto field_sample_word(const godot::String& value)
+  static auto identity_word(const godot::String& value)
       -> std::expected<std::uint64_t, std::string> {
     const auto utf8 = value.utf8();
     const std::string_view text{utf8.get_data(),
@@ -1425,14 +1596,14 @@ class FreedomBridge : public godot::RefCounted {
     if (text.empty() || text.size() > 20 || parsed.ec != std::errc{} ||
         parsed.ptr != text.data() + text.size() || std::to_string(word) != text)
       return std::unexpected{
-          "Sample identity must be a canonical unsigned word"};
+          "Identity must be a canonical unsigned decimal word"};
     return word;
   }
   auto get_freedom_field_sample_availability(const godot::String& id) const
       -> godot::Dictionary {
     godot::Dictionary result;
     result["available"] = false;
-    const auto site = field_sample_word(id);
+    const auto site = identity_word(id);
     if (!site || !saved_flight) {
       result["reason"] = !site ? godot::String{site.error().c_str()}
                                : godot::String{"Select a journey first"};
@@ -1449,7 +1620,7 @@ class FreedomBridge : public godot::RefCounted {
   auto collect_freedom_field_sample(const godot::String& id) -> bool {
     return change_freedom_port([&](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
-      const auto site = field_sample_word(id);
+      const auto site = identity_word(id);
       if (!site) return std::unexpected{site.error()};
       return session.collect_field_sample(SurfaceLandmarkId{*site});
     });
@@ -1460,9 +1631,9 @@ class FreedomBridge : public godot::RefCounted {
                                     const godot::String& id) -> bool {
     return change_freedom_port([&](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
-      const auto system_word = field_sample_word(system);
-      const auto body_word = field_sample_word(body);
-      const auto site = field_sample_word(id);
+      const auto system_word = identity_word(system);
+      const auto body_word = identity_word(body);
+      const auto site = identity_word(id);
       if (!system_word || !body_word || !site ||
           (kind != "planet" && kind != "moon"))
         return std::unexpected{"Select an actual carried specimen"};
@@ -1791,26 +1962,7 @@ class FreedomBridge : public godot::RefCounted {
       resources["propulsion_refused"] = reading.propulsion_refused;
     }
     result["resources"] = resources;
-    godot::Dictionary jump;
-    const auto& travel = session.travel();
-    const auto available = session.jump_available();
-    jump["available"] = available.has_value();
-    jump["refusal"] =
-        available ? godot::String{} : godot::String{available.error().c_str()};
-    jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle ? "idle"
-                    : travel->phase == FreedomJumpPhase::spool         ? "spool"
-                                                               : "transit";
-    jump["selected"] = travel && travel->local && travel->local->selected
-                           ? decimal(travel->local->selected->body.value)
-                           : godot::String{};
-    jump["remaining_seconds"] =
-        travel && travel->phase == FreedomJumpPhase::spool
-            ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
-        : travel && travel->phase == FreedomJumpPhase::transit &&
-                travel->local && travel->local->committed
-            ? (travel->local->committed->arrival_tick - body.tick) / 120.0
-            : 0.0;
-    result["jump"] = jump;
+    result["jump"] = project_saved_jump(session, body.tick);
     const auto force =
         selected.last_step && selected.last_step->moon &&
                 !(session.surface() && session.surface()->moon_landed)
@@ -1950,26 +2102,7 @@ class FreedomBridge : public godot::RefCounted {
       resources["propulsion_refused"] = reading.propulsion_refused;
     }
     result["resources"] = resources;
-    godot::Dictionary jump;
-    const auto& travel = session.travel();
-    const auto available = session.jump_available();
-    jump["available"] = available.has_value();
-    jump["refusal"] =
-        available ? godot::String{} : godot::String{available.error().c_str()};
-    jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle ? "idle"
-                    : travel->phase == FreedomJumpPhase::spool         ? "spool"
-                                                               : "transit";
-    jump["selected"] = travel && travel->local && travel->local->selected
-                           ? decimal(travel->local->selected->body.value)
-                           : godot::String{};
-    jump["remaining_seconds"] =
-        travel && travel->phase == FreedomJumpPhase::spool
-            ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
-        : travel && travel->phase == FreedomJumpPhase::transit &&
-                travel->local && travel->local->committed
-            ? (travel->local->committed->arrival_tick - body.tick) / 120.0
-            : 0.0;
-    result["jump"] = jump;
+    result["jump"] = project_saved_jump(session, body.tick);
     const auto force = selected.last_step && selected.last_step->minor
                            ? selected.last_step->minor->propulsion
                            : VacuumActuation{};
@@ -2431,7 +2564,7 @@ class FreedomBridge : public godot::RefCounted {
         knowledge &&
         (knowledge->recipe.version == kFreedomObservedKnowledgeVersion ||
          knowledge->recipe.version == kFreedomTravelKnowledgeVersion ||
-         knowledge->recipe.version == kFreedomNetworkKnowledgeVersion);
+         freedom_knowledge_uses_network(knowledge->recipe.version));
     godot::Dictionary result;
     const auto version = knowledge && knowledge->surface_marker
                              ? knowledge->surface_marker->version
@@ -3072,50 +3205,7 @@ class FreedomBridge : public godot::RefCounted {
         chart["baseline"] = "Starting chart";
       }
       result["chart"] = chart;
-      godot::Dictionary jump;
-      const auto& travel = session.travel();
-      const auto jump_available = session.jump_available();
-      jump["available"] = jump_available.has_value();
-      jump["refusal"] = jump_available
-                            ? godot::String{}
-                            : godot::String{jump_available.error().c_str()};
-      jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle
-                          ? "idle"
-                      : travel->phase == FreedomJumpPhase::spool ? "spool"
-                                                                 : "transit";
-      jump["selected"] =
-          travel && travel->local && travel->local->selected
-              ? decimal(travel->local->selected->body.value)
-          : travel && travel->selected
-              ? godot::String{system_id_string(*travel->selected).c_str()}
-              : godot::String{};
-      jump["remaining_seconds"] =
-          travel && travel->phase == FreedomJumpPhase::spool
-              ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
-          : travel && travel->phase == FreedomJumpPhase::transit
-              ? ((travel->local ? travel->local->committed->arrival_tick
-                                : travel->committed->preview.arrival_tick) -
-                 body.tick) /
-                    120.0
-              : 0.0;
-      if (const auto preview = session.jump_preview(); preview) {
-        jump["distance_light_hours"] =
-            preview->distance_metres / (kMetresPerLightSecond * 3600.0);
-        jump["heading_error_degrees"] =
-            preview->alignment.heading_error_millidegrees / 1000.0;
-        jump["drift_percent"] =
-            preview->alignment.velocity_error_basis_points / 100.0;
-        jump["quality"] = godot::String{
-            intersystem_arrival_quality_name(preview->alignment.quality)
-                .data()};
-        jump["envelope_radius_metres"] =
-            preview->distance.envelope_radius_metres
-                ? godot::Variant{static_cast<std::int64_t>(
-                      *preview->distance.envelope_radius_metres)}
-                : godot::Variant{};
-      }
-      // No hidden sampled point, destination body identity or catalog leaks.
-      result["jump"] = jump;
+      result["jump"] = project_saved_jump(session, body.tick);
 
       const auto force =
           selected.last_step &&

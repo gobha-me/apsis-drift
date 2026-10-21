@@ -141,7 +141,9 @@ This first local branch connects the origin home body and its selected moon.
 It does not add arbitrary local-body selection, landable asteroids, a new
 intersystem risk policy or seamless gravity transitions. The existing
 intersystem route retains its validators; switching from a retained local
-voyage into that route is explicitly refused in this increment.
+voyage into that route is explicitly refused in the retained chart recipes.
+The separate [planetary-chart start](FREEDOM_PLANET_TRAVEL.md) uses a new composed
+travel selection to retain completed companion and intersystem receipts together.
 The existing Moon and asteroid round trips can be reused in the same save through
 [the home route and station service](ASTEROID_INSPECTION.md#versioned-ownership-and-compatibility).
 Go home between companions and replenish at the real station before another full

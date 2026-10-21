@@ -32,6 +32,105 @@ auto check(bool condition, const char* message) -> void {
   return text;
 }
 
+auto planetary_chart_start(const std::filesystem::path& directory) -> void {
+  using namespace apsis_drift;
+  for (const auto seed : {Seed{0}, Seed{42}, Seed{UINT64_MAX}}) {
+    const auto pair = native_new_game(seed);
+    const auto four = native_network_new_game(seed);
+    check(pair && four, "existing pair/four-system startup refused");
+    const auto pair_bytes = encode_native_save_document_json(pair->document);
+    const auto four_bytes = encode_native_save_document_json(four->document);
+    check(pair_bytes && four_bytes, "existing startup envelope did not encode");
+    const auto selected = native_planetary_network_new_game(seed);
+    check(selected && selected->mode == NativeStartup::Mode::freedom &&
+              !selected->source_save &&
+              selected->home_planet == four->home_planet &&
+              std::holds_alternative<FreedomKnowledgeSaveDocument>(
+                  selected->document),
+          "explicit planetary new game changed startup mode, source path or "
+          "actual home");
+    const auto& old_document =
+        std::get<FreedomKnowledgeSaveDocument>(four->document);
+    const auto& document =
+        std::get<FreedomKnowledgeSaveDocument>(selected->document);
+    const auto& pair_document =
+        std::get<FreedomKnowledgeSaveDocument>(pair->document);
+    check(pair_document.knowledge.recipe.version == 2 &&
+              old_document.knowledge.recipe.version == 4 &&
+              old_document.knowledge.recipe.chart == 2 &&
+              document.knowledge.recipe.version ==
+                  kFreedomPlanetaryKnowledgeVersion &&
+              document.knowledge.recipe.chart ==
+                  kFreedomPlanetaryStartingChartVersion &&
+              document.voyage == old_document.voyage &&
+              document.knowledge.surface_landmarks ==
+                  old_document.knowledge.surface_landmarks &&
+              !document.knowledge.field_samples &&
+              !document.knowledge.orbital_surveys &&
+              !document.knowledge.moon_surface_landmarks &&
+              !document.knowledge.surface_marker,
+          "planetary chart changed real craft/actor/attachment/resources/clock "
+          "or fabricated optional history");
+    auto expected = old_document;
+    expected.knowledge = document.knowledge;
+    check(expected == document,
+          "new planetary startup must differ from old four-system startup only "
+          "in declared knowledge");
+    auto borrowed = pair_document;
+    borrowed.knowledge = document.knowledge;
+    check(!encode_native_save_document_json(NativeSaveDocument{borrowed}),
+          "an unchanged pair origin cannot borrow the new four-system planet "
+          "chart");
+    const auto new_station = prepare_native_freedom_station_start(*selected);
+    const auto old_station = prepare_native_freedom_station_start(*four);
+    check(new_station && old_station &&
+              new_station->system == old_station->system &&
+              new_station->station == old_station->station &&
+              new_station->host == old_station->host &&
+              new_station->ephemeris == old_station->ephemeris,
+          "planet chart selection changed the actual station owner or initial "
+          "physical pose");
+    const auto encoded = encode_native_save_document_json(selected->document);
+    check(encoded && decode_native_save_document_json(*encoded) ==
+                         std::expected<NativeSaveDocument, SaveSchemaError>{
+                             selected->document},
+          "new chart recipe failed full nested native encode/decode");
+    const auto path =
+        directory / ("planetary-chart-" + std::to_string(seed.value) + ".json");
+    check(native_save_freedom(*selected, path).has_value(),
+          "planet chart station Save As refused");
+    const auto saved_bytes = contents(path);
+    const auto continued = native_continue(path);
+    check(continued && continued->document == selected->document &&
+              continued->source_save == path && contents(path) == saved_bytes &&
+              std::get<FreedomKnowledgeSaveDocument>(continued->document)
+                      .knowledge.recipe.version == 5,
+          "planetary Continue upgraded, rewrote or lost its explicit chart "
+          "selection");
+    const auto copy_path = directory / ("planetary-chart-copy-" +
+                                        std::to_string(seed.value) + ".json");
+    check(
+        native_save_freedom(*continued, copy_path).has_value() &&
+            contents(copy_path) == saved_bytes,
+        "planetary Continue Save As did not preserve complete canonical bytes");
+    const auto old_path =
+        directory / ("old-four-chart-" + std::to_string(seed.value) + ".json");
+    check(native_save_freedom(*four, old_path).has_value(),
+          "existing four-system startup Save refused");
+    const auto old_continued = native_continue(old_path);
+    check(old_continued && old_continued->document == four->document &&
+              std::get<FreedomKnowledgeSaveDocument>(old_continued->document)
+                      .knowledge.recipe.version == 4 &&
+              contents(old_path) == *four_bytes &&
+              encode_native_save_document_json(
+                  native_network_new_game(seed)->document) == four_bytes &&
+              encode_native_save_document_json(
+                  native_new_game(seed)->document) == pair_bytes,
+          "new recipe factory/Continue silently changed existing pair or "
+          "four-system factories/bytes");
+  }
+}
+
 auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
                    const apsis_drift::NativeSaveDocument& complete) -> void {
   using namespace apsis_drift;
@@ -187,6 +286,7 @@ auto main() -> int {
          std::to_string(
              std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(directory);
+    planetary_chart_start(directory);
     const auto save = directory / "freedom.json";
     check(write_freedom_save_file_atomically(save, freedom).has_value(),
           "could not write test save");

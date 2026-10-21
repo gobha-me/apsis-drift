@@ -644,8 +644,31 @@ auto validate_origin_local(const FreedomTravelSaveDocument& d)
 }
 } // namespace
 
+auto travel_local_frozen_json(const FrozenLocalBodyJumpArrival& value)
+    -> std::expected<Json, SaveSchemaError> {
+  return frozen_json(value);
+}
+auto travel_local_frozen_value(const Json& value)
+    -> std::expected<FrozenLocalBodyJumpArrival, SaveSchemaError> {
+  return frozen_value(value);
+}
+auto travel_valid_pilot_binding(const FreedomTravelSaveDocument& d,
+                                const FreedomFlightSaveDocument& flight)
+    -> bool {
+  return valid_pilot_binding(d, flight);
+}
+auto travel_free_pilot(const FreedomTravelSaveDocument& d) -> bool {
+  return free_pilot(d);
+}
+auto travel_target_of(const FreedomFlightSaveDocument& d)
+    -> std::optional<BodyTarget> {
+  return target_of(d);
+}
 auto validate_local_travel(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
+  if (d.travel.composed)
+    return std::unexpected{
+        failure("Composed routes require explicit version5")};
   if (d.travel.version == kFreedomOriginLocalTravelStateVersion)
     return validate_origin_local(d);
   if (d.travel.origin_routes)

@@ -24,6 +24,8 @@ struct NativeStartup {
     -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_network_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
+[[nodiscard]] auto native_planetary_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
 

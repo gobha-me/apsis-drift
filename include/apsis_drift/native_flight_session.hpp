@@ -190,6 +190,12 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto jump_selection_available(SystemId) const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto select_jump(SystemId) -> std::expected<void, std::string>;
+  [[nodiscard]] auto planet_jump_selection_available(BodyTarget) const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto select_planet_jump(BodyTarget)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto planet_jump_preview() const
+      -> std::expected<FrozenFreedomPlanetJumpArrival, std::string>;
   [[nodiscard]] auto select_local_jump(BodyTarget)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto local_jump_preview() const
@@ -416,6 +422,19 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto moon_surface_marker_view(FreedomSurfaceMarkerView) const
       -> std::expected<FreedomSurfaceMarkerView, std::string>;
+  [[nodiscard]] auto prepare_composed_travel()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto admit_composed_travel() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto select_composed_local_jump(BodyTarget)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto composed_body_jump_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_composed_body_jump()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_composed_body_jump(const NativeFlightControls&,
+                                                SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto local_jump_available() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_local_jump() -> std::expected<void, std::string>;

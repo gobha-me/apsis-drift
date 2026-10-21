@@ -7,6 +7,11 @@ to browse slots, **Open save file…** for an explicit JSON path, **Flight basic
 at D1. The new journey is unsaved until Save As creates its first slot. A seed is a whole decimal value from zero through 18446744073709551615,
 without signs, spaces or leading zeros. The default field contains 42.
 
+**Starting charts** offers the default nearby systems, the existing four-system
+map, or **Four systems + planetary charts**. The last choice explicitly grants
+planetary names and orbital locations for [manual planet trips](FREEDOM_PLANET_TRAVEL.md);
+physical properties and surfaces remain unexplored. Continue retains its saved charts.
+
 Opening the title, control Settings or its read-only reference selects no active C++ journey. The
 reference explains the current Freedom mechanisms and control bindings without
 claiming live observations. Escape/Start or Back returns to the title. Keyboard,
