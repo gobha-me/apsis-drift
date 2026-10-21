@@ -306,7 +306,16 @@ func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
 	return candidate
 
 func select_start(owner: Variant, options: Dictionary) -> bool:
-	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_network_new_game(options.value) if options.mode == "new_game" and options.get("network", false) else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_profile(options.value) if options.mode == "profile" else owner.stage_freedom_continue(options.value)
+	var staged := false
+	match options.mode:
+		"recovery": staged = owner.stage_freedom_recovery()
+		"new_game":
+			staged = owner.stage_freedom_planetary_network_new_game(options.value) if options.get("planetary", false) else owner.stage_freedom_network_new_game(options.value) if options.get("network", false) else owner.stage_freedom_new_game(options.value)
+		"profile": staged = owner.stage_freedom_profile(options.value)
+		"continue": staged = owner.stage_freedom_continue(options.value)
+		_:
+			error = "Unsupported startup request"
+			return false
 	if not staged:
 		error = str(owner.get_last_error())
 		return false

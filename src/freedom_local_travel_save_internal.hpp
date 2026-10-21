@@ -26,4 +26,15 @@ namespace apsis_drift::detail {
     -> std::expected<FreedomResources, SaveSchemaError>;
 [[nodiscard]] auto travel_binding_json(const NativeStartingAssemblySelection&)
     -> nlohmann::ordered_json;
+// Pure receipt codecs and existing pilot predicates shared by explicit56.
+[[nodiscard]] auto travel_local_frozen_json(const FrozenLocalBodyJumpArrival&)
+    -> std::expected<nlohmann::ordered_json, SaveSchemaError>;
+[[nodiscard]] auto travel_local_frozen_value(const nlohmann::ordered_json&)
+    -> std::expected<FrozenLocalBodyJumpArrival, SaveSchemaError>;
+[[nodiscard]] auto travel_valid_pilot_binding(const FreedomTravelSaveDocument&,
+                                              const FreedomFlightSaveDocument&)
+    -> bool;
+[[nodiscard]] auto travel_free_pilot(const FreedomTravelSaveDocument&) -> bool;
+[[nodiscard]] auto travel_target_of(const FreedomFlightSaveDocument&)
+    -> std::optional<BodyTarget>;
 } // namespace apsis_drift::detail

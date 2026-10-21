@@ -152,7 +152,11 @@ auto NativeFreedomFlightSession::jump_selection_available(
         return std::unexpected{"Retain the authentic returned-home intersystem "
                                "receipt, bill and attempt"};
     }
-  } else if (travel_->version != kFreedomTravelStateVersion) {
+  } else if (travel_->version != kFreedomTravelStateVersion &&
+             !(knowledge_->recipe.version ==
+                   kFreedomPlanetaryKnowledgeVersion &&
+               travel_->version == kFreedomComposedTravelStateVersion &&
+               travel_->composed)) {
     return std::unexpected{"Unsupported native travel selection"};
   }
   return {};
@@ -183,6 +187,13 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
     return {};
   }
   auto candidate = *this;
+  if (candidate.knowledge_->recipe.version ==
+      kFreedomPlanetaryKnowledgeVersion) {
+    if (const auto prepared = candidate.prepare_composed_travel(); !prepared)
+      return prepared;
+    candidate.travel_->composed->active = FreedomComposedRouteKind::system;
+    candidate.travel_->composed->selected_body.reset();
+  }
   if (candidate.travel_ && local_choice(*candidate.travel_)) {
     candidate.travel_->local.reset();
     candidate.travel_->prior_moon.reset();
@@ -214,6 +225,9 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
 }
 auto NativeFreedomFlightSession::jump_preview() const
     -> std::expected<FreedomJumpPreview, std::string> {
+  if (travel_ && travel_->composed &&
+      travel_->composed->active != FreedomComposedRouteKind::system)
+    return std::unexpected{"Typed body travel uses its own preview"};
   if (moon_ || minor_ || (travel_ && travel_->local))
     return std::unexpected{"Local body travel uses its typed local preview"};
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
@@ -256,6 +270,9 @@ auto NativeFreedomFlightSession::jump_preview() const
 }
 auto NativeFreedomFlightSession::jump_available() const
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->composed &&
+      travel_->composed->active != FreedomComposedRouteKind::system)
+    return composed_body_jump_available();
   if (travel_ && travel_->local) return local_jump_available();
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
     if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
@@ -300,6 +317,9 @@ auto NativeFreedomFlightSession::jump_available() const
 }
 auto NativeFreedomFlightSession::begin_jump()
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->composed &&
+      travel_->composed->active != FreedomComposedRouteKind::system)
+    return begin_composed_body_jump();
   if (travel_ && travel_->local) return begin_local_jump();
   if (recovery_pending())
     return std::unexpected{
@@ -333,6 +353,10 @@ auto NativeFreedomFlightSession::begin_jump()
   candidate.cancel_surface_maneuver();
   if (auto v = candidate.travel_document(); !v)
     return std::unexpected{v.error()};
+  if (candidate.travel_->composed) {
+    if (const auto admitted = candidate.admit_composed_travel(); !admitted)
+      return std::unexpected{admitted.error()};
+  }
   *this = std::move(candidate);
   return {};
 }
@@ -348,12 +372,19 @@ auto NativeFreedomFlightSession::cancel_jump()
   candidate.travel_->spool_tick = 0;
   if (auto v = candidate.travel_document(); !v)
     return std::unexpected{v.error()};
+  if (candidate.travel_->composed) {
+    if (const auto admitted = candidate.admit_composed_travel(); !admitted)
+      return std::unexpected{admitted.error()};
+  }
   *this = std::move(candidate);
   return {};
 }
 auto NativeFreedomFlightSession::advance_jump(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (travel_ && travel_->composed &&
+      travel_->composed->active != FreedomComposedRouteKind::system)
+    return advance_composed_body_jump(controls, step);
   if (travel_ && travel_->local) return advance_local_jump(controls, step);
   if (!std::isfinite(step.count()) || step != kSimulationStep || !travel_ ||
       travel_->phase == FreedomJumpPhase::idle)
@@ -493,6 +524,10 @@ auto NativeFreedomFlightSession::advance_jump(
   }
   if (auto v = candidate.travel_document(); !v)
     return std::unexpected{v.error()};
+  if (candidate.travel_->composed) {
+    if (const auto admitted = candidate.admit_composed_travel(); !admitted)
+      return std::unexpected{admitted.error()};
+  }
   *this = std::move(candidate);
   return result;
 }

@@ -929,7 +929,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
   if (knowledge_ &&
       (knowledge_->recipe.version == kFreedomObservedKnowledgeVersion ||
        knowledge_->recipe.version == kFreedomTravelKnowledgeVersion ||
-       knowledge_->recipe.version == kFreedomNetworkKnowledgeVersion) &&
+       freedom_knowledge_uses_network(knowledge_->recipe.version)) &&
       candidate.flight.tick % kFreedomLocalObservationInterval == 0) {
     auto observed = *this;
     observed.document_ = candidate;

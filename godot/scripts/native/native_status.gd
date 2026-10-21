@@ -295,8 +295,12 @@ static func summary(value: Dictionary, walking_keys: String = "WASD") -> String:
 			lines.append("Fuel %.1f%% · Jumps %d/3%s" % [resources.fraction * 100.0, resources.jump_charges, " · EMPTY" if resources.get("operationally_empty", false) else " · LOW FUEL" if resources.get("reserve", false) else ""])
 		else: lines.append("Fuel tracking unavailable for this historical save")
 		if resources.get("propulsion_refused", false): lines.append("Insufficient fuel · thrust unavailable")
-		for row in rows:
-			if row is Dictionary and row.get("system_id", "") == jump.get("selected", "") and not row.get("current", false):
-				lines.append("Jump target · " + str(row.get("name", "Unidentified destination")))
-				break
+		if jump.has("destination_name"):
+			if not jump.destination_name is String or jump.destination_name.is_empty() or jump.destination_name.length() > 128: return "Jump observations unavailable"
+			lines.append("Planet target · " + jump.destination_name)
+		else:
+			for row in rows:
+				if row is Dictionary and row.get("system_id", "") == jump.get("selected", "") and not row.get("current", false):
+					lines.append("Jump target · " + str(row.get("name", "Unidentified destination")))
+					break
 	return "\n".join(lines)

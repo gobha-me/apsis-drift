@@ -106,6 +106,10 @@ planetary landing, release flight and look controls, then use the displayed
 **A/Cross**. Leaving pauses outside; resume explicitly to walk. **Liftoff** stays
 in paused Controls. Flight basics gives the supported actions and conditions
 for each mode.
+For [planetary trips](FREEDOM_PLANET_TRAVEL.md), choose **Four systems + planetary
+charts** when starting a journey. Paused Controls list the known planets in the
+current system and **Begin selected jump**. Each leg uses one charge; arrival
+leaves descent and landing to the pilot. Continue retains its original chart.
 For the [airless Moon trip](AIRLESS_MOON.md#local-voyage-and-operation), choose
 **Select nearby moon jump** after departing the station. **Deploy gear · manual
 descent** deploys the gear; brake and descend with your thrusters. **Release

@@ -2,6 +2,7 @@ extends SceneTree
 ## Actual bridge travel compared with independently ticked C++ save oracles.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
+const PlanetTravel = preload("res://tests/native_planet_travel.gd")
 var failures := 0
 
 func check(value: bool, message: String) -> void:
@@ -160,5 +161,6 @@ func run() -> void:
 		await process_frame
 	shell.free()
 	await process_frame
+	failures += await PlanetTravel.new().run(self, trace, directory.path_join("native-assets"))
 	print("Native first jump: %d failures" % failures)
 	quit(1 if failures else 0)

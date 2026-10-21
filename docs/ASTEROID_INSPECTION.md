@@ -87,8 +87,10 @@ approach and capture the moving station, use **Replenish flight fuel and jump
 charges · free**, release the port and withdraw before choosing either existing
 destination. The home return leaves one reserve charge; another full round trip
 requires two. Selection, Continue and changing destinations never refill fuel.
-Direct Moon–asteroid transfers and combining completed local routes with an
-intersystem voyage remain unavailable.
+Direct Moon–asteroid transfers remain unavailable. The retained chart recipes
+also refuse combining completed local routes with an intersystem voyage; the
+separate [planetary-chart start](FREEDOM_PLANET_TRAVEL.md) explicitly composes
+those histories while requiring a real return home between companions.
 
 A local destination choice at home stays reversible until a local jump commits.
 Cancel any active spool, then select the known neighboring system from the chart.

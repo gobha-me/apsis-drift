@@ -12,7 +12,14 @@ inline constexpr std::uint32_t kFreedomKnowledgeVersion{1};
 inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomNetworkKnowledgeVersion{4};
+inline constexpr std::uint32_t kFreedomPlanetaryKnowledgeVersion{5};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
+inline constexpr std::uint32_t kFreedomPlanetaryStartingChartVersion{3};
+[[nodiscard]] constexpr auto freedom_knowledge_uses_network(
+    std::uint32_t version) -> bool {
+  return version == kFreedomNetworkKnowledgeVersion ||
+         version == kFreedomPlanetaryKnowledgeVersion;
+}
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
 inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
@@ -82,7 +89,8 @@ struct FreedomKnowledgeRecipe {
   std::uint32_t observation_policy{};
   // Version 3 registers the same seeded neighbor's planets. Earlier domains
   // stay origin-only; registration itself grants no observations. Version4
-  // selects the explicit four-system domain2/chart2/topology2.
+  // selects the explicit four-system domain2/chart2/topology2. Version5
+  // additionally grants ordinary-planet identity/location through chart3.
   std::uint32_t world_domain{};
   // Explicit recovery selection bounds historical craft provenance to the
   // admitted generations. Absence retains the exact starter-only contract.
@@ -305,6 +313,14 @@ struct KnowledgeReading {
       -> bool = default;
 };
 
+struct FreedomKnownPlanetRow {
+  BodyTarget target;
+  std::string name;
+  bool current{}, visited{};
+  friend auto operator==(const FreedomKnownPlanetRow&,
+                         const FreedomKnownPlanetRow&) -> bool = default;
+};
+
 [[nodiscard]] auto make_freedom_starting_knowledge(
     Seed, std::uint32_t version = kFreedomKnowledgeVersion)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
@@ -324,6 +340,12 @@ struct KnowledgeReading {
 [[nodiscard]] auto known_freedom_subjects(const FreedomKnowledge&,
                                           SimulationTick now)
     -> std::expected<std::vector<KnowledgeSubject>, FreedomKnowledgeError>;
+// Selected chart3 only. Enumerate resolved identity/location evidence first;
+// authentic catalog entries then resolve those admitted IDs, never grant them.
+[[nodiscard]] auto resolve_freedom_known_planets(const FreedomKnowledge&,
+                                                 BodyTarget current,
+                                                 SimulationTick now)
+    -> std::expected<std::vector<FreedomKnownPlanetRow>, FreedomKnowledgeError>;
 [[nodiscard]] auto resolve_freedom_knowledge_chart(
     const FreedomKnowledge&, SystemId current, const FreedomResources&,
     bool selection_open = true,

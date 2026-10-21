@@ -1,5 +1,5 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
-  foreach(reuse_case IN ITEMS freedom-origin-local-travel-save native-local-route-reuse native-port-rendezvous native-port-docking native-local-choice origin-station-crew)
+  foreach(reuse_case IN ITEMS freedom-origin-local-travel-save native-local-route-reuse native-port-rendezvous native-port-docking native-local-choice origin-station-crew freedom-planet-jump freedom-composed-travel native-planet-travel)
     string(REPLACE "-" "_" reuse_source "${reuse_case}")
     add_executable(apsis-drift-${reuse_case}-tests test/${reuse_source}_test.cpp)
     target_include_directories(apsis-drift-${reuse_case}-tests PRIVATE src)

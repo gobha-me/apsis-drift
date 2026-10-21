@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_recovery_save.hpp"
+#include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 
 #include <algorithm>
@@ -667,6 +668,218 @@ auto lineage(Seed seed) -> void {
             !derive_freedom_craft_identity(seed, maximum),
         "Identity wrap excludes zero and refuses before a repeated starter");
 }
+auto composed_fixture() -> FreedomTravelSaveDocument {
+  // Saved-space codec fixture, not a claimed flown departure or descent.
+  // The pilot is constructed from the genuine station entry/boarding route.
+  const Seed seed{42};
+  auto origin = need(make_freedom_network_new_game_document(seed));
+  const auto system = need(generate_physical_origin_system(seed, 2));
+  const auto station = generate_origin_station(seed);
+  const auto geometry = need(origin_station_geometry(station));
+  const auto port = need(resolve_origin_port_pose(system, station, geometry,
+                                                  {station.id, 1}, 5000));
+  OriginWalkerState entry;
+  for (unsigned i = 0; i < 2960; ++i)
+    entry = need(advance_origin_walker(entry, {0, -1, 0}));
+  const auto binding = need(make_native_starting_assembly_binding({}));
+  const RigidVector3 eye{entry.foot_position_metres.x,
+                         entry.foot_position_metres.y +
+                             kOriginWalkerEyeHeightMetres,
+                         entry.foot_position_metres.z};
+  const auto route = need(step_origin_gameplay_boarding(
+      need(begin_origin_gameplay_boarding(binding, port, eye,
+                                          entry.heading_radians,
+                                          GameplayBoardingDirection::board)),
+      kGameplayBoardingTicks));
+  const FreedomBoardingState pilot{FreedomBoardingPhase::seated, entry,
+                                   5000 - kGameplayBoardingTicks, route};
+  origin.state.tick = 5000;
+  FreedomFlightSaveDocument flight;
+  flight.origin = origin;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = 3;
+  flight.model.frame_policy = 2;
+  flight.model.optics = 1;
+  flight.model.companions = 1;
+  flight.world = FreedomActiveWorldSelection{2, system.catalog.id,
+                                             origin.recipe.home_planet};
+  flight.flight = port.planet_relative;
+  flight.flight.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
+  const auto home =
+      need(find_local_system_planet(system, origin.recipe.home_planet));
+  flight.flight.position_metres = {
+      0, 0, static_cast<double>(home->descriptor.radius.value) * 10000};
+  flight.flight.orientation = {};
+  flight.flight.linear_velocity_metres_per_second = {};
+  flight.flight.angular_velocity_radians_per_second = {};
+  flight.flight = need(canonicalize_rigid_body_state(
+      RigidBodyWorldContext{system}, flight.flight));
+  const FreedomSurfaceSaveDocument surface{flight, {}};
+  const FreedomResources resources{1,
+                                   origin.state.craft,
+                                   flight.flight.craft,
+                                   5000,
+                                   kFreedomFlightCapacityQuanta - 123,
+                                   3};
+  const FreedomResourceSaveDocument fueled{surface, resources};
+  FreedomKnowledgeSaveDocument mapped{
+      fueled, need(make_freedom_starting_knowledge(
+                  seed, kFreedomPlanetaryKnowledgeVersion))};
+  FreedomTravelSaveDocument result{
+      mapped, {}, NativeStartingAssemblySelection{}, pilot};
+  result.travel.version = kFreedomComposedTravelStateVersion;
+  result.travel.composed.emplace();
+  return result;
+}
+auto composed_recovery() -> void {
+  const auto legacy_fingerprint = fingerprint;
+  auto travel = composed_fixture();
+  auto& flight =
+      std::get<FreedomFlightSaveDocument>(travel.voyage.voyage.voyage.base);
+  const auto owner = need(hydrate_freedom_flight_document(flight)).system;
+  const auto& planet = owner.catalog.planets.front().descriptor;
+  auto& knowledge = travel.voyage.knowledge;
+  const auto shell_x = static_cast<std::int32_t>(
+      std::floor(static_cast<double>(planet.radius.value) * 1000 /
+                 kSurfaceLandmarkCellMetres));
+  // Identity-only persistence metadata, not a claimed walk, inspection or
+  // collection.
+  std::optional<FreedomFieldSampleRecord> note;
+  for (std::int32_t x = -1; x <= 1 && !note; ++x)
+    for (std::int32_t y = -2; y <= 2 && !note; ++y)
+      for (std::int32_t z = -2; z <= 2 && !note; ++z) {
+        const SurfaceLandmarkCell cell{shell_x + x, y, z};
+        const auto identity = need(identify_surface_landmark(planet, cell));
+        if (!identity) continue;
+        knowledge.surface_landmarks = FreedomSurfaceLandmarkState{
+            1, {{owner.catalog.id, planet.id, cell, identity->id, 3, 7}}};
+        note = FreedomFieldSampleRecord{{owner.catalog.id, body_id(planet.id)},
+                                        cell,
+                                        identity->id,
+                                        3,
+                                        identity->kind,
+                                        flight.origin.state.craft,
+                                        20};
+      }
+  if (!note) throw std::runtime_error("Composed sample metadata unavailable");
+  knowledge.field_samples =
+      FreedomFieldSampleState{1, flight.origin.state.craft, {*note}, {*note}};
+  auto& state = travel.travel;
+  auto& composed = *state.composed;
+  composed.active = FreedomComposedRouteKind::planet;
+  for (const auto& destination : owner.catalog.planets)
+    if (destination.descriptor.id != flight.world->planet) {
+      composed.selected_body =
+          BodyTarget{owner.catalog.id, body_id(destination.descriptor.id)};
+      break;
+    }
+  if (!composed.selected_body)
+    throw std::runtime_error("Composed destination unavailable");
+  state.phase = FreedomJumpPhase::spool;
+  state.spool_tick = flight.flight.tick;
+  flight.flight.tick += kJumpSpoolTicks;
+  flight.origin.state.tick = flight.flight.tick;
+  travel.voyage.voyage.resources.tick = flight.flight.tick;
+  composed.planet_committed = need(freeze_freedom_planet_jump_arrival(
+      {1, flight, *composed.selected_body, state.next_attempt}));
+  composed.planet_commitment_resources = travel.voyage.voyage.resources;
+  --travel.voyage.voyage.resources.jump_charges;
+  ++state.next_attempt;
+  // Frozen provider arrival is codec metadata, not a claim of actual native
+  // travel.
+  travel.voyage.voyage.voyage.base = composed.planet_committed->arrival;
+  travel.voyage.voyage.resources.tick =
+      composed.planet_committed->arrival.flight.tick;
+  state.phase = FreedomJumpPhase::idle;
+  state.spool_tick = 0;
+  composed.selected_body.reset();
+  const auto original = need(encode_freedom_travel_document_json(travel));
+  const FreedomRecoverySaveDocument source{travel, {}};
+  const auto plain = need(encode_freedom_recovery_document_json(source));
+  check(need(decode_freedom_recovery_document_json(plain)) == source &&
+            Json::parse(plain)["voyage"] == Json::parse(original),
+        "Recovery29 nests full composed56 receipt, billed resources and chart5 "
+        "without flattening");
+  const auto current = recovery_flight(source.voyage);
+  const auto pending = need(record_freedom_loss(
+      source, FreedomLossCause::irrecoverable_destruction,
+      current.origin.state.craft, current.flight.tick,
+      need(freedom_recovery_source_checksum(source.voyage))));
+  const auto pending_text =
+      need(encode_freedom_recovery_document_json(pending));
+  const auto resumed =
+      need(decode_freedom_recovery_document_json(pending_text));
+  check(resumed == pending && resumed.recovery.latest->retired == source.voyage,
+        "Pending composed loss retains the exact playable and retired full "
+        "voyage");
+  const auto replacement = need(complete_freedom_recovery(resumed));
+  const auto& retained =
+      std::get<FreedomTravelSaveDocument>(replacement.recovery.latest->retired);
+  const auto& replacement_knowledge =
+      recovery_knowledge(replacement.voyage).knowledge;
+  const auto replaced_flight = recovery_flight(replacement.voyage);
+  check(retained == travel &&
+            need(encode_freedom_travel_document_json(retained)) == original &&
+            replacement_knowledge.recipe.version ==
+                kFreedomPlanetaryKnowledgeVersion &&
+            replacement_knowledge.recipe.chart ==
+                kFreedomPlanetaryStartingChartVersion &&
+            replacement_knowledge.recipe.craft_lineage ==
+                replaced_flight.origin.lineage &&
+            replaced_flight.origin.lineage &&
+            replaced_flight.origin.lineage->generation == 1 &&
+            replacement_knowledge.entries == knowledge.entries &&
+            replacement_knowledge.surface_landmarks ==
+                knowledge.surface_landmarks &&
+            replaced_flight.origin.network == current.origin.network &&
+            replaced_flight.world->version == 2,
+        "Replacement preserves chart5 grants and authentic full retired "
+        "receipts while rebinding only the new craft");
+  check(replacement_knowledge.field_samples &&
+            replacement_knowledge.field_samples->carrier ==
+                replaced_flight.origin.state.craft &&
+            replacement_knowledge.field_samples->carried.empty() &&
+            replacement_knowledge.field_samples->journal ==
+                std::vector{*note} &&
+            retained.voyage.knowledge.field_samples == knowledge.field_samples,
+        "Composed replacement clears only the physical pouch and preserves "
+        "exact first notes and retired specimens");
+  const auto text = need(encode_freedom_recovery_document_json(replacement));
+  check(need(decode_freedom_recovery_document_json(text)) == replacement &&
+            need(complete_freedom_recovery(resumed)) == replacement,
+        "Completed composed replacement roundtrips and resumed loss produces "
+        "the same replacement");
+  for (unsigned fault = 0; fault < 5; ++fault) {
+    auto bad = Json::parse(text);
+    auto& retired = bad["recovery"]["latest"]["retired"];
+    switch (fault) {
+      case 0: retired["format_version"] = 57U; break;
+      case 1:
+        retired["format_version"] = kFreedomNetworkTravelSaveFormatVersion;
+        break;
+      case 2:
+        retired["travel"]["composed"]["planet_committed"]["source_checksum"] =
+            0U;
+        break;
+      case 3:
+        bad["voyage"]["knowledge"]["field_samples"]["journal"][0]["tick"] = 21U;
+        break;
+      case 4:
+        bad["voyage"]["knowledge"]["field_samples"]["carrier"] =
+            std::to_string(current.origin.state.craft.value);
+        break;
+      default: break;
+    }
+    check(!decode_freedom_recovery_document_json(bad.dump()),
+          "Composed recovery refuses unknown/mismatched nested policies, "
+          "forged receipts, rewritten notes and stale carrier");
+  }
+  check(need(encode_freedom_travel_document_json(travel)) == original &&
+            fingerprint == legacy_fingerprint,
+        "Composed wrapper checks leave source bytes and historical-only "
+        "fingerprint unchanged");
+}
 auto network_recovery(const std::filesystem::path& path) -> void {
   auto live = need(
       NativeFreedomFlightSession::open(need(native_network_new_game({42}))));
@@ -721,6 +934,7 @@ auto main() -> int {
     network_recovery(path / "network-recovery.json");
     session_contract(path / "recovery.json");
     landmark_retention();
+    composed_recovery();
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     std::filesystem::remove_all(path);

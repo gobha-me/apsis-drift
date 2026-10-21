@@ -8,6 +8,9 @@
 namespace apsis_drift {
 auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     -> std::expected<void, std::string> {
+  if (knowledge_ &&
+      knowledge_->recipe.version == kFreedomPlanetaryKnowledgeVersion)
+    return select_composed_local_jump(target);
   if (recovery_pending() ||
       (travel_ && travel_->phase != FreedomJumpPhase::idle))
     return std::unexpected{
@@ -145,6 +148,36 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
 }
 auto NativeFreedomFlightSession::local_jump_preview() const
     -> std::expected<FrozenLocalBodyJumpArrival, std::string> {
+  if (travel_ && travel_->composed) {
+    const auto& route = *travel_->composed;
+    if (route.active != FreedomComposedRouteKind::moon &&
+        route.active != FreedomComposedRouteKind::minor)
+      return std::unexpected{"Select a companion route first"};
+    const auto& slot = route.active == FreedomComposedRouteKind::moon
+                           ? route.moon
+                           : route.minor;
+    if (travel_->phase == FreedomJumpPhase::transit && slot.committed)
+      return *slot.committed;
+    if (!route.selected_body)
+      return std::unexpected{"Select the companion or home body first"};
+    auto model = document_.model;
+    if (moon_ || minor_) {
+      if (!slot.outbound)
+        return std::unexpected{
+            "The current excursion has no authenticated home departure"};
+      model = slot.outbound->request.home_model;
+    }
+    const auto policy = route.active == FreedomComposedRouteKind::moon
+                            ? kFreedomLocalBodyJumpVersion
+                            : kFreedomMinorLocalBodyJumpVersion;
+    const auto result =
+        freeze_local_body_jump_arrival({policy, document_, *route.selected_body,
+                                        travel_->next_attempt, model});
+    if (!result)
+      return std::unexpected{
+          "Companion source, destination or full clearance is unavailable"};
+    return *result;
+  }
   if (!travel_ || !travel_->local || !travel_->local->selected)
     return std::unexpected{"Select the moon or home body first"};
   const auto& local = *travel_->local;
@@ -187,6 +220,7 @@ auto NativeFreedomFlightSession::local_jump_preview() const
 }
 auto NativeFreedomFlightSession::local_jump_available() const
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->composed) return composed_body_jump_available();
   if (recovery_pending() || !travel_ || !travel_->local ||
       travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Select an idle local jump first"};
@@ -216,6 +250,7 @@ auto NativeFreedomFlightSession::local_jump_available() const
 }
 auto NativeFreedomFlightSession::begin_local_jump()
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->composed) return begin_composed_body_jump();
   if (const auto available = local_jump_available(); !available)
     return available;
   auto candidate = *this;
@@ -234,6 +269,8 @@ auto NativeFreedomFlightSession::begin_local_jump()
 auto NativeFreedomFlightSession::advance_local_jump(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (travel_ && travel_->composed)
+    return advance_composed_body_jump(controls, step);
   if (!std::isfinite(step.count()) || step != kSimulationStep || !travel_ ||
       !travel_->local || travel_->phase == FreedomJumpPhase::idle ||
       !resources_)
