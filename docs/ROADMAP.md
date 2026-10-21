@@ -99,11 +99,11 @@ inspected planet/Moon sites, a four-slot pouch, explicit discard and first notes
 that survive specimen loss. It adds no sale, extraction, probes or missions;
 the wider #207 horizon remains separate.
 
-The engineering follow-through [#662](https://github.com/gobha-me/apsis-drift/issues/662)
+The owner-selected follow-through [#662](https://github.com/gobha-me/apsis-drift/issues/662)
 adds a separate [planetary-chart start](FREEDOM_PLANET_TRAVEL.md) and manual jumps
 between known generated planets in a system. It grants only navigation facts,
 retains the existing charge rules and composes prior route receipts. This is the
-recommended implementation scope, not an additional quoted owner selection;
+bounded implementation scope selected on 2026-10-21;
 existing journeys and the broader deferred horizon keep their meanings.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)

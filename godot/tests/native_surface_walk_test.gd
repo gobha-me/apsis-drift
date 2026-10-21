@@ -3,6 +3,7 @@ const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const PositionStatus = preload("res://scripts/native/native_status.gd")
 const Landmarks = preload("res://scripts/native/native_surface_landmarks.gd")
+const CockpitGearChecks = preload("res://tests/native_cockpit_gear_checks.gd")
 const FieldSamples = preload("res://tests/native_field_samples.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
@@ -994,6 +995,8 @@ func run() -> void:
 	recording.close()
 	shell.configure_audio({"audio_hum": wave, "audio_propulsion": wave, "audio_persist": false})
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Surface test output unavailable"): shell.free(); quit(1); return
+	await CockpitGearChecks.run(self, args[0].path_join("source.json"), args[1], args[2].path_join("cockpit-gear"), check)
+	if failed: shell.free(); quit(1); return
 	await check_personal_surface_marker(args[0], args[1], args[2])
 	if failed: shell.free(); quit(1); return
 	await check_surface_landmarks(args[0], args[1], args[2])

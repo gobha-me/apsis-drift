@@ -89,3 +89,20 @@ settings, recorded observations and save dialogs retain their existing ownership
 and neutral-resume rules. This reduces the sidebar covering the boarding view,
 without changing the authored eye, route, physical state or saves. Text still
 wraps in small windows; cramped ingress and rough mesh joins remain unfinished.
+
+## First cockpit control
+
+The bounded continuation under #277 adds one provisional GEAR control to the
+existing console. Its placement derives from the admitted current SYSTEMS
+screen, rather than an earlier cockpit layout. The target is presentation,
+not an authenticated mechanical switch or proof of the pilot's reach.
+
+Activation immediately requests the existing C++ gear change. Assistance does
+not turn this command into an automatic landing. The visible switch follows
+accepted gear state; refused commands leave it unchanged. Existing paused
+controls remain available. Camera changes, pause, focus loss and Continue
+clear transient interaction, and holding an activation does not repeat it.
+
+The admitted pilot assets do not include a discrete hand reach/press/return
+clip. That animation and final seated visual quality remain open under #277;
+they do not block this usable control or restart the deferred anatomy studies.

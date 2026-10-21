@@ -36,6 +36,7 @@ func run() -> void:
 	check_foot_controller_look()
 	check_surface_interaction()
 	check_landed_hatch_neutral()
+	check_cockpit_interaction()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -783,4 +784,87 @@ func check_landed_hatch_neutral() -> void:
 	probe.call(false, "Remapped E exemption ignored independent selected camera button")
 	joy_button(JOY_BUTTON_X, false, 0)
 	physical_key(KEY_E, false)
+	controls.free()
+
+
+func check_cockpit_interaction() -> void:
+	var controls := Controls.new()
+	controls.persist = false
+	controls.thrust_mode = true
+	controls.initial_device = 0
+	root.add_child(controls)
+	controls.set_process_input(false)
+	controls.available_pads = {0: true, 9: true}
+	controls.observe_neutral()
+	var calls := [0]
+	controls.surface_interaction_requested.connect(func(): calls[0] += 1)
+	var send_key := func(down: bool) -> void:
+		physical_key(KEY_E, down)
+		var event := InputEventKey.new()
+		event.physical_keycode = KEY_E
+		event.pressed = down
+		controls._input(event)
+	controls.cockpit_interaction_enabled = true
+	send_key.call(true)
+	check(calls[0] == 1 and controls.cockpit_interaction_neutral() and controls.sample().thrust_axes[5] == 0.0, "Aimed cockpit E did not act once without firing strafe")
+	var repeated := InputEventKey.new()
+	repeated.physical_keycode = KEY_E
+	repeated.pressed = true
+	controls._input(repeated)
+	repeated.echo = true
+	controls._input(repeated)
+	check(calls[0] == 1, "Held/echoed cockpit E repeated its discrete action")
+	joy_button(JOY_BUTTON_RIGHT_SHOULDER, true, 0)
+	check(not controls.cockpit_interaction_neutral() and controls.sample().thrust_axes[5] == 1.0, "Cockpit E suppression erased the same action's independent pad channel")
+	joy_button(JOY_BUTTON_RIGHT_SHOULDER, false, 0)
+	controls.cockpit_interaction_enabled = false
+	check(controls.sample().thrust_axes[5] == 0.0, "Leaving a cockpit target while E was held created strafe")
+	send_key.call(false)
+	send_key.call(true)
+	check(controls.sample().thrust_axes[5] == 1.0 and calls[0] == 1, "Ordinary free-flight E did not recover after release")
+	controls.cockpit_interaction_enabled = true
+	repeated.echo = false
+	controls._input(repeated)
+	check(calls[0] == 1 and controls.sample().thrust_axes[5] == 0.0, "Entering a cockpit target with held E activated it")
+	send_key.call(false)
+	controls.observe_neutral()
+	send_key.call(true)
+	check(calls[0] == 2, "A fresh E press after release could not actuate the cockpit")
+	send_key.call(false)
+	for gate in ["focus", "disabled", "remap", "neutral"]:
+		controls.focused = gate != "focus"
+		controls.enabled = gate != "disabled"
+		controls.waiting_action = "camera" if gate == "remap" else ""
+		controls.needs_neutral = gate == "neutral"
+		check(not controls.cockpit_interaction_neutral(), "Cockpit neutral gate admitted " + gate)
+	controls.focused = true
+	controls.enabled = true
+	controls.waiting_action = ""
+	controls.needs_neutral = false
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	pad.device = 9
+	controls._input(pad)
+	check(calls[0] == 2, "Foreign pad actuated the cockpit")
+	pad.device = 0
+	controls._input(pad)
+	controls._input(pad)
+	check(calls[0] == 3, "Selected pad cockpit action failed or repeated while held")
+	pad.pressed = false
+	controls._input(pad)
+	joy_button(JOY_BUTTON_LEFT_STICK, true, 0)
+	check(controls.cockpit_interaction_neutral(), "Stationary head-look modifier blocked an aimed cockpit action")
+	joy_button(JOY_BUTTON_LEFT_STICK, false, 0)
+	check(controls.rebind("strafe_right", "key", {"kind": "key", "code": KEY_T}) and controls.rebind("camera", "key", {"kind": "key", "code": KEY_E}), "Cockpit E overlap remap refused")
+	controls.observe_neutral()
+	var camera_calls := [0]
+	controls.camera_requested.connect(func(): camera_calls[0] += 1)
+	send_key.call(true)
+	check(calls[0] == 4 and camera_calls[0] == 0, "Aimed gear interaction also fired its remapped camera key")
+	controls.cockpit_interaction_enabled = false
+	send_key.call(false)
+	send_key.call(true)
+	check(camera_calls[0] == 1 and calls[0] == 4, "Released ordinary E camera binding did not recover outside the target")
+	send_key.call(false)
 	controls.free()

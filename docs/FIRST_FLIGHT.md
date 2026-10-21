@@ -93,6 +93,14 @@ The three cockpit screens show native NAV, FLIGHT and SYSTEMS readings,
 including fuel, jump charges and applied propulsion. Reference altitude is
 height above the body's reference sphere, not ground clearance. Use paused
 Controls for commands; the screens themselves are read-only instruments.
+In cockpit view, look at the **GEAR UP/DOWN** pad beside the SYSTEMS screen.
+Release flight demands, then press **E**, selected-controller **A/Cross**, or
+left click when its label highlights. Hold right mouse or the configured look
+modifier to aim without steering. This gear-only command does not request
+landing assistance. A refusal leaves the indicated gear state unchanged;
+holding the action does not toggle repeatedly. Away from the target, E keeps
+its normal flight binding. The pad placement is provisional and the pilot's
+hand reach animation remains unfinished under #277.
 The seeded background stars are visual reference points, not selectable chart
 destinations or newly granted observations.
 

@@ -25,6 +25,9 @@ var mouse_free_look := false
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 var cockpit_displays: Node3D
+const CockpitControl = preload("res://scripts/native/native_cockpit_control.gd")
+var cockpit_control: Node3D
+var cockpit_mouse_held := false
 const DistantContacts = preload("res://scripts/native/native_distant_contacts.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
 var planet_optics := PlanetOptics.new()
@@ -388,6 +391,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		if not cockpit_displays.bind_screens(model.specification.screens) or not cockpit_displays.refresh(state, 0.0, true):
 			error = "The Wayfarer instrument screens are unavailable"
 			return false
+		if not setup_cockpit_control(): return false
 	else:
 		# Preserve the registered legacy frame without relabelling it Wayfarer.
 		var placeholder := MeshInstance3D.new()
@@ -905,6 +909,8 @@ func update_compact_hud() -> void:
 		var compact_steering := "RMB looks · release to steer" if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else "Mouse steers · RMB looks"
 		if survey_text.is_empty():
 			primary_status.text += "\n" + (compact_steering if state.get("orbital_survey", {}).get("selected", false) else steering_hint)
+	if cockpit_control_aimed():
+		primary_status.text += "\n" + surface_interaction_binding() + " · " + ("Stow gear" if state.get("surface", {}).get("gear_deployed", false) else "Deploy gear · manual")
 	context_source = null
 	if surface_walking():
 		context_source = landmark_inspect_button if not exposure.is_empty() and exposure.can_inspect and not state.surface_walk.return_access.get("within_reach", false) else surface_walk_button
@@ -923,6 +929,53 @@ func update_compact_hud() -> void:
 		elif player_input != null and player_input.last_device != "pad": context_action.text += " · left click"
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
+
+
+func setup_cockpit_control() -> bool:
+	if state.get("body_kind", "planet") == "minor": return true
+	cockpit_control = CockpitControl.new()
+	ship.add_child(cockpit_control)
+	if not cockpit_control.bind_screens(staged_model.specification.screens):
+		error = "The current cockpit gear control datum is unavailable"
+		return false
+	return true
+
+
+func cockpit_control_present() -> bool:
+	var boarding: Dictionary = state.get("boarding", {})
+	return cockpit_control != null and cockpit and state.get("frame_id") == "2" and state.get("body_kind", "planet") in ["planet", "moon"] and (boarding.get("state") == "seated" or boarding.get("seated", false)) and not surface_walking()
+
+
+func refresh_cockpit_control() -> void:
+	if cockpit_control == null: return
+	var active: bool = activated and focused and not paused and controls_armed and error.is_empty() and not journey_dialog_open and not recovery_notified and not mode_change_pending and save_dialog != null and not save_dialog.visible and player_input != null and player_input.enabled and not player_input.needs_neutral and player_input.waiting_action.is_empty()
+	cockpit_control.present(state.get("surface", {}).get("gear_deployed", false), cockpit_control_present(), active, camera)
+	if player_input != null: player_input.cockpit_interaction_enabled = cockpit_control.aimed
+
+
+func clear_cockpit_control() -> void:
+	cockpit_mouse_held = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if cockpit_control != null: cockpit_control.clear()
+	if player_input != null: player_input.cockpit_interaction_enabled = false
+
+
+func cockpit_control_aimed() -> bool:
+	return cockpit_control != null and cockpit_control.aimed
+
+
+func request_cockpit_gear() -> void:
+	refresh_cockpit_control()
+	if not cockpit_control_aimed(): return
+	if not player_input.cockpit_interaction_neutral() or (flight_mouse != null and flight_mouse.offset != Vector2.ZERO):
+		report_action_status("Release flight controls before using the gear switch.")
+		return
+	var deployed: bool = not state.get("surface", {}).get("gear_deployed", false)
+	if not bridge.set_freedom_landing_gear(deployed):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	report_action_status("Gear deployed · manual descent" if deployed else "Gear stowed")
 
 
 func setup_controls() -> void:
@@ -1278,6 +1331,9 @@ func landed_hatch_available() -> bool:
 
 
 func request_surface_interaction() -> void:
+	if cockpit_control_aimed():
+		request_cockpit_gear()
+		return
 	if not activated or not focused or paused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty(): return
 	if not surface_walking():
 		if not landed_hatch_available(): return
@@ -1545,6 +1601,7 @@ func open_save_dialog() -> void:
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	clear_cockpit_control()
 	clear_flight_mouse()
 	mouse_look.set_active(false)
 	if state.get("port_docking", {}).get("active", false):
@@ -1589,6 +1646,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 func change_camera() -> void:
 	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2" and not surface_walking():
 		cockpit = not cockpit
+		clear_cockpit_control()
 		clear_flight_mouse()
 		look_offset = Vector2.ZERO
 		update_view(0.0)
@@ -1841,17 +1899,24 @@ func sync_mouse_look() -> void:
 
 
 func _exit_tree() -> void:
+	clear_cockpit_control()
 	clear_flight_mouse()
 	mouse_look.set_active(false)
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed: cockpit_mouse_held = false
 	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
 	if player_input != null and event.device == player_input.device:
 		if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > float(player_input.settings.deadzone)):
 			clear_flight_mouse()
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and mouse_look.active:
-		if surface_walking(): request_surface_interaction()
+		refresh_cockpit_control()
+		if cockpit_control_aimed():
+			if not cockpit_mouse_held:
+				cockpit_mouse_held = true
+				request_cockpit_gear()
+		elif surface_walking(): request_surface_interaction()
 		elif context_action != null and context_action.visible and not context_action.disabled:
 			context_action.pressed.emit()
 		get_viewport().set_input_as_handled()
@@ -1886,6 +1951,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.physical_keycode == KEY_F3 and error.is_empty() and focused and state.frame_id == "2" and not surface_walking():
 		# Historical alias may inspect the camera while paused; no world action.
 		cockpit = not cockpit
+		clear_cockpit_control()
 		clear_flight_mouse()
 		look_offset = Vector2.ZERO
 		update_view(0.0)
@@ -2286,4 +2352,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_surface_landmarks()
 	refresh_orbital_survey()
 	refresh_distant_contacts()
+	refresh_cockpit_control()
 	update_compact_hud()
