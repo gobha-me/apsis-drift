@@ -141,9 +141,11 @@ auto orbital_readout(const std::filesystem::path& path, std::uint64_t seed,
 namespace {
 auto planet_travel_trace(const std::filesystem::path& prefix,
                          apsis_drift::Seed seed,
-                         apsis_drift::SimulationTick tick) -> bool {
+                         apsis_drift::SimulationTick tick,
+                         bool recovering = false) -> bool {
   using namespace apsis_drift;
-  auto selected = native_planetary_network_new_game(seed);
+  auto selected = recovering ? native_jump_recovery_new_game(seed, 2)
+                             : native_planetary_network_new_game(seed);
   if (!selected) return false;
   auto boarding = NativeFreedomFlightSession::open(std::move(*selected));
   if (!boarding || !boarding->save_as(prefix.string() + ".station.json"))
@@ -184,7 +186,8 @@ auto planet_travel_trace(const std::filesystem::path& prefix,
                                    {},
                                    NativeStartingAssemblySelection{},
                                    boarding->boarding()};
-  source.travel.version = kFreedomComposedTravelStateVersion;
+  source.travel.version = recovering ? kFreedomRecoveringTravelStateVersion
+                                     : kFreedomComposedTravelStateVersion;
   source.travel.composed.emplace();
   auto session = NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, source, (*home)->descriptor, {}});
@@ -307,7 +310,8 @@ auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
     }
   }
   // New sidecars only. Every existing pair trace path and byte stays intact.
-  return planet_travel_trace(path.string() + ".planet", seed, tick);
+  return planet_travel_trace(path.string() + ".planet", seed, tick) &&
+         planet_travel_trace(path.string() + ".recovery", seed, tick, true);
 }
 } // namespace
 

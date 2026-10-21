@@ -34,6 +34,25 @@ func _initialize() -> void:
 	check(position == position_before, "Position formatting mutated the supplied observation")
 	var snapshot := {"altitude": 900.0, "surface_speed": 1.9, "radial_rate": 1.9, "air_density": 1.0685, "attached": false, "surface": {}, "surface_walk": {}, "jump": {"phase": "idle", "selected": "next"}, "resources": {"selected": true, "fraction": 0.9, "jump_charges": 3}, "chart": {"rows": [{"name": "Known home", "current": true, "system_id": "here"}, {"name": "Known neighbor", "current": false, "system_id": "next"}]}}
 	var original := snapshot.duplicate(true)
+	var recovering := snapshot.duplicate(true)
+	recovering.jump.recovery = {"version": 1, "remaining_seconds": 45.0, "extra_radius_metres": 2000.0, "ready": false, "pending_arrival": false}
+	check("Drive recovery · 45.0 s" in Status.summary(recovering), "Recovery countdown and uncertainty bound disappeared from compact HUD")
+	for field in ["remaining_seconds", "extra_radius_metres"]:
+		for invalid in [null, NAN, INF, -1.0, "45"]:
+			var damaged := recovering.duplicate(true)
+			damaged.jump.recovery[field] = invalid
+			check("unavailable" in Status.summary(damaged), "Malformed recovery reading reached HUD: " + field)
+	for damage in ["extra", "version", "remaining", "radius", "ready", "pending"]:
+		var damaged := recovering.duplicate(true)
+		match damage:
+			"extra": damaged.jump.recovery.extra = true
+			"version": damaged.jump.recovery.version = 1.0
+			"remaining": damaged.jump.recovery.remaining_seconds = 45.1
+			"radius": damaged.jump.recovery.extra_radius_metres = 2000.1
+			"ready": damaged.jump.recovery.ready = true
+			"pending": damaged.jump.recovery.pending_arrival = true
+		check("unavailable" in Status.summary(damaged), "Inconsistent recovery packet reached HUD: " + damage)
+
 	check("Atmosphere" in Status.summary(snapshot) and "Reference altitude 0.90 km" in Status.summary(snapshot) and "Known neighbor" in Status.summary(snapshot), "Reference height, modeled air or selected target lost")
 	check(not "Coasting" in Status.summary(snapshot), "Powered or assisted flight granted coasting")
 	for field in ["altitude", "surface_speed", "radial_rate", "air_density"]:

@@ -7,6 +7,8 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomLocalBodyJumpVersion{1};
 inline constexpr double kFreedomLocalMoonArrivalClearanceMetres{10000.0};
 inline constexpr std::uint32_t kFreedomMinorLocalBodyJumpVersion{2};
+inline constexpr std::uint32_t kFreedomRecoveryLocalBodyJumpVersion{3};
+inline constexpr std::uint32_t kFreedomRecoveryMinorLocalBodyJumpVersion{4};
 inline constexpr double kFreedomLocalMinorArrivalClearanceMetres{11000.0};
 
 // source.tick is the actual COMMIT tick after the ordinary kJumpSpoolTicks.
@@ -18,6 +20,7 @@ struct FreedomLocalBodyJumpRequest {
   BodyTarget destination;
   std::uint64_t attempt{1};
   FreedomFlightModel home_model;
+  std::optional<FreedomDriveRecoveryState> recovery{};
   friend auto operator==(const FreedomLocalBodyJumpRequest&,
                          const FreedomLocalBodyJumpRequest&) -> bool = default;
 };
@@ -38,6 +41,7 @@ struct FrozenLocalBodyJumpArrival {
   FreedomFlightSaveDocument arrival;
   SystemPositionMetres source_system_position, arrival_system_position;
   FreedomLocalBodyClearance departure_volume, arrival_volume;
+  std::optional<FrozenFreedomJumpUncertainty> recovery{};
   friend auto operator==(const FrozenLocalBodyJumpArrival&,
                          const FrozenLocalBodyJumpArrival&) -> bool = default;
 };
@@ -54,8 +58,9 @@ enum class FreedomLocalBodyJumpError : std::uint8_t {
   unclear_arrival,
   invalid_frozen_solution,
 };
-// Pure deterministic same-system home<->moon geometry. No random scatter,
-// relocation of the live craft, charge debit/refill, new clock or risk policy.
+// Legacy1/2 preserve exact home<->Moon/minor geometry. Recovery3/4 require
+// explicit recovery1 input and add its bounded independent location error.
+// No relocation of the live craft, charge debit/refill or independent clock.
 // Arrival occurs at source.tick+kJumpTransitTicks and is not a landing promise.
 [[nodiscard]] auto freeze_local_body_jump_arrival(
     const FreedomLocalBodyJumpRequest&)

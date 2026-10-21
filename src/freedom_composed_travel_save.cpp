@@ -2,6 +2,7 @@
 
 #include "apsis_drift/freedom_system_network.hpp"
 #include "freedom_local_travel_save_internal.hpp"
+#include "freedom_resource_save_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -36,34 +37,60 @@ auto planet_json(const FrozenFreedomPlanetJumpArrival& f)
   const auto target = encode_body_target(f.request.destination);
   if (!source || !arrival || !target)
     return std::unexpected{failure("Planet receipt owner cannot encode")};
-  return Json{{"version", f.version},
+  Json result{{"version", f.version},
               {"source", Json::parse(*source)},
               {"destination", Json::parse(*target)},
               {"attempt", f.request.attempt},
               {"source_checksum", f.source_checksum},
               {"arrival_tick", f.arrival_tick},
               {"arrival", Json::parse(*arrival)}};
+  if (f.request.recovery)
+    result["recovery_input"] = drive_json(*f.request.recovery);
+  if (f.recovery) result["recovery"] = uncertainty_json(*f.recovery);
+  return result;
 }
 auto planet_value(const Json& j)
     -> std::expected<FrozenFreedomPlanetJumpArrival, SaveSchemaError> {
-  if (!fields(j, {"version", "source", "destination", "attempt",
-                  "source_checksum", "arrival_tick", "arrival"}) ||
+  const bool recovering = j.is_object() && j.contains("version") &&
+                          j["version"].is_number_unsigned() &&
+                          j["version"] == kFreedomRecoveryPlanetJumpVersion;
+  auto shape = j;
+  if (recovering) {
+    if (!j.contains("recovery_input") || !j.contains("recovery"))
+      return std::unexpected{failure("Missing planet recovery input/sample")};
+    shape.erase("recovery_input");
+    shape.erase("recovery");
+  }
+  if (!fields(shape, {"version", "source", "destination", "attempt",
+                      "source_checksum", "arrival_tick", "arrival"}) ||
       !uints(j, {"version", "attempt", "source_checksum", "arrival_tick"}) ||
-      j["version"] != kFreedomPlanetJumpVersion)
+      (j["version"] != kFreedomPlanetJumpVersion && !recovering))
     return std::unexpected{failure("Invalid closed planet receipt")};
   auto source = decode_freedom_flight_document_json(j["source"].dump());
   const auto arrival = decode_freedom_flight_document_json(j["arrival"].dump());
   const auto target = decode_body_target(j["destination"].dump());
   if (!source || !arrival || !target)
     return std::unexpected{failure("Invalid planet receipt owner")};
-  const auto frozen = freeze_freedom_planet_jump_arrival(
-      {kFreedomPlanetJumpVersion, std::move(*source), *target,
-       j["attempt"].get<std::uint64_t>()});
+  FreedomPlanetJumpRequest request{j["version"].get<std::uint32_t>(),
+                                   std::move(*source), *target,
+                                   j["attempt"].get<std::uint64_t>()};
+  if (recovering) {
+    auto drive = drive_value(j["recovery_input"], request.source.flight.tick);
+    if (!drive) return std::unexpected{drive.error()};
+    request.recovery = *drive;
+  }
+  const auto frozen = freeze_freedom_planet_jump_arrival(request);
   if (!frozen || frozen->arrival != *arrival ||
       frozen->arrival_tick != j["arrival_tick"].get<SimulationTick>() ||
       frozen->source_checksum != j["source_checksum"].get<std::uint64_t>())
     return std::unexpected{
         failure("Planet receipt differs from frozen solution")};
+  if (recovering) {
+    const auto sample = uncertainty_value(j["recovery"]);
+    if (!sample || !frozen->recovery || *sample != *frozen->recovery)
+      return std::unexpected{
+          failure("Planet recovery sample differs from its input")};
+  }
   return *frozen;
 }
 auto checkpoint_json(const FreedomComposedLocalCheckpoint& c)
@@ -150,7 +177,25 @@ struct Event {
   const FreedomFlightSaveDocument* source_flight{};
   const FreedomFlightSaveDocument* arrival{};
   const FrozenLocalBodyJumpArrival* local{};
+  std::uint64_t source_checksum{};
+  const FreedomDriveRecoveryState* recovery_input{};
 };
+auto recovery_kind(FreedomComposedRouteKind kind) -> FreedomJumpRecoveryKind {
+  switch (kind) {
+    case FreedomComposedRouteKind::system:
+      return FreedomJumpRecoveryKind::system;
+    case FreedomComposedRouteKind::planet:
+      return FreedomJumpRecoveryKind::planet;
+    case FreedomComposedRouteKind::moon: return FreedomJumpRecoveryKind::moon;
+    case FreedomComposedRouteKind::minor: return FreedomJumpRecoveryKind::minor;
+  }
+  return static_cast<FreedomJumpRecoveryKind>(255);
+}
+auto stamp_of(const Event& e)
+    -> std::expected<FreedomJumpRecoveryStamp, FreedomJumpRecoveryError> {
+  return make_freedom_jump_recovery_stamp(recovery_kind(e.kind), e.attempt,
+                                          e.source_checksum, e.source_tick);
+}
 auto event(const FrozenLocalBodyJumpArrival& f, FreedomComposedRouteKind kind,
            const FreedomResources* bill) -> Event {
   return {kind,
@@ -162,12 +207,18 @@ auto event(const FrozenLocalBodyJumpArrival& f, FreedomComposedRouteKind kind,
           bill,
           &f.request.source,
           &f.arrival,
-          &f};
+          &f,
+          f.source_checksum,
+          f.request.recovery ? &*f.request.recovery : nullptr};
 }
 auto bill_valid(const FreedomResources& bill,
-                const FreedomFlightSaveDocument& source) -> bool {
+                const FreedomFlightSaveDocument& source, bool recovering,
+                const std::optional<FreedomDriveRecoveryState>& input) -> bool {
   return validate_freedom_resources(bill, source).has_value() &&
-         bill.jump_charges > 0;
+         bill.jump_charges > 0 &&
+         bill.version == (recovering ? kFreedomRecoveryResourceVersion
+                                     : kFreedomResourceVersion) &&
+         bill.drive == input;
 }
 auto receipt_valid(const FrozenLocalBodyJumpArrival& f,
                    const FreedomFlightSaveDocument& current,
@@ -179,10 +230,10 @@ auto receipt_valid(const FrozenLocalBodyJumpArrival& f,
          f.request.source.flight.tick <= current.flight.tick;
 }
 auto exact_system_arrival(const FrozenFreedomJumpArrival& f,
-                          const FreedomFlightSaveDocument& flight,
-                          const FreedomSystemNetwork& network) -> bool {
-  const auto system =
-      resolve_freedom_network_system(network, f.preview.request.destination, 2);
+                          const FreedomFlightSaveDocument& flight) -> bool {
+  const auto system = travel_source_world(f.preview.request.universe_seed,
+                                          f.preview.request.destination,
+                                          f.preview.request.network);
   if (!system) return false;
   const auto centre = resolve_planet_ephemeris(
       *system, f.preview.reference_planet, {f.preview.arrival_tick, 0});
@@ -216,11 +267,19 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   const auto current = travel_target_of(flight);
   const auto& ledger = d.voyage.voyage.resources;
   const auto now = flight.flight.tick;
-  if (s.version != kFreedomComposedTravelStateVersion || !s.composed ||
-      s.local || s.prior_moon || s.origin_routes || !s.next_attempt ||
-      !flight.origin.network ||
-      d.voyage.knowledge.recipe.version != kFreedomPlanetaryKnowledgeVersion ||
-      !current || !d.craft_binding ||
+  const bool recovering = s.version == kFreedomRecoveringTravelStateVersion;
+  const auto knowledge_version = d.voyage.knowledge.recipe.version;
+  const bool knowledge_matches =
+      recovering ? (knowledge_version == kFreedomTravelKnowledgeVersion ||
+                    freedom_knowledge_uses_network(knowledge_version))
+                 : (flight.origin.network &&
+                    knowledge_version == kFreedomPlanetaryKnowledgeVersion);
+  if ((!recovering && s.version != kFreedomComposedTravelStateVersion) ||
+      !s.composed || s.local || s.prior_moon || s.origin_routes ||
+      !s.next_attempt || !knowledge_matches ||
+      ledger.version != (recovering ? kFreedomRecoveryResourceVersion
+                                    : kFreedomResourceVersion) ||
+      ledger.drive.has_value() != recovering || !current || !d.craft_binding ||
       *d.craft_binding != NativeStartingAssemblySelection{} ||
       !travel_valid_pilot_binding(d, flight))
     return std::unexpected{failure("Composed travel requires explicit recipe5, "
@@ -231,11 +290,17 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
       (c.active == FreedomComposedRouteKind::system && c.selected_body) ||
       (c.active != FreedomComposedRouteKind::system && s.selected))
     return std::unexpected{failure("Invalid composed route selection")};
-  const auto network = generate_freedom_system_network(
-      flight.origin.recipe.universe_seed, flight.origin.network->version);
+  std::optional<FreedomSystemNetwork> network;
+  if (flight.origin.network) {
+    auto generated = generate_freedom_system_network(
+        flight.origin.recipe.universe_seed, flight.origin.network->version);
+    if (!generated)
+      return std::unexpected{failure("Composed network unavailable")};
+    network = *generated;
+  }
   const auto home_system =
       generate_physical_origin_system(flight.origin.recipe.universe_seed, 2);
-  if (!network || !home_system)
+  if (!home_system)
     return std::unexpected{failure("Composed source network unavailable")};
   const auto catalog = generate_secondary_body_catalog(*home_system);
   if (!catalog)
@@ -244,14 +309,20 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
                         body_id(flight.origin.recipe.home_planet)};
   const BodyTarget moon{home.system, catalog->bodies[0].node.id};
   const BodyTarget minor{home.system, catalog->bodies[1].node.id};
-  if (s.selected && (!flight.world || *s.selected == current->system ||
-                     !find_freedom_system_network_node(*network, *s.selected)))
+  const auto pair =
+      generate_first_intersystem_identities(flight.origin.recipe.universe_seed);
+  if (s.selected &&
+      (!flight.world || *s.selected == current->system ||
+       (network ? !find_freedom_system_network_node(*network, *s.selected)
+                : (*s.selected != pair.origin_system &&
+                   *s.selected != pair.target_system))))
     return std::unexpected{failure("Invalid known system destination")};
   if (c.selected_body) {
     bool allowed{};
     switch (c.active) {
       case FreedomComposedRouteKind::planet:
-        allowed = flight.world && c.selected_body->system == current->system &&
+        allowed = knowledge_version == kFreedomPlanetaryKnowledgeVersion &&
+                  flight.world && c.selected_body->system == current->system &&
                   *c.selected_body != *current &&
                   known_planet(d.voyage.knowledge, *c.selected_body, now);
         break;
@@ -280,8 +351,10 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     const auto& r = f.preview.request;
     const auto& bill = *s.commitment_resources;
     if (!validate_frozen_freedom_jump_arrival(f) ||
-        r.version != kFreedomNetworkJumpTargetingVersion || !f.preview.volume ||
-        !f.preview.volume->clear() || !f.point_assessment.clear() ||
+        r.version != (recovering ? kFreedomRecoveryJumpTargetingVersion
+                                 : kFreedomNetworkJumpTargetingVersion) ||
+        !f.preview.volume || !f.preview.volume->clear() ||
+        !f.point_assessment.clear() ||
         r.universe_seed != flight.origin.recipe.universe_seed ||
         r.network != flight.origin.network ||
         r.lineage != flight.origin.lineage || r.craft != ledger.craft ||
@@ -291,7 +364,14 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
             std::numeric_limits<SimulationTick>::max() - 2 ||
         r.source.tick > now || !validate_freedom_resources(bill) ||
         bill.craft != r.craft || bill.frame != r.source.craft ||
-        bill.tick != r.source.tick || !bill.jump_charges)
+        bill.tick != r.source.tick || !bill.jump_charges ||
+        bill.version != (recovering ? kFreedomRecoveryResourceVersion
+                                    : kFreedomResourceVersion) ||
+        bill.drive != r.recovery ||
+        (recovering && (!bill.drive || !f.recovery ||
+                        !validate_freedom_drive_recovery(
+                            *bill.drive, r.universe_seed, r.craft,
+                            r.source.craft, r.lineage, r.source.tick))))
       return std::unexpected{failure("Invalid composed system proof/bill")};
     add({FreedomComposedRouteKind::system,
          r.attempt,
@@ -302,30 +382,40 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
          &bill,
          nullptr,
          nullptr,
-         nullptr});
+         nullptr,
+         recovering ? f.recovery->source_checksum : 0,
+         r.recovery ? &*r.recovery : nullptr});
   }
   if (c.planet_committed) {
     const auto& f = *c.planet_committed;
-    if (!validate_frozen_freedom_planet_jump_arrival(f) ||
+    if (knowledge_version != kFreedomPlanetaryKnowledgeVersion ||
+        f.version != (recovering ? kFreedomRecoveryPlanetJumpVersion
+                                 : kFreedomPlanetJumpVersion) ||
+        !validate_frozen_freedom_planet_jump_arrival(f) ||
         !same_owner(f.request.source, flight) ||
         f.request.attempt == std::numeric_limits<std::uint64_t>::max() ||
         f.arrival_tick >= std::numeric_limits<SimulationTick>::max() - 2 ||
-        !bill_valid(*c.planet_commitment_resources, f.request.source))
+        !bill_valid(*c.planet_commitment_resources, f.request.source,
+                    recovering, f.request.recovery))
       return std::unexpected{failure("Invalid composed planet proof/bill")};
     add({FreedomComposedRouteKind::planet, f.request.attempt,
          f.request.source.flight.tick, f.arrival_tick,
          *travel_target_of(f.request.source), f.request.destination,
          &*c.planet_commitment_resources, &f.request.source, &f.arrival,
-         nullptr});
+         nullptr, f.source_checksum,
+         f.request.recovery ? &*f.request.recovery : nullptr});
   }
   for (const auto kind :
        {FreedomComposedRouteKind::moon, FreedomComposedRouteKind::minor}) {
     const auto& local =
         kind == FreedomComposedRouteKind::moon ? c.moon : c.minor;
     const auto target = kind == FreedomComposedRouteKind::moon ? moon : minor;
-    const auto policy = kind == FreedomComposedRouteKind::moon
-                            ? kFreedomLocalBodyJumpVersion
-                            : kFreedomMinorLocalBodyJumpVersion;
+    const auto policy =
+        kind == FreedomComposedRouteKind::moon
+            ? (recovering ? kFreedomRecoveryLocalBodyJumpVersion
+                          : kFreedomLocalBodyJumpVersion)
+            : (recovering ? kFreedomRecoveryMinorLocalBodyJumpVersion
+                          : kFreedomMinorLocalBodyJumpVersion);
     if (local.committed.has_value() != local.commitment_resources.has_value() ||
         local.committed.has_value() != local.outbound.has_value())
       return std::unexpected{
@@ -337,7 +427,8 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         !receipt_valid(out, flight, policy) ||
         travel_target_of(out.request.source) != home ||
         out.request.destination != target ||
-        !bill_valid(*local.commitment_resources, last.request.source))
+        !bill_valid(*local.commitment_resources, last.request.source,
+                    recovering, last.request.recovery))
       return std::unexpected{
           failure("Invalid companion source or current outbound")};
     if (travel_target_of(last.request.source) == target) {
@@ -377,6 +468,38 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   if (s.next_attempt != (latest ? latest->attempt + 1 : 1))
     return std::unexpected{
         failure("Composed attempt counter differs from latest proof")};
+  if (recovering) {
+    if (!latest) {
+      if (ledger.drive->last_use)
+        return std::unexpected{
+            failure("Unused recovering journey retains a drive use")};
+    } else {
+      const auto stamp = stamp_of(*latest);
+      if (!stamp || ledger.drive->last_use != std::optional{*stamp})
+        return std::unexpected{
+            failure("Current drive use differs from latest typed commitment")};
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto& e = events[i];
+      if (!e.recovery_input ||
+          (!e.recovery_input->last_use && e.attempt != 1) ||
+          (e.recovery_input->last_use &&
+           (e.recovery_input->last_use->attempt >=
+                std::numeric_limits<std::uint64_t>::max() - 1 ||
+            e.recovery_input->last_use->attempt + 1 != e.attempt ||
+            e.recovery_input->last_use->arrival_tick > e.source_tick)))
+        return std::unexpected{
+            failure("Recovery input differs from preceding actual attempt")};
+      if (!e.recovery_input->last_use) continue;
+      for (std::size_t j = 0; j < count; ++j)
+        if (events[j].attempt == e.recovery_input->last_use->attempt) {
+          const auto prior = stamp_of(events[j]);
+          if (!prior || *prior != *e.recovery_input->last_use)
+            return std::unexpected{
+                failure("Recovery input rewrites a retained typed use")};
+        }
+    }
+  }
   for (const auto* checkpoint : {&c.moon, &c.minor})
     if (checkpoint->committed &&
         checkpoint->committed->request.destination != home &&
@@ -448,10 +571,9 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   if (now == latest->arrival_tick) {
     if (!latest->bill || ledger.flight_quanta != latest->bill->flight_quanta ||
         ledger.jump_charges != latest->bill->jump_charges - 1 ||
-        (latest->arrival
-             ? (flight.flight != latest->arrival->flight ||
-                flight.origin != latest->arrival->origin)
-             : !exact_system_arrival(*s.committed, flight, *network)))
+        (latest->arrival ? (flight.flight != latest->arrival->flight ||
+                            flight.origin != latest->arrival->origin)
+                         : !exact_system_arrival(*s.committed, flight)))
       return std::unexpected{
           failure("Instant arrival pose or bill differs from frozen receipt")};
   }
@@ -494,7 +616,9 @@ auto encode_composed_travel(const FreedomTravelSaveDocument& d)
   if (!moon) return std::unexpected{moon.error()};
   if (!minor) return std::unexpected{minor.error()};
   const Json root{
-      {"format_version", kFreedomComposedTravelSaveFormatVersion},
+      {"format_version", s.version == kFreedomRecoveringTravelStateVersion
+                             ? kFreedomRecoveringTravelSaveFormatVersion
+                             : kFreedomComposedTravelSaveFormatVersion},
       {"voyage", Json::parse(*voyage)},
       {"travel",
        {{"version", s.version},
@@ -528,13 +652,18 @@ auto decode_composed_travel(const Json& root)
     -> std::expected<FreedomTravelSaveDocument, SaveSchemaError> {
   if (!fields(root, {"format_version", "voyage", "travel", "craft_binding",
                      "seated_pilot"}) ||
-      root["format_version"] != kFreedomComposedTravelSaveFormatVersion)
+      (root["format_version"] != kFreedomComposedTravelSaveFormatVersion &&
+       root["format_version"] != kFreedomRecoveringTravelSaveFormatVersion))
     return std::unexpected{failure("Invalid closed composed root")};
   const auto& s = root["travel"];
+  const auto version =
+      root["format_version"] == kFreedomRecoveringTravelSaveFormatVersion
+          ? kFreedomRecoveringTravelStateVersion
+          : kFreedomComposedTravelStateVersion;
   if (!fields(s, {"version", "phase", "selected", "spool_tick", "next_attempt",
                   "committed", "commitment_resources", "composed"}) ||
       !uints(s, {"version", "phase", "spool_tick", "next_attempt"}) ||
-      s["version"] != kFreedomComposedTravelStateVersion ||
+      s["version"] != version ||
       s["phase"] > static_cast<unsigned>(FreedomJumpPhase::transit))
     return std::unexpected{failure("Invalid composed shared phase")};
   const auto& c = s["composed"];
@@ -553,7 +682,7 @@ auto decode_composed_travel(const Json& root)
   d.voyage = std::move(*voyage);
   d.craft_binding = NativeStartingAssemblySelection{};
   auto& state = d.travel;
-  state.version = kFreedomComposedTravelStateVersion;
+  state.version = version;
   state.phase = static_cast<FreedomJumpPhase>(s["phase"].get<unsigned>());
   state.spool_tick = s["spool_tick"].get<SimulationTick>();
   state.next_attempt = s["next_attempt"].get<std::uint64_t>();

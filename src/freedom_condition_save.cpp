@@ -75,7 +75,8 @@ auto decode_voyage(const Json& j)
       j["format_version"] == kFreedomMinorTravelSaveFormatVersion ||
       j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
       j["format_version"] == kFreedomNetworkTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomComposedTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected(d.error());
     return FreedomConditionVoyage{std::move(*d)};
@@ -141,6 +142,12 @@ auto validate_freedom_condition_document(const FreedomConditionSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
   if (d.consequence_version != kImpactConsequencesVersion)
     return std::unexpected(failure("Unsupported consequence policy"));
+  if (const auto* knowledge =
+          std::get_if<FreedomKnowledgeSaveDocument>(&d.voyage);
+      knowledge && knowledge->voyage.resources.drive &&
+      knowledge->voyage.resources.drive->last_use)
+    return std::unexpected(
+        failure("A recorded drive use requires its travel57 owner"));
   if (const auto encoded = encode_voyage(d.voyage); !encoded)
     return std::unexpected(encoded.error());
   if (!supported(d.voyage))

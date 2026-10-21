@@ -96,6 +96,78 @@ auto clearance(const PhysicalLocalSystem& system, SimulationTick tick,
 
 auto freeze_freedom_planet_jump_arrival(const FreedomPlanetJumpRequest& request)
     -> std::expected<FrozenFreedomPlanetJumpArrival, FreedomPlanetJumpError> {
+  if (request.version == kFreedomRecoveryPlanetJumpVersion) {
+    if (!request.recovery) return std::unexpected{Error::unsupported_policy};
+    auto baseline = request;
+    baseline.version = kFreedomPlanetJumpVersion;
+    baseline.recovery.reset();
+    auto frozen = freeze_freedom_planet_jump_arrival(baseline);
+    if (!frozen) return std::unexpected{frozen.error()};
+    const auto owner = hydrate_freedom_flight_document(request.source);
+    if (!owner) return std::unexpected{Error::invalid_owner};
+    const auto relative =
+        relative_freedom_flight_state(request.source, owner->system);
+    if (!relative || !relative->frame.planet)
+      return std::unexpected{Error::invalid_source};
+    const auto recovery = freeze_freedom_jump_uncertainty(
+        request.source.origin.recipe.universe_seed,
+        request.source.origin.state.craft, request.source.flight.craft,
+        request.source.origin.lineage, frozen->source_checksum,
+        FreedomJumpRecoveryKind::planet, request.source.flight.tick,
+        {owner->system.catalog.id, body_id(*relative->frame.planet)},
+        request.destination, request.attempt, *request.recovery);
+    if (!recovery) return std::unexpected{Error::invalid_source};
+    if (recovery->extra_radius_millimetres) {
+      const auto craft = resolve_craft_frame(request.source.flight.craft);
+      if (!craft) return std::unexpected{Error::invalid_owner};
+      const auto& p = craft->properties;
+      const double hull_radius =
+          norm({static_cast<double>(std::max(std::abs(p.hull_min_mm[0]),
+                                             std::abs(p.hull_max_mm[0]))) /
+                    1000,
+                static_cast<double>(std::max(std::abs(p.hull_min_mm[1]),
+                                             std::abs(p.hull_max_mm[1]))) /
+                    1000,
+                static_cast<double>(std::max(std::abs(p.hull_min_mm[2]),
+                                             std::abs(p.hull_max_mm[2]))) /
+                    1000});
+      const auto envelope = clearance(
+          owner->system, frozen->arrival_tick, frozen->arrival_system_position,
+          hull_radius +
+              static_cast<double>(recovery->extra_radius_millimetres) / 1000,
+          request.source.model.atmosphere);
+      if (!envelope) return std::unexpected{envelope.error()};
+      if (!envelope->clear()) return std::unexpected{Error::unclear_arrival};
+      auto& point = frozen->arrival.flight.position_metres;
+      point.x += recovery->offset_metres.x;
+      point.y += recovery->offset_metres.y;
+      point.z += recovery->offset_metres.z;
+      const auto canonical = canonicalize_rigid_body_state(
+          RigidBodyWorldContext{owner->system}, frozen->arrival.flight);
+      if (!canonical) return std::unexpected{Error::invalid_geometry};
+      frozen->arrival.flight = *canonical;
+      if (!hydrate_freedom_flight_document(frozen->arrival))
+        return std::unexpected{Error::invalid_geometry};
+      const auto ephemeris = resolve_planet_ephemeris(
+          owner->system, PlanetId{request.destination.body.value},
+          {frozen->arrival_tick, 0});
+      if (!ephemeris) return std::unexpected{Error::invalid_geometry};
+      frozen->arrival_system_position = {ephemeris->position.x + point.x,
+                                         ephemeris->position.y + point.y,
+                                         ephemeris->position.z + point.z};
+      const auto actual = clearance(
+          owner->system, frozen->arrival_tick, frozen->arrival_system_position,
+          hull_radius, request.source.model.atmosphere);
+      if (!actual) return std::unexpected{actual.error()};
+      if (!actual->clear()) return std::unexpected{Error::unclear_arrival};
+      frozen->arrival_volume = *envelope;
+    }
+    frozen->version = kFreedomRecoveryPlanetJumpVersion;
+    frozen->request = request;
+    frozen->recovery = *recovery;
+    return frozen;
+  }
+  if (request.recovery) return std::unexpected{Error::unsupported_policy};
   if (request.version != kFreedomPlanetJumpVersion)
     return std::unexpected{Error::unsupported_policy};
   if (!request.attempt ||

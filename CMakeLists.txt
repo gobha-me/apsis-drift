@@ -201,6 +201,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_surface_save.cpp
   src/freedom_moon_walk_save.cpp
   src/freedom_local_jump.cpp
+  src/freedom_jump_recovery.cpp
   src/freedom_planet_jump.cpp
   src/freedom_moon_surface_save.cpp
   src/godot/contact_surface.cpp
@@ -338,7 +339,7 @@ target_link_libraries(apsis_drift_boarding_research
 # adds. Keep this local: legacy replay math has its own compatibility contract.
 set_property(SOURCE src/physical_minor.cpp src/physical_minor_rotation.cpp src/native_minor_flight.cpp src/secondary_bodies.cpp src/secondary_observations.cpp src/physical_moon.cpp src/physical_moon_rotation.cpp src/moon_terrain.cpp src/moon_surface_contact.cpp src/moon_landed_craft.cpp src/moon_surface_walker.cpp src/moon_terrain_impact.cpp src/native_moon_surface.cpp src/native_moon_walk.cpp src/freedom_local_jump.cpp src/native_local_jump.cpp src/native_moon_flight.cpp src/terrain_local_detail.cpp src/surface_landmarks.cpp src/moon_surface_landmarks.cpp src/native_moon_landmarks.cpp src/native_surface_landmarks.cpp src/native_field_samples.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
-set_property(SOURCE src/freedom_planet_jump.cpp src/freedom_composed_travel_save.cpp src/native_planet_jump.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/freedom_jump_recovery.cpp src/freedom_planet_jump.cpp src/freedom_composed_travel_save.cpp src/native_planet_jump.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/freedom_jump_targeting.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)

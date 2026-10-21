@@ -162,5 +162,6 @@ func run() -> void:
 	shell.free()
 	await process_frame
 	failures += await PlanetTravel.new().run(self, trace, directory.path_join("native-assets"))
+	failures += await PlanetTravel.new().run(self, trace, directory.path_join("native-assets"), true)
 	print("Native first jump: %d failures" % failures)
 	quit(1 if failures else 0)

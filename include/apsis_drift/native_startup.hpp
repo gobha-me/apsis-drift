@@ -26,6 +26,10 @@ struct NativeStartup {
     -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_planetary_network_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
+// Recovery is a drive choice independent of the three starting chart choices.
+[[nodiscard]] auto native_jump_recovery_new_game(Seed universe_seed,
+                                                 std::uint32_t chart_kind)
+    -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
 

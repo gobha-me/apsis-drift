@@ -372,6 +372,16 @@ auto load_save_file(const std::filesystem::path& path)
   return *decoded;
 }
 
+namespace {
+auto validate_native_resource_root(const FreedomResources& resource)
+    -> std::expected<void, SaveSchemaError> {
+  if (resource.drive && resource.drive->last_use)
+    return std::unexpected{
+        SaveSchemaError{SaveSchemaErrorCode::invalid_state, "$.resources.drive",
+                        "A recorded drive use requires its travel57 owner"}};
+  return {};
+}
+} // namespace
 auto decode_native_save_document_json(std::string_view contents)
     -> std::expected<NativeSaveDocument, SaveSchemaError> {
   auto condition = decode_freedom_condition_document_json(contents);
@@ -391,11 +401,19 @@ auto decode_native_save_document_json(std::string_view contents)
   if (travel.error().code != SaveSchemaErrorCode::unsupported_format_version)
     return std::unexpected{travel.error()};
   auto knowledge = decode_freedom_knowledge_document_json(contents);
-  if (knowledge) return NativeSaveDocument{std::move(*knowledge)};
+  if (knowledge) {
+    if (auto v = validate_native_resource_root(knowledge->voyage.resources); !v)
+      return std::unexpected{v.error()};
+    return NativeSaveDocument{std::move(*knowledge)};
+  }
   if (knowledge.error().code != SaveSchemaErrorCode::unsupported_format_version)
     return std::unexpected{knowledge.error()};
   auto resource = decode_freedom_resource_document_json(contents);
-  if (resource) return NativeSaveDocument{std::move(*resource)};
+  if (resource) {
+    if (auto v = validate_native_resource_root(resource->resources); !v)
+      return std::unexpected{v.error()};
+    return NativeSaveDocument{std::move(*resource)};
+  }
   if (resource.error().code != SaveSchemaErrorCode::unsupported_format_version)
     return std::unexpected{resource.error()};
   auto surface = decode_freedom_surface_document_json(contents);
@@ -471,11 +489,16 @@ auto encode_native_save_document_json(const NativeSaveDocument& document)
           return encode_freedom_boarding_document_json(value);
         else if constexpr (std::is_same_v<T, FreedomSurfaceSaveDocument>)
           return encode_freedom_surface_document_json(value);
-        else if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>)
+        else if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>) {
+          if (auto v = validate_native_resource_root(value.resources); !v)
+            return std::unexpected{v.error()};
           return encode_freedom_resource_document_json(value);
-        else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+        } else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>) {
+          if (auto v = validate_native_resource_root(value.voyage.resources);
+              !v)
+            return std::unexpected{v.error()};
           return encode_freedom_knowledge_document_json(value);
-        else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
+        } else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
           return encode_freedom_travel_document_json(value);
         else if constexpr (std::is_same_v<T, FreedomRecoverySaveDocument>)
           return encode_freedom_recovery_document_json(value);

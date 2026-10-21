@@ -326,6 +326,23 @@ auto native_planetary_network_new_game(Seed universe_seed)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_jump_recovery_new_game(Seed universe_seed, std::uint32_t chart_kind)
+    -> std::expected<NativeStartup, std::string> {
+  if (chart_kind > 2)
+    return std::unexpected{"Unsupported starting chart choice"};
+  auto start = chart_kind == 0 ? native_new_game(universe_seed)
+               : chart_kind == 1
+                   ? native_network_new_game(universe_seed)
+                   : native_planetary_network_new_game(universe_seed);
+  if (!start) return std::unexpected{start.error()};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
+  const auto& flight = surface_base_flight(voyage.voyage.voyage.base);
+  voyage.voyage.resources.version = kFreedomRecoveryResourceVersion;
+  voyage.voyage.resources.drive.emplace();
+  voyage.voyage.resources.drive->lineage = flight.origin.lineage;
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);
@@ -346,6 +363,21 @@ auto native_select_save_document(
     -> std::expected<NativeStartup, std::string> {
   if (missing_recovery_owner(document))
     return std::unexpected{"Replacement lineage requires its recovery owner"};
+  const auto missing_drive_receipt = std::visit(
+      [](const auto& selected) {
+        using T = std::decay_t<decltype(selected)>;
+        if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>)
+          return selected.resources.drive && selected.resources.drive->last_use;
+        else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+          return selected.voyage.resources.drive &&
+                 selected.voyage.resources.drive->last_use;
+        else
+          return false;
+      },
+      document);
+  if (missing_drive_receipt)
+    return std::unexpected{
+        "Used recovery drive requires its authenticated travel receipt"};
   return std::visit(
       [&](auto& selected) {
         return select_document(std::move(selected), source_save);

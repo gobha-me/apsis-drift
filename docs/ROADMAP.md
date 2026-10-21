@@ -398,3 +398,5 @@ compact/1080p/4K outputs with explicit internal resolution. This is the #208
 research definition, not new terrain, a renderer implementation, a dynamic
 resolution setting or proof that every target view has passed. Preserve the
 working prototype and record missing consumer/hardware evidence separately.
+
+The owner-selected first drive-recovery increment is scoped in [Freedom jump recovery](FREEDOM_JUMP_RECOVERY.md) (#664), following charted planetary travel (#662). It adds no mission, upgrade or economy gate.

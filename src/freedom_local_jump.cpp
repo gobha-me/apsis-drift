@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace apsis_drift {
 namespace {
@@ -57,6 +58,77 @@ auto system_pose(const FreedomFlightSaveDocument& source, const Owner& moon)
        source.flight.tick});
   if (!pose) return std::unexpected{Error::invalid_source};
   return *pose;
+}
+template <class Owner>
+auto apply_recovery(const FreedomLocalBodyJumpRequest& request,
+                    FrozenLocalBodyJumpArrival frozen, const Owner& owner,
+                    FreedomJumpRecoveryKind kind)
+    -> std::expected<FrozenLocalBodyJumpArrival, Error> {
+  if (!request.recovery) return std::unexpected{Error::unsupported_policy};
+  const auto& source = request.source;
+  const BodyTarget source_target =
+      source.moon    ? source.moon->target
+      : source.minor ? source.minor->target
+                     : BodyTarget{owner.catalog.owner.catalog.id,
+                                  body_id(source.origin.recipe.home_planet)};
+  const auto recovery = freeze_freedom_jump_uncertainty(
+      source.origin.recipe.universe_seed, source.origin.state.craft,
+      source.flight.craft, source.origin.lineage, frozen.source_checksum, kind,
+      source.flight.tick, source_target, request.destination, request.attempt,
+      *request.recovery);
+  if (!recovery) return std::unexpected{Error::invalid_source};
+  if (recovery->extra_radius_millimetres) {
+    const auto craft = resolve_craft_frame(source.flight.craft);
+    if (!craft) return std::unexpected{Error::invalid_owner};
+    const auto& p = craft->properties;
+    const double hull_radius =
+        norm({static_cast<double>(std::max(std::abs(p.hull_min_mm[0]),
+                                           std::abs(p.hull_max_mm[0]))) /
+                  1000,
+              static_cast<double>(std::max(std::abs(p.hull_min_mm[1]),
+                                           std::abs(p.hull_max_mm[1]))) /
+                  1000,
+              static_cast<double>(std::max(std::abs(p.hull_min_mm[2]),
+                                           std::abs(p.hull_max_mm[2]))) /
+                  1000});
+    const bool minor_shell = kind == FreedomJumpRecoveryKind::minor;
+    const auto envelope = clearance(
+        owner, frozen.arrival_tick, frozen.arrival_system_position,
+        hull_radius +
+            static_cast<double>(recovery->extra_radius_millimetres) / 1000,
+        minor_shell);
+    if (!envelope) return std::unexpected{envelope.error()};
+    if (!envelope->clear()) return std::unexpected{Error::unclear_arrival};
+    auto& point = frozen.arrival.flight.position_metres;
+    point.x += recovery->offset_metres.x;
+    point.y += recovery->offset_metres.y;
+    point.z += recovery->offset_metres.z;
+    const RigidBodyWorldContext context =
+        (frozen.arrival.moon || frozen.arrival.minor)
+            ? RigidBodyWorldContext{owner}
+            : RigidBodyWorldContext{owner.catalog.owner};
+    const auto canonical =
+        canonicalize_rigid_body_state(context, frozen.arrival.flight);
+    if (!canonical) return std::unexpected{Error::invalid_geometry};
+    frozen.arrival.flight = *canonical;
+    if (!hydrate_freedom_flight_document(frozen.arrival))
+      return std::unexpected{Error::invalid_geometry};
+    const auto pose = system_pose(frozen.arrival, owner);
+    if (!pose) return std::unexpected{pose.error()};
+    frozen.arrival_system_position = {pose->position_metres.x,
+                                      pose->position_metres.y,
+                                      pose->position_metres.z};
+    const auto actual =
+        clearance(owner, frozen.arrival_tick, frozen.arrival_system_position,
+                  hull_radius, minor_shell);
+    if (!actual) return std::unexpected{actual.error()};
+    if (!actual->clear()) return std::unexpected{Error::unclear_arrival};
+    frozen.arrival_volume = *envelope;
+  }
+  frozen.version = request.version;
+  frozen.request = request;
+  frozen.recovery = *recovery;
+  return frozen;
 }
 } // namespace
 
@@ -206,6 +278,36 @@ auto freeze_minor_local_body_jump_arrival(
 } // namespace
 auto freeze_local_body_jump_arrival(const FreedomLocalBodyJumpRequest& request)
     -> std::expected<FrozenLocalBodyJumpArrival, FreedomLocalBodyJumpError> {
+  if (request.version == kFreedomRecoveryLocalBodyJumpVersion ||
+      request.version == kFreedomRecoveryMinorLocalBodyJumpVersion) {
+    if (!request.recovery) return std::unexpected{Error::unsupported_policy};
+    const bool minor_route =
+        request.version == kFreedomRecoveryMinorLocalBodyJumpVersion;
+    auto baseline = request;
+    baseline.version = minor_route ? kFreedomMinorLocalBodyJumpVersion
+                                   : kFreedomLocalBodyJumpVersion;
+    baseline.recovery.reset();
+    auto frozen = freeze_local_body_jump_arrival(baseline);
+    if (!frozen) return std::unexpected{frozen.error()};
+    const auto system = generate_physical_origin_system(
+        request.source.origin.recipe.universe_seed, 2);
+    if (!system) return std::unexpected{Error::invalid_owner};
+    const auto catalog = generate_secondary_body_catalog(*system);
+    if (!catalog) return std::unexpected{Error::invalid_owner};
+    if (minor_route) {
+      const auto owner = generate_physical_minor_descriptor(
+          *catalog, catalog->bodies[1].node.id);
+      if (!owner) return std::unexpected{Error::invalid_owner};
+      return apply_recovery(request, std::move(*frozen), *owner,
+                            FreedomJumpRecoveryKind::minor);
+    }
+    const auto owner =
+        generate_physical_moon_descriptor(*catalog, catalog->bodies[0].node.id);
+    if (!owner) return std::unexpected{Error::invalid_owner};
+    return apply_recovery(request, std::move(*frozen), *owner,
+                          FreedomJumpRecoveryKind::moon);
+  }
+  if (request.recovery) return std::unexpected{Error::unsupported_policy};
   if (request.version == kFreedomMinorLocalBodyJumpVersion)
     return freeze_minor_local_body_jump_arrival(request);
   if (request.version != kFreedomLocalBodyJumpVersion)

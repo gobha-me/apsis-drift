@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "apsis_drift/freedom_jump_recovery.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/rigid_body.hpp"
 #include "apsis_drift/universe_navigation.hpp"
@@ -12,6 +13,7 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomJumpTargetingVersion{1};
 inline constexpr std::uint32_t kFreedomNetworkJumpTargetingVersion{2};
+inline constexpr std::uint32_t kFreedomRecoveryJumpTargetingVersion{3};
 inline constexpr std::uint64_t kFreedomJumpRatedLightSeconds{360'000};
 inline constexpr std::uint64_t kFreedomJumpRatedMetres{
     kFreedomJumpRatedLightSeconds * kMetresPerLightSecond};
@@ -47,6 +49,7 @@ struct FreedomJumpRequest {
   std::uint64_t attempt{1};
   std::optional<FreedomCraftLineage> lineage{};
   std::optional<FreedomNetworkSelection> network{};
+  std::optional<FreedomDriveRecoveryState> recovery{};
   friend auto operator==(const FreedomJumpRequest&, const FreedomJumpRequest&)
       -> bool = default;
 };
@@ -75,9 +78,11 @@ struct FreedomJumpPreview {
 };
 struct FrozenFreedomJumpArrival {
   FreedomJumpPreview preview;
+  // Original jump_arrival stream14; recovery has its independent stream20.
   Seed sample_seed;
   SystemPositionMetres point;
   FreedomArrivalVolumeAssessment point_assessment;
+  std::optional<FrozenFreedomJumpUncertainty> recovery{};
   friend auto operator==(const FrozenFreedomJumpArrival&,
                          const FrozenFreedomJumpArrival&) -> bool = default;
 };

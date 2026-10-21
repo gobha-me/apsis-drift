@@ -1,10 +1,12 @@
 #pragma once
 
 #include "apsis_drift/freedom_docking_save.hpp"
+#include "apsis_drift/freedom_jump_recovery.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomResourceVersion{1};
+inline constexpr std::uint32_t kFreedomRecoveryResourceVersion{2};
 inline constexpr std::uint64_t kFreedomQuantaPerNewtonSecond{1'560'000};
 inline constexpr std::uint64_t kFreedomFlightCapacityQuanta{
     5'400ULL * 360'000ULL * kFreedomQuantaPerNewtonSecond};
@@ -15,6 +17,7 @@ inline constexpr std::uint32_t kFreedomJumpCapacity{3};
 
 // The existing starter identity is the vehicle owner, not just a frame type.
 // The tick is a consistency witness for the same authoritative flight clock.
+// Version1 requires absent drive; explicit version2 requires recovery1.
 struct FreedomResources {
   std::uint32_t version{kFreedomResourceVersion};
   StarterCraftId craft;
@@ -22,6 +25,7 @@ struct FreedomResources {
   SimulationTick tick{};
   std::uint64_t flight_quanta{kFreedomFlightCapacityQuanta};
   std::uint32_t jump_charges{kFreedomJumpCapacity};
+  std::optional<FreedomDriveRecoveryState> drive{};
   friend auto operator==(const FreedomResources&, const FreedomResources&)
       -> bool = default;
 };

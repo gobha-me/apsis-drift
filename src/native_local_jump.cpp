@@ -8,8 +8,9 @@
 namespace apsis_drift {
 auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     -> std::expected<void, std::string> {
-  if (knowledge_ &&
-      knowledge_->recipe.version == kFreedomPlanetaryKnowledgeVersion)
+  if ((resources_ && resources_->drive) ||
+      (knowledge_ &&
+       knowledge_->recipe.version == kFreedomPlanetaryKnowledgeVersion))
     return select_composed_local_jump(target);
   if (recovery_pending() ||
       (travel_ && travel_->phase != FreedomJumpPhase::idle))
@@ -170,9 +171,15 @@ auto NativeFreedomFlightSession::local_jump_preview() const
     const auto policy = route.active == FreedomComposedRouteKind::moon
                             ? kFreedomLocalBodyJumpVersion
                             : kFreedomMinorLocalBodyJumpVersion;
-    const auto result =
-        freeze_local_body_jump_arrival({policy, document_, *route.selected_body,
-                                        travel_->next_attempt, model});
+    FreedomLocalBodyJumpRequest request{policy, document_, *route.selected_body,
+                                        travel_->next_attempt, model};
+    if (resources_ && resources_->drive) {
+      request.version = route.active == FreedomComposedRouteKind::moon
+                            ? kFreedomRecoveryLocalBodyJumpVersion
+                            : kFreedomRecoveryMinorLocalBodyJumpVersion;
+      request.recovery = resources_->drive;
+    }
+    const auto result = freeze_local_body_jump_arrival(request);
     if (!result)
       return std::unexpected{
           "Companion source, destination or full clearance is unavailable"};

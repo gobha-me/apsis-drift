@@ -7,10 +7,14 @@
 namespace apsis_drift {
 auto validate_freedom_resources(const FreedomResources& s)
     -> std::expected<void, FreedomResourceError> {
-  if (s.version != kFreedomResourceVersion ||
+  if ((s.version != kFreedomResourceVersion &&
+       s.version != kFreedomRecoveryResourceVersion) ||
+      (s.version == kFreedomRecoveryResourceVersion) != s.drive.has_value() ||
       s.frame != CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion} ||
       s.flight_quanta > kFreedomFlightCapacityQuanta ||
       s.jump_charges > kFreedomJumpCapacity)
+    return std::unexpected{FreedomResourceError::invalid_state};
+  if (s.drive && !validate_freedom_drive_recovery(*s.drive, s.tick))
     return std::unexpected{FreedomResourceError::invalid_state};
   return {};
 }
@@ -23,6 +27,10 @@ auto validate_freedom_resources(const FreedomResources& s,
     return std::unexpected{FreedomResourceError::wrong_owner};
   if (s.tick != d.flight.tick || s.tick != d.origin.state.tick)
     return std::unexpected{FreedomResourceError::wrong_tick};
+  if (s.drive && !validate_freedom_drive_recovery(
+                     *s.drive, d.origin.recipe.universe_seed, s.craft, s.frame,
+                     d.origin.lineage, s.tick))
+    return std::unexpected{FreedomResourceError::wrong_owner};
   return {};
 }
 auto freedom_propulsion_tick_quanta(const VacuumActuation& p)
@@ -103,7 +111,8 @@ namespace {
 auto validate_jump_owner(const IntersystemContractState& c,
                          const FreedomResources& s)
     -> std::expected<void, FreedomResourceError> {
-  if (!validate_intersystem_contract_state(c) || !validate_freedom_resources(s))
+  if (s.version != kFreedomResourceVersion ||
+      !validate_intersystem_contract_state(c) || !validate_freedom_resources(s))
     return std::unexpected{FreedomResourceError::invalid_state};
   if (s.craft !=
       make_freedom_new_game_document(c.identities.universe_seed).state.craft)
