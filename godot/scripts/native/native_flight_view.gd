@@ -35,6 +35,10 @@ var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
+const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
+var frame_diagnostics: PanelContainer
+var frame_diagnostics_button: Button
+var initial_frame_diagnostics := false
 var survey_start_button: Button
 var survey_cancel_button: Button
 var observation_cue := Status.ObservationCue.new()
@@ -933,6 +937,7 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
+	setup_frame_diagnostics(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
 	survey_cancel_button = controls_menu.add_button(survey_column, "Stop orbital survey", orbital_survey_command.bind(true))
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
@@ -1124,6 +1129,34 @@ func refresh_surface_landmarks() -> void:
 	landmark_inspect_button.visible = not site.is_empty()
 	landmark_inspect_button.disabled = site.is_empty() or not site.can_inspect
 	landmark_inspect_button.tooltip_text = "%s · %.1f m\nInspect within 8 m on supported ground." % [site.label, site.distance_metres] if not site.is_empty() else ""
+
+
+func setup_frame_diagnostics(column: Node) -> void:
+	frame_diagnostics = FrameDiagnostics.new()
+	add_child(frame_diagnostics)
+	frame_diagnostics.set_enabled(initial_frame_diagnostics)
+	frame_diagnostics_button = controls_menu.add_button(column, "", toggle_frame_diagnostics)
+	refresh_frame_diagnostics_button()
+
+
+func refresh_frame_diagnostics_button() -> void:
+	frame_diagnostics_button.text = "Frame diagnostics: " + ("On" if frame_diagnostics.enabled else "Off")
+	frame_diagnostics_button.tooltip_text = "Optional local frame/clock readings while playing. No automatic tuning, recording or upload. Resume explicitly."
+
+
+func toggle_frame_diagnostics() -> void:
+	if not marker_controls_available() or mode_change_pending: return
+	frame_diagnostics.set_enabled(not frame_diagnostics.enabled)
+	refresh_frame_diagnostics_button()
+	report_action_status("Frame diagnostics selected. Resume explicitly to continue.")
+
+
+func sample_frame_diagnostics(delta: float) -> void:
+	if frame_diagnostics == null or not frame_diagnostics.enabled: return
+	var targets: Array = []
+	if far_viewport != null: targets.append(far_viewport.size)
+	if near_viewport != null: targets.append(near_viewport.size)
+	frame_diagnostics.observe(delta, state, targets, activated and focused and not paused and not journey_dialog_open and not recovery_notified and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible)
 
 
 func marker_controls_available() -> bool:
@@ -1333,6 +1366,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		bridge.cancel_freedom_port_approach()
 		state = bridge.get_freedom_flight_state()
 	paused = true
+	if frame_diagnostics != null: frame_diagnostics.observe(0.0, {}, [], false)
 	instruments_open = false
 	controls_armed = false
 	if player_input != null:
@@ -1675,6 +1709,7 @@ func pause_on_error(message: String) -> void:
 
 
 func _process(delta: float) -> void:
+	sample_frame_diagnostics(delta)
 	if not activated or recovery_notified: return
 	sync_mouse_look()
 	if bridge == null or camera == null or terrain == null or not error.is_empty():

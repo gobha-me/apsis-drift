@@ -16,6 +16,10 @@ var planet_optics := PlanetOptics.new()
 const Controls = preload("res://scripts/ui/player_input.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
 const ViewportSize = preload("res://scripts/native/native_viewport_size.gd")
+const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
+var frame_diagnostics: PanelContainer
+var frame_diagnostics_button: Button
+var initial_frame_diagnostics := false
 var mouse_look := MouseLook.new()
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 const StationCrew = preload("res://scripts/native/native_station_crew.gd")
@@ -372,6 +376,13 @@ func build_ui() -> void:
 	observations_button.text = "Recorded observations"
 	observations_button.pressed.connect(open_observations)
 	column.add_child(observations_button)
+	frame_diagnostics_button = Button.new()
+	frame_diagnostics_button.pressed.connect(toggle_frame_diagnostics)
+	column.add_child(frame_diagnostics_button)
+	frame_diagnostics = FrameDiagnostics.new()
+	add_child(frame_diagnostics)
+	frame_diagnostics.set_enabled(initial_frame_diagnostics)
+	refresh_frame_diagnostics_button()
 	save_status = hud_text()
 	save_status.text = "Approach the D1 ladder to board."
 	column.add_child(save_status)
@@ -417,6 +428,18 @@ func build_ui() -> void:
 	resized.connect(layout_hud)
 
 
+func refresh_frame_diagnostics_button() -> void:
+	frame_diagnostics_button.text = "Frame diagnostics: " + ("On" if frame_diagnostics.enabled else "Off")
+	frame_diagnostics_button.tooltip_text = "Optional local frame/clock readings while playing. No automatic tuning, recording or upload. Resume explicitly."
+
+
+func toggle_frame_diagnostics() -> void:
+	if not paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible: return
+	frame_diagnostics.set_enabled(not frame_diagnostics.enabled)
+	refresh_frame_diagnostics_button()
+	save_status.text = "Frame diagnostics selected. Resume explicitly to continue."
+
+
 func hud_text() -> Label:
 	var label := Label.new()
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -454,7 +477,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button]:
+	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
@@ -499,6 +522,7 @@ func set_paused(value: bool) -> void:
 func pause_controls(reason: String) -> void:
 	pending_crew_talk.clear()
 	paused = true
+	if frame_diagnostics != null: frame_diagnostics.observe(0.0, {}, [], false)
 	if crew_actor != null and crew_actor.bubble != null: crew_actor.bubble.hide()
 	refresh_hud()
 	mouse_look.set_active(false)
@@ -959,6 +983,8 @@ func update_view(delta: float = 0.0) -> void:
 
 
 func _process(delta: float) -> void:
+	if frame_diagnostics != null and frame_diagnostics.enabled:
+		frame_diagnostics.observe(delta, state, [viewport.size] if viewport != null else [], activated and focused and not paused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible)
 	if bridge == null or not activated:
 		return
 	if not pending_crew_talk.is_empty() and not pending_crew_talk_valid(): pending_crew_talk.clear()
@@ -1069,7 +1095,7 @@ func _input(event: InputEvent) -> void:
 		return
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button]
+		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):

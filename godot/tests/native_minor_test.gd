@@ -1,4 +1,5 @@
 extends SceneTree
+const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 ## Actual C++ inspection route, typed staging and ordinary occupied-craft UI.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
@@ -240,6 +241,7 @@ func run() -> void:
 	var view: Control = shell.current_view
 	if not check(view is MinorView and view.paused and view.staged_model.valid_current_pose(), "Actual Continue failed ordinary typed MinorView staging"):
 		shell.free(); quit(1); return
+	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
 	check_admission(owner, view, output)
 	for index in 2:
 		var segment: Dictionary = report.segments[index]

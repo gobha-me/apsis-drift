@@ -397,10 +397,12 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	var seat_light: Basis = walk.light.basis
 	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-before.json")), "Controller pre-board export failed")
 	var before_board: PackedByteArray = FileAccess.get_file_as_bytes("user://controller-before.json")
+	walk.frame_diagnostics.set_enabled(true)
 	shell.switch_journey_view()
 	var flight: Control = shell.current_view
 	check(flight is FlightView and flight.staged_model == model and flight.cockpit, "Seat did not hand the same model to cockpit flight")
 	if not flight is FlightView: return
+	check(flight.frame_diagnostics.enabled and flight.frame_diagnostics.samples.is_empty(), "Boarding lost diagnostic choice or retained a stale frame sample epoch")
 	check_sunlight(flight)
 	flight.set_process(false)
 	check(flight.player_input.device == 19, "Boarding replaced the station-selected controller")
@@ -544,6 +546,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	walk = shell.current_view
 	check(walk is WalkView and walk.staged_model == model, "Unboard did not restore walking on the same model")
 	if not walk is WalkView: return
+	check(walk.frame_diagnostics.enabled and walk.frame_diagnostics.samples.is_empty(), "Unboarding lost diagnostic choice or retained stale frame samples")
 	check_sunlight(walk)
 	check(walk.selected_pad == 19 and walk.available_pads.get(19, false), "Unboarding forgot the selected controller")
 	check(walk.paused and not walk.controls_armed, "Held selected walking stick bypassed the unboarding neutral gate")

@@ -655,8 +655,11 @@ func confirm_title() -> void:
 
 
 static func inherit_controller(previous: Control, candidate: Control) -> void:
-	# Transfer only live device ownership; the fresh view owns its neutral gates.
+	# Transfer live device ownership and the optional local diagnostic choice;
+	# the fresh view owns its neutral gates and starts a new sample interval.
 	if not (candidate is WalkView or candidate is FlightView or candidate is NativeTitle): return
+	if (candidate is WalkView or candidate is FlightView) and (previous is WalkView or previous is FlightView) and previous.frame_diagnostics != null:
+		candidate.initial_frame_diagnostics = previous.frame_diagnostics.enabled
 	if previous is WalkView:
 		candidate.initial_controller_device = previous.selected_pad if previous.available_pads.get(previous.selected_pad, false) else -1
 	elif previous is FlightView:

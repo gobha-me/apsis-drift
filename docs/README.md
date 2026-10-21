@@ -193,3 +193,6 @@ playable kinematic interaction described above.
 
 These are grouped entry points, not a complete chronological proof index. Each
 contract records its own scope, version and remaining qualifications.
+
+- [Optional native frame diagnostics](NATIVE_FRAME_DIAGNOSTICS.md): local frame,
+  render-count and fixed-clock readings for walking and flight playtests.
