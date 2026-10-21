@@ -10,6 +10,7 @@ const Navigation = preload("res://scripts/native/home_navigation.gd")
 const MoonExposures = preload("res://tests/native_moon_exposures.gd")
 const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
 const CompanionMouseChecks = preload("res://tests/native_companion_mouse_checks.gd")
+const CompanionLayoutChecks = preload("res://tests/native_companion_layout_checks.gd")
 const PHASES = ["arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent"]
 var failures := 0
 
@@ -642,6 +643,8 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	await process_frame
 
 func run() -> void:
+	CompanionLayoutChecks.check_inputs(check)
+	if failures: quit(1); return
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
 	var phases := args[0]
@@ -686,6 +689,8 @@ func run() -> void:
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
 		check_gear_clearance(phase_shell.current_view, restored, output, label)
 		var phase_view: Control = phase_shell.current_view
+		if label in ["arrival", "outside"]:
+			await CompanionLayoutChecks.run(self, phase_view, restored, output, "moon-" + label + "-companion", check)
 		if label in ["approach", "landed"]:
 			check_manual_moon_menu(phase_view, restored, output, label)
 		var observed: Dictionary = restored.get_freedom_flight_state()

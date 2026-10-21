@@ -4,6 +4,7 @@ const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
 const NavigationSky = preload("res://scripts/world/navigation_sky.gd")
 var moon_jump_button: Button
 var moon_select_button: Button
+var companion_panel: PanelContainer
 
 func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, handoff := false) -> bool:
 	if bridge != null or model == null or model.get_parent() != null or not (model.valid_current_pose() if handoff else model.valid_installed()):
@@ -20,6 +21,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	staged_model = model
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
+	far_container = container
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container.stretch = true
 	add_child(container)
@@ -52,7 +54,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	camera.cull_mask = 3
 	# Reuse planetary flight's close/distant composition. A single cockpit-to-
 	# lunar-diameter frustum loses nearby geometry in the renderer's float math.
-	var near_container := SubViewportContainer.new()
+	near_container = SubViewportContainer.new()
 	near_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	near_container.stretch = true
 	near_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -124,18 +126,22 @@ func build_ui() -> void:
 	ship_marker = HomeNavigation.new()
 	ship_marker.visible = false
 	add_child(ship_marker)
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	for side in ["left", "top", "right", "bottom"]: margin.add_theme_constant_override("margin_" + side, 18)
-	add_child(margin)
-	var panel := PanelContainer.new()
-	margin.add_child(panel)
+	hud_theme = Theme.new()
+	theme = hud_theme
+	companion_panel = PanelContainer.new()
+	companion_panel.clip_contents = true
+	add_child(companion_panel)
+	hud_scroll = ScrollContainer.new()
+	hud_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	hud_scroll.follow_focus = true
+	companion_panel.add_child(hud_scroll)
+	hud_scroll_style = hud_scroll.get_v_scroll_bar().get_theme_stylebox("scroll").duplicate()
+	hud_scroll.get_v_scroll_bar().add_theme_stylebox_override("scroll", hud_scroll_style)
 	var column := VBoxContainer.new()
-	column.custom_minimum_size.x = 340
-	panel.add_child(column)
-	primary_status = RichTextLabel.new()
-	primary_status.fit_content = true
-	primary_status.custom_minimum_size.y = 140
+	hud_column = column
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud_scroll.add_child(column)
+	primary_status = hud_text()
 	column.add_child(primary_status)
 	assist_button = CheckButton.new()
 	assist_button.text = "Flight assistance"
@@ -167,11 +173,13 @@ func build_ui() -> void:
 	column.add_child(moon_jump_button)
 	pause_button = Button.new()
 	pause_button.pressed.connect(toggle_pause)
-	column.add_child(pause_button)
-	save_status = RichTextLabel.new()
-	save_status.fit_content = true
-	save_status.custom_minimum_size.y = 45
+	add_child(pause_button)
+	save_status = hud_text()
 	column.add_child(save_status)
+	for child in column.get_children():
+		if child is Button:
+			child.clip_text = true
+	resized.connect(layout_hud)
 	save_dialog = FileDialog.new()
 	save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	save_dialog.access = FileDialog.ACCESS_FILESYSTEM
@@ -194,8 +202,32 @@ func activate() -> void:
 	set_process_input(true)
 
 func layout_hud() -> void:
-	# The stretched SubViewportContainer owns the lunar viewport dimensions.
-	pass
+	if not activated or not is_inside_tree() or companion_panel == null:
+		return
+	var pixels := Vector2(get_window().size)
+	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
+		return
+	var density := get_viewport().get_final_transform().get_scale().abs()
+	ViewportSize.fit(far_container, size, density)
+	ViewportSize.fit(near_container, size, density)
+	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+	var margin := minf(16.0 * scale, minf(size.x, size.y) * 0.1)
+	var usable := size - Vector2.ONE * (2.0 * margin)
+	if usable.x <= 0.0 or usable.y <= 0.0: return
+	hud_theme.default_font_size = roundi(18.0 * scale)
+	hud_scroll_style.content_margin_left = 8.0 * scale
+	hud_scroll_style.content_margin_right = 8.0 * scale
+	hud_column.add_theme_constant_override("separation", roundi(8.0 * scale))
+	for child in hud_column.get_children():
+		if child is Button:
+			child.custom_minimum_size.y = 44.0 * scale
+	var pause_height := minf(44.0 * scale, usable.y * 0.4)
+	var gap := minf(8.0 * scale, usable.y * 0.05)
+	var width := minf(420.0 * scale, usable.x)
+	pause_button.position = Vector2(margin, size.y - margin - pause_height)
+	pause_button.size = Vector2(width, pause_height)
+	companion_panel.position = Vector2.ONE * margin
+	companion_panel.size = Vector2(width, maxf(0.0, usable.y - pause_height - gap))
 
 func setup_controls() -> void:
 	player_input = PlayerInput.new()
