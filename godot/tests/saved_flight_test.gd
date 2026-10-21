@@ -385,6 +385,11 @@ func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 		for frame in 3:
 			await process_frame
 		var bounds := Rect2(Vector2.ZERO, view.size)
+		# The 640x450 window letterboxes the 16:9 logical canvas to 640x360.
+		var rendered: Vector2i = Vector2i(640, 360) if pixels == Vector2i(640, 450) else pixels
+		check(view.far_viewport.size == rendered and view.near_viewport.size == rendered, "Flight depth passes still render extra logical pixels: " + str(pixels))
+		for container in [view.far_container, view.near_container]:
+			check((container.size * container.scale).is_equal_approx(view.size), "Physical-size flight pass no longer covers its logical canvas")
 		check(bounds.encloses(view.hud_scroll.get_rect()), "HUD scroll bounds escaped " + str(pixels))
 		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "HUD has horizontal overflow")
 		var font_pixels: float = view.telemetry.get_theme_font_size("normal_font_size") * pixels.x / view.size.x

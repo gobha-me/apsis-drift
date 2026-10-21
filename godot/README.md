@@ -39,6 +39,12 @@ with `--headless-validate`. Wayland/Vulkan display support requires separate
 interactive qualification; headless correctness checks and software Xvfb
 captures do not establish it. This option does not change the project renderer.
 
+Station and flight 3D targets fit the physical output when the logical UI canvas
+is larger. A 1280×720 window uses 1280×720 targets; a letterboxed window uses the
+actual content rectangle. Larger windows retain the existing logical rendering
+budget. The UI keeps its logical layout and readable text sizing. This reduces
+extra rendered pixels; it does not establish a frame-rate guarantee.
+
 New Game starts on Origin Station. Walking keys (WASD by default, configurable in
 Settings / Controls) or the left stick move; ordinary mouse
 movement, arrow keys or the right stick look. Escape releases the pointer and
