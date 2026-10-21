@@ -613,8 +613,10 @@ func run() -> void:
 	view.set_process(false)
 	var arrived := save_bytes(owner, output.path_join("arrival-native.json"))
 	check(arrived == originals.arrival, "Native charged Moon jump differs from continuous C++ arrival Save")
-	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
+	# Own the first stream batch before diagnostics drives a paused view tick;
+	# that tick can otherwise consume the batch through the terrain presenter.
 	await check_cover(view, owner)
+	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
 	check_assistance(view, owner, output)
 	await check_home(shell, owner, assets, output)
 	shell.free()
