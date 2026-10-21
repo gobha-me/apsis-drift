@@ -22,6 +22,10 @@ remaining gap to the inspection stand-off boundary. Negative radial speed means
 closing. There is no atmosphere, atmospheric drag, gear deployment, surface
 exit, mining or landing action here.
 
+Mouse pitch/yaw steering, held right-mouse free look and recenter work as they
+do near home. Releasing free look returns to forward view with neutral mouse
+steering. Pause, focus loss and Continue clear that steering intent.
+
 **Select jump home**, begin the normal spool and resume to return to the real
 home body and moving station. Each committed leg spends one charge; three
 starting charges cover the trip and a reserve. Flight thrust spends its existing

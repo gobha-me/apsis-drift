@@ -512,11 +512,15 @@ static func set_ship_layer(node: Node) -> void:
 		set_ship_layer(child)
 
 
-func build_ui() -> void:
+func setup_flight_mouse() -> void:
 	flight_mouse = FlightMouse.new()
 	add_child(flight_mouse)
 	flight_mouse.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flight_mouse.hide()
+
+
+func build_ui() -> void:
+	setup_flight_mouse()
 	var backing := StyleBoxFlat.new()
 	backing.bg_color = Color(0.01, 0.015, 0.025, 0.94)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
@@ -907,6 +911,7 @@ func update_compact_hud() -> void:
 	if context_source != null:
 		context_action.text = context_source.text
 		if surface_walking() or landed_hatch_available(): context_action.text += " · " + surface_interaction_binding()
+		elif player_input != null and player_input.last_device != "pad": context_action.text += " · left click"
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
 
@@ -1700,6 +1705,18 @@ func hide_exhaust() -> void:
 		exhaust.update_applied({}, 0.0, true)
 
 
+func flight_demand(axes: PackedFloat64Array) -> PackedFloat64Array:
+	# Planet and companion views apply the same mouse intent before the existing
+	# actuator mapping; presentation never supplies a separate flight force law.
+	var flight_axes := axes.duplicate()
+	if mouse_steering_available() and flight_mouse != null:
+		var steering: Vector2 = flight_mouse.demands(player_input.settings)
+		flight_axes[2] = clampf(flight_axes[2] + steering.x, -1.0, 1.0)
+		flight_axes[3] = clampf(flight_axes[3] + steering.y, -1.0, 1.0)
+	else: clear_flight_mouse()
+	return actuator_fractions(flight_axes)
+
+
 func pause_on_error(message: String) -> void:
 	error = message
 	if impact_overlay != null: impact_overlay.visible = false
@@ -1726,13 +1743,7 @@ func _process(delta: float) -> void:
 		return
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
-	var flight_axes: PackedFloat64Array = resolved.thrust_axes.duplicate()
-	if mouse_steering_available() and flight_mouse != null:
-		var steering: Vector2 = flight_mouse.demands(player_input.settings)
-		flight_axes[2] = clampf(flight_axes[2] + steering.x, -1.0, 1.0)
-		flight_axes[3] = clampf(flight_axes[3] + steering.y, -1.0, 1.0)
-	else: clear_flight_mouse()
-	var demand := actuator_fractions(flight_axes)
+	var demand := flight_demand(resolved.thrust_axes)
 	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
 	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
@@ -1800,6 +1811,27 @@ func apply_camera_depth(relation: Transform3D, minimum_far: float) -> bool:
 	camera.transform = relation
 	terrain_camera.transform = relation
 	return true
+
+
+static func home_navigation_target(value: Dictionary, geometry: Variant) -> Dictionary:
+	var centre: Variant = value.get("station_position")
+	if not centre is Vector3 or not centre.is_finite(): return {}
+	var result := {"position": centre, "label": "HOME"}
+	if not value.get("station_available", true) or value.get("attached", false) or centre.length() >= 1000.0: return result
+	var ordinal: Variant = value.get("target_port")
+	var frame: Variant = value.get("station_basis")
+	var station_id: Variant = value.get("station_id")
+	if not ordinal is int or ordinal < 1 or ordinal > 2 or not station_id is String or not frame is Basis or not frame.is_finite(): return result
+	var determinant: float = frame.determinant()
+	if not is_finite(determinant) or absf(determinant) < 0.000001 or not StationPresentation.valid_geometry(geometry, station_id): return result
+	# Registered collar coordinates already include the authored station datum.
+	# This is the same transform as the station's physical port markers; the
+	# imported asset offset and the craft's attitude do not belong here.
+	var point: Vector3 = centre + frame * StationPresentation.vector(geometry.ports[ordinal - 1].position_metres)
+	if point.is_finite():
+		result.position = point
+		result.label = "D%d" % ordinal
+	return result
 
 
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
@@ -1980,16 +2012,18 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
-	home_marker.label_text = "HOME"
+	var home_target := home_navigation_target(state, station_geometry)
+	home_marker.label_text = home_target.get("label", "HOME")
 	home_marker.visible = state.get("station_available", true)
 	home_cue.visible = home_marker.visible
-	if home_marker.visible: home_marker.update_cue(camera, target, state.attached)
+	if home_marker.visible: home_marker.update_cue(camera, home_target.get("position", target), state.attached)
 	var navigation: Dictionary = home_marker.cue
-	var direction := " · behind you" if navigation.get("behind", false) else (" · follow HOME marker" if not navigation.get("in_view", false) else " · ahead")
+	var direction := " · behind you" if navigation.get("behind", false) else (" · follow %s marker" % home_marker.label_text if not navigation.get("in_view", false) else " · ahead")
 	if navigation.is_empty(): direction = " · direction unavailable"
 	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
-	home_cue.tooltip_text = "Station " + state.station_id + " · HOME marks its projected direction. It does not steer or certify a route."
+	var bearing_description := "the selected port collar" if home_marker.label_text != "HOME" else "the station centre"
+	home_cue.tooltip_text = "Station %s · %s marks %s. Range is to the station centre. Bearing only; use live port readings for alignment and capture." % [state.station_id, home_marker.label_text, bearing_description]
 	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)
 	if rendezvous_button != null:
 		var rendezvous: Dictionary = state.get("port_rendezvous", {})

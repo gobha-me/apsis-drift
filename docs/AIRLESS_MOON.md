@@ -77,6 +77,10 @@ commits one charge, advances the existing transit clock and arrives above that
 moon. Selecting a target does not spend a charge. The starting three charges
 cover outbound, home and reserve.
 
+Mouse movement steers pitch/yaw here just as it does near home. Hold right
+mouse for free look; release it to face forward with steering centred. Pause,
+focus loss and Continue clear mouse steering; resume explicitly.
+
 The moon uses manual descent: deploy gear, brake with real thrusters and settle
 onto suitable ground. Flight assistance controls rotation; it does not hover or
 cancel lunar gravity. The landing-aid autopilot and atmospheric controls do not

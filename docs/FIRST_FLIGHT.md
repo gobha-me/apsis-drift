@@ -71,11 +71,16 @@ propulsion. Flight basics explains the current keyboard/controller mappings;
 Flight has finite fuel. Atmospheric drag, gravity, braking and assistance use
 the same C++ flight owner. Watch your fuel while exploring terrain and returning
 to space. The cyan [HOME marker](HOME_NAVIGATION.md) gives the station bearing
-and range. Near the selected port, choose **Dock with thrusters** to align, close
+and range. Within one kilometre of the station centre, the cue becomes **D1** or
+**D2** and points at the selected collar; the range still measures the station
+centre. Near the selected port, choose **Dock with thrusters** to align, close
 the gap, brake and latch automatically. It uses flight fuel and accepts only the
 [bounded approach corridor](PORT_APPROACH_AID.md#smooth-docking). Manual flight
 input or pause cancels it. The older approach aid and manual capture remain
 available in paused controls.
+During live keyboard/mouse flight, the lower action button names **left click**:
+click with the pointer captured to invoke that current action. Paused Controls
+remain available through Esc / Start.
 While attached at D1, **Unboard to station** restores station walking and
 [free station replenishment](FREEDOM_RESOURCES.md) can restore both resources.
 

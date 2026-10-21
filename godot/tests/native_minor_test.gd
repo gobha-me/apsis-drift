@@ -1,5 +1,6 @@
 extends SceneTree
 const FrameDiagnosticsChecks = preload("res://tests/frame_diagnostics_checks.gd")
+const CompanionMouseChecks = preload("res://tests/native_companion_mouse_checks.gd")
 ## Actual C++ inspection route, typed staging and ordinary occupied-craft UI.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
@@ -235,6 +236,7 @@ func run() -> void:
 	if not check(report is Dictionary and report.get("version") == 1 and report.get("seed") == "42" and report.get("approach_limited") == true and report.get("segments") is Array and report.segments.size() == 2, "Actual bounded C++ minor fixture report unavailable"): quit(1); return
 	var originals := {}
 	for label in PHASES: originals[label] = FileAccess.get_file_as_bytes(phases.path_join(label + ".json"))
+	await CompanionMouseChecks.run(self, phases.path_join("arrival.json"), assets, output.path_join("mouse"), "minor", check)
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var shell := shell_for(owner, phases.path_join("arrival.json"), assets)
 	if shell == null: quit(1); return
