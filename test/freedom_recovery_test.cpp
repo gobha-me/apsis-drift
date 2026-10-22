@@ -1024,6 +1024,14 @@ auto star_search_recovery() -> void {
   rejects_valid_knowledge(onward, "An otherwise valid added search cannot "
                                   "begin before the replacement loss");
 }
+// These independent metadata scenarios must release their large save carriers
+// before the session scenario exercises the full nested Continue decoder.
+// Keep that call-depth boundary even when optimized test builds inline helpers.
+[[gnu::noinline]] auto metadata_recovery_scenarios(
+    const std::filesystem::path& path) -> void {
+  network_recovery(path);
+  star_search_recovery();
+}
 } // namespace
 auto main() -> int {
   const auto path =
@@ -1046,8 +1054,7 @@ auto main() -> int {
          {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy})
       provider(Seed{42}, FreedomLossCause::recoverable_destruction, false, 0,
                policy);
-    network_recovery(path / "network-recovery.json");
-    star_search_recovery();
+    metadata_recovery_scenarios(path / "network-recovery.json");
     session_contract(path / "recovery.json");
     landmark_retention();
     composed_recovery();

@@ -230,6 +230,109 @@ func check_blocked_chart(owner: Variant, view: Control, output: String) -> void:
 	if check(file != null, "Blocked chart evidence unavailable"):
 		file.store_string(JSON.stringify(evidence, "\t") + "\n")
 
+func foreign_notes(bytes: PackedByteArray) -> Dictionary:
+	var document: Variant = JSON.parse_string(bytes.get_string_from_utf8())
+	if not check(document is Dictionary and document.get("voyage") is Dictionary and document.voyage.get("knowledge") is Dictionary, "Foreign fixture lacks its complete travel/knowledge owner"): return {}
+	var knowledge: Dictionary = document.voyage.knowledge
+	var result := {}
+	for name in ["surface_marker", "surface_landmarks", "moon_surface_landmarks", "field_samples"]:
+		result[name] = knowledge.get(name)
+	return result
+
+func check_foreign_outing(phases: String, assets: String, output: String) -> void:
+	# Native starts at the independently generated real paid system arrival.
+	# C++ owns earlier boarding/system travel after one labelled Home-space
+	# placement. This UI repeats the minor/Home legs and stages the separately
+	# flown approach/withdraw clone; no asteroid landing is claimed.
+	var initial_failures := failures
+	var originals := {}
+	var source_hashes := {}
+	for label in ["foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw"]:
+		var path := phases.path_join(label + ".json")
+		originals[label] = FileAccess.get_file_as_bytes(path)
+		if not check(not originals[label].is_empty(), "Foreign minor sidecar unavailable: " + label): return
+		source_hashes[label] = FileAccess.get_sha256(path)
+	var notes := foreign_notes(originals["foreign-entry"])
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := shell_for(owner, phases.path_join("foreign-entry.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var entry: Dictionary = owner.get_freedom_flight_state()
+	if not check(view is FlightView and not view is MinorView and view.paused and view.error.is_empty() and entry.resources.jump_charges == 2 and save_bytes(owner, output.path_join("foreign-entry-native.json")) == originals["foreign-entry"], "Foreign entry failed exact paused planetary Continue"):
+		shell.free(); return
+	var held_code: int = int(view.player_input.bindings.forward.key.code)
+	key(held_code, true)
+	view.select_minor_jump()
+	check(not view.controls_armed and save_bytes(owner, output.path_join("foreign-entry-held.json")) == originals["foreign-entry"], "Held mapped movement bypassed foreign-minor selection or changed Save")
+	key(held_code, false)
+	check(view.paused, "Releasing foreign entry movement resumed flight implicitly")
+	view.observe_neutral_controls()
+	if not check(view.controls_armed and view.player_input != null and not view.player_input.needs_neutral, "Actual foreign entry has not observed neutral controls"):
+		shell.free(); return
+	var occupied_model: Node3D = view.staged_model
+	view.select_minor_jump()
+	var selected: Dictionary = owner.get_freedom_flight_state()
+	if not check(view.error.is_empty() and view.paused and selected.jump.get("route_kind") == "foreign_minor" and selected.tick == entry.tick and selected.resources == entry.resources, "Actual planetary UI failed zero-time foreign-minor selection"):
+		shell.free(); return
+	view.jump_requested()
+	var neutral := PackedFloat64Array()
+	neutral.resize(12)
+	if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual foreign-minor cancellation tick refused"):
+		shell.free(); return
+	view.state = owner.get_freedom_flight_state()
+	view.jump_requested()
+	var canceled: Dictionary = owner.get_freedom_flight_state()
+	check(canceled.jump.phase == "idle" and canceled.resources.jump_charges == 2, "Canceling the real one-tick spool spent a charge")
+	view.jump_requested()
+	for tick in 600:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual foreign minor travel refused: " + str(owner.get_last_error())):
+			shell.free(); return
+	var arrival: Dictionary = owner.get_freedom_flight_state()
+	var arrival_bytes := save_bytes(owner, output.path_join("foreign-arrival-native.json"))
+	check(MinorState.valid(arrival) and arrival.system_id == entry.system_id and arrival.resources.jump_charges == 1 and arrival.jump.phase == "idle" and arrival_bytes == originals["foreign-arrival"], "Actual foreign minor arrival differs from independent full C++ Save")
+	check(foreign_notes(arrival_bytes) == notes, "Minor arrival changed retained personal notes/pouch")
+	shell.switch_journey_view()
+	view = shell.current_view
+	if not check(view is MinorView and view.paused and view.error.is_empty() and shell.error.is_empty() and view.staged_model == occupied_model and view.staged_model.valid_current_pose(), "Foreign minor failed the real borrowed-Wayfarer handoff"):
+		shell.free(); return
+	view.set_process(false)
+	view.observe_neutral_controls()
+	view.select_home()
+	var home_choice: Dictionary = owner.get_freedom_flight_state()
+	check(home_choice.jump.get("route_kind") == "foreign_minor" and home_choice.jump.get("destination_name") == "Origin Home", "Foreign minor omitted its direct charted Origin Home destination")
+	view.jump_requested()
+	for tick in 600:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual foreign-minor-to-Home tick refused: " + str(owner.get_last_error())):
+			shell.free(); return
+	var home_bytes := save_bytes(owner, output.path_join("foreign-home-native.json"))
+	check(home_bytes == originals["foreign-home"] and foreign_notes(home_bytes) == notes, "Actual direct Home return differs from C++ full Save or changes retained notes")
+	shell.switch_journey_view()
+	view = shell.current_view
+	var home: Dictionary = owner.get_freedom_flight_state()
+	check(view is FlightView and not view is MinorView and view.paused and view.error.is_empty() and shell.error.is_empty() and view.staged_model == occupied_model and home.resources.jump_charges == 0 and not home.attached, "Three actual charged legs failed the free-flight Home view handoff")
+	view.set_process(false)
+	shell.free()
+	await process_frame
+	var snapshots := {}
+	for label in ["foreign-approach", "foreign-withdraw"]:
+		var peer: Variant = ClassDB.instantiate("FreedomBridge")
+		var restored := shell_for(peer, phases.path_join(label + ".json"), assets)
+		if restored == null: continue
+		var observed: Dictionary = peer.get_freedom_flight_state()
+		var bytes := save_bytes(peer, output.path_join(label + "-continued.json"))
+		check(restored.current_view is MinorView and restored.current_view.paused and MinorState.valid(observed) and observed.body_id == arrival.body_id and observed.system_id == arrival.system_id and observed.stand_off_gap > 0.0 and not observed.surface.landed and not observed.surface.gear_deployed and observed.surface_walk.is_empty() and bytes == originals[label] and foreign_notes(bytes) == notes, "Reached foreign inspection Continue lost stand-off/no-landing/owner/notes/full bytes: " + label)
+		snapshots[label] = {"tick": observed.tick, "altitude": observed.altitude, "stand_off_gap": observed.stand_off_gap, "fuel_fraction": observed.resources.fraction}
+		restored.free()
+		await process_frame
+	if snapshots.size() == 2:
+		check(snapshots["foreign-approach"].altitude < arrival.altitude and snapshots["foreign-withdraw"].altitude > snapshots["foreign-approach"].altitude and snapshots["foreign-withdraw"].altitude >= 2000.0 and int(snapshots["foreign-withdraw"].tick) > int(snapshots["foreign-approach"].tick) and snapshots["foreign-withdraw"].fuel_fraction < snapshots["foreign-approach"].fuel_fraction, "Actual independent approach/withdraw snapshots lost movement/clock/fuel accounting")
+	for label in originals:
+		check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Foreign minor check mutated C++ source fixture: " + label)
+	var evidence := {"version": 1, "completed": failures == initial_failures, "scope": "Actual native UI minor/Home travel from paid foreign entry; exact independent C++ Save parity and genuine reached inspection snapshot Continue. C++ earlier route has one labelled Home-space placement; no asteroid landing or present-specimen provenance is claimed.", "source_sha256": source_hashes, "native_flight_ticks": 1201, "inspection_snapshots": snapshots, "retained_components": notes}
+	var file := FileAccess.open(output.path_join("foreign-outing-report.json"), FileAccess.WRITE)
+	if check(file != null, "Foreign minor evidence unavailable"):
+		file.store_string(JSON.stringify(evidence, "\t") + "\n")
+
 func run() -> void:
 	CompanionLayoutChecks.check_inputs(check)
 	if failures: quit(1); return
@@ -306,6 +409,7 @@ func run() -> void:
 		failures += await RouteReuse.run(self, reuse_shell, reused, assets, output.path_join("route-reuse"), "moon")
 		reuse_shell.free()
 		await process_frame
+	await check_foreign_outing(phases, assets, output)
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Minor integration test changed source fixture: " + label)
 	print("Native minor: %d failures" % failures)
 	quit(1 if failures else 0)

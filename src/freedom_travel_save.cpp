@@ -355,7 +355,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
       d.travel.version == kFreedomComposedTravelStateVersion ||
       d.travel.version == kFreedomRecoveringTravelStateVersion ||
       d.travel.version == kFreedomStrainedTravelStateVersion ||
-      d.travel.version == kFreedomForeignMoonTravelStateVersion)
+      d.travel.version == kFreedomForeignMoonTravelStateVersion ||
+      d.travel.version == kFreedomForeignMinorTravelStateVersion)
     return detail::validate_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -504,7 +505,8 @@ auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
       d.travel.version == kFreedomComposedTravelStateVersion ||
       d.travel.version == kFreedomRecoveringTravelStateVersion ||
       d.travel.version == kFreedomStrainedTravelStateVersion ||
-      d.travel.version == kFreedomForeignMoonTravelStateVersion)
+      d.travel.version == kFreedomForeignMoonTravelStateVersion ||
+      d.travel.version == kFreedomForeignMinorTravelStateVersion)
     return detail::encode_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -563,7 +565,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if ((*root)["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
       (*root)["format_version"] == kFreedomRecoveringTravelSaveFormatVersion ||
       (*root)["format_version"] == kFreedomStrainedTravelSaveFormatVersion ||
-      (*root)["format_version"] == kFreedomForeignMoonTravelSaveFormatVersion)
+      (*root)["format_version"] == kFreedomForeignMoonTravelSaveFormatVersion ||
+      (*root)["format_version"] == kFreedomForeignMinorTravelSaveFormatVersion)
     return detail::decode_composed_travel(*root);
   const bool network_format =
       (*root)["format_version"] == kFreedomNetworkTravelSaveFormatVersion;

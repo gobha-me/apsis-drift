@@ -21,7 +21,7 @@ func create_body_geometry(pending: Dictionary) -> Node3D:
 	return geometry
 
 func add_body_controls(column: Node) -> void:
-	controls_menu.add_button(column, "Select jump home", select_home)
+	controls_menu.add_button(column, "Select jump to Origin Home", select_home)
 	controls_menu.add_button(column, "Begin / cancel local spool", jump_requested)
 
 func build_ui() -> void:
@@ -48,7 +48,7 @@ func update_compact_hud() -> void:
 	assist_button.disabled = jumping
 	moon_select_button.disabled = jumping
 	moon_jump_button.disabled = not state.jump.available and state.jump.phase != "spool"
-	moon_jump_button.text = "Cancel local spool" if state.jump.phase == "spool" else "Begin local jump"
+	moon_jump_button.text = (("Cancel spool" if state.jump.phase == "spool" else "Begin jump to Origin Home") if state.jump.get("route_kind") == "foreign_minor" else ("Cancel local spool" if state.jump.phase == "spool" else "Begin local jump"))
 	moon_jump_button.tooltip_text = str(state.jump.refusal) if moon_jump_button.disabled else ""
 	pause_button.text = "Resume" if paused else "Pause"
 

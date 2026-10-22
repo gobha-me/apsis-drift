@@ -438,7 +438,8 @@ def validate_report(report, path, metadata, selected, m, runner):
                     all(HEX.fullmatch(sha) for sha in row["files_sha256"].values()), "Foreign/incomplete fixture")
             if family == "minor_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
-                    ("arrival", "approach", "withdraw", "home")},
+                    ("arrival", "approach", "withdraw", "home", "rendezvous-near", "reuse-captured",
+                     "foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw")},
                     "Incomplete actual minor phases")
             if family == "derelict_saves":
                 require(set(row["files_sha256"]) == {name + ".json" for name in

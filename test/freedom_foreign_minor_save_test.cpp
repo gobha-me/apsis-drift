@@ -1,0 +1,513 @@
+#include "apsis_drift/freedom_recovery_save.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
+#include "apsis_drift/freedom_travel_save.hpp"
+#include "apsis_drift/moon_surface_landmarks.hpp"
+#include "apsis_drift/native_craft_binding.hpp"
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <tuple>
+
+#include <iostream>
+#include <limits>
+#include <nlohmann/json.hpp>
+#include <source_location>
+#include <stdexcept>
+#include <type_traits>
+
+namespace {
+using namespace apsis_drift;
+using Json = nlohmann::ordered_json;
+unsigned checks{};
+auto check(bool value, const char* message) -> void {
+  ++checks;
+  if (!value) throw std::runtime_error(message);
+}
+template <class T, class E>
+auto need(std::expected<T, E> value,
+          std::source_location location = std::source_location::current())
+    -> T {
+  if (!value) {
+    std::cerr << location.file_name() << ':' << location.line() << ' ';
+    if constexpr (requires { value.error().detail; })
+      std::cerr << value.error().detail << '\n';
+    else if constexpr (std::is_enum_v<E>)
+      std::cerr << "provider refusal " << static_cast<unsigned>(value.error())
+                << '\n';
+    throw std::runtime_error("Composed codec fixture refused");
+  }
+  if constexpr (!std::is_void_v<T>) return std::move(*value);
+}
+auto flight_of(const FreedomTravelSaveDocument& d)
+    -> FreedomFlightSaveDocument {
+  return surface_base_flight(d.voyage.voyage.voyage.base);
+}
+auto roundtrip(const FreedomTravelSaveDocument& d) -> std::string {
+  const auto encoded = need(encode_freedom_travel_document_json(d));
+  const auto decoded = need(decode_freedom_travel_document_json(encoded));
+  check(decoded == d &&
+            need(encode_freedom_travel_document_json(decoded)) == encoded,
+        "Explicit56 preserves current voyage, fixed receipts, bill and "
+        "canonical bytes");
+  const auto expected =
+      d.travel.version == kFreedomForeignMinorTravelStateVersion  ? 63U
+      : d.travel.version == kFreedomForeignMoonTravelStateVersion ? 61U
+                                                                  : 56U;
+  check(Json::parse(encoded)["format_version"] == expected,
+        "Travel retains its explicitly selected outer envelope");
+  return encoded;
+}
+auto tick(FreedomTravelSaveDocument& d, SimulationTick time) -> void {
+  auto& flight =
+      std::get<FreedomFlightSaveDocument>(d.voyage.voyage.voyage.base);
+  flight.flight.tick = time;
+  flight.origin.state.tick = time;
+  d.voyage.voyage.resources.tick = time;
+}
+auto fixture(std::uint32_t network_version = 1) -> FreedomTravelSaveDocument {
+  // Saved-space codec fixture, not a claimed flown departure or descent.
+  // The pilot is constructed from the genuine station entry/boarding route.
+  const Seed seed{42};
+  auto origin = need(make_freedom_network_new_game_document(seed));
+  origin.network = FreedomNetworkSelection{network_version};
+  const auto system = need(generate_physical_origin_system(seed, 2));
+  const auto station = generate_origin_station(seed);
+  const auto geometry = need(origin_station_geometry(station));
+  const auto port = need(resolve_origin_port_pose(system, station, geometry,
+                                                  {station.id, 1}, 5000));
+  OriginWalkerState entry;
+  for (unsigned i = 0; i < 2960; ++i)
+    entry = need(advance_origin_walker(entry, {0, -1, 0}));
+  const auto binding = need(make_native_starting_assembly_binding({}));
+  const RigidVector3 eye{entry.foot_position_metres.x,
+                         entry.foot_position_metres.y +
+                             kOriginWalkerEyeHeightMetres,
+                         entry.foot_position_metres.z};
+  const auto route = need(step_origin_gameplay_boarding(
+      need(begin_origin_gameplay_boarding(binding, port, eye,
+                                          entry.heading_radians,
+                                          GameplayBoardingDirection::board)),
+      kGameplayBoardingTicks));
+  const FreedomBoardingState pilot{FreedomBoardingPhase::seated, entry,
+                                   5000 - kGameplayBoardingTicks, route};
+  origin.state.tick = 5000;
+  FreedomFlightSaveDocument flight;
+  flight.origin = origin;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = 3;
+  flight.model.frame_policy = 2;
+  flight.model.optics = 1;
+  flight.model.companions = 1;
+  flight.world = FreedomActiveWorldSelection{2, system.catalog.id,
+                                             origin.recipe.home_planet};
+  flight.flight = port.planet_relative;
+  flight.flight.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
+  const auto home =
+      need(find_local_system_planet(system, origin.recipe.home_planet));
+  flight.flight.position_metres = {
+      0, 0, static_cast<double>(home->descriptor.radius.value) * 10000};
+  flight.flight.orientation = {};
+  flight.flight.linear_velocity_metres_per_second = {};
+  flight.flight.angular_velocity_radians_per_second = {};
+  flight.flight = need(canonicalize_rigid_body_state(
+      RigidBodyWorldContext{system}, flight.flight));
+  const FreedomSurfaceSaveDocument surface{flight, {}};
+  const FreedomResources resources{1,
+                                   origin.state.craft,
+                                   flight.flight.craft,
+                                   5000,
+                                   kFreedomFlightCapacityQuanta - 123,
+                                   3};
+  const FreedomResourceSaveDocument fueled{surface, resources};
+  FreedomKnowledgeSaveDocument mapped{fueled,
+                                      need(make_freedom_starting_knowledge(
+                                          seed, network_version == 2 ? 6 : 5))};
+  FreedomTravelSaveDocument result{
+      mapped, {}, NativeStartingAssemblySelection{}, pilot};
+  result.travel.version = kFreedomComposedTravelStateVersion;
+  result.travel.composed.emplace();
+  return result;
+}
+auto system_leg(FreedomTravelSaveDocument& d, SystemId destination) -> void {
+  auto& s = d.travel;
+  s.composed->active = FreedomComposedRouteKind::system;
+  s.composed->selected_body.reset();
+  s.selected = destination;
+  roundtrip(d);
+  s.phase = FreedomJumpPhase::spool;
+  s.spool_tick = flight_of(d).flight.tick;
+  roundtrip(d);
+  tick(d, s.spool_tick + kJumpSpoolTicks);
+  const auto source = flight_of(d);
+  const auto& ledger = d.voyage.voyage.resources;
+  const auto frozen = need(freeze_freedom_jump_arrival(
+      {ledger.drive ? kFreedomRecoveryJumpTargetingVersion
+                    : kFreedomNetworkJumpTargetingVersion,
+       source.origin.recipe.universe_seed, source.origin.state.craft,
+       source.flight, destination, IntersystemRuleProfile::assisted,
+       s.next_attempt, source.origin.lineage, source.origin.network,
+       ledger.drive}));
+  s.committed = frozen;
+  s.commitment_resources = d.voyage.voyage.resources;
+  if (ledger.drive)
+    d.voyage.voyage.resources.drive = need(advance_freedom_drive_recovery(
+        *ledger.drive, FreedomJumpRecoveryKind::system, s.next_attempt,
+        frozen.recovery->source_checksum, source.flight.tick));
+  --d.voyage.voyage.resources.jump_charges;
+  ++s.next_attempt;
+  s.phase = FreedomJumpPhase::transit;
+  roundtrip(d);
+  const auto network = need(generate_freedom_system_network(
+      source.origin.recipe.universe_seed, source.origin.network->version));
+  const auto system =
+      need(resolve_freedom_network_system(network, destination));
+  const auto centre =
+      need(resolve_planet_ephemeris(system, frozen.preview.reference_planet,
+                                    {frozen.preview.arrival_tick, 0}));
+  auto arrival = source;
+  arrival.flight.tick = frozen.preview.arrival_tick;
+  arrival.origin.state.tick = arrival.flight.tick;
+  arrival.flight.frame = {RigidFrameKind::planet_relative_inertial,
+                          destination,
+                          frozen.preview.reference_planet,
+                          {}};
+  arrival.flight.position_metres = {frozen.point.x - centre.position.x,
+                                    frozen.point.y - centre.position.y,
+                                    frozen.point.z - centre.position.z};
+  arrival.flight.linear_velocity_metres_per_second = {
+      frozen.preview.arrival_velocity.x - centre.velocity.x,
+      frozen.preview.arrival_velocity.y - centre.velocity.y,
+      frozen.preview.arrival_velocity.z - centre.velocity.z};
+  arrival.flight = need(canonicalize_rigid_body_state(
+      RigidBodyWorldContext{system}, arrival.flight));
+  arrival.world = FreedomActiveWorldSelection{2, destination,
+                                              frozen.preview.reference_planet};
+  arrival.model.hold = {};
+  d.voyage.voyage.voyage.base = arrival;
+  d.voyage.voyage.resources.tick = arrival.flight.tick;
+  s.selected.reset();
+  s.phase = FreedomJumpPhase::idle;
+  s.spool_tick = 0;
+  roundtrip(d);
+}
+auto home(const FreedomTravelSaveDocument& d) -> BodyTarget {
+  const auto f = flight_of(d);
+  return {generate_first_intersystem_identities(f.origin.recipe.universe_seed)
+              .origin_system,
+          body_id(f.origin.recipe.home_planet)};
+}
+auto foreign_target(const FreedomTravelSaveDocument& d,
+                    FreedomComposedRouteKind kind) -> BodyTarget {
+  const auto f = flight_of(d);
+  const auto owner = need(hydrate_freedom_flight_document(f)).system;
+  const auto catalog = need(generate_secondary_body_catalog(owner));
+  return {
+      owner.catalog.id,
+      catalog.bodies[kind == FreedomComposedRouteKind::foreign_minor ? 1 : 0]
+          .node.id};
+}
+auto select_body(FreedomTravelSaveDocument& d, FreedomComposedRouteKind kind,
+                 BodyTarget target) -> void {
+  d.travel.composed->active = kind;
+  d.travel.composed->selected_body = target;
+  d.travel.selected.reset();
+  roundtrip(d);
+}
+auto foreign_leg(FreedomTravelSaveDocument& d, FreedomComposedRouteKind kind,
+                 BodyTarget target) -> void {
+  auto& s = d.travel;
+  auto& c = *s.composed;
+  select_body(d, kind, target);
+  s.phase = FreedomJumpPhase::spool;
+  s.spool_tick = flight_of(d).flight.tick;
+  roundtrip(d);
+  tick(d, s.spool_tick + kJumpSpoolTicks);
+  const auto source = flight_of(d);
+  auto& checkpoint = kind == FreedomComposedRouteKind::foreign_minor
+                         ? c.foreign_minor
+                         : c.foreign_moon;
+  auto profile = source.moon || source.minor
+                     ? checkpoint.outbound->request.home_model
+                     : source.model;
+  if (!source.moon && !source.minor) profile.hold = {};
+  const auto& before = d.voyage.voyage.resources;
+  const auto frozen = need(freeze_local_body_jump_arrival(
+      {kind == FreedomComposedRouteKind::foreign_minor
+           ? (before.drive ? kFreedomRecoveryForeignMinorJumpVersion
+                           : kFreedomForeignMinorJumpVersion)
+           : (before.drive ? kFreedomRecoveryForeignMoonJumpVersion
+                           : kFreedomForeignMoonJumpVersion),
+       source, target, s.next_attempt, profile, before.drive}));
+  checkpoint.committed = frozen;
+  checkpoint.commitment_resources = before;
+  if (!source.moon && !source.minor) checkpoint.outbound = frozen;
+  if (before.drive)
+    d.voyage.voyage.resources.drive = need(advance_freedom_drive_recovery(
+        *before.drive,
+        kind == FreedomComposedRouteKind::foreign_minor
+            ? FreedomJumpRecoveryKind::minor
+            : FreedomJumpRecoveryKind::moon,
+        s.next_attempt, frozen.source_checksum, source.flight.tick));
+  --d.voyage.voyage.resources.jump_charges;
+  ++s.next_attempt;
+  s.phase = FreedomJumpPhase::transit;
+  roundtrip(d);
+  tick(d, frozen.arrival_tick - 1);
+  roundtrip(d);
+  d.voyage.voyage.voyage.base = frozen.arrival;
+  d.voyage.voyage.resources.tick = frozen.arrival_tick;
+  s.phase = FreedomJumpPhase::idle;
+  s.spool_tick = 0;
+  c.selected_body.reset();
+  roundtrip(d);
+}
+auto visit_system(FreedomTravelSaveDocument& d) -> void {
+  // The same system-presence event granted by actual system arrival. This
+  // does not fabricate planetary contact, landing or surface observation.
+  const auto f = flight_of(d);
+  const auto craft = f.origin.state.craft;
+  d.voyage.knowledge = need(apply_freedom_knowledge(
+      d.voyage.knowledge,
+      {{KnowledgeSubjectKind::system, f.world->system, f.world->system.value},
+       KnowledgeFact::presence,
+       {NavigationKnowledgeLevel::visited, KnowledgeSource::physical_arrival,
+        craft.value, f.flight.tick, craft}},
+      f.flight.tick));
+}
+auto origin_notes(FreedomTravelSaveDocument& d) -> void {
+  // Labelled present-metadata codec fixture, not a claim of a second physical
+  // collection/walking campaign. Source identity is genuinely regenerated.
+  const auto f = flight_of(d);
+  const auto owner =
+      need(generate_physical_origin_system(f.origin.recipe.universe_seed, 2));
+  const auto catalog = need(generate_secondary_body_catalog(owner));
+  const auto moon = need(
+      generate_physical_moon_descriptor(catalog, catalog.bodies[0].node.id));
+  const auto shell = static_cast<std::int32_t>(std::floor(
+      static_cast<double>(moon.radius_metres) / kSurfaceLandmarkCellMetres));
+  std::optional<MoonSurfaceLandmarkIdentity> site;
+  for (std::int32_t x = -1; x <= 1 && !site; ++x)
+    for (std::int32_t y = -1; y <= 1 && !site; ++y)
+      for (std::int32_t z = -1; z <= 1 && !site; ++z)
+        site = need(identify_moon_surface_landmark(moon, {shell + x, y, z}));
+  check(site.has_value(),
+        "Bounded existing Moon identity supplies retained metadata");
+  const BodyTarget target{owner.catalog.id, moon.body};
+  auto& k = d.voyage.knowledge;
+  k.surface_marker = FreedomSurfaceMarkerState{
+      kFreedomMoonSurfaceMarkerVersion,
+      FreedomMoonSurfaceMarkerPoint{target.system, target.body,
+                                    site->reference_position_metres, 7}};
+  k.moon_surface_landmarks = FreedomMoonSurfaceLandmarkState{
+      kFreedomMoonSurfaceLandmarkVersion,
+      {{target, site->cell, site->id, kMoonTerrainRecipeVersion, 7}}};
+  const FreedomFieldSampleRecord sample{
+      target,     site->cell,           site->id, kMoonTerrainRecipeVersion,
+      site->kind, f.origin.state.craft, 7};
+  k.field_samples = FreedomFieldSampleState{
+      kFreedomFieldSamplesVersion, f.origin.state.craft, {sample}, {sample}};
+  roundtrip(d);
+}
+auto resource_mode(FreedomTravelSaveDocument& d, std::uint32_t version)
+    -> void {
+  auto& ledger = d.voyage.voyage.resources;
+  ledger.version = version;
+  if (version != kFreedomResourceVersion)
+    ledger.drive =
+        FreedomDriveRecoveryState{version == kFreedomStrainedResourceVersion
+                                      ? kFreedomStrainedDriveRecoveryVersion
+                                      : kFreedomDriveRecoveryVersion,
+                                  {},
+                                  {}};
+}
+auto to_foreign(FreedomTravelSaveDocument& d) -> void {
+  system_leg(d, generate_first_intersystem_identities({42}).target_system);
+  visit_system(d);
+  tick(d, flight_of(d).flight.tick + 1);
+}
+auto invalids(const FreedomTravelSaveDocument& d) -> void {
+  const auto bytes = roundtrip(d);
+  for (unsigned fault = 0; fault < 16; ++fault) {
+    auto bad = Json::parse(bytes);
+    auto& t = bad["travel"];
+    auto& c = t["composed"];
+    auto& slot = c["foreign_minor"];
+    switch (fault) {
+      case 0: bad["format_version"] = 61U; break;
+      case 1: t["version"] = 8U; break;
+      case 2: c["version"] = 2U; break;
+      case 3: c.erase("foreign_minor"); break;
+      case 4: slot["unknown"] = 0U; break;
+      case 5: slot["commitment_resources"] = nullptr; break;
+      case 6: slot["outbound"] = nullptr; break;
+      case 7: t["next_attempt"] = 0U; break;
+      case 8: slot["committed"]["source_checksum"] = 0U; break;
+      case 9: slot["committed"]["arrival_tick"] = 0U; break;
+      case 10:
+        slot["outbound"]["version"] = kFreedomForeignMoonJumpVersion;
+        break;
+      case 11:
+        slot["committed"]["arrival"]["world_owner"]["version"] = 1U;
+        break;
+      case 12: c["active"] = -1; break;
+      case 13: c["active"] = std::numeric_limits<std::uint64_t>::max(); break;
+      case 14:
+        slot["committed"]["version"] =
+            std::numeric_limits<std::uint64_t>::max();
+        break;
+      case 15: slot["outbound"]["destination"]["kind"] = "moon"; break;
+      default: break;
+    }
+    check(!decode_freedom_travel_document_json(bad.dump()),
+          "Closed63 refuses malformed "
+          "owner/slot/profile/receipt/bill/clock/version/counter");
+  }
+  auto future = std::make_unique<FreedomTravelSaveDocument>(d);
+  const auto& out = *d.travel.composed->foreign_minor.outbound;
+  bool changed{};
+  for (auto& e : future->voyage.knowledge.entries)
+    if (e.subject == KnowledgeSubject{KnowledgeSubjectKind::system,
+                                      out.request.destination.system,
+                                      out.request.destination.system.value} &&
+        e.fact == KnowledgeFact::presence)
+      for (auto& evidence : e.transitions)
+        if (evidence.level == NavigationKnowledgeLevel::visited) {
+          evidence.tick = out.request.source.flight.tick + 1;
+          changed = true;
+        }
+  need(validate_freedom_knowledge_document(future->voyage));
+  check(changed && !encode_freedom_travel_document_json(*future),
+        "Later individually valid system visit cannot authorize an earlier "
+        "minor departure");
+  check(roundtrip(d) == bytes,
+        "Rejected candidates do not mutate current full Save");
+}
+auto recovery(const FreedomTravelSaveDocument& d) -> void {
+  FreedomRecoverySaveDocument source{d, {}};
+  const auto f = flight_of(d);
+  const auto pending = need(record_freedom_loss(
+      source, FreedomLossCause::irrecoverable_destruction, f.origin.state.craft,
+      f.flight.tick, need(freedom_recovery_source_checksum(source.voyage))));
+  const auto replacement = need(complete_freedom_recovery(pending));
+  const auto bytes = need(encode_freedom_recovery_document_json(replacement));
+  const auto resumed = need(decode_freedom_recovery_document_json(bytes));
+  const auto& notes = recovery_knowledge(resumed.voyage).knowledge;
+  check(resumed == replacement &&
+            resumed.recovery.latest->retired == source.voyage &&
+            notes.field_samples->journal ==
+                d.voyage.knowledge.field_samples->journal &&
+            notes.field_samples->carried.empty() &&
+            notes.surface_marker == d.voyage.knowledge.surface_marker,
+        "Recovery29 preserves exact retired63 and first notes, with existing "
+        "lost-pouch replacement policy");
+}
+auto minor_outing(std::uint32_t version, std::uint32_t network_version)
+    -> void {
+  auto d =
+      std::make_unique<FreedomTravelSaveDocument>(fixture(network_version));
+  origin_notes(*d);
+  d->travel.version = kFreedomForeignMinorTravelStateVersion;
+  d->travel.composed->version = kFreedomForeignMinorComposedRoutesVersion;
+  resource_mode(*d, version);
+  roundtrip(*d);
+  to_foreign(*d);
+  const auto notes = d->voyage.knowledge;
+  const auto minor =
+      foreign_target(*d, FreedomComposedRouteKind::foreign_minor);
+  auto& flight =
+      std::get<FreedomFlightSaveDocument>(d->voyage.voyage.voyage.base);
+  // Preserve the actual frozen ten-radius foreign arrival. The hold selection
+  // exercises profile derivation without moving the source pose.
+  flight.model.hold.target =
+      OrbitHoldTarget{flight.world->planet,
+                      std::hypot(flight.flight.position_metres.x,
+                                 flight.flight.position_metres.y,
+                                 flight.flight.position_metres.z) +
+                          1'000'000,
+                      {0, 0, 1}};
+  foreign_leg(*d, FreedomComposedRouteKind::foreign_minor, minor);
+  const auto hydrated = need(hydrate_freedom_flight_document(flight_of(*d)));
+  check(hydrated.minor && hydrated.minor->minor.parent.kind == BodyKind::star &&
+            !d->travel.composed->foreign_minor.outbound->request.home_model.hold
+                 .target &&
+            d->voyage.knowledge == notes,
+        "Foreign minor retains genuine STAR parent and exact prior "
+        "profile/notes without surface tools");
+  invalids(*d);
+  recovery(*d);
+  tick(*d, flight_of(*d).flight.tick + 1);
+  foreign_leg(*d, FreedomComposedRouteKind::foreign_minor, home(*d));
+  check(d->voyage.voyage.resources.jump_charges == 0 &&
+            d->travel.next_attempt == 4 && d->voyage.knowledge == notes &&
+            flight_of(*d).world->system == home(*d).system,
+        "Three paid typed commitments return to actual Home with exact carried "
+        "specimens/notes");
+  const auto saved = need(encode_freedom_travel_document_json(*d));
+  tick(*d, flight_of(*d).flight.tick + 1);
+  const auto checkpoint = d->travel.composed->foreign_minor;
+  d->travel.composed->active = FreedomComposedRouteKind::system;
+  d->travel.selected =
+      generate_first_intersystem_identities({42}).target_system;
+  roundtrip(*d);
+  check(d->travel.composed->foreign_minor == checkpoint && !saved.empty(),
+        "Later ordinary system selection preserves completed minor checkpoint");
+}
+auto cross_slot_selection(std::uint32_t version) -> void {
+  auto d = std::make_unique<FreedomTravelSaveDocument>(fixture());
+  d->travel.version = kFreedomForeignMoonTravelStateVersion;
+  d->travel.composed->version = kFreedomForeignMoonComposedRoutesVersion;
+  resource_mode(*d, version);
+  to_foreign(*d);
+  const auto old61 = roundtrip(*d);
+  const auto old_json = Json::parse(old61);
+  check(!old_json["travel"]["composed"].contains("foreign_minor"),
+        "Historical61 remains closed and omits the new checkpoint");
+  const auto before = flight_of(*d);
+  const auto ledger = d->voyage.voyage.resources;
+  const auto attempt = d->travel.next_attempt;
+  d->travel.version = kFreedomForeignMinorTravelStateVersion;
+  d->travel.composed->version = kFreedomForeignMinorComposedRoutesVersion;
+  select_body(*d, FreedomComposedRouteKind::foreign_minor,
+              foreign_target(*d, FreedomComposedRouteKind::foreign_minor));
+  select_body(*d, FreedomComposedRouteKind::foreign_moon,
+              foreign_target(*d, FreedomComposedRouteKind::foreign_moon));
+  check(flight_of(*d) == before && d->voyage.voyage.resources == ledger &&
+            d->travel.next_attempt == attempt,
+        "Minor selection promotion then Moon switch is "
+        "zero-time/resource-neutral with no invented capacity");
+  foreign_leg(*d, FreedomComposedRouteKind::foreign_moon,
+              foreign_target(*d, FreedomComposedRouteKind::foreign_moon));
+  tick(*d, flight_of(*d).flight.tick + 1);
+  foreign_leg(*d, FreedomComposedRouteKind::foreign_moon, home(*d));
+  check(d->travel.version == kFreedomForeignMinorTravelStateVersion &&
+            d->travel.composed->version ==
+                kFreedomForeignMinorComposedRoutesVersion &&
+            d->travel.composed->foreign_moon.committed &&
+            !d->travel.composed->foreign_minor.committed &&
+            d->voyage.voyage.resources.jump_charges == 0 &&
+            d->travel.next_attempt == 4,
+        "Selected9 carrier preserves actual later Moon outing and original "
+        "three-charge budget");
+  const auto continued = need(decode_freedom_travel_document_json(old61));
+  check(need(encode_freedom_travel_document_json(continued)) == old61,
+        "Unmodified old61 canonical bytes remain exact after independent "
+        "version9 outing");
+}
+} // namespace
+int main() {
+  try {
+    for (const auto version :
+         {kFreedomResourceVersion, kFreedomRecoveryResourceVersion,
+          kFreedomStrainedResourceVersion}) {
+      minor_outing(version, 1);
+      cross_slot_selection(version);
+    }
+    minor_outing(kFreedomStrainedResourceVersion, 2);
+    std::cout << checks << " foreign minor codec checks passed\n";
+    return 0;
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << '\n';
+    return 1;
+  }
+}

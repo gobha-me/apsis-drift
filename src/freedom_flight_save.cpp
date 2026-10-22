@@ -470,7 +470,8 @@ auto decode_flight(std::string_view text, bool system_import)
                                    "expected unsigned save version")};
   if (!system_import &&
       (root["format_version"] == kFreedomMinorFlightSaveFormatVersion ||
-       root["format_version"] == kFreedomNetworkMinorFlightSaveFormatVersion))
+       root["format_version"] == kFreedomNetworkMinorFlightSaveFormatVersion ||
+       root["format_version"] == kFreedomForeignMinorFlightSaveFormatVersion))
     return detail::decode_minor_flight(root);
   if (!system_import &&
       (root["format_version"] == kFreedomMoonFlightSaveFormatVersion ||

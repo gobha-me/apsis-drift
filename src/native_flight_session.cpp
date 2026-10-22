@@ -220,10 +220,13 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     return std::unexpected{"System flight cannot select contact, outside "
                            "actors, impacts or an active jump yet"};
   const auto reference = find_local_system_planet(
-      hydrated->system, hydrated->moon
-                            ? PlanetId{hydrated->moon->moon.parent.value}
-                        : hydrated->minor ? document.origin.recipe.home_planet
-                                          : *relative->frame.planet);
+      hydrated->system,
+      hydrated->moon ? PlanetId{hydrated->moon->moon.parent.value}
+      : hydrated->minor
+          ? (document.minor->version == kFreedomForeignMinorWorldVersion
+                 ? hydrated->system.catalog.planets.front().descriptor.id
+                 : document.origin.recipe.home_planet)
+          : *relative->frame.planet);
   if (!reference || selected.home_planet != (*reference)->descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};

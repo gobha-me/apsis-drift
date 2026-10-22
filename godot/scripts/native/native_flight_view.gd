@@ -1912,7 +1912,7 @@ func select_minor_jump() -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
-	report_action_status("Asteroid inspection selected. One charge commits after spooling.")
+	report_action_status("Asteroid inspection selected. One charge commits after spooling." + (" Last charge: none will remain for Home." if int(state.get("resources", {}).get("jump_charges", 0)) == 1 else ""))
 	update_view(0.0)
 
 
@@ -2486,7 +2486,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	jump_status.text = "Jump drive · %s" % phase.capitalize()
 	if phase != "idle": jump_status.text += " · %.1f s" % jump.get("remaining_seconds", 0.0)
 	if jump.get("destination_name") is String and not jump.destination_name.is_empty():
-		jump_status.text += ("\nJump target · " + jump.destination_name + "\nFree-flight arrival; approach and landing remain manual." if jump.get("route_kind") == "foreign_moon" else "\nPlanet target · " + jump.destination_name + "\nHigh space arrival; descent and landing remain manual.")
+		if jump.get("route_kind") == "foreign_minor":
+			jump_status.text += "\nJump target · " + jump.destination_name + "\nStand-off arrival; close inspection only."
+		else:
+			jump_status.text += ("\nJump target · " + jump.destination_name + "\nFree-flight arrival; approach and landing remain manual." if jump.get("route_kind") == "foreign_moon" else "\nPlanet target · " + jump.destination_name + "\nHigh space arrival; descent and landing remain manual.")
 	if jump.has("distance_light_hours"):
 		jump_status.text += "\n%.1f light-hours · %s arrival envelope %.0f m\nHeading %.1f° · drift %.1f%%" % [jump.distance_light_hours, str(jump.quality), jump.envelope_radius_metres, jump.heading_error_degrees, jump.drift_percent]
 	elif phase == "idle" and not jump.has("destination_name"): jump_status.text += "\nSelect a chart destination"

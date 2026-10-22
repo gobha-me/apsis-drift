@@ -114,3 +114,30 @@ segments feed the ordinary native shell test. Invalid owners/versions/kinds,
 non-finite state, mesh dimensions/buffer shortages, swept boundaries and exact
 Save/Continue are checked separately. Automated and rendered checks do not
 establish manual controller feel, final asteroid art or full Freedom acceptance.
+
+## A generated minor beyond Origin
+
+After visiting a generated non-Origin system, its first ordinary planet can
+serve as the entry reference for **Select asteroid inspection jump**. The
+minor remains a genuine star-orbiting catalog body. It does not become a moon
+of that entry planet, and other planet-to-minor routes remain outside this
+bounded outing.
+
+The starter's three charges cover **Home → entry planet → minor → Origin
+Home**, with one charge at each normal commitment. The final charge is usable
+with a warning. The minor view's **Select jump to Origin Home** chooses a
+direct charted return to free flight near Origin Station. Selection grants no
+charge, docking or refueling. Actual endpoint distance and clearance still
+apply; a route outside the drive's rated range refuses.
+
+Use real thrusters to approach and withdraw from the existing stand-off limit.
+This remains a close inspection with a bounded exclusion response. Landing,
+walking and mining are unavailable. Preserve fuel for maneuvering.
+
+Explicit foreign-minor selection adopts travel63/state9/composed3 and
+minor world2/flight64. The outing retains the actual entry-planet flight
+profile with its body-bound hold cleared, the paid commitments, the earlier
+Moon/system/planet receipts and all existing notes. Changing an uncommitted
+minor choice to a Moon keeps that selected carrier; it does not fabricate a
+minor visit. Existing Origin minor worlds and formats46/55 retain their rules.
+Save/Continue preserves genuine ownership and the shared clock.

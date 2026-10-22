@@ -156,6 +156,7 @@ auto NativeFreedomFlightSession::jump_selection_available(
              !((travel_->version == kFreedomRecoveringTravelStateVersion ||
                 travel_->version == kFreedomStrainedTravelStateVersion ||
                 travel_->version == kFreedomForeignMoonTravelStateVersion ||
+                travel_->version == kFreedomForeignMinorTravelStateVersion ||
                 (freedom_knowledge_has_planetary_chart(
                      knowledge_->recipe.version) &&
                  travel_->version == kFreedomComposedTravelStateVersion)) &&
@@ -191,7 +192,9 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
   }
   auto candidate = *this;
   if ((candidate.travel_ &&
-       candidate.travel_->version == kFreedomForeignMoonTravelStateVersion) ||
+       (candidate.travel_->version == kFreedomForeignMoonTravelStateVersion ||
+        candidate.travel_->version ==
+            kFreedomForeignMinorTravelStateVersion)) ||
       (candidate.resources_ && candidate.resources_->drive) ||
       freedom_knowledge_has_planetary_chart(
           candidate.knowledge_->recipe.version)) {

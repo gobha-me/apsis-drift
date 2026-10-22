@@ -2,6 +2,7 @@
 
 #include <limits>
 
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
 namespace apsis_drift {
@@ -21,6 +22,29 @@ auto fields(const Json& value, std::initializer_list<std::string_view> names)
 auto selected_version(const Json& value, std::uint32_t version) -> bool {
   return value.is_number_unsigned() && value == version;
 }
+auto minor_system(const FreedomSaveDocument& origin,
+                  const FreedomMinorWorldSelection& selection)
+    -> std::expected<PhysicalLocalSystem, SaveSchemaError> {
+  if (selection.version == kFreedomMinorWorldVersion) {
+    const auto system =
+        generate_physical_origin_system(origin.recipe.universe_seed, 2);
+    if (system && selection.target.system == system->catalog.id) return *system;
+  } else if (selection.version == kFreedomForeignMinorWorldVersion &&
+             origin.network) {
+    const auto origin_system =
+        generate_physical_origin_system(origin.recipe.universe_seed, 2);
+    const auto network = generate_freedom_system_network(
+        origin.recipe.universe_seed, origin.network->version);
+    if (origin_system && network &&
+        selection.target.system != origin_system->catalog.id) {
+      const auto system =
+          resolve_freedom_network_system(*network, selection.target.system);
+      if (system) return *system;
+    }
+  }
+  return std::unexpected{
+      failure("$.world_owner.target", "minor world/system selection refused")};
+}
 } // namespace
 
 auto hydrate_freedom_minor_flight_document(
@@ -37,21 +61,16 @@ auto hydrate_freedom_minor_flight_document(
     return std::unexpected{failure(
         "$.flight.tick", "history/flight clocks differ or cannot advance")};
   const auto& selection = *document.minor;
-  if (selection.version != kFreedomMinorWorldVersion ||
+  if ((selection.version != kFreedomMinorWorldVersion &&
+       selection.version != kFreedomForeignMinorWorldVersion) ||
       selection.physical_recipe != kPhysicalMinorRecipeVersion ||
       selection.rotation_recipe != kPhysicalMinorRotationVersion ||
       selection.dynamics_recipe != kMinorBodyDynamicsVersion)
     return std::unexpected{
         failure("$.world_owner",
                 "unsupported minor world/physical/rotation/dynamics recipe")};
-  // The first route selects the existing origin minor, not arbitrary minors in
-  // unvisited systems. All physical source fields are regenerated from origin.
-  const auto system =
-      generate_physical_origin_system(document.origin.recipe.universe_seed, 2);
-  if (!system || selection.target.system != system->catalog.id)
-    return std::unexpected{
-        failure("$.world_owner.target",
-                "minor is outside the supported origin system")};
+  const auto system = minor_system(document.origin, selection);
+  if (!system) return std::unexpected{system.error()};
   const auto catalog = generate_secondary_body_catalog(*system);
   if (!catalog)
     return std::unexpected{
@@ -108,9 +127,11 @@ auto encode_minor_flight(const FreedomFlightSaveDocument& document)
     return std::unexpected{
         failure("$.flight", "minor state or target cannot encode")};
   Json root = Json::parse(*origin);
-  root["format_version"] = document.origin.network
-                               ? kFreedomNetworkMinorFlightSaveFormatVersion
-                               : kFreedomMinorFlightSaveFormatVersion;
+  root["format_version"] =
+      document.minor->version == kFreedomForeignMinorWorldVersion
+          ? kFreedomForeignMinorFlightSaveFormatVersion
+      : document.origin.network ? kFreedomNetworkMinorFlightSaveFormatVersion
+                                : kFreedomMinorFlightSaveFormatVersion;
   root["state"]["location"] = "minor_flight";
   root["world_owner"] = {{"version", document.minor->version},
                          {"target", Json::parse(*target)},
@@ -131,10 +152,15 @@ auto encode_minor_flight(const FreedomFlightSaveDocument& document)
 
 auto decode_minor_flight(const Json& root)
     -> std::expected<FreedomFlightSaveDocument, SaveSchemaError> {
-  const bool network =
+  const bool foreign =
       root.is_object() && root.contains("format_version") &&
       selected_version(root["format_version"],
-                       kFreedomNetworkMinorFlightSaveFormatVersion);
+                       kFreedomForeignMinorFlightSaveFormatVersion);
+  const bool network =
+      foreign ||
+      (root.is_object() && root.contains("format_version") &&
+       selected_version(root["format_version"],
+                        kFreedomNetworkMinorFlightSaveFormatVersion));
   auto shape = root;
   shape.erase("craft_lineage");
   if (network) {
@@ -154,7 +180,9 @@ auto decode_minor_flight(const Json& root)
   const auto& model = root["flight_model"];
   if (!fields(world, {"version", "target", "physical_recipe", "rotation_recipe",
                       "dynamics_recipe"}) ||
-      !selected_version(world["version"], kFreedomMinorWorldVersion) ||
+      !selected_version(world["version"], foreign
+                                              ? kFreedomForeignMinorWorldVersion
+                                              : kFreedomMinorWorldVersion) ||
       !selected_version(world["physical_recipe"],
                         kPhysicalMinorRecipeVersion) ||
       !selected_version(world["rotation_recipe"],
@@ -190,11 +218,11 @@ auto decode_minor_flight(const Json& root)
   if (!target)
     return std::unexpected{
         failure("$.world_owner.target", "malformed typed body target")};
-  const auto system =
-      generate_physical_origin_system(history->recipe.universe_seed, 2);
-  if (!system || target->system != system->catalog.id)
-    return std::unexpected{
-        failure("$.world_owner.target", "foreign minor system")};
+  const FreedomMinorWorldSelection selection{
+      foreign ? kFreedomForeignMinorWorldVersion : kFreedomMinorWorldVersion,
+      *target};
+  const auto system = minor_system(*history, selection);
+  if (!system) return std::unexpected{system.error()};
   const auto source = generate_secondary_body_catalog(*system);
   if (!source)
     return std::unexpected{failure("$.world_owner", "minor source refused")};
@@ -210,8 +238,7 @@ auto decode_minor_flight(const Json& root)
   document.model.physical_catalog = 2;
   document.model.physical_ephemeris = 2;
   document.model.assistance = model["assistance"].get<bool>();
-  document.minor =
-      FreedomMinorWorldSelection{kFreedomMinorWorldVersion, *target};
+  document.minor = selection;
   if (const auto valid = hydrate_freedom_minor_flight_document(document);
       !valid)
     return std::unexpected{valid.error()};

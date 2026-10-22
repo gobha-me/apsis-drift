@@ -571,7 +571,8 @@ def main(argv=None):
         if code != 0 or timed_out:
             print("FAIL actual continuous minor route fixture", flush=True)
             return 1
-        names = ("arrival", "approach", "withdraw", "home")
+        names = ("arrival", "approach", "withdraw", "home", "rendezvous-near", "reuse-captured",
+                     "foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw")
         if not all((phases / (name + ".json")).is_file() and
                    0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
                    for name in names):
