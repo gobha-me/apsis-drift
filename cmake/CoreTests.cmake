@@ -75,7 +75,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_link_libraries(apsis-drift-native-local-jump-tests PRIVATE nlohmann_json::nlohmann_json)
   add_executable(apsis-drift-saved-moon-flight-tests test/godot/saved_moon_flight_test.cpp)
   target_include_directories(apsis-drift-saved-moon-flight-tests PRIVATE src)
-  target_link_libraries(apsis-drift-saved-moon-flight-tests PRIVATE apsis-drift::core)
+  target_link_libraries(apsis-drift-saved-moon-flight-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-saved-moon-flight-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME saved-moon-flight-contract COMMAND apsis-drift-saved-moon-flight-tests)

@@ -123,6 +123,40 @@ inline auto rated_rise_margin(const NativeFreedomFlightSession& session,
   return std::isfinite(margin) ? std::optional{margin} : std::nullopt;
 }
 
+// The same rated instrument for an actual Moon owner, including prospective
+// free flight while landed. A foot observer cannot stand in for the craft's
+// radial attitude. Saved rigid-state versions retain their admitted semantics.
+inline auto rated_rise_margin(const NativeFreedomFlightSession& session,
+                              const SavedMoonFlightProjection& view)
+    -> std::optional<double> {
+  const auto& document = session.document();
+  const auto& body = document.flight;
+  if (!session.moon() || !document.moon ||
+      view.version != kSavedMoonFlightProjectionVersion ||
+      view.moon != *session.moon() || view.body != body ||
+      view.surface_observer ||
+      body.frame.kind != RigidFrameKind::body_relative_inertial ||
+      body.frame.body != view.moon.body || session.recovery_pending() ||
+      session.walker() || session.surface_walker() ||
+      (session.docking() && session.docking()->attached) ||
+      (session.travel() && session.travel()->phase != FreedomJumpPhase::idle))
+    return std::nullopt;
+  const auto frame = resolve_craft_frame(body.craft);
+  const auto gravity =
+      evaluate_moon_body_gravity(RigidBodyWorldContext{*session.moon()}, body,
+                                 {document.moon->dynamics_recipe});
+  const double up = view.body_axes[1].up;
+  if (!frame || !gravity || !std::isfinite(up) || std::abs(up) > 1.000000000001)
+    return std::nullopt;
+  const auto& properties = frame->properties;
+  const auto& g = gravity->acceleration_metres_per_second_squared;
+  const double margin =
+      static_cast<double>(properties.positive_force_newtons[1]) /
+          properties.dry_mass_kg * std::clamp(up, -1.0, 1.0) -
+      std::hypot(g.x, g.y, g.z);
+  return std::isfinite(margin) ? std::optional{margin} : std::nullopt;
+}
+
 inline auto validate_saved_projection(const NativeFreedomFlightSession& session)
     -> void {
   if (session.minor())

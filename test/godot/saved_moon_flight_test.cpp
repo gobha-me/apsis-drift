@@ -1,5 +1,5 @@
 #include "../moon_contact_fixture.hpp"
-#include "apsis_drift/godot/saved_moon_flight.hpp"
+#include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/moon_surface_walker.hpp"
 
 #include <cmath>
@@ -321,9 +321,150 @@ auto gear_clearance(const test_fixture::MoonContactFixture& fixture) -> void {
         "All observations and refusals preserve complete source state and "
         "physical owner");
 }
+auto rise_readout(const test_fixture::MoonContactFixture& fixture) -> void {
+  const auto& moon = fixture.moon;
+  const RigidBodyWorldContext context{moon};
+  const auto properties = need(resolve_craft_frame(fixture.source.craft));
+  const long double radius = moon.radius_metres;
+  // Independent recipe1 sphere mass/G oracle, rather than the gravity query
+  // or the presentation's fixed-frame tangent/body-axis calculation.
+  const long double mu =
+      moon.gravitational_constant_si * moon.density_kilograms_per_cubic_metre *
+      (4.L / 3.L) * std::numbers::pi_v<long double> * radius * radius * radius;
+  std::array<double, 2> upright{};
+  std::size_t altitude_index{};
+  for (const double altitude : {1000., 100000.}) {
+    for (const double angle :
+         {0., std::numbers::pi / 3, std::numbers::pi / 2, std::numbers::pi}) {
+      // Explicit saved-space instrument fixture, never a flown approach or
+      // supported landing claim. Preserve the genuine descriptor/frame/tick.
+      auto body = fixture.source;
+      body.position_metres = {0, moon.radius_metres + altitude, 0};
+      body.orientation = {std::cos(angle / 2), std::sin(angle / 2), 0, 0};
+      body = need(canonicalize_rigid_body_state(context, body));
+      FreedomFlightSaveDocument document{
+          make_freedom_new_game_document(Seed{42}), body, {}};
+      document.origin.state.tick = body.tick;
+      document.model.physical_catalog = 2;
+      document.model.physical_ephemeris = 2;
+      document.moon =
+          FreedomMoonWorldSelection{1, {context.system.id, moon.body}};
+      auto session = need(NativeFreedomFlightSession::open(
+          need(native_select_save_document(NativeSaveDocument{document}))));
+      const auto saved =
+          need(encode_native_save_document_json(need(session.save_document())));
+      const auto view = project_saved_moon_flight(session);
+      const auto margin = rated_rise_margin(session, view);
+      const auto& actual = session.document().flight;
+      const auto thrust_up = body_axis(actual.orientation, 1);
+      const auto p = actual.position_metres;
+      const long double distance_squared = dot(p, p);
+      const long double distance = std::sqrt(distance_squared);
+      const long double radial_up = dot(thrust_up, p) / distance;
+      const long double thrust =
+          static_cast<long double>(
+              properties.properties.positive_force_newtons[1]) /
+          properties.properties.dry_mass_kg;
+      const double expected =
+          static_cast<double>(thrust * radial_up - mu / distance_squared);
+      check(margin.has_value(),
+            "Admitted historical Moon flight has a rated RISE estimate");
+      if (!margin) throw std::runtime_error("Actual Moon RISE unavailable");
+      near(*margin, expected, 1e-11,
+           "Moon RISE uses independent quaternion/radial and physical gravity "
+           "oracle");
+      near(static_cast<double>(radial_up), std::cos(angle), 2e-15,
+           "Upright tilted sideways and inverted thrust retain radial signs");
+      if (angle == 0) upright[altitude_index] = *margin;
+      if (angle == std::numbers::pi / 2 || angle == std::numbers::pi)
+        check(*margin < 0,
+              "Sideways/inverted full RISE cannot become upward lift");
+      for (const double bad :
+           {std::numeric_limits<double>::quiet_NaN(),
+            std::numeric_limits<double>::infinity(),
+            -std::numeric_limits<double>::infinity(), -1.01, 1.01}) {
+        auto malformed = view;
+        malformed.body_axes[1].up = bad;
+        check(!rated_rise_margin(session, malformed),
+              "Nonfinite or nonunit Moon radial component is unavailable");
+      }
+      {
+        auto malformed = view;
+        ++malformed.version;
+        check(!rated_rise_margin(session, malformed),
+              "Unsupported Moon projection version is unavailable");
+      }
+      {
+        auto malformed = view;
+        ++malformed.moon.radius_metres;
+        check(!rated_rise_margin(session, malformed),
+              "Altered physical Moon descriptor cannot supply thrust reading");
+      }
+      {
+        auto malformed = view;
+        ++malformed.moon.body.value;
+        check(!rated_rise_margin(session, malformed),
+              "Foreign Moon owner cannot supply thrust reading");
+      }
+      {
+        auto malformed = view;
+        ++malformed.body.tick;
+        check(!rated_rise_margin(session, malformed),
+              "Stale Moon projection clock is unavailable");
+      }
+      {
+        auto malformed = view;
+        malformed.body.position_metres.x += 1;
+        check(!rated_rise_margin(session, malformed),
+              "Changed source pose cannot reuse a Moon thrust reading");
+      }
+      {
+        auto malformed = view;
+        malformed.body.position_metres.x =
+            std::numeric_limits<double>::quiet_NaN();
+        check(!rated_rise_margin(session, malformed),
+              "Nonfinite source projection is unavailable without throwing");
+      }
+      {
+        auto malformed = view;
+        malformed.surface_observer = true;
+        check(!rated_rise_margin(session, malformed),
+              "Foot-observer projection cannot describe craft radial attitude");
+      }
+      {
+        auto malformed = view;
+        malformed.body.frame = view.fixed_frame;
+        check(!rated_rise_margin(session, malformed),
+              "A raw Moon-fixed state cannot substitute for relative flight");
+      }
+      for (unsigned repeat = 0; repeat < 3; ++repeat)
+        check(rated_rise_margin(session, view) == margin,
+              "Repeated Moon thrust reads are exactly stable");
+      check(need(encode_native_save_document_json(
+                need(session.save_document()))) == saved,
+            "All valid/refused Moon thrust reads preserve complete Save and "
+            "clock");
+    }
+    ++altitude_index;
+  }
+  check(upright[1] > upright[0],
+        "Greater actual Moon altitude reduces gravity in the RISE estimate");
+  const auto legacy =
+      need(NativeFreedomFlightSession::open(need(native_new_game(Seed{42}))));
+  const auto view = project_saved_moon_flight(moon, fixture.source);
+  const auto saved =
+      need(encode_native_save_document_json(need(legacy.save_document())));
+  check(
+      !rated_rise_margin(legacy, view),
+      "Planetary session cannot acquire Moon capability through a projection");
+  check(need(encode_native_save_document_json(need(legacy.save_document()))) ==
+            saved,
+        "Unsupported planetary read preserves its complete Save");
+}
 auto run() -> void {
   const auto fixture = test_fixture::make_moon_contact_fixture();
   gear_clearance(fixture);
+  rise_readout(fixture);
   const auto& moon = fixture.moon;
   const RigidBodyWorldContext context{moon};
   const auto original =

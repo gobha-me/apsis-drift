@@ -76,6 +76,13 @@ This transient feedback adds no saved field or movement rule.
 
 ## Local voyage and operation
 
+In paused Controls, **Full RISE − gravity** shows the existing rated free-flight
+estimate using actual Moon gravity and the current craft attitude. While landed,
+it is prospective: it assumes fuel and excludes contact and other thrust channels.
+It is not a hover, liftoff or escape guarantee. The estimate is unavailable on
+foot, during an active jump or pending recovery. Back returns to paused Controls;
+reading does not advance time or change the journey.
+
 New Game still starts on Origin Station. Walk to Wayfarer, board, sit, release
 the port and withdraw using the existing flight controls. **Select nearby moon
 jump** chooses the actual origin moon. The normal jump command spools and

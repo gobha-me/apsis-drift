@@ -94,4 +94,7 @@ assumes fuel and excludes drag, contact and all other thrust channels. While
 landed it describes prospective free flight; it is not a hover, safe liftoff or
 escape guarantee. Turning the craft changes the result. It is absent on foot,
 while attached, during an active jump, in system-only flight or pending recovery.
-The compact HUD is unchanged.
+The compact HUD is unchanged. Moon Controls provide the same estimate through
+**Full RISE − gravity** in a paused reader; it uses the actual Moon gravity and
+current craft attitude, including prospective free flight while landed.
+Back returns to paused Controls.

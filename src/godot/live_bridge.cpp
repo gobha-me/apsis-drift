@@ -2080,6 +2080,8 @@ class FreedomBridge : public godot::RefCounted {
     result["air_density"] = 0.0;
     result["dynamic_pressure"] = 0.0;
     result["recovery_pending"] = session.recovery_pending();
+    if (const auto margin = rated_rise_margin(session, view))
+      result["rated_rise_margin"] = *margin;
 
     result["attached"] = false;
     result["target_port"] = std::int64_t{0};
