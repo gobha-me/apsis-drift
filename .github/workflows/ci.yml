@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Prefer the Ubuntu package archive
+        run: sudo bash tools/ci_ubuntu_mirror.sh
+
       - name: Install Clang tooling and lint dependencies
         env:
           CLANG_VERSION: "20"
@@ -134,6 +137,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Prefer the Ubuntu package archive
+        run: sudo bash tools/ci_ubuntu_mirror.sh
+
       - name: Install Clang
         if: matrix.clang
         env:
@@ -206,6 +212,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Prefer the Ubuntu package archive
+        run: sudo bash tools/ci_ubuntu_mirror.sh
+
       - name: Install Clang
         if: matrix.clang
         env:
@@ -256,6 +265,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+
+      - name: Prefer the Ubuntu package archive
+        run: sudo bash tools/ci_ubuntu_mirror.sh
 
       - name: Download and verify Godot 4.7.2
         run: |
