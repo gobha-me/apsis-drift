@@ -5,6 +5,7 @@
 #include "apsis_drift/freedom_resources.hpp"
 #include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
+#include "freedom_resource_save_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -68,7 +69,7 @@ auto source(bool network = false) -> FreedomFlightSaveDocument {
 auto stamp(const FrozenFreedomJumpUncertainty& u, FreedomJumpRecoveryKind kind,
            std::uint64_t attempt, SimulationTick commit)
     -> FreedomDriveRecoveryState {
-  return {1,
+  return {u.version,
           {},
           need(make_freedom_jump_recovery_stamp(kind, attempt,
                                                 u.source_checksum, commit))};
@@ -129,7 +130,7 @@ auto scalar_contract() -> void {
   for (unsigned fault = 0; fault < 8; ++fault) {
     auto bad = state;
     switch (fault) {
-      case 0: bad.version = 2; break;
+      case 0: bad.version = 3; break;
       case 1: bad.lineage = FreedomCraftLineage{2, 1}; break;
       case 2: bad.lineage = FreedomCraftLineage{1, 0}; break;
       case 3:
@@ -256,7 +257,7 @@ auto same_body_motion(const FreedomFlightSaveDocument& a,
              b.flight.angular_velocity_radians_per_second &&
          a.model == b.model && a.origin == b.origin;
 }
-auto planet_contract() -> void {
+auto planet_contract(std::uint32_t drive_version = 1) -> void {
   const auto d = source(true);
   const auto owner = need(hydrate_freedom_flight_document(d)).system;
   const BodyTarget home{owner.catalog.id, body_id(*d.flight.frame.planet)};
@@ -267,6 +268,7 @@ auto planet_contract() -> void {
   auto request = old;
   request.version = kFreedomRecoveryPlanetJumpVersion;
   request.recovery.emplace();
+  request.recovery->version = drive_version;
   const auto first = need(freeze_freedom_planet_jump_arrival(request));
   check(first.arrival == baseline.arrival &&
             first.arrival_system_position == baseline.arrival_system_position &&
@@ -327,7 +329,7 @@ auto planet_contract() -> void {
         "Ready repeat planet arrival regains exact baseline geometry "
         "at45seconds");
 }
-auto local_contract(bool minor) -> void {
+auto local_contract(bool minor, std::uint32_t drive_version = 1) -> void {
   const auto d = source();
   const auto owner = need(hydrate_freedom_flight_document(d)).system;
   const auto catalog = need(generate_secondary_body_catalog(owner));
@@ -346,6 +348,7 @@ auto local_contract(bool minor) -> void {
   const auto baseline = need(freeze_local_body_jump_arrival(request));
   request.version = policy;
   request.recovery.emplace();
+  request.recovery->version = drive_version;
   const auto first = need(freeze_local_body_jump_arrival(request));
   check(
       first.arrival == baseline.arrival &&
@@ -393,7 +396,8 @@ auto local_contract(bool minor) -> void {
   check(!freeze_local_body_jump_arrival(legacy),
         "Old companion policy rejects the new context");
 }
-auto system_contract(bool network, IntersystemRuleProfile profile) -> void {
+auto system_contract(bool network, IntersystemRuleProfile profile,
+                     std::uint32_t drive_version = 1) -> void {
   const auto d = source(network);
   const auto ids = generate_first_intersystem_identities({42});
   FreedomJumpRequest request;
@@ -407,6 +411,7 @@ auto system_contract(bool network, IntersystemRuleProfile profile) -> void {
   const auto baseline = need(freeze_freedom_jump_arrival(request));
   request.version = kFreedomRecoveryJumpTargetingVersion;
   request.recovery.emplace();
+  request.recovery->version = drive_version;
   const auto first = need(freeze_freedom_jump_arrival(request));
   check(first.point == baseline.point &&
             first.sample_seed == baseline.sample_seed &&
@@ -485,10 +490,244 @@ auto system_contract(bool network, IntersystemRuleProfile profile) -> void {
   check(!preview_freedom_jump(legacy),
         "Old system policies cannot silently accept recovery context");
 }
+auto strain_contract() -> void {
+  const FreedomDriveRecoveryState ready{kFreedomStrainedDriveRecoveryVersion};
+  check(need(freedom_jump_recovery_reading(ready, 0)) ==
+            FreedomJumpRecoveryReading{0, 0, true, false, 5400, 5400},
+        "A fresh strained drive has no debt and projects the normal45s cycle");
+  const auto first = need(advance_freedom_drive_recovery(
+      ready, FreedomJumpRecoveryKind::system, 1, 11, 100));
+  check(first.version == 2 && first.lineage == ready.lineage &&
+            first.last_use ==
+                need(make_freedom_jump_recovery_stamp(
+                    FreedomJumpRecoveryKind::system, 1, 11, 100)) &&
+            !ready.last_use,
+        "First strain use retains normal45s and never mutates the input");
+  const auto second_tick = first.last_use->arrival_tick + 360;
+  const auto second = need(advance_freedom_drive_recovery(
+      first, FreedomJumpRecoveryKind::planet, 2, 12, second_tick));
+  check(second.last_use->recovery_ticks == 10440 &&
+            second.last_use->arrival_tick == second_tick + kJumpTransitTicks &&
+            need(freedom_jump_recovery_reading(first, second_tick))
+                    .next_recovery_ticks == 10440,
+        "Real360tick spool cooling carries5040ticks into the next arrival");
+  const auto third = need(
+      advance_freedom_drive_recovery(second, FreedomJumpRecoveryKind::moon, 3,
+                                     13, second.last_use->arrival_tick + 360));
+  const auto fourth = need(
+      advance_freedom_drive_recovery(third, FreedomJumpRecoveryKind::minor, 4,
+                                     14, third.last_use->arrival_tick + 360));
+  check(third.last_use->recovery_ticks == 10800 &&
+            fourth.last_use->recovery_ticks == 10800,
+        "A shared system/planet/Moon/minor sequence caps debt at90s");
+  const auto untouched = fourth;
+  check(!advance_freedom_drive_recovery(fourth, FreedomJumpRecoveryKind::system,
+                                        5, 15,
+                                        fourth.last_use->arrival_tick - 1) &&
+            fourth == untouched,
+        "A pending transit refuses an overlapping use atomically");
+  const auto arrival = fourth.last_use->arrival_tick;
+  std::uint32_t previous = kFreedomJumpRecoveryMaximumRadiusMillimetres;
+  for (SimulationTick elapsed = 0; elapsed <= 10800; ++elapsed) {
+    const auto reading =
+        need(freedom_jump_recovery_reading(fourth, arrival + elapsed));
+    const auto remaining = 10800 - elapsed;
+    const long double q = static_cast<long double>(remaining) / 10800;
+    const long double reference = 2000000.0L * q * q * (3 - 2 * q);
+    check(reading.remaining_ticks == remaining &&
+              reading.cycle_ticks == 10800 &&
+              reading.next_recovery_ticks ==
+                  std::min<SimulationTick>(10800, 5400 + remaining) &&
+              reading.ready == !remaining && !reading.pending_arrival &&
+              reading.extra_radius_millimetres <= previous &&
+              static_cast<long double>(reading.extra_radius_millimetres) +
+                      1e-8L >=
+                  reference &&
+              static_cast<long double>(reading.extra_radius_millimetres) -
+                      reference <=
+                  1.00000001L,
+          "Every90s-cycle tick independently corroborates bounded normalized "
+          "smoothstep and cooling");
+    previous = reading.extra_radius_millimetres;
+  }
+  check(need(freedom_jump_recovery_reading(fourth, arrival + 5400))
+                .extra_radius_millimetres == 1000000,
+        "Half of a90s cycle leaves half its location-error radius");
+  const auto cooled = need(advance_freedom_drive_recovery(
+      fourth, FreedomJumpRecoveryKind::system, 5, 15, arrival + 10800));
+  check(cooled.last_use->recovery_ticks == 5400,
+        "Waiting out all debt restores a45s next cycle");
+  auto legacy = first;
+  legacy.version = 1;
+  const auto legacy_next = need(advance_freedom_drive_recovery(
+      legacy, FreedomJumpRecoveryKind::planet, 2, 12, second_tick));
+  check(
+      legacy_next.last_use ==
+              need(make_freedom_jump_recovery_stamp(
+                  FreedomJumpRecoveryKind::planet, 2, 12, second_tick)) &&
+          need(freedom_jump_recovery_reading(legacy, second_tick))
+                  .next_recovery_ticks == 5400,
+      "Historical drive1 keeps its exact fixed45s stamp despite an early use");
+  for (unsigned fault = 0; fault < 8; ++fault) {
+    auto bad = fourth;
+    switch (fault) {
+      case 0: bad.version = 3; break;
+      case 1: bad.last_use->recovery_ticks = 0; break;
+      case 2: bad.last_use->recovery_ticks = 5399; break;
+      case 3: bad.last_use->recovery_ticks = 10801; break;
+      case 4: bad.last_use->recovery_ticks = UINT64_MAX; break;
+      case 5: ++bad.last_use->arrival_tick; break;
+      case 6: bad.last_use->attempt = 1; break;
+      case 7: bad.version = 1; break;
+      default: break;
+    }
+    check(!validate_freedom_drive_recovery(bad, arrival),
+          "Unsupported versions/durations/first-use strain and clock tampering "
+          "refuse");
+  }
+  for (auto attempt : {std::uint64_t{0}, std::uint64_t{2}, UINT64_MAX})
+    check(!advance_freedom_drive_recovery(
+              ready, FreedomJumpRecoveryKind::planet, attempt, 1, 100),
+          "Invalid first attempts cannot manufacture a strain stamp");
+  const auto latest = UINT64_MAX - kJumpTransitTicks - 10800 - 3;
+  auto limit_prior = fourth;
+  limit_prior.last_use->arrival_tick = latest;
+  limit_prior.last_use->commit_tick = latest - kJumpTransitTicks;
+  const auto limit = need(advance_freedom_drive_recovery(
+      limit_prior, FreedomJumpRecoveryKind::system, 5, 15, latest));
+  check(limit.last_use->recovery_ticks == 10800 &&
+            need(freedom_jump_recovery_reading(limit, UINT64_MAX - 3)).ready &&
+            !advance_freedom_drive_recovery(limit_prior,
+                                            FreedomJumpRecoveryKind::system, 5,
+                                            15, latest + 1),
+        "The last full90s-cycle commit finishes safely; the next tick refuses");
+  const auto d = source();
+  const auto owner = need(hydrate_freedom_flight_document(d)).system;
+  const BodyTarget a{owner.catalog.id, body_id(*d.flight.frame.planet)};
+  const BodyTarget b{owner.catalog.id,
+                     body_id(owner.catalog.planets[1].descriptor.id)};
+  const auto sample_tick = arrival + 5400;
+  const auto sampled = need(freeze_freedom_jump_uncertainty(
+      {42}, d.origin.state.craft, d.flight.craft, {}, 17,
+      FreedomJumpRecoveryKind::planet, sample_tick, a, b, 5, fourth));
+  check(
+      sampled.version == 2 && sampled.remaining_ticks == 5400 &&
+          sampled.extra_radius_millimetres == 1000000 &&
+          sampled == need(freeze_freedom_jump_uncertainty(
+                         {42}, d.origin.state.craft, d.flight.craft, {}, 17,
+                         FreedomJumpRecoveryKind::planet, sample_tick, a, b, 5,
+                         fourth)),
+      "Strain sample is frozen once from the actual normalized cooling input");
+  offset_bound(sampled);
+  auto shorter = fourth;
+  shorter.last_use->recovery_ticks = 9000;
+  const auto changed = need(freeze_freedom_jump_uncertainty(
+      {42}, d.origin.state.craft, d.flight.craft, {}, 17,
+      FreedomJumpRecoveryKind::planet, sample_tick, a, b, 5, shorter));
+  check(changed.sample_seed != sampled.sample_seed,
+        "Version2 sample stream binds its retained recovery duration");
+  auto foreign = fourth;
+  foreign.lineage = FreedomCraftLineage{1, 1};
+  check(!freeze_freedom_jump_uncertainty(
+            {42}, d.origin.state.craft, d.flight.craft, {}, 17,
+            FreedomJumpRecoveryKind::planet, sample_tick, a, b, 5, foreign),
+        "A foreign lineage cannot contribute cooling debt to this craft");
+}
+auto strain_resource_codec_contract() -> void {
+  auto d = source();
+  FreedomResources ledger{3, d.origin.state.craft, d.flight.craft,
+                          d.flight.tick};
+  const FreedomDriveRecoveryState ready{2};
+  const auto first = need(advance_freedom_drive_recovery(
+      ready, FreedomJumpRecoveryKind::moon, 1, 11, 100));
+  ledger.drive =
+      need(advance_freedom_drive_recovery(first, FreedomJumpRecoveryKind::minor,
+                                          2, 12, first.last_use->arrival_tick));
+  const auto before = ledger;
+  need(validate_freedom_resources(ledger, d));
+  const auto json = detail::resource_json(ledger);
+  check(need(detail::resource_value(json)) == ledger &&
+            json["drive"]["last_use"]["recovery_ticks"] == 10800,
+        "Resource3 roundtrip retains exact bounded strain debt");
+  const auto next =
+      need(advance_freedom_resource_tick(ledger, ledger.tick, 17));
+  check(
+      next.drive == ledger.drive && next.tick == ledger.tick + 1 &&
+          ledger == before,
+      "Ordinary clock/fuel accounting retains strain without mutating source");
+  auto mixed = ledger;
+  mixed.version = 2;
+  check(!validate_freedom_resources(mixed), "Resource2 cannot adopt drive2");
+  mixed = ledger;
+  mixed.drive->version = 1;
+  check(!validate_freedom_resources(mixed), "Resource3 cannot adopt drive1");
+  auto historical = *ledger.drive;
+  historical.version = 1;
+  historical.last_use = need(make_freedom_jump_recovery_stamp(
+      FreedomJumpRecoveryKind::system, 1, 11, 100));
+  const auto old = detail::drive_json(historical);
+  check(
+      old.dump() ==
+              R"({"version":1,"lineage":null,"last_use":{"kind":0,"attempt":1,"source_checksum":11,"commit_tick":100,"arrival_tick":340}})" &&
+          need(detail::drive_value(old, 1200)) == historical,
+      "Historical drive1 JSON remains byte-exact with no duration field");
+  for (unsigned fault = 0; fault < 13; ++fault) {
+    auto bad = json;
+    auto& drive = bad["drive"];
+    auto& use = drive["last_use"];
+    switch (fault) {
+      case 0: use.erase("recovery_ticks"); break;
+      case 1: use["recovery_ticks"] = 5400.0; break;
+      case 2: use["recovery_ticks"] = -1; break;
+      case 3: use["recovery_ticks"] = 5399U; break;
+      case 4: use["recovery_ticks"] = 10801U; break;
+      case 5: use["recovery_ticks"] = UINT64_MAX; break;
+      case 6: use["unselected"] = 0U; break;
+      case 7: drive["version"] = 1U; break;
+      case 8: bad["version"] = 2U; break;
+      case 9: bad["version"] = 4U; break;
+      case 10: drive["version"] = 3U; break;
+      case 11: drive.erase("last_use"); break;
+      case 12: bad.erase("drive"); break;
+      default: break;
+    }
+    check(!detail::resource_value(bad),
+          "Closed resource3 codec refuses malformed duration, mixed policy and "
+          "extra fields");
+  }
+  auto old_extra = old;
+  old_extra["last_use"]["recovery_ticks"] = 5400U;
+  check(!detail::drive_value(old_extra, 1200),
+        "Historical drive1 shape refuses new duration fields");
+  const FrozenFreedomJumpUncertainty sample{2, 17, {19}, 10800, 2000000, {}};
+  const auto uncertainty = detail::uncertainty_json(sample);
+  check(need(detail::uncertainty_value(uncertainty)) == sample,
+        "Frozen uncertainty2 permits the full90s duration");
+  auto old_sample = uncertainty;
+  old_sample["version"] = 1U;
+  check(!detail::uncertainty_value(old_sample),
+        "Frozen uncertainty1 retains its old45s bound");
+  const auto system = need(hydrate_freedom_flight_document(d)).system;
+  const auto station = generate_origin_station({42});
+  const auto geometry = need(origin_station_geometry(station));
+  d.flight = need(release_origin_port(
+      system, station, geometry,
+      {geometry.version, {station.id, 1}, ledger.frame, ledger.tick}));
+  ledger.flight_quanta = 123;
+  ledger.jump_charges = 0;
+  const auto serviced = need(replenish_freedom_resources(
+      ledger, {d, {geometry.version, {station.id, 1}, true}}));
+  check(serviced.drive == ledger.drive && serviced.tick == ledger.tick &&
+            serviced.flight_quanta == kFreedomFlightCapacityQuanta &&
+            serviced.jump_charges == 3,
+        "Actual attached service refills resource3 without clearing strain");
+}
 } // namespace
 int main() {
   try {
     scalar_contract();
+    strain_contract();
+    strain_resource_codec_contract();
     resource_contract();
     planet_contract();
     local_contract(false);
@@ -497,6 +736,13 @@ int main() {
       for (auto profile :
            {IntersystemRuleProfile::assisted, IntersystemRuleProfile::pilot})
         system_contract(network, profile);
+    planet_contract(2);
+    local_contract(false, 2);
+    local_contract(true, 2);
+    for (bool network : {false, true})
+      for (auto profile :
+           {IntersystemRuleProfile::assisted, IntersystemRuleProfile::pilot})
+        system_contract(network, profile, 2);
     std::cout << checks << " jump recovery provider checks passed\n";
     return 0;
   } catch (const std::exception& e) {

@@ -1199,6 +1199,8 @@ func refresh_planet_routes() -> void:
 	planet_jump_button.tooltip_text = "Committed transit cannot be canceled." if phase == "transit" else str(jump.get("refusal", "")) if planet_jump_button.disabled else "Spooling advances after explicit Resume; one charge commits after three seconds."
 	if phase == "idle" and jump.get("recovery") is Dictionary and not jump.recovery.ready and not planet_jump_button.disabled:
 		planet_jump_button.tooltip_text += " Early arrival has up to %.0f m extra spread; spooling reduces this bound." % jump.recovery.extra_radius_metres
+	if phase == "idle" and jump.get("recovery", {}).get("version") == 2 and not planet_jump_button.disabled:
+		planet_jump_button.tooltip_text += " Next arrival recovery ≤ %.1f s if committed now; spooling cools the drive." % jump.recovery.next_recovery_seconds
 
 
 func select_planet_destination(index: int) -> void:
@@ -2271,8 +2273,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	if jump.get("recovery") is Dictionary:
 		var recovery: Dictionary = jump.recovery
-		jump_status.text += "\nRecovery starts on arrival." if recovery.pending_arrival else "\nDrive ready." if recovery.ready else "\nRecovery %.1f s · extra spread ≤ %.0f m.\nEarly jump available for 1 charge; spooling reduces this bound." % [recovery.remaining_seconds, recovery.extra_radius_metres]
+		jump_status.text += "\n" + Status.drive_recovery_text(recovery, phase, true)
 		if phase == "idle" and not recovery.ready: jump_button.text = "Jump early · 1 charge + arrival uncertainty"
+		if phase == "idle" and recovery.version == 2 and not jump_button.disabled:
+			jump_button.tooltip_text += " Next arrival recovery ≤ %.1f s if committed now; spooling cools the drive." % recovery.next_recovery_seconds
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	var home_target := home_navigation_target(state, station_geometry)

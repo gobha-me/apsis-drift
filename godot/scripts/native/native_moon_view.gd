@@ -362,6 +362,9 @@ func update_compact_hud() -> void:
 	moon_jump_button.text = "Cancel local spool" if state.get("jump", {}).get("phase", "idle") == "spool" else "Begin local jump"
 	var jump_reason := str(state.jump.get("refusal", "Local jump unavailable."))
 	moon_jump_button.tooltip_text = jump_reason if moon_jump_button.disabled else ""
+	if not moon_jump_button.disabled and state.jump.get("phase", "idle") == "idle" and state.jump.get("recovery") is Dictionary:
+		moon_jump_button.tooltip_text = Status.drive_recovery_text(state.jump.recovery, "idle", true)
+		if not state.jump.recovery.ready: moon_jump_button.text = "Jump early · 1 charge + arrival uncertainty"
 	if moon_jump_button.disabled and not landed and not surface_walking() and not jumping:
 		primary_status.text += "\nJump unavailable · " + jump_reason
 	if cockpit_control_aimed(): primary_status.text += "\n" + surface_interaction_binding() + " · " + ("Stow gear" if state.surface.gear_deployed else "Deploy gear · manual")

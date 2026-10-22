@@ -7,6 +7,7 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomResourceVersion{1};
 inline constexpr std::uint32_t kFreedomRecoveryResourceVersion{2};
+inline constexpr std::uint32_t kFreedomStrainedResourceVersion{3};
 inline constexpr std::uint64_t kFreedomQuantaPerNewtonSecond{1'560'000};
 inline constexpr std::uint64_t kFreedomFlightCapacityQuanta{
     5'400ULL * 360'000ULL * kFreedomQuantaPerNewtonSecond};
@@ -17,7 +18,7 @@ inline constexpr std::uint32_t kFreedomJumpCapacity{3};
 
 // The existing starter identity is the vehicle owner, not just a frame type.
 // The tick is a consistency witness for the same authoritative flight clock.
-// Version1 requires absent drive; explicit version2 requires recovery1.
+// Version1 requires absent drive; resource2 selects drive1, resource3 drive2.
 struct FreedomResources {
   std::uint32_t version{kFreedomResourceVersion};
   StarterCraftId craft;

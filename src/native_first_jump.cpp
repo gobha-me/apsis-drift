@@ -154,6 +154,7 @@ auto NativeFreedomFlightSession::jump_selection_available(
     }
   } else if (travel_->version != kFreedomTravelStateVersion &&
              !((travel_->version == kFreedomRecoveringTravelStateVersion ||
+                travel_->version == kFreedomStrainedTravelStateVersion ||
                 (knowledge_->recipe.version ==
                      kFreedomPlanetaryKnowledgeVersion &&
                  travel_->version == kFreedomComposedTravelStateVersion)) &&
@@ -444,12 +445,13 @@ auto NativeFreedomFlightSession::advance_jump(
         if (candidate.resources_->drive) {
           if (!frozen->recovery)
             return std::unexpected{"Recovery jump has no frozen uncertainty"};
-          const auto stamp = make_freedom_jump_recovery_stamp(
-              FreedomJumpRecoveryKind::system, preview->request.attempt,
-              frozen->recovery->source_checksum, preview->request.source.tick);
-          if (!stamp)
+          const auto next_drive = advance_freedom_drive_recovery(
+              *candidate.resources_->drive, FreedomJumpRecoveryKind::system,
+              preview->request.attempt, frozen->recovery->source_checksum,
+              preview->request.source.tick);
+          if (!next_drive)
             return std::unexpected{"Recovery commitment clock refused"};
-          candidate.resources_->drive->last_use = *stamp;
+          candidate.resources_->drive = *next_drive;
         }
         --candidate.resources_->jump_charges;
         ++candidate.travel_->next_attempt;

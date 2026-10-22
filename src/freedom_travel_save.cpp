@@ -110,7 +110,8 @@ auto source_world(Seed seed, SystemId system,
   return std::move(*result);
 }
 auto resources_json(const FreedomResources& r) -> Json {
-  if (r.version == kFreedomRecoveryResourceVersion)
+  if (r.version == kFreedomRecoveryResourceVersion ||
+      r.version == kFreedomStrainedResourceVersion)
     return detail::resource_json(r);
   return {{"version", r.version},
           {"craft", r.craft.value},
@@ -124,7 +125,8 @@ auto resources_value(const Json& r)
     -> std::expected<FreedomResources, SaveSchemaError> {
   if (r.is_object() && r.contains("version") &&
       r["version"].is_number_unsigned() &&
-      r["version"] == kFreedomRecoveryResourceVersion)
+      (r["version"] == kFreedomRecoveryResourceVersion ||
+       r["version"] == kFreedomStrainedResourceVersion))
     return detail::resource_value(r);
   if (!fields(r, {"version", "craft", "frame_id", "frame_version", "tick",
                   "flight_quanta", "jump_charges"}) ||
@@ -349,7 +351,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     -> std::expected<void, SaveSchemaError> {
   if (d.travel.composed ||
       d.travel.version == kFreedomComposedTravelStateVersion ||
-      d.travel.version == kFreedomRecoveringTravelStateVersion)
+      d.travel.version == kFreedomRecoveringTravelStateVersion ||
+      d.travel.version == kFreedomStrainedTravelStateVersion)
     return detail::validate_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -496,7 +499,8 @@ auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     -> std::expected<std::string, SaveSchemaError> {
   if (d.travel.composed ||
       d.travel.version == kFreedomComposedTravelStateVersion ||
-      d.travel.version == kFreedomRecoveringTravelStateVersion)
+      d.travel.version == kFreedomRecoveringTravelStateVersion ||
+      d.travel.version == kFreedomStrainedTravelStateVersion)
     return detail::encode_composed_travel(d);
   if (d.travel.local || d.travel.prior_moon || d.travel.origin_routes ||
       d.travel.version == kFreedomLocalTravelStateVersion ||
@@ -553,7 +557,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
   if (!root->is_object() || !uints(*root, {"format_version"}))
     return std::unexpected{failure("unsigned travel version required")};
   if ((*root)["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
-      (*root)["format_version"] == kFreedomRecoveringTravelSaveFormatVersion)
+      (*root)["format_version"] == kFreedomRecoveringTravelSaveFormatVersion ||
+      (*root)["format_version"] == kFreedomStrainedTravelSaveFormatVersion)
     return detail::decode_composed_travel(*root);
   const bool network_format =
       (*root)["format_version"] == kFreedomNetworkTravelSaveFormatVersion;

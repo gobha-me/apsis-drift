@@ -142,10 +142,11 @@ namespace {
 auto planet_travel_trace(const std::filesystem::path& prefix,
                          apsis_drift::Seed seed,
                          apsis_drift::SimulationTick tick,
-                         bool recovering = false) -> bool {
+                         std::uint32_t drive_policy = 0) -> bool {
   using namespace apsis_drift;
-  auto selected = recovering ? native_jump_recovery_new_game(seed, 2)
-                             : native_planetary_network_new_game(seed);
+  auto selected = drive_policy == 2   ? native_jump_strain_new_game(seed, 2)
+                  : drive_policy == 1 ? native_jump_recovery_new_game(seed, 2)
+                                      : native_planetary_network_new_game(seed);
   if (!selected) return false;
   auto boarding = NativeFreedomFlightSession::open(std::move(*selected));
   if (!boarding || !boarding->save_as(prefix.string() + ".station.json"))
@@ -186,8 +187,10 @@ auto planet_travel_trace(const std::filesystem::path& prefix,
                                    {},
                                    NativeStartingAssemblySelection{},
                                    boarding->boarding()};
-  source.travel.version = recovering ? kFreedomRecoveringTravelStateVersion
-                                     : kFreedomComposedTravelStateVersion;
+  source.travel.version = drive_policy == 2 ? kFreedomStrainedTravelStateVersion
+                          : drive_policy == 1
+                              ? kFreedomRecoveringTravelStateVersion
+                              : kFreedomComposedTravelStateVersion;
   source.travel.composed.emplace();
   auto session = NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, source, (*home)->descriptor, {}});
@@ -311,7 +314,8 @@ auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
   }
   // New sidecars only. Every existing pair trace path and byte stays intact.
   return planet_travel_trace(path.string() + ".planet", seed, tick) &&
-         planet_travel_trace(path.string() + ".recovery", seed, tick, true);
+         planet_travel_trace(path.string() + ".recovery", seed, tick, 1) &&
+         planet_travel_trace(path.string() + ".strain", seed, tick, 2);
 }
 } // namespace
 

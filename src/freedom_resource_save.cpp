@@ -61,6 +61,8 @@ auto drive_json(const FreedomDriveRecoveryState& drive) -> Json {
            {"source_checksum", s.source_checksum},
            {"commit_tick", s.commit_tick},
            {"arrival_tick", s.arrival_tick}};
+    if (drive.version == kFreedomStrainedDriveRecoveryVersion)
+      use["recovery_ticks"] = s.recovery_ticks;
   }
   return {{"version", drive.version},
           {"lineage", std::move(lineage)},
@@ -70,10 +72,12 @@ auto drive_value(const Json& j, SimulationTick now)
     -> std::expected<FreedomDriveRecoveryState, SaveSchemaError> {
   if (!fields(j, {"version", "lineage", "last_use"}) ||
       !j["version"].is_number_unsigned() ||
-      j["version"] != kFreedomDriveRecoveryVersion)
+      (j["version"] != kFreedomDriveRecoveryVersion &&
+       j["version"] != kFreedomStrainedDriveRecoveryVersion))
     return std::unexpected{
         failure("$.resources.drive", "invalid closed drive selection")};
   FreedomDriveRecoveryState drive;
+  drive.version = j["version"].get<std::uint32_t>();
   if (!j["lineage"].is_null()) {
     const auto& lineage = j["lineage"];
     if (!fields(lineage, {"version", "generation"}) ||
@@ -94,8 +98,18 @@ auto drive_value(const Json& j, SimulationTick now)
   }
   if (!j["last_use"].is_null()) {
     const auto& use = j["last_use"];
-    if (!fields(use, {"kind", "attempt", "source_checksum", "commit_tick",
-                      "arrival_tick"}))
+    auto shape = use;
+    SimulationTick duration{kFreedomDriveRecoveryTicks};
+    if (drive.version == kFreedomStrainedDriveRecoveryVersion) {
+      if (!use.is_object() || !use.contains("recovery_ticks") ||
+          !use["recovery_ticks"].is_number_unsigned())
+        return std::unexpected{failure("$.resources.drive.last_use",
+                                       "unsigned recovery duration required")};
+      duration = use["recovery_ticks"].get<SimulationTick>();
+      shape.erase("recovery_ticks");
+    }
+    if (!fields(shape, {"kind", "attempt", "source_checksum", "commit_tick",
+                        "arrival_tick"}))
       return std::unexpected{
           failure("$.resources.drive.last_use", "invalid closed drive stamp")};
     for (const auto name :
@@ -111,7 +125,8 @@ auto drive_value(const Json& j, SimulationTick now)
         use["attempt"].get<std::uint64_t>(),
         use["source_checksum"].get<std::uint64_t>(),
         use["commit_tick"].get<SimulationTick>(),
-        use["arrival_tick"].get<SimulationTick>()};
+        use["arrival_tick"].get<SimulationTick>(),
+        duration};
   }
   if (!validate_freedom_drive_recovery(drive, now))
     return std::unexpected{
@@ -134,7 +149,8 @@ auto resource_value(const Json& s)
   auto shape = s;
   const bool recovering = s.is_object() && s.contains("version") &&
                           s["version"].is_number_unsigned() &&
-                          s["version"] == kFreedomRecoveryResourceVersion;
+                          (s["version"] == kFreedomRecoveryResourceVersion ||
+                           s["version"] == kFreedomStrainedResourceVersion);
   if (recovering) {
     if (!shape.contains("drive"))
       return std::unexpected{failure("$.resources", "selected drive missing")};
@@ -193,8 +209,10 @@ auto uncertainty_value(const Json& j)
       return std::unexpected{
           failure("$.travel.recovery", "unsigned frozen uncertainty required")};
   const auto& p = j["offset_metres"];
-  if (j["version"] != kFreedomDriveRecoveryVersion ||
-      j["remaining_ticks"] > kFreedomDriveRecoveryTicks ||
+  const bool strained = j["version"] == kFreedomStrainedDriveRecoveryVersion;
+  if ((!strained && j["version"] != kFreedomDriveRecoveryVersion) ||
+      j["remaining_ticks"] > (strained ? kFreedomDriveMaximumRecoveryTicks
+                                       : kFreedomDriveRecoveryTicks) ||
       j["extra_radius_millimetres"] >
           kFreedomJumpRecoveryMaximumRadiusMillimetres ||
       !p.is_array() || p.size() != 3)
@@ -208,7 +226,7 @@ auto uncertainty_value(const Json& j)
       return std::unexpected{failure(
           "$.travel.recovery", "nonfinite or unbounded uncertainty offset")};
   return FrozenFreedomJumpUncertainty{
-      1,
+      j["version"].get<std::uint32_t>(),
       j["source_checksum"].get<std::uint64_t>(),
       {j["sample_seed"].get<std::uint64_t>()},
       j["remaining_ticks"].get<SimulationTick>(),
@@ -290,7 +308,8 @@ auto decode_freedom_resource_document_json(std::string_view text)
   const auto& s = root["resources"];
   if (s.is_object() && s.contains("version") &&
       s["version"].is_number_unsigned() &&
-      s["version"] == kFreedomRecoveryResourceVersion) {
+      (s["version"] == kFreedomRecoveryResourceVersion ||
+       s["version"] == kFreedomStrainedResourceVersion)) {
     auto ledger = detail::resource_value(s);
     if (!ledger) return std::unexpected{ledger.error()};
     auto voyage = decode_freedom_surface_document_json(root["voyage"].dump());

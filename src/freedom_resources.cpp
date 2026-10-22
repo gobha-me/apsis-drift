@@ -8,8 +8,13 @@ namespace apsis_drift {
 auto validate_freedom_resources(const FreedomResources& s)
     -> std::expected<void, FreedomResourceError> {
   if ((s.version != kFreedomResourceVersion &&
-       s.version != kFreedomRecoveryResourceVersion) ||
-      (s.version == kFreedomRecoveryResourceVersion) != s.drive.has_value() ||
+       s.version != kFreedomRecoveryResourceVersion &&
+       s.version != kFreedomStrainedResourceVersion) ||
+      (s.version != kFreedomResourceVersion) != s.drive.has_value() ||
+      (s.drive &&
+       s.drive->version != (s.version == kFreedomStrainedResourceVersion
+                                ? kFreedomStrainedDriveRecoveryVersion
+                                : kFreedomDriveRecoveryVersion)) ||
       s.frame != CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion} ||
       s.flight_quanta > kFreedomFlightCapacityQuanta ||
       s.jump_charges > kFreedomJumpCapacity)

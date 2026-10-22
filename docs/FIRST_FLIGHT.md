@@ -168,3 +168,13 @@ remains a separate route; direct Moon–minor hops are not supported.
 For optional read-only frame and fixed-clock readings during a playtest, see
 [frame diagnostics](NATIVE_FRAME_DIAGNOSTICS.md). The paused toggle does not
 change the journey or tune graphics automatically.
+
+## Optional jump-drive recovery and strain
+
+At New Game, **Jump drive** offers Standard, Recovery, and Recovery + temporary
+strain independently of starting charts. Recovery is the existing45-second
+arrival-uncertainty mode. Temporary strain carries unfinished recovery into the
+next arrival cycle, from45 seconds cooled to90 seconds maximum. Early jumps remain
+available for one charge. The cockpit displays cooling and the projected next
+cycle; waiting clears the extra strain. Existing saves keep their selected rules.
+See [the drive contract](FREEDOM_JUMP_RECOVERY.md) for persistence and clock behavior.
