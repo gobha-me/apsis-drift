@@ -72,6 +72,7 @@ func run() -> void:
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
 	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 3 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
 	check(title.recovery_choice != null and title.recovery_choice.selected == 0 and title.recovery_choice.item_count == 3 and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive rules changed the default or lost independent keyboard selection")
+	check(title.origin_service_choice != null and not title.origin_service_choice.button_pressed and title.origin_service_choice.focus_mode == Control.FOCUS_ALL, "Fuel service must remain explicit opt-in with keyboard/controller access")
 	title.open_settings()
 	var settings: Control = title.settings_view
 	title.begin_new()
@@ -108,7 +109,7 @@ func run() -> void:
 	for size in [Vector2i(1280, 720), Vector2i(800, 450)]:
 		root.size = size
 		await settle()
-		for control in [title.seed, title.network_choice, title.recovery_choice, title.new_button, title.continue_button, title.reference_button, title.settings_button, title.quit_button]:
+		for control in [title.seed, title.network_choice, title.recovery_choice, title.origin_service_choice, title.new_button, title.continue_button, title.reference_button, title.settings_button, title.quit_button]:
 			control.grab_focus()
 			await settle()
 			check(title.scroll.get_global_rect().encloses(control.get_global_rect()), "Title focused action cannot scroll into view: " + str(size))
@@ -290,6 +291,17 @@ func run() -> void:
 		var strained_hash := FileAccess.get_sha256(strained_save)
 		check(shell.select_start(shell.bridge, {"mode": "continue", "value": strained_save, "assets": args[0]}) and shell.current_view.paused, "Strained-drive Continue failed actual station staging")
 		check(shell.bridge.save_freedom_as(strained_save) and FileAccess.get_sha256(strained_save) == strained_hash, "Strained-drive Continue changed complete station Save")
+	check(shell.select_start(shell.bridge, {"mode": "new_game", "value": "42", "network": true, "planetary": true, "drive_strain": true, "origin_service": true, "assets": args[0]}), "Explicit service/chart/drive staging refused: " + shell.error)
+	var service_start: Dictionary = shell.bridge.get_freedom_flight_state()
+	check(shell.current_view is Walk and service_start.tick == "0" and service_start.chart.rows.size() == 4 and service_start.jump.recovery.version == 2, "Service choice changed player charts, drive or initial clock")
+	var service: Dictionary = service_start.get("origin_service", {})
+	check(service.get("selected", false) and service.get("phase") == "Stationed at D2" and service.get("craft", {}).get("visible", false) and service.craft_id != service_start.craft_id, "Actual distinct D2 service ship was not projected at station start")
+	check(shell.current_view.service_craft != null and shell.current_view.service_craft.visible, "Selected station service ship was not staged into the scene")
+	var service_save: String = args[1].get_base_dir().path_join("service-station.json")
+	check(shell.bridge.save_freedom_as(service_save), "Selected service station Save refused")
+	var service_hash := FileAccess.get_sha256(service_save)
+	check(shell.select_start(shell.bridge, {"mode": "continue", "value": service_save, "assets": args[0]}) and shell.current_view.paused, "Selected service Continue failed actual station staging")
+	check(shell.bridge.save_freedom_as(service_save) and FileAccess.get_sha256(service_save) == service_hash and shell.current_view.service_craft != null and shell.current_view.service_craft.visible, "Service Continue changed complete Save or lost its real D2 presentation")
 	shell.free()
 	await settle()
 	print("Native title: %d failures" % failures)

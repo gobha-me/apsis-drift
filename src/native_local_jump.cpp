@@ -140,7 +140,7 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     return std::unexpected{saved.error()};
   // Adoption and switching add bounded history. Qualify the complete outer
   // save's encoding limit before publishing any selected/checkpoint state.
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

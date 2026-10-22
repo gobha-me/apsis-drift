@@ -52,6 +52,8 @@ auto latch_ready(const OriginDockAssessment& a) -> bool {
 
 auto NativeFreedomFlightSession::port_docking_conditions(bool initial) const
     -> std::expected<void, std::string> {
+  if (docking_ && origin_assistance_port_reserved(docking_->target))
+    return std::unexpected{"D2 is reserved for the Origin service craft"};
   if (recovery_pending() ||
       (travel_ && travel_->phase != FreedomJumpPhase::idle))
     return std::unexpected{"Docking requires an active voyage and idle jump"};
@@ -166,7 +168,7 @@ auto NativeFreedomFlightSession::begin_port_docking()
                              {}};
   if (auto demand = candidate.port_docking_controls(); !demand)
     return std::unexpected{demand.error()};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

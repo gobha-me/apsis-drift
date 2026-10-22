@@ -63,6 +63,7 @@ player's station-to-flight journey.
 - [Charted planetary trips](FREEDOM_PLANET_TRAVEL.md): explicit planetary charts, same-system jumps, manual descent and retained route history.
 - [Native round-trip verification](FREEDOM_NATIVE_ROUNDTRIP.md): station departure, neighboring observation, physical docking/service and disembarking.
 - [Standard Freedom recovery](FREEDOM_RECOVERY.md): explicit loss, retained universe/history, one replacement and native continuation.
+- [Origin fuel service](ORIGIN_FUEL_SERVICE.md): one actual finite-supply home-Moon responder, real departure/delivery/return and shared Save/Continue.
 - [Freedom jump targeting](FREEDOM_JUMP_TARGETING.md): actual endpoint geometry, provisional in-range envelope and frozen arrival point.
 - [Measured Freedom endurance contract](FREEDOM_ENDURANCE.md)
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)

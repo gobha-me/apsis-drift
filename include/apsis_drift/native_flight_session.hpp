@@ -1,11 +1,13 @@
 #pragma once
 
+#include "apsis_drift/freedom_assistance_save.hpp"
 #include "apsis_drift/freedom_local_jump.hpp"
 #include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/origin_station_crew.hpp"
+#include <memory>
 
 namespace apsis_drift {
 class MoonSurfaceWalkTerrain;
@@ -147,6 +149,24 @@ struct NativeOrbitalSurveyView {
 // Presentation has no mutable access to state, catalog or recipe selections.
 class NativeFreedomFlightSession {
  public:
+  [[nodiscard]] auto origin_assistance() const
+      -> const std::optional<FreedomAssistanceActor>& {
+    return assistance_;
+  }
+  [[nodiscard]] auto origin_assistance_world() const
+      -> const OriginAssistanceWorldContext* {
+    return assistance_world_.get();
+  }
+  [[nodiscard]] auto origin_assistance_propulsion() const
+      -> const VacuumActuation& {
+    return assistance_propulsion_;
+  }
+  [[nodiscard]] auto origin_assistance_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto request_origin_assistance()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto cancel_origin_assistance()
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto station_crew() const
       -> std::expected<OriginCrewView, std::string>;
   [[nodiscard]] static auto open(NativeStartup selected)
@@ -391,6 +411,22 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto player_save_document() const
+      -> std::expected<NativeSaveDocument, std::string>;
+  [[nodiscard]] auto advance_player(const NativeFlightControls&,
+                                    SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_player_walk(const OriginWalkControls&,
+                                         SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_player_surface_walk(const OriginWalkControls&,
+                                                 SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_origin_assistance_tick()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto origin_assistance_port_reserved(OriginPortId) const
+      -> bool;
+  [[nodiscard]] auto assistance_recipient_supported() const -> bool;
   [[nodiscard]] auto field_sample_collection_source(SurfaceLandmarkId) const
       -> std::expected<FreedomFieldSampleRecord, std::string>;
   [[nodiscard]] auto advance_flight(const NativeFlightControls&,
@@ -499,6 +535,9 @@ class NativeFreedomFlightSession {
   NativeFreedomFlightSession(FreedomFlightSaveDocument document,
                              FreedomFlightHydration hydrated,
                              std::optional<std::filesystem::path> source);
+  std::optional<FreedomAssistanceActor> assistance_;
+  std::shared_ptr<const OriginAssistanceWorldContext> assistance_world_;
+  VacuumActuation assistance_propulsion_{};
   FreedomFlightSaveDocument document_;
   std::optional<FreedomResources> resources_;
   std::optional<FreedomKnowledge> knowledge_;

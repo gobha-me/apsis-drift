@@ -181,7 +181,7 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
       return selected;
     // Destination choice changes travel selection, not the physical body.
     candidate.document_.flight = document_.flight;
-    const auto saved = candidate.save_document();
+    const auto saved = candidate.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};
@@ -219,7 +219,7 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
   candidate.travel_->selected = destination;
   if (auto v = candidate.travel_document(); !v)
     return std::unexpected{v.error()};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -342,7 +342,7 @@ auto NativeFreedomFlightSession::begin_jump()
                              relative.error().detail};
     candidate.document_.flight = *relative;
     if (auto begun = candidate.begin_jump(); !begun) return begun;
-    const auto saved = candidate.save_document();
+    const auto saved = candidate.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};

@@ -58,6 +58,14 @@ var instruments_open := false
 var context_source: Button
 var local_moon_button: Button
 var local_minor_button: Button
+const ServiceCraft = preload("res://scripts/native/native_service_craft_view.gd")
+var service_craft: Node3D
+var service_binding: Dictionary = {}
+var service_status: RichTextLabel
+var service_request: Button
+var service_cancel: Button
+var service_query_elapsed := 0.25
+var service_availability: Dictionary = {}
 var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
@@ -320,6 +328,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 			error = "The selected Wayfarer could not be staged"
 			return false
 	var pending := {"flight_state": flight, "station_geometry": owner.get_freedom_station_geometry()}
+	if flight.get("frame_id") == "2": pending["craft_binding"] = owner.get_freedom_craft_binding()
 	if not stage(owner, assets, pending, model):
 		if model != null and model.get_parent() == null: model.free()
 		return false
@@ -335,6 +344,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	set_process(false)
 	set_process_input(false)
+	service_binding = pending.get("craft_binding", {}).duplicate(true)
 	bridge = owner
 	state = pending.flight_state.duplicate(true)
 	if not valid_state(state):
@@ -494,6 +504,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	impact_overlay = ImpactView.new()
 	add_child(impact_overlay)
 	impact_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if not refresh_service_craft(state, 0.0):
+		error = "The service Wayfarer presentation is unavailable"
+		return false
 	build_ui()
 	return true
 
@@ -530,6 +543,69 @@ func setup_flight_mouse() -> void:
 	add_child(flight_mouse)
 	flight_mouse.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flight_mouse.hide()
+
+
+func refresh_service_craft(flight: Dictionary, delta: float) -> bool:
+	var service: Dictionary = flight.get("origin_service", {})
+	if service.is_empty():
+		if service_craft != null: service_craft.hide()
+		return true
+	var packet: Dictionary = service.get("craft", {})
+	if not ServiceCraft.valid_packet(packet, delta): return false
+	if service_craft == null:
+		service_craft = ServiceCraft.new()
+		if not service_craft.initialize(assets_root, service_binding, packet.craft_id):
+			service_craft.free()
+			service_craft = null
+			return false
+		scene.add_child(service_craft)
+	return service_craft.present(packet, delta, paused, camera.far)
+
+
+func build_origin_service_ui(column: VBoxContainer) -> void:
+	if not state.has("origin_service"): return
+	service_status = hud_text()
+	column.add_child(service_status)
+
+
+func setup_origin_service_controls(column: Node) -> void:
+	if not state.has("origin_service"): return
+	service_request = controls_menu.add_button(column, "Request fuel from Origin", origin_service_command)
+	service_cancel = controls_menu.add_button(column, "Cancel fuel request · return home", func(): origin_service_command(true))
+
+
+func origin_service_command(cancel := false) -> void:
+	if not activated or mode_change_pending or not marker_controls_available(): return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release movement and look controls before changing the fuel request.")
+		return
+	var command := "cancel_freedom_origin_assistance" if cancel else "request_freedom_origin_assistance"
+	if not bridge.call(command):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	service_query_elapsed = 0.25
+	update_view(0.0)
+	report_action_status("Return requested · Resume to advance the service ship." if cancel else "Fuel request accepted · Resume to advance the service ship.")
+
+
+func refresh_origin_service_ui(delta: float) -> void:
+	if service_status == null or service_request == null or service_cancel == null: return
+	var service: Dictionary = state.get("origin_service", {})
+	if service.is_empty():
+		service_status.hide()
+		service_request.hide()
+		service_cancel.hide()
+		return
+	service_query_elapsed += delta
+	if activated and service_query_elapsed >= 0.25:
+		service_query_elapsed = 0.0
+		service_availability = bridge.get_freedom_origin_assistance_state()
+	service_status.text = "Origin fuel service · %s\nCargo remaining %.1f%% · service jump charges %d" % [service.phase, service.cargo_fraction * 100.0, service.jump_charges]
+	service_request.disabled = not service_availability.get("request_available", false)
+	service_request.tooltip_text = service_availability.get("refusal", "Resume to check service availability")
+	service_cancel.disabled = not service.get("cancel_available", false)
 
 
 func build_ui() -> void:
@@ -574,6 +650,7 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	resource_status = hud_text()
 	column.add_child(resource_status)
+	build_origin_service_ui(column)
 	impact_status = hud_text()
 	impact_status.visible = false
 	column.add_child(impact_status)
@@ -1005,6 +1082,7 @@ func setup_controls() -> void:
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
 	setup_frame_diagnostics(survey_column)
+	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
 	survey_cancel_button = controls_menu.add_button(survey_column, "Stop orbital survey", orbital_survey_command.bind(true))
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
@@ -2099,6 +2177,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	if not refresh_service_craft(state, delta):
+		pause_on_error("The service Wayfarer presentation is unavailable")
+		return
+	refresh_origin_service_ui(delta)
 	var condition: Dictionary = state.get("impact", {"selected": false})
 	if not impact_overlay.apply(condition, state.craft_id, state.frame_id, state.frame_version, cockpit, surface_walking()):
 		pause_on_error("Saved craft condition is unavailable")
@@ -2330,8 +2412,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		unboard_button.visible = state.attached and state.target_port == 1 and boarding.get("state") == "seated"
 		if unboard_menu_button != null:
 			unboard_menu_button.visible = unboard_button.visible
-		for button in port_buttons:
-			button.disabled = state.attached or not state.get("station_available", true) or phase != "idle"
+		for index in port_buttons.size():
+			var button := port_buttons[index]
+			var reserved: bool = state.get("origin_service", {}).get("reserved_port", 0) == index + 1
+			button.disabled = reserved or state.attached or not state.get("station_available", true) or phase != "idle"
+			button.tooltip_text = "Reserved for Origin fuel service, including while it is away." if reserved else ""
 	# Ground exploration keeps the return/suit controls clear of flight telemetry.
 	var outside := surface_walking()
 	refresh_suit_lamp()

@@ -46,7 +46,7 @@ auto NativeFreedomFlightSession::store_moon_surface_marker(bool replace)
                                      actor.foot_position_metres.y,
                                      actor.foot_position_metres.z},
                                     document_.flight.tick}};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

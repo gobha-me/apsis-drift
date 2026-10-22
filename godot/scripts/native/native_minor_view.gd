@@ -56,6 +56,10 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	if not MinorState.valid(state):
 		if error.is_empty(): error = "Invalid typed minor-body observation"
 		return
+	if not refresh_service_craft(state, delta):
+		pause_on_error("The service Wayfarer presentation is unavailable")
+		return
+	refresh_origin_service_ui(delta)
 	ship.basis = state.body_basis
 	if cockpit_displays != null and not cockpit_displays.refresh(state, delta, paused):
 		pause_on_error("The minor-body instrument readings are unavailable")

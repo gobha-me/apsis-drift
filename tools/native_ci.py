@@ -439,7 +439,8 @@ def validate_report(report, path, metadata, selected, m, runner):
                     "Incomplete actual minor phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
-                    ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent")},
+                    ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
+                     "service-landed", "service-requested", "service-partial600")},
                     "Incomplete actual Moon phases")
         if "preparer_sha256" in row:
             helper = "prepare_operating_assets.py" if row["family"] == "operating_assets" else "prepare_freedom_native_assets.py"

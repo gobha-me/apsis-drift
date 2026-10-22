@@ -53,7 +53,7 @@ auto NativeFreedomFlightSession::store_surface_marker(bool replace)
                                  actor.foot_position_metres.y,
                                  actor.foot_position_metres.z},
                                 document_.flight.tick}};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -70,7 +70,7 @@ auto NativeFreedomFlightSession::clear_surface_marker()
     return std::unexpected{"No surface marker to clear"};
   auto candidate = *this;
   candidate.knowledge_->surface_marker->point.reset();
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -206,7 +206,7 @@ auto NativeFreedomFlightSession::return_from_surface_walk()
   surface_walk_terrain_.reset();
   return {};
 }
-auto NativeFreedomFlightSession::advance_surface_walk(
+auto NativeFreedomFlightSession::advance_player_surface_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
   if (moon_) return advance_moon_surface_walk(controls, step);

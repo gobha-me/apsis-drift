@@ -585,7 +585,8 @@ def main(argv=None):
             print("FAIL actual continuous Moon route fixture", flush=True)
             return 1
         names = ("arrival", "approach", "touchdown-source", "landed",
-                 "outside", "returned", "released", "ascent")
+                 "outside", "returned", "released", "ascent",
+                 "service-landed", "service-requested", "service-partial600")
         if not all((phases / (name + ".json")).is_file() and
                    0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
                    for name in names):

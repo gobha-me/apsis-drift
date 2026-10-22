@@ -1,4 +1,24 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  foreach(service_case IN ITEMS origin-service-craft origin-service-save origin-service-sortie-save freedom-assistance-save native-origin-assistance)
+    string(REPLACE "-" "_" service_source "${service_case}")
+    add_executable(apsis-drift-${service_case}-tests test/${service_source}_test.cpp)
+    target_include_directories(apsis-drift-${service_case}-tests PRIVATE src)
+    target_link_libraries(apsis-drift-${service_case}-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+    target_compile_options(apsis-drift-${service_case}-tests PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+    if(service_case STREQUAL "origin-service-craft" OR service_case STREQUAL "origin-service-save")
+      add_test(NAME ${service_case}-contract COMMAND apsis-drift-${service_case}-tests)
+    elseif(service_case STREQUAL "native-origin-assistance")
+      add_test(NAME ${service_case}-contract COMMAND apsis-drift-${service_case}-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/freedom/origin-service-moon-landed.json"
+        "${CMAKE_CURRENT_BINARY_DIR}/origin-service-native-test")
+    else()
+      add_test(NAME ${service_case}-contract COMMAND apsis-drift-${service_case}-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/freedom/origin-service-moon-landed.json"
+        "${CMAKE_CURRENT_BINARY_DIR}/${service_case}-report.json")
+    endif()
+    set_tests_properties(${service_case}-contract PROPERTIES TIMEOUT 180)
+  endforeach()
   foreach(reuse_case IN ITEMS freedom-origin-local-travel-save native-local-route-reuse native-port-rendezvous native-port-docking native-local-choice origin-station-crew freedom-planet-jump freedom-composed-travel native-planet-travel freedom-jump-recovery freedom-jump-recovery-save native-jump-recovery freedom-jump-strain-save native-jump-strain)
     string(REPLACE "-" "_" reuse_source "${reuse_case}")
     add_executable(apsis-drift-${reuse_case}-tests test/${reuse_source}_test.cpp)

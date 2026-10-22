@@ -136,7 +136,7 @@ auto NativeFreedomFlightSession::collect_field_sample(SurfaceLandmarkId id)
   samples.carried.push_back(*record);
   std::ranges::sort(samples.carried, {}, sample_key);
   std::ranges::sort(samples.journal, {}, sample_key);
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -158,7 +158,7 @@ auto NativeFreedomFlightSession::discard_field_sample(BodyTarget target,
   auto candidate = *this;
   std::erase_if(candidate.knowledge_->field_samples->carried,
                 [&](const auto& item) { return same_site(item, target, id); });
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

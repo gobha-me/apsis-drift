@@ -1,0 +1,986 @@
+{
+  "format_version": 45,
+  "voyage": {
+    "format_version": 25,
+    "voyage": {
+      "format_version": 24,
+      "voyage": {
+        "format_version": 43,
+        "base": {
+          "application": "apsis-drift",
+          "application_version": "0.4.44",
+          "format_version": 42,
+          "mode": "freedom",
+          "recipe": {
+            "universe_seed": "42",
+            "origin_system_ordinal": "0",
+            "home_planet_ordinal": "0",
+            "active_planet_ordinal": "0",
+            "generator_versions": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4,
+              4,
+              1,
+              4,
+              1
+            ],
+            "origin_station_id": "14866919373675561773",
+            "home_planet_id": "4853608806881724904"
+          },
+          "state": {
+            "location": "moon_flight",
+            "station_id": "14866919373675561773",
+            "starter_craft_id": "7949747325485323805",
+            "tick": "30580",
+            "discoveries": [],
+            "world_deltas": []
+          },
+          "world_owner": {
+            "version": 1,
+            "target": {
+              "identity": "14076989258914964492",
+              "kind": "moon",
+              "system": "677859337506523986",
+              "version": 1
+            },
+            "physical_recipe": 1,
+            "rotation_recipe": 1,
+            "dynamics_recipe": 1,
+            "terrain_recipe": 1
+          },
+          "flight_model": {
+            "physical_catalog": 2,
+            "physical_ephemeris": 2,
+            "assistance": true
+          },
+          "flight": {
+            "format": "apsis-drift-rigid-body",
+            "version": 4,
+            "craft": {
+              "id": "2",
+              "version": 1
+            },
+            "frame": {
+              "kind": "body_relative_inertial",
+              "system": "677859337506523986",
+              "planet": null,
+              "station": null,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            },
+            "tick": "30580",
+            "position_metres": [
+              "832692.66268391558",
+              "411642.95270733116",
+              "116.44317229795757"
+            ],
+            "orientation_wxyz": [
+              "0.84355875917929402",
+              "-0.0016219807843448372",
+              "0.0010076619360333099",
+              "-0.53703349393464073"
+            ],
+            "linear_velocity_metres_per_second": [
+              "-40.441514198382677",
+              "81.807187319354071",
+              "0"
+            ],
+            "angular_velocity_radians_per_second": [
+              "4.133319317145342e-09",
+              "-3.7517169720518204e-07",
+              "9.8243438922891537e-05"
+            ],
+            "owner": {
+              "family": "physical_circular",
+              "version": 1,
+              "generator": 2,
+              "source_catalog_generator": 1,
+              "ephemeris_version": 2,
+              "system_seed": "677859337506523986",
+              "catalog_kind": "origin_home",
+              "origin_universe_seed": "42"
+            },
+            "moon_owner": {
+              "family": "physical_moon",
+              "version": 1,
+              "secondary_catalog": 1,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            }
+          }
+        },
+        "surface": {
+          "gear_deployed": true,
+          "moon_landed": {
+            "version": 1,
+            "terrain_version": 1,
+            "rotation_version": 1,
+            "fixed": {
+              "format": "apsis-drift-rigid-body",
+              "version": 4,
+              "craft": {
+                "id": "2",
+                "version": 1
+              },
+              "frame": {
+                "kind": "body_fixed",
+                "system": "677859337506523986",
+                "planet": null,
+                "station": null,
+                "body": {
+                  "version": 1,
+                  "kind": "moon",
+                  "value": "14076989258914964492"
+                }
+              },
+              "tick": "30580",
+              "position_metres": [
+                "-115.47344784176676",
+                "928884.80322757037",
+                "116.44317229795757"
+              ],
+              "orientation_wxyz": [
+                "0.99993749383805652",
+                "-0.0019095036638127434",
+                "7.589415207398531e-19",
+                "-0.011016451907241154"
+              ],
+              "linear_velocity_metres_per_second": [
+                "0",
+                "0",
+                "0"
+              ],
+              "angular_velocity_radians_per_second": [
+                "0",
+                "0",
+                "0"
+              ],
+              "owner": {
+                "family": "physical_circular",
+                "version": 1,
+                "generator": 2,
+                "source_catalog_generator": 1,
+                "ephemeris_version": 2,
+                "system_seed": "677859337506523986",
+                "catalog_kind": "origin_home",
+                "origin_universe_seed": "42"
+              },
+              "moon_owner": {
+                "family": "physical_moon",
+                "version": 1,
+                "secondary_catalog": 1,
+                "body": {
+                  "version": 1,
+                  "kind": "moon",
+                  "value": "14076989258914964492"
+                }
+              }
+            }
+          }
+        }
+      },
+      "resources": {
+        "version": 1,
+        "craft": 7949747325485323805,
+        "frame_id": 2,
+        "frame_version": 1,
+        "tick": 30580,
+        "flight_quanta": 3028548034032405,
+        "jump_charges": 2
+      }
+    },
+    "knowledge": {
+      "recipe": {
+        "version": 3,
+        "universe_seed": 42,
+        "chart": 1,
+        "topology": 1,
+        "physical_catalog": 2,
+        "ephemeris": 2,
+        "ambient": 1,
+        "observation_policy": 1,
+        "world_domain": 1
+      },
+      "entries": [
+        {
+          "kind": 0,
+          "system": 677859337506523986,
+          "identity": 677859337506523986,
+          "fact": 0,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 0,
+          "system": 677859337506523986,
+          "identity": 677859337506523986,
+          "fact": 1,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 0,
+          "system": 677859337506523986,
+          "identity": 677859337506523986,
+          "fact": 7,
+          "transitions": [
+            {
+              "level": 3,
+              "source": 2,
+              "source_id": 7949747325485323805,
+              "tick": 2640,
+              "flight": 7949747325485323805
+            }
+          ]
+        },
+        {
+          "kind": 0,
+          "system": 2910174744474113395,
+          "identity": 2910174744474113395,
+          "fact": 0,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 0,
+          "system": 2910174744474113395,
+          "identity": 2910174744474113395,
+          "fact": 1,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 0,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 1,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 2,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 1,
+              "source_id": 7949747325485323805,
+              "tick": 2640,
+              "flight": 7949747325485323805
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 3,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 1,
+              "source_id": 7949747325485323805,
+              "tick": 2640,
+              "flight": 7949747325485323805
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 4,
+          "transitions": [
+            {
+              "level": 1,
+              "source": 1,
+              "source_id": 7949747325485323805,
+              "tick": 2640,
+              "flight": 7949747325485323805
+            }
+          ]
+        },
+        {
+          "kind": 1,
+          "system": 677859337506523986,
+          "identity": 4853608806881724904,
+          "fact": 5,
+          "transitions": [
+            {
+              "level": 1,
+              "source": 1,
+              "source_id": 7949747325485323805,
+              "tick": 2640,
+              "flight": 7949747325485323805
+            }
+          ]
+        },
+        {
+          "kind": 2,
+          "system": 677859337506523986,
+          "identity": 14866919373675561773,
+          "fact": 0,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 2,
+          "system": 677859337506523986,
+          "identity": 14866919373675561773,
+          "fact": 1,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        },
+        {
+          "kind": 2,
+          "system": 677859337506523986,
+          "identity": 14866919373675561773,
+          "fact": 6,
+          "transitions": [
+            {
+              "level": 2,
+              "source": 0,
+              "source_id": 1,
+              "tick": 0,
+              "flight": 0
+            }
+          ]
+        }
+      ],
+      "surface_landmarks": {
+        "version": 1,
+        "inspections": []
+      }
+    }
+  },
+  "travel": {
+    "version": 2,
+    "phase": 0,
+    "selected": null,
+    "spool_tick": 0,
+    "next_attempt": 2,
+    "committed": null,
+    "commitment_resources": null,
+    "local": {
+      "selected": null,
+      "committed": {
+        "version": 1,
+        "source": {
+          "application": "apsis-drift",
+          "application_version": "0.4.44",
+          "format_version": 39,
+          "mode": "freedom",
+          "recipe": {
+            "universe_seed": "42",
+            "origin_system_ordinal": "0",
+            "home_planet_ordinal": "0",
+            "active_planet_ordinal": "0",
+            "generator_versions": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4,
+              4,
+              1,
+              4,
+              1
+            ],
+            "origin_station_id": "14866919373675561773",
+            "home_planet_id": "4853608806881724904"
+          },
+          "state": {
+            "location": "planetary_flight",
+            "station_id": "14866919373675561773",
+            "starter_craft_id": "7949747325485323805",
+            "tick": "3714",
+            "discoveries": [],
+            "world_deltas": []
+          },
+          "world_owner": {
+            "version": 1,
+            "system_id": "677859337506523986",
+            "planet_id": "4853608806881724904"
+          },
+          "flight": {
+            "format": "apsis-drift-rigid-body",
+            "version": 3,
+            "craft": {
+              "id": "2",
+              "version": 1
+            },
+            "frame": {
+              "kind": "planet_relative_inertial",
+              "system": "677859337506523986",
+              "planet": "4853608806881724904",
+              "station": null
+            },
+            "tick": "3714",
+            "position_metres": [
+              "6160169.2434557462",
+              "1576710.1617406511",
+              "122477.20342506994"
+            ],
+            "orientation_wxyz": [
+              "0.70710678118654757",
+              "0",
+              "0.70710678118654757",
+              "0"
+            ],
+            "linear_velocity_metres_per_second": [
+              "-1739.9996528459012",
+              "6805.4096070774704",
+              "-473.7373872733553"
+            ],
+            "angular_velocity_radians_per_second": [
+              "0",
+              "0",
+              "0"
+            ],
+            "owner": {
+              "family": "physical_circular",
+              "version": 1,
+              "generator": 2,
+              "source_catalog_generator": 1,
+              "ephemeris_version": 2,
+              "system_seed": "677859337506523986",
+              "catalog_kind": "origin_home",
+              "origin_universe_seed": "42"
+            }
+          },
+          "flight_model": {
+            "physical_catalog": 2,
+            "physical_ephemeris": 2,
+            "rotation_owner": 1,
+            "rotation_generator": 1,
+            "central_body": 1,
+            "atmosphere": 1,
+            "orbit_hold": {
+              "version": 1,
+              "target": null
+            },
+            "assistance": true,
+            "terrain_policy": 3,
+            "frame_policy": 1,
+            "optics": 1,
+            "companions": 1
+          }
+        },
+        "destination": {
+          "identity": "14076989258914964492",
+          "kind": "moon",
+          "system": "677859337506523986",
+          "version": 1
+        },
+        "attempt": 1,
+        "source_checksum": 5869232027378713366,
+        "arrival_tick": 3954,
+        "arrival": {
+          "application": "apsis-drift",
+          "application_version": "0.4.44",
+          "format_version": 42,
+          "mode": "freedom",
+          "recipe": {
+            "universe_seed": "42",
+            "origin_system_ordinal": "0",
+            "home_planet_ordinal": "0",
+            "active_planet_ordinal": "0",
+            "generator_versions": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4,
+              4,
+              1,
+              4,
+              1
+            ],
+            "origin_station_id": "14866919373675561773",
+            "home_planet_id": "4853608806881724904"
+          },
+          "state": {
+            "location": "moon_flight",
+            "station_id": "14866919373675561773",
+            "starter_craft_id": "7949747325485323805",
+            "tick": "3954",
+            "discoveries": [],
+            "world_deltas": []
+          },
+          "world_owner": {
+            "version": 1,
+            "target": {
+              "identity": "14076989258914964492",
+              "kind": "moon",
+              "system": "677859337506523986",
+              "version": 1
+            },
+            "physical_recipe": 1,
+            "rotation_recipe": 1,
+            "dynamics_recipe": 1,
+            "terrain_recipe": 1
+          },
+          "flight_model": {
+            "physical_catalog": 2,
+            "physical_ephemeris": 2,
+            "assistance": true
+          },
+          "flight": {
+            "format": "apsis-drift-rigid-body",
+            "version": 4,
+            "craft": {
+              "id": "2",
+              "version": 1
+            },
+            "frame": {
+              "kind": "body_relative_inertial",
+              "system": "677859337506523986",
+              "planet": null,
+              "station": null,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            },
+            "tick": "3954",
+            "position_metres": [
+              "854797.60448340245",
+              "399497.46231288672",
+              "0"
+            ],
+            "orientation_wxyz": [
+              "0.84362329857186136",
+              "0",
+              "0",
+              "-0.5369354990189531"
+            ],
+            "linear_velocity_metres_per_second": [
+              "-39.248290753154734",
+              "83.978868655713427",
+              "0"
+            ],
+            "angular_velocity_radians_per_second": [
+              "0",
+              "0",
+              "9.8244155359403595e-05"
+            ],
+            "owner": {
+              "family": "physical_circular",
+              "version": 1,
+              "generator": 2,
+              "source_catalog_generator": 1,
+              "ephemeris_version": 2,
+              "system_seed": "677859337506523986",
+              "catalog_kind": "origin_home",
+              "origin_universe_seed": "42"
+            },
+            "moon_owner": {
+              "family": "physical_moon",
+              "version": 1,
+              "secondary_catalog": 1,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            }
+          }
+        }
+      },
+      "commitment_resources": {
+        "version": 1,
+        "craft": 7949747325485323805,
+        "frame_id": 2,
+        "frame_version": 1,
+        "tick": 3714,
+        "flight_quanta": 3032303040000000,
+        "jump_charges": 3
+      },
+      "outbound": {
+        "version": 1,
+        "source": {
+          "application": "apsis-drift",
+          "application_version": "0.4.44",
+          "format_version": 39,
+          "mode": "freedom",
+          "recipe": {
+            "universe_seed": "42",
+            "origin_system_ordinal": "0",
+            "home_planet_ordinal": "0",
+            "active_planet_ordinal": "0",
+            "generator_versions": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4,
+              4,
+              1,
+              4,
+              1
+            ],
+            "origin_station_id": "14866919373675561773",
+            "home_planet_id": "4853608806881724904"
+          },
+          "state": {
+            "location": "planetary_flight",
+            "station_id": "14866919373675561773",
+            "starter_craft_id": "7949747325485323805",
+            "tick": "3714",
+            "discoveries": [],
+            "world_deltas": []
+          },
+          "world_owner": {
+            "version": 1,
+            "system_id": "677859337506523986",
+            "planet_id": "4853608806881724904"
+          },
+          "flight": {
+            "format": "apsis-drift-rigid-body",
+            "version": 3,
+            "craft": {
+              "id": "2",
+              "version": 1
+            },
+            "frame": {
+              "kind": "planet_relative_inertial",
+              "system": "677859337506523986",
+              "planet": "4853608806881724904",
+              "station": null
+            },
+            "tick": "3714",
+            "position_metres": [
+              "6160169.2434557462",
+              "1576710.1617406511",
+              "122477.20342506994"
+            ],
+            "orientation_wxyz": [
+              "0.70710678118654757",
+              "0",
+              "0.70710678118654757",
+              "0"
+            ],
+            "linear_velocity_metres_per_second": [
+              "-1739.9996528459012",
+              "6805.4096070774704",
+              "-473.7373872733553"
+            ],
+            "angular_velocity_radians_per_second": [
+              "0",
+              "0",
+              "0"
+            ],
+            "owner": {
+              "family": "physical_circular",
+              "version": 1,
+              "generator": 2,
+              "source_catalog_generator": 1,
+              "ephemeris_version": 2,
+              "system_seed": "677859337506523986",
+              "catalog_kind": "origin_home",
+              "origin_universe_seed": "42"
+            }
+          },
+          "flight_model": {
+            "physical_catalog": 2,
+            "physical_ephemeris": 2,
+            "rotation_owner": 1,
+            "rotation_generator": 1,
+            "central_body": 1,
+            "atmosphere": 1,
+            "orbit_hold": {
+              "version": 1,
+              "target": null
+            },
+            "assistance": true,
+            "terrain_policy": 3,
+            "frame_policy": 1,
+            "optics": 1,
+            "companions": 1
+          }
+        },
+        "destination": {
+          "identity": "14076989258914964492",
+          "kind": "moon",
+          "system": "677859337506523986",
+          "version": 1
+        },
+        "attempt": 1,
+        "source_checksum": 5869232027378713366,
+        "arrival_tick": 3954,
+        "arrival": {
+          "application": "apsis-drift",
+          "application_version": "0.4.44",
+          "format_version": 42,
+          "mode": "freedom",
+          "recipe": {
+            "universe_seed": "42",
+            "origin_system_ordinal": "0",
+            "home_planet_ordinal": "0",
+            "active_planet_ordinal": "0",
+            "generator_versions": [
+              1,
+              1,
+              1,
+              1,
+              2,
+              1,
+              1,
+              1,
+              1,
+              1,
+              4,
+              4,
+              1,
+              4,
+              1
+            ],
+            "origin_station_id": "14866919373675561773",
+            "home_planet_id": "4853608806881724904"
+          },
+          "state": {
+            "location": "moon_flight",
+            "station_id": "14866919373675561773",
+            "starter_craft_id": "7949747325485323805",
+            "tick": "3954",
+            "discoveries": [],
+            "world_deltas": []
+          },
+          "world_owner": {
+            "version": 1,
+            "target": {
+              "identity": "14076989258914964492",
+              "kind": "moon",
+              "system": "677859337506523986",
+              "version": 1
+            },
+            "physical_recipe": 1,
+            "rotation_recipe": 1,
+            "dynamics_recipe": 1,
+            "terrain_recipe": 1
+          },
+          "flight_model": {
+            "physical_catalog": 2,
+            "physical_ephemeris": 2,
+            "assistance": true
+          },
+          "flight": {
+            "format": "apsis-drift-rigid-body",
+            "version": 4,
+            "craft": {
+              "id": "2",
+              "version": 1
+            },
+            "frame": {
+              "kind": "body_relative_inertial",
+              "system": "677859337506523986",
+              "planet": null,
+              "station": null,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            },
+            "tick": "3954",
+            "position_metres": [
+              "854797.60448340245",
+              "399497.46231288672",
+              "0"
+            ],
+            "orientation_wxyz": [
+              "0.84362329857186136",
+              "0",
+              "0",
+              "-0.5369354990189531"
+            ],
+            "linear_velocity_metres_per_second": [
+              "-39.248290753154734",
+              "83.978868655713427",
+              "0"
+            ],
+            "angular_velocity_radians_per_second": [
+              "0",
+              "0",
+              "9.8244155359403595e-05"
+            ],
+            "owner": {
+              "family": "physical_circular",
+              "version": 1,
+              "generator": 2,
+              "source_catalog_generator": 1,
+              "ephemeris_version": 2,
+              "system_seed": "677859337506523986",
+              "catalog_kind": "origin_home",
+              "origin_universe_seed": "42"
+            },
+            "moon_owner": {
+              "family": "physical_moon",
+              "version": 1,
+              "secondary_catalog": 1,
+              "body": {
+                "version": 1,
+                "kind": "moon",
+                "value": "14076989258914964492"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "craft_binding": {
+    "version": 1,
+    "preset": "wayfarer-stowed-01",
+    "operating_model_sha256": "a9a8104a0ea8b5c22e4149861a76b5ab3911a9f77ba871b446c08bf9ed56621c",
+    "stowed_model_sha256": "d286dfd5174940ccd7e3db0cb023d3571ad460c6b22609c6f81208e16f06e2fc",
+    "frame_sha256": "f98c50f69d71ecd38ca1d43d010f7b43ca300178dc25d40e170fd45fe5bc88a6",
+    "contact_sha256": "62b4d493f2d74f59b81fd089873360b99e3bae9d17a6d90a00066e9440e44c4a",
+    "hardware": [
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ]
+  },
+  "seated_pilot": {
+    "phase": "seated",
+    "station_entry": {
+      "geometry_version": 1,
+      "actor_id": "1",
+      "foot_position_metres": [
+        -19.90000000000015,
+        0.0,
+        0.0
+      ],
+      "velocity_metres_per_second": [
+        -2.0,
+        0.0,
+        0.0
+      ],
+      "heading_radians": 0.0
+    },
+    "started_tick": "1194",
+    "route": {
+      "direction": "board",
+      "elapsed_ticks": 1440,
+      "station_entry_eye": [
+        -19.90000000000015,
+        1.7,
+        0.0
+      ],
+      "station_entry_heading_radians": 0.0,
+      "craft_station_position": [
+        -28.32,
+        -4.257,
+        0.0
+      ],
+      "craft_station_orientation": [
+        0.7071067811865476,
+        0.0,
+        0.7071067811865476,
+        0.0
+      ]
+    }
+  }
+}

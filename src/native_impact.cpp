@@ -11,7 +11,7 @@ auto NativeFreedomFlightSession::condition_document() const
   // Project the existing sole voyage owner, without recursively wrapping it.
   auto plain = *this;
   plain.condition_.reset();
-  const auto projected = plain.save_document();
+  const auto projected = plain.player_save_document();
   if (!projected) return std::unexpected{projected.error()};
   auto voyage = std::visit(
       [](const auto& value)
@@ -86,7 +86,7 @@ auto NativeFreedomFlightSession::enable_impact_consequences()
     candidate.document_.flight = *relative;
     if (auto enabled = candidate.enable_impact_consequences(); !enabled)
       return enabled;
-    const auto saved = candidate.save_document();
+    const auto saved = candidate.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};

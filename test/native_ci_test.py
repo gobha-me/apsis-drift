@@ -120,7 +120,8 @@ class NativeCiTest(unittest.TestCase):
                             ("arrival", "approach", "withdraw", "home")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
-                            ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent")}
+                            ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
+                     "service-landed", "service-requested", "service-partial600")}
                     if family == "native_first_flight_continuation":
                         data = b"unit continuity boundary, not a game save"
                         for name in ("surface-loop/space-exit.json", "native_first_flight_continuation/surface-ascent.json"):

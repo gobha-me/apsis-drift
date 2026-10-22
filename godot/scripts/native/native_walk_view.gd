@@ -36,6 +36,10 @@ var crew_feedback := ""
 var stick_settings_path := Controls.SETTINGS_PATH
 var stick_preferences: Dictionary = {}
 var stick_preferences_status := ""
+const ServiceCraft = preload("res://scripts/native/native_service_craft_view.gd")
+var service_craft: Node3D
+var service_binding: Dictionary = {}
+var assets_root := ""
 var bridge: Variant
 var state: Dictionary = {}
 var station: Node3D
@@ -166,7 +170,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 	if model == null:
 		error = "The selected Wayfarer could not be staged"
 		return false
-	var pending := {"walk_state": owner.get_freedom_walk_state(), "flight_state": owner.get_freedom_flight_state(), "station_geometry": owner.get_freedom_station_geometry()}
+	var pending := {"walk_state": owner.get_freedom_walk_state(), "flight_state": owner.get_freedom_flight_state(), "station_geometry": owner.get_freedom_station_geometry(), "craft_binding": owner.get_freedom_craft_binding()}
 	if not stage(owner, assets, pending, model):
 		if model.get_parent() == null: model.free()
 		return false
@@ -179,6 +183,8 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	set_process(false)
 	set_process_input(false)
+	service_binding = pending.get("craft_binding", {}).duplicate(true)
+	assets_root = assets
 	bridge = owner
 	state = pending.walk_state.duplicate(true)
 	if not valid_state(state):
@@ -248,6 +254,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	scene.add_child(light)
 	if not refresh_environment(flight, state):
 		error = "The station sky projection is unavailable"
+		return false
+	if not refresh_service_craft(flight, 0.0):
+		error = "The service Wayfarer presentation is unavailable"
 		return false
 	requested_heading = state.heading_radians
 	build_ui()
@@ -915,6 +924,23 @@ func refresh_boarding_action() -> void:
 	boarding_prompt.text = binding + " · Climb aboard Wayfarer" if current_controls_neutral() else "Release movement controls · " + binding + " to climb aboard"
 
 
+func refresh_service_craft(flight: Dictionary, delta: float) -> bool:
+	var service: Dictionary = flight.get("origin_service", {})
+	if service.is_empty():
+		if service_craft != null: service_craft.hide()
+		return true
+	var packet: Dictionary = service.get("craft", {})
+	if not ServiceCraft.valid_packet(packet, delta): return false
+	if service_craft == null:
+		service_craft = ServiceCraft.new()
+		if not service_craft.initialize(assets_root, service_binding, packet.craft_id):
+			service_craft.free()
+			service_craft = null
+			return false
+		scene.add_child(service_craft)
+	return service_craft.present(packet, delta, paused, camera.far)
+
+
 func update_view(delta: float = 0.0) -> void:
 	var next_state: Dictionary = bridge.get_freedom_walk_state()
 	if next_state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
@@ -947,6 +973,10 @@ func update_view(delta: float = 0.0) -> void:
 	var flight: Dictionary = bridge.get_freedom_flight_state()
 	if not valid_environment(flight, next_state):
 		error = "C++ returned an invalid station flight projection"
+		set_paused(true)
+		return
+	if not refresh_service_craft(flight, delta):
+		error = "The service Wayfarer presentation is unavailable"
 		set_paused(true)
 		return
 	var boarding: Dictionary = next_state.get("boarding", {})

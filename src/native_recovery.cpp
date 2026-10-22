@@ -72,6 +72,10 @@ auto NativeFreedomFlightSession::complete_recovery()
   auto candidate = open({NativeStartup::Mode::freedom, std::move(*replacement),
                          (*home)->descriptor, source_save_});
   if (!candidate) return std::unexpected{candidate.error()};
+  // Player replacement never replaces or restocks the independent responder.
+  candidate->assistance_ = assistance_;
+  candidate->assistance_world_ = assistance_world_;
+  candidate->assistance_propulsion_ = assistance_propulsion_;
   candidate->surface_walk_selected_ = surface_walk_selected_;
   if (condition_) {
     auto pristine = make_craft_condition(candidate->document_);

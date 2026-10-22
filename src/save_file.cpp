@@ -384,6 +384,11 @@ auto validate_native_resource_root(const FreedomResources& resource)
 } // namespace
 auto decode_native_save_document_json(std::string_view contents)
     -> std::expected<NativeSaveDocument, SaveSchemaError> {
+  auto assistance = decode_freedom_assistance_document_json(contents);
+  if (assistance) return NativeSaveDocument{std::move(*assistance)};
+  if (assistance.error().code !=
+      SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{assistance.error()};
   auto condition = decode_freedom_condition_document_json(contents);
   if (condition) return NativeSaveDocument{std::move(*condition)};
   if (condition.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -506,6 +511,8 @@ auto encode_native_save_document_json(const NativeSaveDocument& document)
           return encode_freedom_surface_walk_document_json(value);
         else if constexpr (std::is_same_v<T, FreedomConditionSaveDocument>)
           return encode_freedom_condition_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomAssistanceSaveDocument>)
+          return encode_freedom_assistance_document_json(value);
       },
       document);
 }
@@ -545,8 +552,27 @@ auto write_native_save_file_atomically(const std::filesystem::path& path,
           return write_freedom_surface_walk_file_atomically(path, value);
         else if constexpr (std::is_same_v<T, FreedomConditionSaveDocument>)
           return write_freedom_condition_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomAssistanceSaveDocument>)
+          return write_freedom_assistance_file_atomically(path, value);
       },
       document);
+}
+
+auto write_freedom_assistance_file_atomically(
+    const std::filesystem::path& path,
+    const FreedomAssistanceSaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_assistance_document_json(document);
+  if (!encoded)
+    return std::unexpected{SaveFileError{SaveFileErrorCode::invalid_document,
+                                         path, "assistance cannot be encoded",
+                                         encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
 }
 
 auto write_freedom_condition_file_atomically(
