@@ -108,6 +108,8 @@ auto initial_and_legacy() -> void {
               "Undiscovered-system planets remain absent, not a hidden catalog "
               "dump");
     }
+    // An independent copy detects mutation by refused operations.
+    // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot.
     const auto frozen = initial;
     for (const auto fact :
          {KnowledgeFact::identity_type, KnowledgeFact::location}) {

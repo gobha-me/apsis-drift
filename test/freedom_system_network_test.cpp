@@ -68,6 +68,8 @@ auto geometry(Seed seed, bool print_routes) -> void {
   const auto old_ids = generate_first_intersystem_identities(seed);
   const auto old_route = generate_first_universe_route(seed);
   const auto network = need(generate_freedom_system_network(seed));
+  // An independent copy detects mutation by refused operations.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot.
   const auto original = network;
   check(validate_freedom_system_network(network).has_value() &&
             network == need(generate_freedom_system_network(seed)),
@@ -289,6 +291,8 @@ auto uncharted_geometry(Seed seed) -> void {
   const auto prior = need(generate_freedom_system_network(seed));
   const auto network = need(generate_freedom_system_network(
       seed, kFreedomUnchartedSystemNetworkVersion));
+  // An independent copy detects mutation by refused operations.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot.
   const auto original = network;
   const auto route = generate_first_universe_route(seed);
   const bool sizes =
