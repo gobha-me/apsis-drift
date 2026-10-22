@@ -8,12 +8,19 @@ class Bridge:
 	var saved := "unchanged complete voyage"
 	var sample_packet: Dictionary
 	var derelict_packet: Dictionary
+	var navigation: Dictionary = {}
+	var commands: Array = []
+	func mark_freedom_field_sample_site(system: String, kind: String, body: String, site: String, replace: bool) -> bool:
+		commands.append([system, kind, body, site, replace])
+		return true
 	func get_freedom_field_samples() -> Dictionary:
 		sample_queries += 1
 		return sample_packet
 	func get_freedom_flight_state() -> Dictionary:
 		flight_queries += 1
-		return {"derelict": derelict_packet}
+		var result := navigation.duplicate(true)
+		result["derelict"] = derelict_packet
+		return result
 
 static func row(site: String = "3") -> Dictionary:
 	return {"system_id": "1", "body_kind": "moon", "body_id": "2", "site_id": site, "craft_id": "4", "tick": "0", "kind": 0, "label": "Pale specimen", "source_name": "Moon"}
@@ -134,9 +141,33 @@ static func run() -> int:
 	var saved := bridge.saved
 	Notes.pages(snapshot)
 	Notes.pages(snapshot)
-	failures += check(bridge.sample_queries == 1 and bridge.flight_queries == 1 and bridge.saved == saved and snapshot == packet, "Archive getter polled repeatedly or changed provider state")
+	failures += check(bridge.sample_queries == 1 and bridge.flight_queries == 1 and bridge.saved == saved and snapshot == {"samples": packet.samples, "derelict": packet.derelict, "navigation": null}, "Archive getter polled repeatedly or changed provider state")
 	Notes.read_bridge(bridge)
 	failures += check(bridge.sample_queries == 2 and bridge.flight_queries == 2, "Reopen did not refresh each projection once")
-	failures += check(Notes.read_bridge(null) == {"samples": null, "derelict": null}, "Missing provider did not remain bounded")
+	failures += check(Notes.read_bridge(null) == {"samples": null, "derelict": null, "navigation": null}, "Missing provider did not remain bounded")
+	var flight := {"system_id": "1", "body_kind": "moon", "body_id": "2", "surface_marker": {"present": false}, "jump": {"phase": "idle"}}
+	var navigation: Variant = Notes.navigation_context(flight)
+	failures += check(Notes.navigation_valid(navigation), "Current Moon marker context refused")
+	var action: Dictionary = Notes.site_action(first, navigation)
+	failures += check(action.available and not action.replace and action.target == {"system_id": "1", "body_kind": "moon", "body_id": "2", "site_id": "3"}, "Site action lost recorded typed identity")
+	navigation.present = true
+	failures += check(Notes.site_action(first, navigation).replace, "Present marker did not require explicit replacement")
+	for change in [{"system_id": "9"}, {"body_id": "9"}, {"body_kind": "planet"}, {"body_kind": "minor"}, {"idle": false}]:
+		var remote: Dictionary = navigation.duplicate(true)
+		remote.merge(change, true)
+		failures += check(not Notes.site_action(first, remote).available, "Wrong body/system or active jump offered marker")
+	for bad in [null, {}, [], {"system_id": "1", "body_kind": "moon", "body_id": "2", "present": 1, "idle": true}]:
+		failures += check(not Notes.site_action(first, bad).available, "Malformed marker context enabled an action")
+	for field in ["system_id", "body_id", "body_kind", "surface_marker", "jump"]:
+		var bad := flight.duplicate(true)
+		bad[field] = NAN
+		failures += check(Notes.navigation_context(bad) == null, "Malformed navigation projection accepted")
+	bridge.navigation = flight
+	var projection := Notes.read_bridge(bridge)
+	failures += check(Notes.pages(projection)[1].site_action.available and bridge.commands.is_empty(), "Reading notes issued a command or omitted the current site action")
+	var target: Dictionary = action.target
+	for bad in [{}, {"system_id": "1", "body_kind": "moon", "body_id": "2", "site_id": "03"}, {"system_id": "1", "body_kind": 1, "body_id": "2", "site_id": "3"}]:
+		failures += check(not Notes.mark_bridge(bridge, bad, false).ok and bridge.commands.is_empty(), "Malformed site command reached provider")
+	failures += check(Notes.mark_bridge(bridge, target, true).ok and bridge.commands == [["1", "moon", "2", "3", true]], "Explicit replace command changed typed identity or replacement intent")
 	print("Exploration notes checks: %d failures" % failures)
 	return failures

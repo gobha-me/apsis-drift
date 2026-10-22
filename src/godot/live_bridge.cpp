@@ -492,6 +492,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("collect_freedom_field_sample", "site_id"),
         &FreedomBridge::collect_freedom_field_sample);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("mark_freedom_field_sample_site", "system_id",
+                        "body_kind", "body_id", "site_id", "replace"),
+        &FreedomBridge::mark_freedom_field_sample_site);
     godot::ClassDB::bind_method(godot::D_METHOD("discard_freedom_field_sample",
                                                 "system_id", "body_kind",
                                                 "body_id", "site_id"),
@@ -1805,6 +1809,27 @@ class FreedomBridge : public godot::RefCounted {
           {kBodyIdentityVersion,
            kind == "planet" ? BodyKind::planet : BodyKind::moon, *body_word}};
       return session.discard_field_sample(target, SurfaceLandmarkId{*site});
+    });
+  }
+  auto mark_freedom_field_sample_site(const godot::String& system,
+                                      const godot::String& kind,
+                                      const godot::String& body,
+                                      const godot::String& id, bool replace)
+      -> bool {
+    return change_freedom_port([&](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      const auto system_word = identity_word(system);
+      const auto body_word = identity_word(body);
+      const auto site = identity_word(id);
+      if (!system_word || !body_word || !site ||
+          (kind != "planet" && kind != "moon"))
+        return std::unexpected{"Select an actual retained specimen note"};
+      const BodyTarget target{
+          SystemId{*system_word},
+          {kBodyIdentityVersion,
+           kind == "planet" ? BodyKind::planet : BodyKind::moon, *body_word}};
+      return session.mark_field_sample_site(target, SurfaceLandmarkId{*site},
+                                            replace);
     });
   }
   auto get_freedom_field_samples() const -> godot::Dictionary {

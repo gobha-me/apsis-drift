@@ -129,3 +129,16 @@ lineage, ordering, capacity and clocks. Commands validate the complete Save
 before committing; refusal leaves the session unchanged. Historical absence
 stays absent until a successful collection. The feature adds no seed domain or
 navigation knowledge.
+
+From a retained specimen page in **Recorded observations**, choose **Mark site**
+to navigate back to that exposure on the currently loaded planet or Moon.
+**Replace marker** explicitly replaces your existing personal point. Discarded
+or lost specimens keep this option through their first-collection note. Notes
+from other bodies remain readable; return to that body before marking. Enable
+**Show personal marker** in flight or surface controls to display its bearing.
+
+C++ resolves only the recorded cell under its original terrain recipe and
+checks the generated identity before using the existing marker format and
+bearing. It does not scan nearby cells, discover new sites or certify a route
+or landing. Reading pages is unchanged; only the explicit action changes the
+personal marker, without advancing time or spending resources.

@@ -1117,6 +1117,7 @@ func setup_controls() -> void:
 	controls_menu.saved_flight = true
 	controls_menu.observations_query = Callable(bridge, "get_freedom_observations")
 	controls_menu.exploration_notes_query = func(): return preload("res://scripts/native/exploration_notes.gd").read_bridge(bridge)
+	controls_menu.exploration_marker_command = mark_recorded_sample_site
 	controls_menu.saved_wayfarer = state.frame_id == "2"
 	controls_menu.ship_audio_available = ship_audio != null
 	controls_menu.audio_preferences = audio_preferences
@@ -1434,6 +1435,17 @@ func show_field_samples() -> void:
 		text += "%d. %s · %s\n" % [index + 1, journal[index].label, journal[index].source_name]
 	text += "\nInspect an exposure, then collect within 8 metres on supported ground. Discard from controls to free a slot. Collection notes survive discarded or lost specimens. Specimens have no sale value or material analysis in this slice."
 	controls_menu.show_surface_reference(text, sample_pouch_button, "FIELD SAMPLES")
+
+
+func mark_recorded_sample_site(target: Dictionary, replace: bool) -> Dictionary:
+	# This command belongs to the active archive, never to a covered control.
+	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty() or controls_menu == null or not controls_menu.panel.visible or controls_menu.observations_view == null or not controls_menu.observations_view.visible or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible:
+		return {"ok": false, "reason": "Return to the focused, paused archive before marking a site."}
+	var result: Dictionary = preload("res://scripts/native/exploration_notes.gd").mark_bridge(bridge, target, replace)
+	if result.ok:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+	return result
 
 
 func surface_interaction_binding() -> String:

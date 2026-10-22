@@ -137,7 +137,12 @@ specimen notes and any acquired derelict contact/history. A collection page
 distinguishes a currently carried specimen from its first-collection note;
 discard or recovery does not erase that note. The archive shows retained
 information, without operating sensors or providing a remote moving position.
-Back returns to paused controls.
+Back returns to paused controls. On a specimen note for your current body,
+**Mark site** sets your one personal surface marker at the recorded exposure;
+**Replace marker** explicitly replaces an existing point. The specimen need
+not still be carried. In flight or surface controls, enable **Show personal
+marker** to display its bearing. Neither the marker nor the note certifies a
+safe route or landing.
 
 ## Save and report problems
 

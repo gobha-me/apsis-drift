@@ -255,6 +255,84 @@ auto sample_walk_tick(NativeFreedomFlightSession& session, V target) -> void {
   check(!session.surface_walk_blockage(),
         "Moon specimen foot route remains genuinely supported");
 }
+auto without_sample_marker(std::string_view text) -> Json {
+  auto value = Json::parse(text);
+  auto* inner = &value;
+  for (unsigned layer = 0; layer < 8; ++layer) {
+    if (inner->contains("knowledge")) {
+      inner->at("knowledge").erase("surface_marker");
+      return value;
+    }
+    inner = &inner->at("voyage");
+  }
+  throw std::runtime_error(
+      "Moon sample marker fixture lacks current knowledge");
+}
+auto moon_sample_marker_continue(const NativeFreedomFlightSession& source)
+    -> void {
+  auto resumed = continued(source);
+  check(bytes(resumed) == bytes(source) &&
+            need(resumed.surface_marker_view()).current_body,
+        "Moon note marker survives complete Continue with the original local "
+        "bearing");
+}
+auto moon_sample_marker(const NativeFreedomFlightSession& source,
+                        const MoonSurfaceLandmarkSite& site) -> void {
+  auto marked = std::make_unique<NativeFreedomFlightSession>(source);
+  if (marked->knowledge()->surface_marker &&
+      marked->knowledge()->surface_marker->point)
+    need(marked->clear_surface_marker());
+  const BodyTarget target{source.system().catalog.id, source.moon()->body};
+  const auto id = site.identity.id;
+  const auto before = bytes(*marked);
+  auto foreign = target;
+  ++foreign.body.version;
+  check(!marked->mark_field_sample_site(target, id, true) &&
+            !marked->mark_field_sample_site(foreign, id, false) &&
+            !marked->mark_field_sample_site(target, {}, false) &&
+            bytes(*marked) == before,
+        "Moon malformed keys and missing-marker replacement refuse with exact "
+        "Save invariance");
+  need(marked->mark_field_sample_site(target, id, false));
+  const auto after = bytes(*marked);
+  const auto& point = std::get<FreedomMoonSurfaceMarkerPoint>(
+      *marked->knowledge()->surface_marker->point);
+  check(marked->knowledge()->surface_marker->version == 2 &&
+            point.system == target.system && point.body == target.body &&
+            point.position == site.position_metres &&
+            point.tick == source.document().flight.tick &&
+            marked->knowledge()->field_samples->carried.empty() &&
+            without_sample_marker(after) == without_sample_marker(before),
+        "A discarded Moon specimen's exact fixed centre changes only the "
+        "existing typed marker");
+  check(!marked->mark_field_sample_site(target, id, false) &&
+            bytes(*marked) == after,
+        "Moon note marking cannot silently overwrite a personal marker");
+  need(marked->mark_field_sample_site(target, id, true));
+  check(bytes(*marked) == after,
+        "Explicit Moon same-site replacement keeps first notes exact");
+  moon_sample_marker_continue(*marked);
+  need(marked->clear_surface_marker());
+  // Explicit existing loss/replacement API, not a claimed collision event.
+  need(marked->record_loss(
+      FreedomLossCause::recoverable_destruction,
+      marked->document().origin.state.craft, marked->document().flight.tick,
+      need(rigid_body_state_checksum(RigidBodyWorldContext{*marked->moon()},
+                                     marked->document().flight))));
+  const auto pending = bytes(*marked);
+  check(!marked->mark_field_sample_site(target, id, false) &&
+            bytes(*marked) == pending,
+        "Pending Moon loss refuses sample marker mutation");
+  need(marked->complete_recovery());
+  const auto home = bytes(*marked);
+  check(marked->knowledge()->field_samples->journal ==
+                source.knowledge()->field_samples->journal &&
+            marked->knowledge()->field_samples->carried.empty() &&
+            !marked->mark_field_sample_site(target, id, false) &&
+            bytes(*marked) == home,
+        "Retained Moon notes survive replacement but cannot remotely mark the "
+        "Moon from Home");
+}
 auto field_samples(
     const std::vector<FreedomMoonSurfaceLandmarkInspection>& records) -> void {
   // Keep the existing supported-contact unit fixture and actual charged route.
@@ -283,12 +361,15 @@ auto field_samples(
       reached,
       "Actual supported Moon walking reaches the fixed exposure within8metres");
   const auto before_inspect = bytes(session);
-  check(!session.field_sample_collection_available(id) &&
-            !session.collect_field_sample(id) &&
-            bytes(session) == before_inspect &&
-            !session.knowledge()->field_samples,
-        "Reachable Moon collection requires inspection and cannot silently "
-        "select sample state");
+  check(
+      !session.field_sample_collection_available(id) &&
+          !session.collect_field_sample(id) &&
+          !session.knowledge()->field_samples &&
+          !session.mark_field_sample_site(
+              {session.system().catalog.id, session.moon()->body}, id, false) &&
+          bytes(session) == before_inspect,
+      "Reachable Moon collection requires inspection and cannot silently "
+      "select sample state");
   need(session.inspect_surface_landmark(id));
   const BodyTarget target{session.system().catalog.id, session.moon()->body};
   const auto tick = session.document().flight.tick;
@@ -386,6 +467,7 @@ auto field_samples(
             session.knowledge()->field_samples->journal == collected.journal &&
             session.document().flight.tick == tick + 1,
         "Moon discard keeps the first journal record without advancing time");
+  moon_sample_marker(session, site);
   need(session.collect_field_sample(id));
   check(session.knowledge()->field_samples->carried.front().tick == tick + 1 &&
             session.knowledge()->field_samples->journal == collected.journal,
@@ -451,6 +533,13 @@ auto field_samples(
     const auto departure_tick = homebound.document().flight.tick;
     need(homebound.select_local_jump(
         minor_route_fixture::home_target(homebound)));
+    need(homebound.begin_jump());
+    const auto spooling = bytes(homebound);
+    check(!homebound.mark_field_sample_site(target, id, false) &&
+              bytes(homebound) == spooling,
+          "Moon note marking refuses an active real jump without changing its "
+          "receipt");
+    need(homebound.cancel_jump());
     minor_route_fixture::leg(homebound);
     check(!homebound.moon() && !homebound.minor() &&
               homebound.document().world &&
@@ -474,12 +563,22 @@ auto field_samples(
               bytes(session) == original,
           "Present specimens survive exact Home Continue while the original "
           "aboard-discard voyage remains unchanged");
+    const auto elsewhere = bytes(homebound);
+    check(!homebound.mark_field_sample_site(target, id, false) &&
+              bytes(homebound) == elsewhere,
+          "Actual Home arrival cannot mark a retained Moon site remotely");
   }
   need(session.discard_field_sample(target, id));
   check(
       session.knowledge()->field_samples->carried.empty() &&
           session.knowledge()->field_samples->journal == collected.journal,
       "Moon samples can be discarded aboard without deleting the first notes");
+  const auto seated_note = bytes(session);
+  need(session.mark_field_sample_site(target, id, false));
+  check(!session.surface_walker() && without_sample_marker(bytes(session)) ==
+                                         without_sample_marker(seated_note),
+        "Same-body seated Moon craft may mark an old note without walking or "
+        "spending fuel");
   resumed = continued(session);
   check(bytes(resumed) == bytes(session),
         "Empty Moon pouch with retained notes survives complete Continue");

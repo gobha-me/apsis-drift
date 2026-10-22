@@ -417,6 +417,9 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto discard_field_sample(BodyTarget, SurfaceLandmarkId)
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto mark_field_sample_site(BodyTarget, SurfaceLandmarkId,
+                                            bool replace)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto last_gear_clearance() const
       -> std::optional<TerrainPadGapSample>;
