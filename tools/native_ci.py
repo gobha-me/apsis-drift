@@ -442,7 +442,7 @@ def validate_report(report, path, metadata, selected, m, runner):
                     "Incomplete actual minor phases")
             if family == "derelict_saves":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
-                    ("station", "approach", "contact", "near", "inspection")},
+                    ("station", "approach", "contact", "near", "inspection", "recovered")},
                     "Incomplete actual derelict phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in

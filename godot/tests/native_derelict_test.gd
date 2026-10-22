@@ -35,6 +35,26 @@ func peer_from(path: String) -> Variant:
 	if not check(not pending.is_empty() and peer.commit_pending_freedom_start(pending.candidate_id), "Independent Continue commit refused"): return null
 	return peer
 
+func check_archive(view: Control, owner: Variant, history: String, source: String, output: String) -> void:
+	var station := view.has_method("open_observations")
+	if station: view.open_observations()
+	else: view.controls_menu.show_observations()
+	var reader: Control = view.observations_view if station else view.controls_menu.observations_view
+	if not check(reader != null and reader.visible and view.paused, "Actual view cannot open the paused records archive"): return
+	if history.is_empty():
+		check(reader.note_pages.is_empty(), "Unacquired contact leaked an archive entry")
+	else:
+		var found := false
+		for index in reader.titles().size():
+			if history in reader.body.text:
+				found = true
+				break
+			reader.next_button.pressed.emit()
+		check(found and "does not show a live position" in reader.body.text, "Earned history is unavailable or misrepresented as a live fix")
+	checkpoint(owner, output, source)
+	reader.back_button.pressed.emit()
+	check(view.paused and not reader.visible, "Record Back resumed the actual view")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -45,7 +65,7 @@ func run() -> void:
 	if not check(ClassDB.class_exists("FreedomBridge") and DirAccess.make_dir_recursive_absolute(output) == OK, "Bridge or output unavailable"):
 		quit(1); return
 	var original_hashes := {}
-	for phase in ["station", "approach", "contact", "near", "inspection"]:
+	for phase in ["station", "approach", "contact", "near", "inspection", "recovered"]:
 		var source: String = phases.path_join(phase + ".json")
 		original_hashes[source] = FileAccess.get_sha256(source)
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
@@ -58,6 +78,7 @@ func run() -> void:
 	var station: Dictionary = owner.get_freedom_flight_state()
 	check(Derelict.valid_packet(station.derelict) and station.derelict.selected and not station.derelict.known and not station.derelict.can_scan and not station.derelict.can_inspect, "Station leaked a contact or enabled space actions")
 	check(not owner.scan_freedom_derelict() and not owner.inspect_freedom_derelict() and owner.get_freedom_flight_state() == station, "Station action refusal changed state")
+	check_archive(shell.current_view, owner, "", phases.path_join("station.json"), output.path_join("station-archive.json"))
 	checkpoint(owner, output.path_join("station.json"), phases.path_join("station.json"))
 	if not check(shell.select_start(owner, {"mode": "continue", "value": phases.path_join("approach.json"), "assets": assets}), "Labelled saved-space approach staging refused: " + shell.error):
 		shell.free(); quit(1); return
@@ -111,6 +132,7 @@ func run() -> void:
 	check(inspected.derelict.history in view.derelict_inspect_button.tooltip_text and inspected.derelict.history in view.primary_status.tooltip_text, "Earned exterior history is absent from Controls/HUD")
 	var saved := output.path_join("inspection.json")
 	checkpoint(owner, saved, phases.path_join("inspection.json"))
+	check_archive(view, owner, inspected.derelict.history, saved, output.path_join("inspection-archive.json"))
 	var peer: Variant = peer_from(saved)
 	if peer != null:
 		checkpoint(peer, output.path_join("continued.json"), saved)
@@ -124,6 +146,15 @@ func run() -> void:
 		view.set_process(false)
 		check(view.paused and view.derelict_marker.visible and view.derelict_view != null and view.state.derelict.history == inspected.derelict.history, "Scene Continue lost earned hull, history or pause")
 		checkpoint(owner, output.path_join("scene-continued.json"), saved)
+		check_archive(view, owner, inspected.derelict.history, saved, output.path_join("continued-archive.json"))
+	# The C++ phase uses explicit classified loss and actual recovery; the
+	# inspection itself does not cause destruction or teleportation.
+	var recovered := phases.path_join("recovered.json")
+	if check(shell.select_start(owner, {"mode": "continue", "value": recovered, "assets": assets}), "Recovered station Continue refused: " + shell.error):
+		view = shell.current_view
+		view.set_process(false)
+		check(view.has_method("open_observations") and owner.get_freedom_flight_state().derelict.inspected, "Recovery did not retain the note at the actual station")
+		check_archive(view, owner, inspected.derelict.history, recovered, output.path_join("recovered-archive.json"))
 	for source in original_hashes:
 		check(FileAccess.get_sha256(source) == original_hashes[source], "Godot rewrote a C++ source phase")
 	shell.free()

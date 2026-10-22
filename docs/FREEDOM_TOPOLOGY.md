@@ -185,3 +185,8 @@ collision response, boarding route, repair, towing, loot or sale value. Observe
 the indicated stand-off. The admitted Wayfarer model has retracted gear and no
 pilot or exhaust; its pose comes from C++ at the committed tick. Retained notes
 do not expose a moving remote pose when visiting another body.
+
+**Recorded observations** also keeps an acquired contact and its earned exterior
+history readable at the station and in all flight contexts. These are retained
+notes, without a live pose, distance or new scan. An unknown hull contributes
+no archive entry; reading never performs the inspection.

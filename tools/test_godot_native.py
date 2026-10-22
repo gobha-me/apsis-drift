@@ -851,7 +851,7 @@ def main(argv=None):
                   "fixture_sha256": sha256(derelict_fixture)}
         report["setup"].append(record)
         save()
-        names = ("station", "approach", "contact", "near", "inspection")
+        names = ("station", "approach", "contact", "near", "inspection", "recovered")
         if code != 0 or timed_out or not all(
                 (phases / (name + ".json")).is_file() and
                 0 < (phases / (name + ".json")).stat().st_size <= 1 << 20

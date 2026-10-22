@@ -157,6 +157,20 @@ auto exercise(const std::filesystem::path& output) -> void {
   need(resumed.inspect_derelict());
   check(resumed.knowledge()->derelicts == records,
         "Repeated inspection is idempotent after Continue");
+  // A classified-loss fixture, not a claim that the exterior inspection
+  // causes destruction. Use genuine recovery to retain the note at station.
+  need(resumed.record_loss(
+      FreedomLossCause::recoverable_destruction,
+      resumed.document().origin.state.craft, resumed.document().flight.tick,
+      need(rigid_body_state_checksum(RigidBodyWorldContext{resumed.system()},
+                                     resumed.document().flight))));
+  need(resumed.complete_recovery());
+  check(resumed.walker().has_value() &&
+            resumed.knowledge()->derelicts == records &&
+            resumed.derelict_view().inspected && !resumed.derelict_view().local,
+        "Actual station replacement retains the historical exterior note "
+        "without a moving remote pose");
+  resumed = continued(resumed, output / "recovered.json");
 }
 } // namespace
 

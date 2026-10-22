@@ -44,6 +44,12 @@ func shell_for(owner: Variant, path: String, assets: String) -> Control:
 func check_admission(owner: Variant, view: Control, output: String) -> void:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var frozen := save_bytes(owner, output.path_join("admission-before.json"))
+	check(view.controls_menu.observations_button != null, "Asteroid controls omit retained records")
+	view.controls_menu.show_observations()
+	var archive: Control = view.controls_menu.observations_view
+	check(archive != null and archive.visible and view.paused and archive.readings == owner.get_freedom_observations(), "Asteroid archive lost actual records or pause")
+	if archive != null: archive.back_button.pressed.emit()
+	check(view.paused and owner.get_freedom_flight_state() == state and save_bytes(owner, output.path_join("admission-archive.json")) == frozen, "Reading asteroid records changed the complete voyage")
 	check(not frozen.is_empty() and MinorState.valid(state) and not state.has("planet_id") and state.body_kind == "minor", "Actual source is not a typed minor-only observation")
 	check(not state.surface.landed and not state.surface.gear_deployed and state.surface_walk.is_empty() and state.surface.gear_clearance == {"available": false}, "Inspection proxy invented surface/gear/walking authority")
 	check(not state.surface_marker.current_body and not state.surface_marker.can_mark and state.exclusion_radius > state.body_radius and state.stand_off_gap > 0.0, "Minor packet lost C++ stand-off or invented local marker authority")

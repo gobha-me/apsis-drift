@@ -106,6 +106,13 @@ the new specimen records the current collection, while its first note stays
 unchanged. The journal holds up to64 distinct sites. If full, it still permits
 recollection from a previously recorded site.
 
+The same retained notes are also pages in **Recorded observations**, available
+at the station and in planet/Moon/asteroid controls. Each page shows its source
+and first-collection ship time, and separately states whether that specimen is
+carried now. It does not infer whether an absent specimen was
+discarded or lost. Opening the archive neither selects a pouch nor collects
+or analyzes anything.
+
 Save and Continue preserve the pouch and notes through walking, boarding and
 travel. Standard craft replacement clears the carried specimens, binds the
 empty pouch to the replacement craft and keeps the notes. The retired voyage

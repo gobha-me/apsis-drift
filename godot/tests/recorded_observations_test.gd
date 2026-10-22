@@ -30,6 +30,7 @@ func pad(button: JoyButton, down: bool) -> void:
 	await process_frame
 
 func run() -> void:
+	failures += preload("res://tests/exploration_notes_test.gd").run()
 	var fact := {"fact": "physical", "confidence": "probable", "source": "local_ship", "source_id": "17", "tick": "120", "craft_id": "23", "value": {}}
 	var subject := {"name": "Unresolved planet", "kind": "planet", "system_id": "system-fixture", "subject_id": "27", "facts": [fact]}
 	var readings := {"selected": true, "tick": "120", "subjects": [subject]}
@@ -101,6 +102,24 @@ func run() -> void:
 	view.query = func(): return {"selected": false, "tick": "0", "subjects": []}
 	view.open()
 	check("no selected observation records" in view.body.text and root.gui_get_focus_owner() == view.back_button, "Unselected archive was presented as an empty survey")
+	# Appended field pages preserve fact order and query only on opening.
+	var notes_calls := [0]
+	var note := preload("res://tests/exploration_notes_test.gd").row()
+	view.query = func(): return {"selected": true, "tick": "120", "subjects": [subject]}
+	view.notes_query = func():
+		notes_calls[0] += 1
+		return {"samples": {"selected": true, "capacity": 4, "carried": [], "journal": [note]}, "derelict": null}
+	view.open()
+	check(view.titles().size() == 3 and view.page == 0 and "Unresolved planet" in view.body.text and notes_calls[0] == 1, "Field notes displaced facts or queried more than once")
+	await key(KEY_ENTER, true)
+	await key(KEY_ENTER, false)
+	check(view.page == 1 and "FIELD SAMPLES" in view.body.text, "Keyboard did not reach appended pouch summary")
+	await key(KEY_ENTER, true)
+	await key(KEY_ENTER, false)
+	check(view.page == 2 and note.label in view.body.text and "Specimen not carried." in view.body.text and "ship time 0.0 s" in view.body.text and notes_calls[0] == 1, "Note page lost first provenance, disposition or query neutrality")
+	view.open()
+	check(view.page == 0 and notes_calls[0] == 2, "Reopened field archive did not refresh exactly once")
+	view.notes_query = Callable()
 	menu.back_from_nested()
 	menu.observations_query = func(): return null
 	view.query = menu.observations_query

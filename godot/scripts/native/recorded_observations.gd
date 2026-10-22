@@ -1,9 +1,12 @@
 extends "res://scripts/flight/flight_basics.gd"
 ## Reuse the paused reference's pagination, readable sizing and pad scrolling.
-## This view consumes only the C++ knowledge query, never world descriptors.
+## This view consumes C++ records and retained notes, never world descriptors.
 var query: Callable
+var notes_query: Callable
 var readings: Dictionary = {}
+var note_pages: Array = []
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
+const ExplorationNotes = preload("res://scripts/native/exploration_notes.gd")
 const VALUE_FIELDS := {
 	"identity_type": {"name": TYPE_STRING},
 	"physical": {"radius_kilometres": TYPE_INT, "gravity_milli_g": TYPE_INT},
@@ -40,32 +43,40 @@ static func valid_readings(candidate: Variant) -> bool:
 
 func titles() -> Array:
 	var subjects: Array = readings.get("subjects", [])
-	return subjects if not subjects.is_empty() else ["No records"]
+	var result: Array = ["Unavailable observations"] if readings.has("error") else subjects.duplicate()
+	result.append_array(note_pages)
+	return result if not result.is_empty() else ["No records"]
 
 func open() -> void:
 	var candidate: Variant = query.call() if query.is_valid() else null
 	readings = candidate if valid_readings(candidate) else {"error": "Observation records are unavailable."}
+	note_pages = ExplorationNotes.pages(notes_query.call()) if notes_query.is_valid() else []
 	super.open()
 	if next_button.disabled: back_button.grab_focus()
 
 func refresh() -> void:
 	if not is_instance_valid(heading): return
 	var subjects: Array = readings.get("subjects", [])
-	page = clampi(page, 0, maxi(subjects.size() - 1, 0))
-	heading.text = "RECORDED OBSERVATIONS  %d / %d" % [page + 1, maxi(subjects.size(), 1)]
+	var count := titles().size()
+	page = clampi(page, 0, count - 1)
+	heading.text = "RECORDED OBSERVATIONS  %d / %d" % [page + 1, count]
 	_paused.text = "PAUSED / RETAINED KNOWLEDGE"
 	if readings.get("selected", false):
 		_paused.text += " · ship time " + time_text(readings.tick)
 	_hint.text = "Left / right or Tab: select · Up / down: scroll\nB / Circle / Esc / Start: back to controls"
-	if readings.has("error"):
+	var facts_count := 1 if readings.has("error") else subjects.size()
+	if page >= facts_count and not note_pages.is_empty():
+		var note: Dictionary = note_pages[page - facts_count]
+		body.text = str(note.title) + "\n\n" + str(note.text)
+	elif readings.has("error"):
 		body.text = str(readings.error)
 	elif subjects.is_empty():
 		body.text = "No observations have been recorded." if readings.get("selected", false) else "This journey has no selected observation records."
 		body.text += " Reading this page does not start sensors or upgrade a save."
 	else:
 		body.text = subject_text(subjects[page])
-	previous_button.disabled = subjects.size() < 2
-	next_button.disabled = subjects.size() < 2
+	previous_button.disabled = count < 2
+	next_button.disabled = count < 2
 	if is_visible_in_tree() and next_button.disabled:
 		back_button.grab_focus()
 

@@ -50,6 +50,7 @@ var basics_button: Button
 var settings_view: Control
 var settings_button: Button
 var observations_query: Callable
+var exploration_notes_query: Callable
 var observations_view: Control
 var observations_button: Button
 var surface_reference_view: Control
@@ -291,6 +292,7 @@ func _ready() -> void:
 			observations_view = preload("res://scripts/native/recorded_observations.gd").new()
 			observations_view.controls = controls
 			observations_view.query = observations_query
+			observations_view.notes_query = exploration_notes_query
 			panel.add_child(observations_view)
 			observations_view.back_requested.connect(close_observations)
 			observations_button = add_button(left, "Recorded observations", show_observations)
