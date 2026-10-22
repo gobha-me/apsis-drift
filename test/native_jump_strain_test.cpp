@@ -25,7 +25,7 @@ auto starts() -> void {
     check(reading(s).ready && reading(s).next_recovery_ticks == 5400,
           "Every new strain craft starts ready for its first45-second cycle");
   }
-  check(!native_jump_strain_new_game({42}, 3),
+  check(!native_jump_strain_new_game({42}, 4),
         "Unsupported chart selection refuses");
 }
 auto cancel_and_cool() -> void {

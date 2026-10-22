@@ -10,7 +10,9 @@
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <source_location>
 #include <stdexcept>
+#include <type_traits>
 
 namespace {
 using namespace apsis_drift;
@@ -30,16 +32,22 @@ auto check(bool value, std::string_view message) -> void {
     ++failures;
   }
 }
-template <class T, class E> auto need(std::expected<T, E> value) -> T {
+template <class T, class E>
+auto need(std::expected<T, E> value,
+          const std::source_location where = std::source_location::current())
+    -> T {
   if (!value) {
+    const auto context = std::string{where.file_name()} + ":" +
+                         std::to_string(where.line()) + ": ";
     if constexpr (std::is_same_v<E, SaveSchemaError>)
-      throw std::runtime_error(value.error().detail);
+      throw std::runtime_error(context + value.error().detail);
     else if constexpr (std::is_same_v<E, SaveFileError>)
-      throw std::runtime_error(save_file_error_message(value.error()));
+      throw std::runtime_error(context +
+                               save_file_error_message(value.error()));
     else if constexpr (std::is_same_v<E, std::string>)
-      throw std::runtime_error(value.error());
+      throw std::runtime_error(context + value.error());
     else
-      throw std::runtime_error("Recovery fixture refused");
+      throw std::runtime_error(context + "Recovery fixture refused");
   }
   if constexpr (!std::is_void_v<T>) return std::move(*value);
 }
@@ -909,6 +917,113 @@ auto network_recovery(const std::filesystem::path& path) -> void {
   check(!validate_freedom_recovery_document(tampered),
         "Recovery cannot silently replace the selected network with a pair");
 }
+auto star_search_recovery() -> void {
+  const Seed seed{42};
+  auto selected = need(native_uncharted_network_new_game(seed));
+  FreedomRecoverySaveDocument source{
+      std::get<FreedomKnowledgeSaveDocument>(std::move(selected.document)), {}};
+  const auto craft = recovery_flight(source.voyage).origin.state.craft;
+  const auto system = recovery_flight(source.voyage).flight.frame.system;
+  // Metadata-only saved-station snapshots, not a flown search acquisition.
+  // Resolve the real station constraint at each snapshot's new clock.
+  const auto snapshot_tick = [&](auto& document, SimulationTick tick) {
+    auto& knowledge = std::get<FreedomKnowledgeSaveDocument>(document.voyage);
+    auto& assembly = std::get<FreedomStartingAssemblySaveDocument>(
+        knowledge.voyage.voyage.base);
+    auto& flight = assembly.journey.voyage.flight;
+    const auto owner = need(generate_physical_origin_system(seed, 2));
+    const auto station = generate_origin_station(seed);
+    const auto geometry = need(origin_station_geometry(station));
+    flight.flight = need(release_origin_port(
+        owner, station, geometry,
+        {geometry.version, assembly.journey.voyage.docking.target,
+         flight.flight.craft, tick}));
+    flight.origin.state.tick = tick;
+    knowledge.voyage.resources.tick = tick;
+  };
+  const auto finish_search = [&](FreedomKnowledge knowledge,
+                                 StarterCraftId collector,
+                                 SimulationTick started) {
+    auto searching =
+        need(begin_freedom_star_search(knowledge, system, collector, started));
+    auto& active = *searching.star_search->active;
+    active.last_tick = started + kFreedomStarSearchTicks;
+    active.acquired_ticks = kFreedomStarSearchTicks - 1;
+    return need(advance_freedom_star_search(
+        searching, system, collector, started + kFreedomStarSearchTicks + 1,
+        true));
+  };
+  auto& knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(source.voyage).knowledge;
+  knowledge = finish_search(knowledge, craft, 0);
+  const SimulationTick loss_tick = kFreedomStarSearchTicks + 2;
+  knowledge =
+      need(begin_freedom_star_search(knowledge, system, craft, loss_tick));
+  snapshot_tick(source, loss_tick);
+  need(validate_freedom_recovery_document(source));
+  const auto pending = need(record_freedom_loss(
+      source, FreedomLossCause::irrecoverable_destruction, craft, loss_tick,
+      need(freedom_recovery_source_checksum(source.voyage))));
+  const auto completed = need(complete_freedom_recovery(pending));
+  const auto& previous = recovery_knowledge(source.voyage).knowledge;
+  const auto& replacement = recovery_knowledge(completed.voyage).knowledge;
+  const auto current = recovery_flight(completed.voyage).origin.state.craft;
+  check(recovery_flight(completed.voyage).origin.network ==
+                recovery_flight(source.voyage).origin.network &&
+            replacement.recipe.version == kFreedomUnchartedKnowledgeVersion &&
+            replacement.entries == previous.entries &&
+            replacement.star_search && !replacement.star_search->active &&
+            replacement.star_search->completed ==
+                previous.star_search->completed &&
+            recovery_knowledge(completed.recovery.latest->retired).knowledge ==
+                previous &&
+            need(decode_freedom_recovery_document_json(
+                need(encode_freedom_recovery_document_json(completed)))) ==
+                completed,
+        "Replacement retains exact searched-region records and network2, "
+        "clears only the active search, and roundtrips retired provenance");
+  const auto rejects_valid_knowledge = [&](const auto& candidate,
+                                           std::string_view message) {
+    need(validate_freedom_knowledge_document(
+        std::get<FreedomKnowledgeSaveDocument>(candidate.voyage)));
+    check(!validate_freedom_recovery_document(candidate), message);
+  };
+  auto rewritten = completed;
+  auto& rewritten_search =
+      std::get<FreedomKnowledgeSaveDocument>(rewritten.voyage)
+          .knowledge.star_search;
+  ++rewritten_search->completed.front().started_tick;
+  rejects_valid_knowledge(
+      rewritten,
+      "Individually valid search metadata cannot rewrite the retained prefix");
+  rewritten_search->completed = previous.star_search->completed;
+  rewritten_search->active = previous.star_search->active;
+  check(!validate_freedom_knowledge(
+            std::get<FreedomKnowledgeSaveDocument>(rewritten.voyage).knowledge,
+            loss_tick) &&
+            !validate_freedom_recovery_document(rewritten),
+        "The retired craft's active search fails both current-craft knowledge "
+        "and replacement recovery admission");
+  auto onward = completed;
+  auto& next = std::get<FreedomKnowledgeSaveDocument>(onward.voyage).knowledge;
+  next = need(begin_freedom_star_search(next, system, current, loss_tick));
+  need(validate_freedom_recovery_document(onward));
+  --next.star_search->active->started_tick;
+  rejects_valid_knowledge(onward, "A new craft's active search cannot be "
+                                  "backdated before its loss boundary");
+  next.star_search->active.reset();
+  next = finish_search(next, current, loss_tick);
+  snapshot_tick(onward, loss_tick + kFreedomStarSearchTicks + 1);
+  check(
+      need(decode_freedom_recovery_document_json(
+          need(encode_freedom_recovery_document_json(onward)))) == onward &&
+          next.star_search->completed.size() == 2 &&
+          next.star_search->completed.back().craft == current,
+      "The replacement may append and Continue its own newly completed search");
+  --next.star_search->completed.back().started_tick;
+  rejects_valid_knowledge(onward, "An otherwise valid added search cannot "
+                                  "begin before the replacement loss");
+}
 } // namespace
 auto main() -> int {
   const auto path =
@@ -932,6 +1047,7 @@ auto main() -> int {
       provider(Seed{42}, FreedomLossCause::recoverable_destruction, false, 0,
                policy);
     network_recovery(path / "network-recovery.json");
+    star_search_recovery();
     session_contract(path / "recovery.json");
     landmark_retention();
     composed_recovery();

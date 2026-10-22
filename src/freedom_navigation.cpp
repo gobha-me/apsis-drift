@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_navigation.hpp"
 
+#include <algorithm>
 #include <array>
 
 namespace apsis_drift {
@@ -42,7 +43,8 @@ auto resolve_freedom_network_chart(const FreedomSystemNetwork& network,
                                    SystemId current,
                                    const FreedomResources& resources,
                                    bool selection_open,
-                                   const FreedomSaveDocument* owner)
+                                   const FreedomSaveDocument* owner,
+                                   std::span<const SystemId> acquired)
     -> std::expected<UniverseNavigationView, UniverseNavigationError> {
   if (!validate_freedom_system_network(network))
     return std::unexpected{UniverseNavigationError::invalid_route};
@@ -58,6 +60,9 @@ auto resolve_freedom_network_chart(const FreedomSystemNetwork& network,
   UniverseNavigationView view{current, {}};
   view.destinations.reserve(network.nodes.size());
   for (const auto& node : network.nodes) {
+    if (network.version == kFreedomUnchartedSystemNetworkVersion &&
+        std::ranges::find(acquired, node.system) == acquired.end())
+      continue;
     const bool is_current = node.system == current;
     std::optional<std::uint64_t> distance;
     if (!is_current) {

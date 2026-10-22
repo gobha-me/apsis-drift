@@ -94,7 +94,7 @@ auto network_companion_roundtrips() -> void {
       check(!decode_freedom_flight_document_json(bad.dump()),
             "new54/55 cannot infer an absent selector");
       bad = json;
-      bad["network"]["version"] = 2U;
+      bad["network"]["version"] = 3U;
       check(!decode_freedom_flight_document_json(bad.dump()),
             "typed companion saves authenticate the network recipe");
       bad = json;

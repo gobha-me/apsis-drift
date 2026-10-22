@@ -9,8 +9,8 @@ namespace apsis_drift {
 auto NativeFreedomFlightSession::prepare_composed_travel()
     -> std::expected<void, std::string> {
   const bool recovering = resources_ && resources_->drive;
-  if (!knowledge_ || (!recovering && (knowledge_->recipe.version !=
-                                          kFreedomPlanetaryKnowledgeVersion ||
+  if (!knowledge_ || (!recovering && (!freedom_knowledge_has_planetary_chart(
+                                          knowledge_->recipe.version) ||
                                       !document_.origin.network)))
     return std::unexpected{"Travel requires its explicitly selected chart"};
   const auto version =
@@ -60,7 +60,7 @@ auto NativeFreedomFlightSession::planet_jump_selection_available(
     return std::unexpected{
         "Select planetary travel outside recovery or an active jump"};
   if (!knowledge_ ||
-      knowledge_->recipe.version != kFreedomPlanetaryKnowledgeVersion ||
+      !freedom_knowledge_has_planetary_chart(knowledge_->recipe.version) ||
       !document_.origin.network || !resources_ || !starting_assembly_ ||
       document_.model.physical_catalog != 2 ||
       document_.model.physical_ephemeris != 2 ||
@@ -347,6 +347,8 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
         state.phase = FreedomJumpPhase::transit;
         candidate.docking_.reset();
         result.jump_committed = true;
+        if (candidate.knowledge_ && candidate.knowledge_->star_search)
+          candidate.knowledge_->star_search->active.reset();
       }
     }
   } else {

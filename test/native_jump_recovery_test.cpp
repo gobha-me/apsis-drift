@@ -200,7 +200,7 @@ auto selection_and_cancel() -> void {
           "Every explicitly selected station craft starts ready");
     live = continued(live);
   }
-  check(!native_jump_recovery_new_game({42}, 3),
+  check(!native_jump_recovery_new_game({42}, 4),
         "Unknown chart declines before startup");
   auto s = fixture();
   const auto home = current_target(s);

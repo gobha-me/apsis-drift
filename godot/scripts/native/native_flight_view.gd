@@ -38,12 +38,15 @@ var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
+const StarSearch = preload("res://scripts/native/native_star_search.gd")
 const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
 var frame_diagnostics: PanelContainer
 var frame_diagnostics_button: Button
 var initial_frame_diagnostics := false
 var survey_start_button: Button
 var survey_cancel_button: Button
+var star_search_start_button: Button
+var star_search_cancel_button: Button
 var observation_cue := Status.ObservationCue.new()
 var surface_aid_cue := Status.SurfaceAidCue.new()
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
@@ -209,6 +212,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 static func valid_state(value: Dictionary) -> bool:
 	if value.has("orbital_survey") and not OrbitalSurvey.valid(value.orbital_survey): return false
+	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
 	if value.has("port_docking"):
@@ -662,7 +666,7 @@ func build_ui() -> void:
 	chart_status = hud_text()
 	chart_status.visible = false
 	column.add_child(chart_status)
-	for ordinal in 4:
+	for ordinal in 6:
 		var destination := Button.new()
 		destination.focus_mode = Control.FOCUS_ALL
 		destination.pressed.connect(func(): select_jump_destination(ordinal))
@@ -955,6 +959,10 @@ func update_compact_hud() -> void:
 		# Command/refusal and maneuver outcomes retain their existing priority.
 		primary_status.text += "\n" + OrbitalSurvey.compact_text(state.orbital_survey, not observation_cue.text().is_empty())
 		primary_status.tooltip_text += "\n" + str(state.orbital_survey.note)
+	var search_text := StarSearch.text(state.get("star_search"))
+	if error.is_empty() and not search_text.is_empty():
+		primary_status.text += "\n" + search_text
+		primary_status.tooltip_text += "\n" + search_text + "\n" + str(state.star_search.note)
 	var personal: Dictionary = state.get("surface_marker", {})
 	if error.is_empty() and personal.get("present", false):
 		var marker_text := ""
@@ -1085,6 +1093,9 @@ func setup_controls() -> void:
 	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
 	survey_cancel_button = controls_menu.add_button(survey_column, "Stop orbital survey", orbital_survey_command.bind(true))
+	star_search_start_button = controls_menu.add_button(survey_column, "Search nearby stars", star_search_command)
+	star_search_cancel_button = controls_menu.add_button(survey_column, "Stop star search", star_search_command.bind(true))
+	refresh_star_search()
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
@@ -1511,6 +1522,39 @@ func orbital_survey_command(cancel := false) -> void:
 	if not error.is_empty(): return
 	report_action_status("Survey stopped." if cancel else "Survey started · Resume to scan.")
 	controls_menu.resume_button.grab_focus()
+
+
+func star_search_command(cancel := false) -> void:
+	if not marker_controls_available() or mode_change_pending or not StarSearch.valid(state.get("star_search")): return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release movement controls before changing the star search.")
+		return
+	if cancel:
+		if not state.star_search.active: return
+	elif not state.star_search.can_begin: return
+	if not bridge.call("cancel_freedom_star_search" if cancel else "begin_freedom_star_search"):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	report_action_status("Star search stopped; unfinished progress discarded." if cancel else "Star search started · Resume to acquire a fix.")
+	controls_menu.resume_button.grab_focus()
+
+
+func refresh_star_search() -> void:
+	if star_search_start_button == null: return
+	var packet: Variant = state.get("star_search")
+	var available: bool = StarSearch.valid(packet) and packet.selected
+	var ordinary: bool = state.get("body_kind", "planet") == "planet"
+	star_search_start_button.visible = available and ordinary and not packet.active
+	star_search_cancel_button.visible = available and packet.active
+	star_search_start_button.disabled = not available or not packet.can_begin
+	star_search_cancel_button.disabled = not available or not packet.active
+	if available:
+		star_search_start_button.tooltip_text = "Fly above the atmosphere for 10 simulation seconds to acquire a stellar navigation fix. Pause holds the clock; unsuitable flight holds progress. Observe the planets after arrival.\n" + packet.note
+		star_search_cancel_button.tooltip_text = StarSearch.text(packet) + "\nStop, jump commitment or craft replacement discards unfinished work. Pause and Save preserve it."
 
 
 func refresh_orbital_survey() -> void:
@@ -2318,10 +2362,12 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		resource_status.text = "Historical save · resource recipe unselected"
 		service_button.visible = false
 	var chart: Dictionary = state.get("chart", {})
+	var acquired_chart: bool = state.get("star_search", {}).get("selected", false)
+	chart_button.text = "Navigation chart" if acquired_chart else "Starting chart"
 	chart_button.visible = chart.get("selected", false)
 	chart_status.visible = chart_button.visible and chart_button.button_pressed
 	if chart_button.visible:
-		chart_status.text = "Starting chart · granted positions"
+		chart_status.text = "Navigation chart · known system locations" if acquired_chart else "Starting chart · granted positions"
 		if chart.get("local_sensors", false):
 			chart_status.text += "\nShip sensors · %d recorded findings" % chart.observed_facts
 		for row: Dictionary in chart.rows:
@@ -2440,6 +2486,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_surface_marker()
 	refresh_surface_landmarks()
 	refresh_orbital_survey()
+	refresh_star_search()
 	refresh_distant_contacts()
 	refresh_cockpit_control()
 	update_compact_hud()

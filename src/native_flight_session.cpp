@@ -98,10 +98,12 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     if (auto v = validate_freedom_recovery_document(*d); !v)
       return std::unexpected{v.error().detail};
     recovery = std::move(d->recovery);
-    auto voyage = std::move(d->voyage);
-    selected.document = std::visit(
-        [](auto& value) -> NativeSaveDocument { return std::move(value); },
-        voyage);
+    const auto voyage = std::visit(
+        [](auto& value) {
+          return std::make_unique<NativeSaveDocument>(std::move(value));
+        },
+        d->voyage);
+    selected.document = std::move(*voyage);
   }
   std::optional<FreedomTravelState> travel;
   std::optional<NativeStartingAssemblySelection> travel_binding;
@@ -147,10 +149,12 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     if (auto valid = validate_freedom_surface_document(*d); !valid)
       return std::unexpected{valid.error().detail};
     surface = d->surface;
-    auto base = std::move(d->base);
-    selected.document = std::visit(
-        [](auto& value) -> NativeSaveDocument { return std::move(value); },
-        base);
+    const auto base = std::visit(
+        [](auto& value) {
+          return std::make_unique<NativeSaveDocument>(std::move(value));
+        },
+        d->base);
+    selected.document = std::move(*base);
   }
   if (auto* d = std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)

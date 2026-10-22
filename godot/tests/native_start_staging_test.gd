@@ -4,6 +4,7 @@ const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
+const StarSearch = preload("res://scripts/native/native_star_search.gd")
 class LateDamagedShell extends Shell:
 	var damage := ""
 	var staged_reference: WeakRef
@@ -212,7 +213,7 @@ func run() -> void:
 		network_flight.controls_menu.hide_menu()
 		network_flight.chart_button.button_pressed = true
 		network_flight._process(0.0)
-		check(network_flight.jump_destinations.size() == 4, "Flight scene lost network chart actions")
+		check(network_flight.jump_destinations.filter(func(button: Button) -> bool: return button.visible).size() == 4, "Flight scene lost known network chart actions or leaked hidden slots")
 		var before_choice: Dictionary = bridge.get_freedom_flight_state()
 		var before_facts: Dictionary = bridge.get_freedom_observations()
 		for ordinal in [1, 2, 3]:
@@ -223,8 +224,9 @@ func run() -> void:
 			check(chosen.tick == before_choice.tick and chosen.resources == before_choice.resources and bridge.get_freedom_observations() == before_facts, "Chart choice changed clock, resources or knowledge")
 	else:
 		check(false, "A seated network Continue did not create the actual flight view")
-	for chart in 3:
-		check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "network": chart > 0, "planetary": chart == 2, "drive_recovery": true, "assets": args[0]}), "Independent drive/chart staging refused: " + shell.error)
+	await check_uncharted(shell, bridge, args)
+	for chart in 4:
+		check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "network": chart > 0, "planetary": chart == 2, "uncharted": chart == 3, "drive_recovery": true, "assets": args[0]}), "Independent drive/chart staging refused: " + shell.error)
 		var selected_drive: Dictionary = bridge.get_freedom_flight_state()
 		check(shell.current_view is WalkView and selected_drive.tick == "0" and selected_drive.chart.rows.size() == (2 if chart == 0 else 4) and selected_drive.jump.recovery.ready and selected_drive.jump.recovery.remaining_seconds == 0.0, "Drive choice changed chart selection or failed ready station start")
 		var drive_save: String = args[1].get_base_dir().path_join("recovery-start-%d.json" % chart)
@@ -236,6 +238,66 @@ func run() -> void:
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)
+
+
+func check_uncharted(shell: Control, owner: Variant, args: PackedStringArray) -> void:
+	check(shell.select_start(owner, {"mode": "new_game", "value": "42", "uncharted": true, "assets": args[0]}), "Uncharted station staging refused: " + shell.error)
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	check(initial.chart.rows.size() == 4 and StarSearch.valid(initial.star_search) and initial.star_search.selected and not initial.star_search.active and not initial.star_search.can_begin, "Uncharted start leaked contacts or allowed station acquisition")
+	for frame in 298: check(owner.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, -1.0, 0.0])), "Uncharted station walking refused")
+	check(owner.advance_freedom_walk(1.0 / 60.0, PackedFloat64Array([0.0, -1.0, 0.0])) and owner.begin_freedom_boarding(), "Uncharted actual boarding refused")
+	for frame in 360: check(owner.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])), "Uncharted boarding tick refused")
+	check(owner.release_freedom_port(), "Uncharted departure release refused")
+	var path: String = args[1].get_base_dir().path_join("uncharted-flight.json")
+	check(owner.save_freedom_as(path) and shell.select_start(owner, {"mode": "continue", "value": path, "assets": args[0]}), "Uncharted seated flight staging refused")
+	if not shell.current_view is FlightView:
+		check(false, "Uncharted seated Continue lost actual flight view")
+		return
+	var view: Control = shell.current_view
+	view.set_process(false)
+	view.focused = true
+	view.player_input.focused = true
+	view.player_input.persist = false
+	view.controls_menu.show_menu()
+	view.observe_neutral_controls()
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	var before: Dictionary = owner.get_freedom_flight_state()
+	check(before.star_search.can_begin and view.star_search_start_button.visible and not view.star_search_start_button.disabled, "Actual released orbital craft lacks search action")
+	view.focused = false
+	view.star_search_start_button.pressed.emit()
+	check(owner.get_freedom_flight_state() == before, "Unfocused star action changed state")
+	view.focused = true
+	view.journey_dialog_open = true
+	view.star_search_start_button.pressed.emit()
+	check(owner.get_freedom_flight_state() == before, "Modal star action changed state")
+	view.journey_dialog_open = false
+	view.star_search_start_button.pressed.emit()
+	var begun: Dictionary = owner.get_freedom_flight_state()
+	check(begun.star_search.active and begun.star_search.acquired_ticks == 0 and begun.tick == before.tick and begun.resources == before.resources and view.paused, "Search action spent time/fuel or implicitly resumed")
+	var neutral := PackedFloat64Array()
+	neutral.resize(12)
+	check(owner.advance_freedom_flight(0.1, neutral, true) and owner.get_freedom_flight_state() == begun, "Paused search advanced state")
+	for frame in 150: check(owner.advance_freedom_flight(1.0 / 30.0, neutral, false), "Partial stellar acquisition refused")
+	check(owner.get_freedom_flight_state().star_search.acquired_ticks == 600 and owner.save_freedom_as(path), "Actual partial600 search or save refused")
+	var partial_bytes := FileAccess.get_file_as_bytes(path)
+	check(shell.select_start(owner, {"mode": "continue", "value": path, "assets": args[0]}) and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == partial_bytes, "Partial stellar Continue changed complete state")
+	view = shell.current_view
+	view.set_process(false)
+	view.focused = true
+	view.player_input.focused = true
+	view.observe_neutral_controls()
+	for frame in 150: check(owner.advance_freedom_flight(1.0 / 30.0, neutral, false), "Completing stellar acquisition refused")
+	view.chart_button.button_pressed = true
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	check(view.state.chart.rows.size() == 5 and view.state.star_search.completed == 1 and not view.state.star_search.active and view.state.resources.jump_charges == 3, "Actual discovery did not add exactly one known chart row")
+	check(view.jump_destinations.filter(func(button: Button) -> bool: return button.visible).size() == 5, "Native chart did not show exactly five earned destinations")
+	var packet: Dictionary = before.star_search.duplicate(true)
+	for change in [{"target": "hidden"}, {"acquired_ticks": NAN}, {"acquired_ticks": 1200}, {"completed": 3}, {"active": true, "can_begin": true}, {"selected": false, "completed": 1}]:
+		var bad := packet.duplicate(true)
+		bad.merge(change, true)
+		check(not StarSearch.valid(bad), "Malformed or target-leaking search packet admitted")
 
 
 func joy_axis(axis: int, value: float, device: int) -> void:

@@ -121,5 +121,43 @@ Three charges support Home → A → B → Home; a tour of all four systems retu
 requires four jumps. Origin remains the only station and free replenishment
 requires physical attachment. There are no extra services, missions or upgrades.
 
-The larger network, hidden contacts and automatic routing remain separate
+Further region expansion and automatic routing remain separate
 [scope decisions](https://github.com/gobha-me/apsis-drift/issues/229).
+
+## Discoverable systems
+
+The explicit **Four charted + two uncharted systems** New Game choice adds two
+initially unknown generated systems to the existing four-node region. Continue
+retains its saved choice. Recipe2 embeds the original four nodes exactly, adds
+two nodes through independent seed domain22, and preserves every prior recipe.
+The added anchors use the remaining perpendicular axis, h×e±q×r. All fifteen
+links retain the integer light-second grid and existing starter range bound;
+actual jump eligibility still uses the craft's physical source and arrival.
+
+**Controls → Search nearby stars** starts a ten-second acquisition during
+ordinary space flight above the atmosphere. Resume explicitly. Menus freeze
+the shared clock; unsuitable flight holds progress. Stop, committed jump or
+craft replacement discards unfinished acquisition. Save/Continue retains partial
+progress. The next unknown contact is chosen deterministically from the current
+system by anchor distance, with system identity breaking ties; reopening a menu
+cannot reroll it.
+
+Completion records one resolved stellar navigation fix with source craft,
+source system and acquisition ticks. That system then appears in the chart.
+It grants no visit, remote planets or surface findings. Actual arrival and the
+existing local observer earn those facts. Completed fixes survive ordinary
+recovery. A second search can find the other contact; an exhausted region
+reports no further detections rather than inventing more systems or resources.
+
+Knowledge recipe6/chart4 grants the original four systems and their planetary
+navigation facts, while the extra systems remain hidden. C++ retains the
+private generated catalogs and acquisition targets; Godot receives only known
+chart rows and bounded progress. Guessed system IDs cannot authorize a native
+jump. Closed knowledge persistence binds the region, craft and source world;
+completed search provenance and learned anchor facts must agree.
+
+Travel uses the current drive, one charge per committed leg, spool/transit and
+selected recovery/strain. Home → Frontier A → Frontier B → Home uses three
+charges. Fuel service still requires physical Origin docking; no extra station,
+free return, probe, relay, mission or economy is added. This finite prototype
+does not define the eventual universe's size or exploration ceiling.

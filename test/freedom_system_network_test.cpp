@@ -68,6 +68,8 @@ auto geometry(Seed seed, bool print_routes) -> void {
   const auto old_ids = generate_first_intersystem_identities(seed);
   const auto old_route = generate_first_universe_route(seed);
   const auto network = need(generate_freedom_system_network(seed));
+  // An independent copy detects mutation by refused operations.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot.
   const auto original = network;
   check(validate_freedom_system_network(network).has_value() &&
             network == need(generate_freedom_system_network(seed)),
@@ -225,7 +227,7 @@ auto ownership_and_refusals() -> void {
         "Original Home/neighbor physical catalogs are exact, without carrier "
         "conversion");
   check(!generate_freedom_system_network(seed, 0) &&
-            !generate_freedom_system_network(seed, 2) &&
+            !generate_freedom_system_network(seed, 3) &&
             !generate_freedom_system_network(
                 seed, std::numeric_limits<std::uint32_t>::max()),
         "Unsupported topology versions refuse before any adoption");
@@ -285,6 +287,199 @@ auto ownership_and_refusals() -> void {
         "Existing seed42 identity/geometry golden is not replaced by network "
         "recipe");
 }
+auto uncharted_geometry(Seed seed) -> void {
+  const auto prior = need(generate_freedom_system_network(seed));
+  const auto network = need(generate_freedom_system_network(
+      seed, kFreedomUnchartedSystemNetworkVersion));
+  // An independent copy detects mutation by refused operations.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Snapshot.
+  const auto original = network;
+  const auto route = generate_first_universe_route(seed);
+  const bool sizes =
+      network.nodes.size() == kFreedomUnchartedSystemNetworkSize &&
+      prior.nodes.size() == kFreedomSystemNetworkSize;
+  check(sizes,
+        "Explicit recipe2 has six nodes and default recipe1 still has four");
+  if (!sizes) return;
+  check(network.version == 2 && network.universe_seed == seed &&
+            network.network_seed ==
+                derive_seed(seed, SeedDomain::freedom_uncharted_systems, 2) &&
+            network == need(generate_freedom_system_network(seed, 2)) &&
+            validate_freedom_system_network(network).has_value(),
+        "Six-node recipe has reproducible independently named versioned truth");
+  check(
+      std::equal(prior.nodes.begin(), prior.nodes.end(), network.nodes.begin()),
+      "All original four IDs, seeds, ordinals and anchors remain exact prefix");
+  const std::array<std::int64_t, 3> old{route.destination_position.x,
+                                        route.destination_position.y,
+                                        route.destination_position.z};
+  const auto axis = static_cast<std::size_t>(
+      std::ranges::find_if(old, [](auto x) { return x != 0; }) - old.begin());
+  check(axis < 3, "Six-node source retains genuine old cardinal route");
+  if (axis >= 3) return;
+  const auto unused = (axis + 2) % 3;
+  const auto h = static_cast<std::int64_t>(route.distance_light_seconds / 2);
+  const auto q = static_cast<std::int64_t>(route.distance_light_seconds / 4);
+  std::size_t links{};
+  for (std::size_t i = 0; i < network.nodes.size(); ++i) {
+    const auto& node = network.nodes[i];
+    check(node.ordinal == i && node.system_seed.value != 0 &&
+              node.system.value == node.system_seed.value &&
+              need(find_freedom_system_network_node(network, node.system)) ==
+                  node,
+          "All six canonical owned nodes resolve without identity aliases");
+    if (i >= kFreedomSystemNetworkSize) {
+      std::array<std::int64_t, 3> expected{};
+      expected[axis] = (old[axis] < 0 ? -h : h) * kMetresPerLightSecond;
+      expected[unused] = (i == 4 ? q : -q) * kMetresPerLightSecond;
+      check(node.system_seed ==
+                    derive_seed(network.network_seed, SeedDomain::system, i) &&
+                node.position == UniversePositionMetres{expected[0],
+                                                        expected[1],
+                                                        expected[2]},
+            "Independent axis-index oracle locates new4/5 in the third plane");
+    }
+    for (std::size_t j = 0; j < i; ++j)
+      check(node.system != network.nodes[j].system &&
+                node.system_seed != network.nodes[j].system_seed &&
+                node.position != network.nodes[j].position,
+            "All six IDs, seeds and positions are distinct");
+    check(!resolve_freedom_system_network_route(network, node.system,
+                                                node.system),
+          "Six-node route still refuses same-system travel");
+    for (std::size_t j = i + 1; j < network.nodes.size(); ++j) {
+      ++links;
+      const auto& other = network.nodes[j];
+      const auto actual = need(resolve_freedom_system_network_route(
+          network, node.system, other.system));
+      const auto reverse = need(resolve_freedom_system_network_route(
+          network, other.system, node.system));
+      const UniversePositionMetres delta{other.position.x - node.position.x,
+                                         other.position.y - node.position.y,
+                                         other.position.z - node.position.z};
+      const std::array metres{absolute(delta.x), absolute(delta.y),
+                              absolute(delta.z)};
+      std::uint64_t square_ls{};
+      for (const auto component : metres) {
+        check(component % kMetresPerLightSecond == 0,
+              "Six-node displacements stay on the exact integer LS grid");
+        const auto ls = component / kMetresPerLightSecond;
+        square_ls += ls * ls;
+      }
+      check(actual.source == node.system &&
+                actual.destination == other.system &&
+                actual.displacement == delta &&
+                reverse.displacement ==
+                    UniversePositionMetres{-delta.x, -delta.y, -delta.z} &&
+                reverse.distance_metres == actual.distance_metres &&
+                reverse.squared_distance_light_seconds == square_ls &&
+                actual.squared_distance_light_seconds == square_ls &&
+                square_ls > 0 &&
+                square_ls <=
+                    route.distance_light_seconds * route.distance_light_seconds,
+            "All15 links have independent exact displacement/square and "
+            "symmetry");
+      check(actual.distance_metres > 2 * static_cast<std::uint64_t>(
+                                             kLocalSystemBoundaryMetres) &&
+                actual.distance_metres <= route.distance_metres &&
+                actual.distance_metres <= kFreedomJumpRatedMetres,
+            "All15 links retain separated systems and starter-rated distance");
+      const auto target = sum_squares(metres);
+      check(
+          !less(sum_squares({actual.distance_metres, 0, 0}), target) &&
+              less(sum_squares({actual.distance_metres - 1, 0, 0}), target),
+          "Independent schoolbook oracle certifies each integer metre ceiling");
+      if (j < kFreedomSystemNetworkSize)
+        check(actual == need(resolve_freedom_system_network_route(
+                            prior, node.system, other.system)),
+              "All original six complete route records remain exact under "
+              "recipe2");
+      if (seed == Seed{42})
+        std::cout << "UNCHARTED_ROUTE seed=" << seed.value << " from=" << i
+                  << " to=" << j << " dx=" << delta.x << " dy=" << delta.y
+                  << " dz=" << delta.z << " square_ls=" << square_ls
+                  << " ceil_metres=" << actual.distance_metres << '\n';
+    }
+  }
+  check(
+      links == 15 && network == original &&
+          prior == need(generate_freedom_system_network(seed)),
+      "Whole15-link reads preserve both selected and default immutable truth");
+}
+auto uncharted_ownership_and_refusals() -> void {
+  const auto network = need(generate_freedom_system_network(Seed{42}, 2));
+  for (const auto& node : network.nodes) {
+    const auto physical =
+        need(resolve_freedom_network_system(network, node.system));
+    const auto direct =
+        node.ordinal == 0
+            ? need(generate_physical_origin_system(Seed{42}, 2))
+            : need(generate_physical_local_system(node.system_seed, 2));
+    check(
+        physical == direct && validate_local_system(physical).has_value() &&
+            physical.catalog.id == node.system &&
+            physical.generator_version == 2 &&
+            physical.origin_universe_seed ==
+                (node.ordinal == 0 ? std::optional{Seed{42}} : std::nullopt),
+        "Each of six genuine physical catalogs binds the actual seeded owner");
+    check(!resolve_freedom_network_system(network, node.system, 0),
+          "Six-node selection never authorizes an unsupported physical recipe");
+  }
+  check(freedom_system_network_version_supported(1) &&
+            freedom_system_network_version_supported(2) &&
+            !freedom_system_network_version_supported(0) &&
+            !freedom_system_network_version_supported(3) &&
+            !freedom_system_network_version_supported(
+                std::numeric_limits<std::uint32_t>::max()),
+        "Only explicit topology versions1/2 are supported");
+  for (unsigned damage = 0; damage < 14; ++damage) {
+    auto bad = network;
+    switch (damage) {
+      case 0: bad.nodes.pop_back(); break;
+      case 1: bad.nodes.push_back(bad.nodes.back()); break;
+      case 2: bad.nodes.clear(); break;
+      case 3: bad.nodes.resize(64, bad.nodes.back()); break;
+      case 4: bad.version = 1; break;
+      case 5: bad.version = 3; break;
+      case 6: ++bad.network_seed.value; break;
+      case 7: bad.nodes[4].system = bad.nodes[0].system; break;
+      case 8: bad.nodes[4].system = SystemId{0}; break;
+      case 9: ++bad.nodes[5].system_seed.value; break;
+      case 10: bad.nodes[4].ordinal = 5; break;
+      case 11: bad.nodes[4].position = bad.nodes[0].position; break;
+      case 12:
+        bad.nodes[4].position.x = std::numeric_limits<std::int64_t>::min();
+        break;
+      case 13:
+        bad.nodes[5].position.z = std::numeric_limits<std::int64_t>::max();
+        break;
+    }
+    const auto frozen = bad;
+    check(!validate_freedom_system_network(bad) &&
+              !find_freedom_system_network_node(bad, network.nodes[0].system) &&
+              !resolve_freedom_network_system(bad, network.nodes[0].system) &&
+              !resolve_freedom_system_network_route(
+                  bad, network.nodes[0].system, network.nodes[1].system) &&
+              bad == frozen,
+          "Malformed vector size/recipe/new node refuses before old-node "
+          "lookup or arithmetic");
+  }
+  const auto prior = need(generate_freedom_system_network(Seed{42}));
+  check(!find_freedom_system_network_node(prior, network.nodes[4].system) &&
+            !resolve_freedom_system_network_route(prior, prior.nodes[0].system,
+                                                  network.nodes[4].system),
+        "Old four-node topology cannot silently acquire a new system");
+  const auto foreign =
+      need(generate_freedom_system_network(Seed{43}, 2)).nodes[4].system;
+  for (const auto id : {SystemId{0}, foreign})
+    check(!find_freedom_system_network_node(network, id) &&
+              !resolve_freedom_network_system(network, id) &&
+              !resolve_freedom_system_network_route(network, id,
+                                                    network.nodes[0].system) &&
+              !resolve_freedom_system_network_route(
+                  network, network.nodes[0].system, id),
+          "Six-node consumers refuse zero and foreign system ownership");
+}
 } // namespace
 int main() {
   try {
@@ -295,6 +490,13 @@ int main() {
       geometry(Seed{value}, true);
     for (std::uint64_t value = 100; value < 164; ++value)
       geometry(Seed{value}, false);
+    uncharted_ownership_and_refusals();
+    for (const auto value : std::array<std::uint64_t, 8>{
+             0, 1, 4, 7, 42, 123, 2048,
+             std::numeric_limits<std::uint64_t>::max()})
+      uncharted_geometry(Seed{value});
+    for (std::uint64_t value = 100; value < 164; ++value)
+      uncharted_geometry(Seed{value});
   } catch (const std::exception& error) {
     ++failures;
     std::cerr << error.what() << '\n';

@@ -224,7 +224,9 @@ auto frozen_value(const Json& f)
   if (r.contains("network")) {
     const auto& network = r["network"];
     if (!fields(network, {"version"}) || !uints(network, {"version"}) ||
-        network["version"] != kFreedomSystemNetworkVersion)
+        network["version"] > std::numeric_limits<std::uint32_t>::max() ||
+        !freedom_system_network_version_supported(
+            network["version"].get<std::uint32_t>()))
       return std::unexpected{
           failure("invalid closed frozen network selection")};
     request.network =

@@ -346,14 +346,32 @@ auto native_planetary_network_new_game(Seed universe_seed)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_uncharted_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string> {
+  auto start = native_network_new_game(universe_seed);
+  if (!start) return std::unexpected{start.error()};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  assembly.journey.voyage.flight.origin.network =
+      FreedomNetworkSelection{kFreedomUnchartedSystemNetworkVersion};
+  auto knowledge = make_freedom_starting_knowledge(
+      universe_seed, kFreedomUnchartedKnowledgeVersion);
+  if (!knowledge) return std::unexpected{"Uncharted region rejected"};
+  knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
+  voyage.knowledge = std::move(*knowledge);
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_jump_recovery_new_game(Seed universe_seed, std::uint32_t chart_kind)
     -> std::expected<NativeStartup, std::string> {
-  if (chart_kind > 2)
+  if (chart_kind > 3)
     return std::unexpected{"Unsupported starting chart choice"};
-  auto start = chart_kind == 0 ? native_new_game(universe_seed)
-               : chart_kind == 1
-                   ? native_network_new_game(universe_seed)
-                   : native_planetary_network_new_game(universe_seed);
+  auto start =
+      chart_kind == 3   ? native_uncharted_network_new_game(universe_seed)
+      : chart_kind == 0 ? native_new_game(universe_seed)
+      : chart_kind == 1 ? native_network_new_game(universe_seed)
+                        : native_planetary_network_new_game(universe_seed);
   if (!start) return std::unexpected{start.error()};
   auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
   const auto& flight = surface_base_flight(voyage.voyage.voyage.base);
@@ -377,11 +395,12 @@ auto native_jump_strain_new_game(Seed universe_seed, std::uint32_t chart_kind)
 auto native_origin_assistance_new_game(Seed seed, std::uint32_t chart_kind,
                                        std::uint32_t drive_kind)
     -> std::expected<NativeStartup, std::string> {
-  if (chart_kind > 2 || drive_kind > 2)
+  if (chart_kind > 3 || drive_kind > 2)
     return std::unexpected{"Unsupported assistance chart/drive choice"};
   auto selected =
       drive_kind == 2   ? native_jump_strain_new_game(seed, chart_kind)
       : drive_kind == 1 ? native_jump_recovery_new_game(seed, chart_kind)
+      : chart_kind == 3 ? native_uncharted_network_new_game(seed)
       : chart_kind == 2 ? native_planetary_network_new_game(seed)
       : chart_kind == 1 ? native_network_new_game(seed)
                         : native_new_game(seed);

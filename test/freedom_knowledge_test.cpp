@@ -1147,8 +1147,9 @@ auto planetary_knowledge() -> void {
         "exploration history");
   for (std::uint32_t version = 0; version < 8; ++version)
     check(freedom_knowledge_uses_network(version) ==
-              (version == 4 || version == 5),
-          "Network recipe predicate admits exactly existing4 and explicit5");
+              (version == 4 || version == 5 || version == 6),
+          "Network recipe predicate admits only explicit supported network "
+          "recipes");
   for (const auto& entry : initial.entries)
     check(entry.transitions == std::vector{KnowledgeTransition{
                                    NavigationKnowledgeLevel::resolved,
