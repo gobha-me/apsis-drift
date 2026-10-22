@@ -68,3 +68,22 @@ flight arithmetic was changed, and no preload is used by the native launcher.
 Local diagnostic sources, the isolated library and historical object are retained
 under ignored `build-godot/math-probe/` and `build-godot/`. They are development
 evidence, not new redistributable game dependencies.
+
+## CI compiler and math-library evidence
+
+The existing GCC/Clang build and native-core jobs retain small
+`ctest-math-*` artifacts for seven days. Each records the tested commit,
+run/attempt, job label, CTest step outcome and `LastTest.log` hash, configured
+compiler/build options, representative vacuum-dynamics test binary hash, and
+resolved libc/libm hashes and GNU build IDs when available. Missing builds,
+tools and dependencies are reported as unavailable; a canceled runner may
+produce no artifact. The existing tests and their failure results remain primary.
+Artifact names include the attempt so a job retry retains earlier evidence.
+
+`tools/ctest_math_provenance.py` inspects the already-built executable without
+running its tests. Loader dependency resolution does not establish which math
+functions or IFUNC implementations executed. Configured flags are cache values,
+not the complete options for every translation unit. These fingerprints help
+compare CI environments; they do not resolve
+[#255](https://github.com/gobha-me/apsis-drift/issues/255), select a numerical
+implementation, or establish historical/save-continuation compatibility.

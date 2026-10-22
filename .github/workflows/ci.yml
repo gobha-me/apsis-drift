@@ -145,6 +145,8 @@ jobs:
           sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
 
       - name: Install media test tools
+        # Fail closed on a stalled package mirror; retain the normal dependencies.
+        timeout-minutes: 10
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install RtAudio system headers
@@ -165,10 +167,29 @@ jobs:
         run: cmake --build build --parallel 4
 
       - name: Test
+        id: ctest
         run: ctest --test-dir build --output-on-failure --parallel 2
 
       - name: Headless benchmark smoke test
         run: ./build/apsis-drift --benchmark 3
+
+      - name: Collect compiler and math-library provenance
+        if: always()
+        env:
+          CTEST_STEP_OUTCOME: ${{ steps.ctest.outcome || 'unknown' }}
+          CTEST_JOB_LABEL: ${{ matrix.name }}
+        run: >-
+          python3 tools/ctest_math_provenance.py --build-dir build
+          --output ctest-math-provenance.json
+
+      - name: Retain compact CTest provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-math-${{ github.job }}-${{ matrix.cxx }}-${{ matrix.rtaudio || 'OFF' }}-${{ github.run_attempt }}
+          path: ctest-math-provenance.json
+          if-no-files-found: error
+          retention-days: 7
 
   native-core:
     name: ${{ matrix.name }} / native core
@@ -209,7 +230,26 @@ jobs:
         run: cmake --build build-core --parallel 4
 
       - name: Test native and headless targets
+        id: ctest
         run: ctest --test-dir build-core --output-on-failure
+
+      - name: Collect compiler and math-library provenance
+        if: always()
+        env:
+          CTEST_STEP_OUTCOME: ${{ steps.ctest.outcome || 'unknown' }}
+          CTEST_JOB_LABEL: ${{ format('{0} / native core', matrix.name) }}
+        run: >-
+          python3 tools/ctest_math_provenance.py --build-dir build-core
+          --output ctest-math-provenance.json
+
+      - name: Retain compact CTest provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-math-${{ github.job }}-${{ matrix.cxx }}-${{ matrix.rtaudio || 'OFF' }}-${{ github.run_attempt }}
+          path: ctest-math-provenance.json
+          if-no-files-found: error
+          retention-days: 7
 
   native-godot-build:
     name: Godot 4.7.2 / verified native build
