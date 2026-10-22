@@ -226,7 +226,7 @@ auto NativeFreedomFlightSession::mark_field_sample_site(BodyTarget target,
                                              document_.flight.tick};
   }
   auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
-  candidate->knowledge_->surface_marker = std::move(marker);
+  candidate->knowledge_->surface_marker = marker;
   const auto saved = candidate->player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
