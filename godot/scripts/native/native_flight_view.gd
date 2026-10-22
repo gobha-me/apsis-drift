@@ -39,6 +39,11 @@ const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const StarSearch = preload("res://scripts/native/native_star_search.gd")
+const DerelictView = preload("res://scripts/native/native_derelict_view.gd")
+var derelict_view: Node3D
+var derelict_marker: Control
+var derelict_scan_button: Button
+var derelict_inspect_button: Button
 const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
 var frame_diagnostics: PanelContainer
 var frame_diagnostics_button: Button
@@ -213,6 +218,7 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 static func valid_state(value: Dictionary) -> bool:
 	if value.has("orbital_survey") and not OrbitalSurvey.valid(value.orbital_survey): return false
 	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
+	if value.has("derelict") and not DerelictView.valid_packet(value.derelict): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
 	if value.has("port_docking"):
@@ -511,6 +517,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	if not refresh_service_craft(state, 0.0):
 		error = "The service Wayfarer presentation is unavailable"
 		return false
+	if not refresh_derelict(state):
+		error = "The derelict Wayfarer presentation is unavailable"
+		return false
 	build_ui()
 	return true
 
@@ -570,6 +579,25 @@ func build_origin_service_ui(column: VBoxContainer) -> void:
 	if not state.has("origin_service"): return
 	service_status = hud_text()
 	column.add_child(service_status)
+
+
+func refresh_derelict(flight: Dictionary) -> bool:
+	if not flight.has("derelict"):
+		if derelict_view != null: derelict_view.hide()
+		return true
+	var packet: Dictionary = flight.derelict
+	if not DerelictView.valid_packet(packet):
+		if derelict_view != null: derelict_view.hide()
+		return false
+	if derelict_view == null:
+		if not packet.local or packet.distance_metres > terrain_camera.far: return true
+		derelict_view = DerelictView.new()
+		if not derelict_view.initialize(assets_root, service_binding, packet.id):
+			derelict_view.free()
+			derelict_view = null
+			return false
+		scene.add_child(derelict_view)
+	return derelict_view.present(packet, paused, camera.far, terrain_camera.far)
 
 
 func setup_origin_service_controls(column: Node) -> void:
@@ -644,6 +672,10 @@ func build_ui() -> void:
 	contact_marker.label_text = "CONTACT"
 	contact_marker.visible = false
 	navigation_layer.add_child(contact_marker)
+	derelict_marker = HomeNavigation.new()
+	derelict_marker.label_text = "DERELICT"
+	derelict_marker.visible = false
+	navigation_layer.add_child(derelict_marker)
 	var column := VBoxContainer.new()
 	hud_column = column
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -963,6 +995,11 @@ func update_compact_hud() -> void:
 	if error.is_empty() and not search_text.is_empty():
 		primary_status.text += "\n" + search_text
 		primary_status.tooltip_text += "\n" + search_text + "\n" + str(state.star_search.note)
+	var derelict_text := DerelictView.text(state.get("derelict"))
+	if error.is_empty() and not derelict_text.is_empty():
+		primary_status.text += "\n" + derelict_text
+		primary_status.tooltip_text += "\n" + derelict_text + "\n" + str(state.derelict.note)
+		if not state.derelict.history.is_empty(): primary_status.tooltip_text += "\n" + state.derelict.history
 	var personal: Dictionary = state.get("surface_marker", {})
 	if error.is_empty() and personal.get("present", false):
 		var marker_text := ""
@@ -1096,6 +1133,9 @@ func setup_controls() -> void:
 	star_search_start_button = controls_menu.add_button(survey_column, "Search nearby stars", star_search_command)
 	star_search_cancel_button = controls_menu.add_button(survey_column, "Stop star search", star_search_command.bind(true))
 	refresh_star_search()
+	derelict_scan_button = controls_menu.add_button(survey_column, "Scan local space", derelict_command)
+	derelict_inspect_button = controls_menu.add_button(survey_column, "Inspect derelict exterior", derelict_command.bind(true))
+	refresh_derelict_controls()
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
@@ -1541,6 +1581,43 @@ func star_search_command(cancel := false) -> void:
 	if not error.is_empty(): return
 	report_action_status("Star search stopped; unfinished progress discarded." if cancel else "Star search started · Resume to acquire a fix.")
 	controls_menu.resume_button.grab_focus()
+
+
+func derelict_command(inspect := false) -> void:
+	if not marker_controls_available() or mode_change_pending or not DerelictView.valid_packet(state.get("derelict")): return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release movement controls before scanning or inspecting.")
+		return
+	if not (state.derelict.can_inspect if inspect else state.derelict.can_scan): return
+	if not bridge.call("inspect_freedom_derelict" if inspect else "scan_freedom_derelict"):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	report_action_status(str(state.derelict.note) + ("\n" + str(state.derelict.history) if inspect and not state.derelict.history.is_empty() else ""))
+	controls_menu.resume_button.grab_focus()
+
+
+func refresh_derelict_controls() -> void:
+	if derelict_scan_button == null: return
+	var packet: Variant = state.get("derelict")
+	var available: bool = DerelictView.valid_packet(packet) and packet.selected
+	var ordinary: bool = state.get("body_kind", "planet") == "planet"
+	derelict_scan_button.visible = available and ordinary
+	derelict_scan_button.disabled = not available or not packet.can_scan
+	derelict_scan_button.tooltip_text = "Scan the local planet frame in ordinary space above the atmosphere. Contact range: 100,000 km. A scan may find no signal; it does not reveal remote locations or advance ship time."
+	derelict_inspect_button.visible = available and packet.known
+	derelict_inspect_button.disabled = not available or not packet.can_inspect
+	derelict_inspect_button.tooltip_text = "Exterior inspection only: hold a 100–500 m stand-off with relative speed at most 20 m/s. Approach manually. No boarding or hull collision in this prototype."
+	if available:
+		derelict_scan_button.tooltip_text += "\n" + packet.note
+		derelict_inspect_button.tooltip_text += "\n" + packet.note
+		if not packet.history.is_empty(): derelict_inspect_button.tooltip_text += "\n" + packet.history
+	if derelict_marker != null:
+		derelict_marker.visible = available and packet.local and not surface_walking()
+		if derelict_marker.visible: derelict_marker.update_cue(camera, packet.position, false)
 
 
 func refresh_star_search() -> void:
@@ -2220,6 +2297,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		pause_on_error("Saved flight observation is invalid")
 	if not error.is_empty():
 		hide_exhaust()
+		if derelict_view != null: derelict_view.hide()
+		if derelict_marker != null: derelict_marker.hide()
 		return
 	if not refresh_service_craft(state, delta):
 		pause_on_error("The service Wayfarer presentation is unavailable")
@@ -2487,6 +2566,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_surface_landmarks()
 	refresh_orbital_survey()
 	refresh_star_search()
+	refresh_derelict_controls()
+	if not refresh_derelict(state):
+		pause_on_error("The derelict Wayfarer presentation is unavailable")
+		return
 	refresh_distant_contacts()
 	refresh_cockpit_control()
 	update_compact_hud()

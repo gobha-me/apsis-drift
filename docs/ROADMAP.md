@@ -114,6 +114,14 @@ uses real flight ticks; actual charged jumps and local observations earn visits
 and planetary knowledge. Existing journeys, resources and drive rules retain
 their meanings. Probes, relays and the wider #207 horizon remain separate.
 
+2026-10-22 engineering follow-through: [#674](https://github.com/gobha-me/apsis-drift/issues/674)
+adds one [seeded derelict exterior](FREEDOM_TOPOLOGY.md#derelict-inspection) to
+new uncharted journeys. Local signal acquisition, manual approach and a retained
+inspection note use existing flight and admitted Wayfarer art. Boarding,
+salvage trading and the wider economy remain later work; older saves retain
+their explicit selection. This is an engineering default under the continuing
+development loop, not another quoted owner preference.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

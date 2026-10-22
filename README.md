@@ -32,7 +32,8 @@ An [asteroid inspection trip](docs/ASTEROID_INSPECTION.md) adds close flight aro
 one existing minor body, an explicit stand-off limit and a charged return.
 The title screen also offers [four charted systems](docs/FREEDOM_TOPOLOGY.md#optional-four-system-region)
 for a new journey, or [two additional uncharted systems](docs/FREEDOM_TOPOLOGY.md#discoverable-systems)
-to discover in flight; existing saves retain their original map.
+to discover in flight; existing saves retain their original map. New uncharted
+journeys also include a [derelict exterior to find and inspect](docs/FREEDOM_TOPOLOGY.md#derelict-inspection).
 An optional [Origin fuel service](docs/ORIGIN_FUEL_SERVICE.md) sends one actual
 service Wayfarer to a supported home-Moon ship; its fuel and charges are finite.
 **Esc / Start · Controls** opens paused controls and Flight basics.

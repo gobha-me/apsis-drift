@@ -124,11 +124,11 @@ auto NativeFreedomFlightSession::collect_field_sample(SurfaceLandmarkId id)
     -> std::expected<void, std::string> {
   const auto record = field_sample_collection_source(id);
   if (!record) return std::unexpected{record.error()};
-  auto candidate = *this;
-  if (!candidate.knowledge_->field_samples)
-    candidate.knowledge_->field_samples = FreedomFieldSampleState{
+  auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
+  if (!candidate->knowledge_->field_samples)
+    candidate->knowledge_->field_samples = FreedomFieldSampleState{
         kFreedomFieldSamplesVersion, document_.origin.state.craft, {}, {}};
-  auto& samples = *candidate.knowledge_->field_samples;
+  auto& samples = *candidate->knowledge_->field_samples;
   if (!std::ranges::any_of(samples.journal, [&](const auto& item) {
         return same_site(item, record->target, id);
       }))
@@ -136,11 +136,11 @@ auto NativeFreedomFlightSession::collect_field_sample(SurfaceLandmarkId id)
   samples.carried.push_back(*record);
   std::ranges::sort(samples.carried, {}, sample_key);
   std::ranges::sort(samples.journal, {}, sample_key);
-  const auto saved = candidate.player_save_document();
+  const auto saved = candidate->player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
-  *this = std::move(candidate);
+  *this = std::move(*candidate);
   return {};
 }
 auto NativeFreedomFlightSession::discard_field_sample(BodyTarget target,

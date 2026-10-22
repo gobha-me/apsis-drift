@@ -61,6 +61,7 @@ TESTS = {
     "first_jump": "freedom_saves",
     "native_moon": "freedom_saves",
     "native_minor": "freedom_saves",
+    "native_derelict": "freedom_saves",
     "native_recovery": "freedom_saves",
     "native_port": "freedom_saves",
     "native_walk": "freedom_saves",
@@ -268,6 +269,7 @@ def main(argv=None):
     frame_import_fixture = args.build_dir.resolve() / "apsis-drift-freedom-flight-import-tests"
     system_release_fixture = args.build_dir.resolve() / "apsis-drift-native-system-release-tests"
     survey_fixture = args.build_dir.resolve() / "apsis-drift-native-orbital-survey-tests"
+    derelict_fixture = args.build_dir.resolve() / "apsis-drift-native-derelict-tests"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
@@ -301,6 +303,9 @@ def main(argv=None):
     if "orbital_survey" in selected:
         if not survey_fixture.is_file() or not os.access(survey_fixture, os.X_OK):
             parser.error(f"missing C++ orbital survey fixture: {survey_fixture}")
+    if "native_derelict" in selected:
+        if not derelict_fixture.is_file() or not os.access(derelict_fixture, os.X_OK):
+            parser.error(f"missing C++ derelict fixture: {derelict_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -402,6 +407,10 @@ def main(argv=None):
         shutil.copy2(survey_fixture, work / survey_fixture.name)
         survey_fixture = work / survey_fixture.name
         staged_executables.append(survey_fixture)
+    if "native_derelict" in selected:
+        shutil.copy2(derelict_fixture, work / derelict_fixture.name)
+        derelict_fixture = work / derelict_fixture.name
+        staged_executables.append(derelict_fixture)
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -432,7 +441,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_recovery", "native_port", "native_walk", "native_station_crew", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", "orbital_survey", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_moon", "native_minor", "native_derelict", "native_recovery", "native_port", "native_walk", "native_station_crew", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", "orbital_survey", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -832,6 +841,26 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
         save()
+    if "native_derelict" in selected:
+        phases = work / "derelict-voyage"
+        log = work / "derelict-voyage-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(derelict_fixture), "--fixtures", str(phases)], log, env, args.timeout)
+        record = {"family": "derelict_saves", "returncode": code,
+                  "timed_out": timed_out, "seconds": elapsed,
+                  "fixture_sha256": sha256(derelict_fixture)}
+        report["setup"].append(record)
+        save()
+        names = ("station", "approach", "contact", "near", "inspection")
+        if code != 0 or timed_out or not all(
+                (phases / (name + ".json")).is_file() and
+                0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
+                for name in names):
+            print(f"FAIL authoritative derelict fixture: {log}", flush=True)
+            return 1
+        record["files_sha256"] = {
+            name + ".json": sha256(phases / (name + ".json")) for name in names}
+        save()
     for name, (stem, fixture_flag, terrain_policy) in SURFACE_TESTS.items():
         if name not in selected:
             continue
@@ -1116,6 +1145,9 @@ def main(argv=None):
         if name == "native_minor":
             arguments = [str(work / path) for path in
                          ("minor-voyage", "native-assets", "minor-native")]
+        if name == "native_derelict":
+            arguments = [str(work / path) for path in
+                         ("derelict-voyage", "native-assets", "derelict-native")]
         if name == "native_moon":
             arguments = [str(work / path) for path in
                          ("moon-voyage", "native-assets", "moon-native")]

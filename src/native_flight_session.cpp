@@ -91,13 +91,13 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     auto inner = std::move(walking->voyage);
     selected.document = std::move(inner);
   }
-  std::optional<FreedomRecoveryState> recovery;
+  std::unique_ptr<FreedomRecoveryState> recovery;
   if (auto* d = std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
       return std::unexpected{"Recovery requires Freedom"};
     if (auto v = validate_freedom_recovery_document(*d); !v)
       return std::unexpected{v.error().detail};
-    recovery = std::move(d->recovery);
+    recovery = std::make_unique<FreedomRecoveryState>(std::move(d->recovery));
     const auto voyage = std::visit(
         [](auto& value) {
           return std::make_unique<NativeSaveDocument>(std::move(value));
@@ -105,7 +105,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
         d->voyage);
     selected.document = std::move(*voyage);
   }
-  std::optional<FreedomTravelState> travel;
+  std::unique_ptr<FreedomTravelState> travel;
   std::optional<NativeStartingAssemblySelection> travel_binding;
   std::optional<FreedomBoardingState> travel_pilot;
   if (auto* d = std::get_if<FreedomTravelSaveDocument>(&selected.document)) {
@@ -113,7 +113,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
       return std::unexpected{"Travel state requires Freedom"};
     if (auto v = validate_freedom_travel_document(*d); !v)
       return std::unexpected{v.error().detail};
-    travel = std::move(d->travel);
+    travel = std::make_unique<FreedomTravelState>(std::move(d->travel));
     travel_binding = std::move(d->craft_binding);
     travel_pilot = d->seated_pilot;
     auto voyage = std::move(d->voyage);
@@ -245,8 +245,8 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
       result.minor_ ? std::optional<FreedomSurfaceState>{} : surface;
   result.resources_ = resources;
   result.knowledge_ = std::move(knowledge);
-  result.travel_ = std::move(travel);
-  result.recovery_ = std::move(recovery);
+  if (travel) result.travel_ = std::move(*travel);
+  if (recovery) result.recovery_ = std::move(*recovery);
   result.condition_ = condition;
   result.retired_condition_ = retired_condition;
   result.surface_walk_selected_ = surface_walk_selected;

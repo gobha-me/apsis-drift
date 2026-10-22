@@ -355,10 +355,12 @@ auto native_uncharted_network_new_game(Seed universe_seed)
       std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
   assembly.journey.voyage.flight.origin.network =
       FreedomNetworkSelection{kFreedomUnchartedSystemNetworkVersion};
+  assembly.journey.voyage.flight.origin.derelicts = FreedomDerelictSelection{};
   auto knowledge = make_freedom_starting_knowledge(
       universe_seed, kFreedomUnchartedKnowledgeVersion);
   if (!knowledge) return std::unexpected{"Uncharted region rejected"};
   knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
+  knowledge->derelicts = FreedomDerelictState{};
   voyage.knowledge = std::move(*knowledge);
   return native_select_save_document(std::move(start->document));
 }

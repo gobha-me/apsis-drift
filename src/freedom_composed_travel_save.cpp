@@ -142,8 +142,8 @@ auto same_owner(const FreedomFlightSaveDocument& source,
   const auto& a = source.origin;
   const auto& b = current.origin;
   return a.recipe == b.recipe && a.lineage == b.lineage &&
-         a.network == b.network && a.state.station == b.state.station &&
-         a.state.craft == b.state.craft &&
+         a.network == b.network && a.derelicts == b.derelicts &&
+         a.state.station == b.state.station && a.state.craft == b.state.craft &&
          source.flight.craft == current.flight.craft &&
          a.state.tick <= b.state.tick &&
          a.state.discoveries.size() <= b.state.discoveries.size() &&

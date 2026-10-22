@@ -156,6 +156,7 @@ auto decode_freedom_docking_document_json(std::string_view text)
     if (!root.contains("network"))
       return std::unexpected{failure("$.network", "network selection missing")};
     shape.erase("network");
+    shape.erase("derelicts");
   }
   if (root.contains("world_owner")) shape.erase("craft_lineage");
   shape.erase("world_owner");
