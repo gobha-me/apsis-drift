@@ -25,6 +25,9 @@ inline constexpr std::uint32_t kFreedomRecoveringTravelSaveFormatVersion{57};
 inline constexpr std::uint32_t kFreedomRecoveringTravelStateVersion{6};
 inline constexpr std::uint32_t kFreedomStrainedTravelSaveFormatVersion{58};
 inline constexpr std::uint32_t kFreedomStrainedTravelStateVersion{7};
+inline constexpr std::uint32_t kFreedomForeignMoonTravelSaveFormatVersion{61};
+inline constexpr std::uint32_t kFreedomForeignMoonTravelStateVersion{8};
+inline constexpr std::uint32_t kFreedomForeignMoonComposedRoutesVersion{2};
 enum class FreedomJumpPhase : std::uint8_t { idle, spool, transit };
 struct FreedomLocalTravelState {
   std::optional<BodyTarget> selected;
@@ -72,7 +75,8 @@ enum class FreedomComposedRouteKind : std::uint8_t {
   system,
   planet,
   moon,
-  minor
+  minor,
+  foreign_moon
 };
 struct FreedomComposedLocalCheckpoint {
   std::optional<FrozenLocalBodyJumpArrival> committed;
@@ -91,6 +95,8 @@ struct FreedomComposedTravelState {
   std::optional<FrozenFreedomPlanetJumpArrival> planet_committed;
   std::optional<FreedomResources> planet_commitment_resources;
   FreedomComposedLocalCheckpoint moon, minor;
+  // Explicit composed2 only; preserves one real foreign-parent excursion.
+  FreedomComposedLocalCheckpoint foreign_moon;
   friend auto operator==(const FreedomComposedTravelState&,
                          const FreedomComposedTravelState&) -> bool = default;
 };

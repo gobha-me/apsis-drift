@@ -155,6 +155,7 @@ auto NativeFreedomFlightSession::jump_selection_available(
   } else if (travel_->version != kFreedomTravelStateVersion &&
              !((travel_->version == kFreedomRecoveringTravelStateVersion ||
                 travel_->version == kFreedomStrainedTravelStateVersion ||
+                travel_->version == kFreedomForeignMoonTravelStateVersion ||
                 (freedom_knowledge_has_planetary_chart(
                      knowledge_->recipe.version) &&
                  travel_->version == kFreedomComposedTravelStateVersion)) &&
@@ -189,7 +190,9 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
     return {};
   }
   auto candidate = *this;
-  if ((candidate.resources_ && candidate.resources_->drive) ||
+  if ((candidate.travel_ &&
+       candidate.travel_->version == kFreedomForeignMoonTravelStateVersion) ||
+      (candidate.resources_ && candidate.resources_->drive) ||
       freedom_knowledge_has_planetary_chart(
           candidate.knowledge_->recipe.version)) {
     if (const auto prepared = candidate.prepare_composed_travel(); !prepared)

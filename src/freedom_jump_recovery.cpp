@@ -158,12 +158,16 @@ auto advance_freedom_drive_recovery(const FreedomDriveRecoveryState& prior,
   next.last_use = *stamp;
   return next;
 }
-auto freeze_freedom_jump_uncertainty(
-    Seed seed, StarterCraftId craft, CraftFrameRecipe frame,
-    const std::optional<FreedomCraftLineage>& lineage,
-    std::uint64_t source_checksum, FreedomJumpRecoveryKind kind,
-    SimulationTick commit_tick, BodyTarget source, BodyTarget destination,
-    std::uint64_t attempt, const FreedomDriveRecoveryState& state)
+namespace {
+auto freeze_jump_uncertainty(Seed seed, StarterCraftId craft,
+                             CraftFrameRecipe frame,
+                             const std::optional<FreedomCraftLineage>& lineage,
+                             std::uint64_t source_checksum,
+                             FreedomJumpRecoveryKind kind,
+                             SimulationTick commit_tick, BodyTarget source,
+                             BodyTarget destination, std::uint64_t attempt,
+                             const FreedomDriveRecoveryState& state,
+                             bool foreign_moon)
     -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
   if (const auto valid = validate_freedom_drive_recovery(
           state, seed, craft, frame, lineage, commit_tick);
@@ -196,10 +200,20 @@ auto freeze_freedom_jump_uncertainty(
                       destination.body.kind == BodyKind::minor) ||
                      (source.body.kind == BodyKind::minor &&
                       destination.body.kind == BodyKind::planet);
-  if ((kind == FreedomJumpRecoveryKind::system && (!planets || same_system)) ||
-      (kind == FreedomJumpRecoveryKind::planet && (!planets || !same_system)) ||
-      (kind == FreedomJumpRecoveryKind::moon && (!moon || !same_system)) ||
-      (kind == FreedomJumpRecoveryKind::minor && (!minor || !same_system)))
+  if (foreign_moon) {
+    if (!((same_system && source.body.kind == BodyKind::planet &&
+           destination.body.kind == BodyKind::moon) ||
+          (!same_system && source.body.kind == BodyKind::moon &&
+           destination.body.kind == BodyKind::planet)))
+      return std::unexpected{Error::invalid_target};
+  } else if ((kind == FreedomJumpRecoveryKind::system &&
+              (!planets || same_system)) ||
+             (kind == FreedomJumpRecoveryKind::planet &&
+              (!planets || !same_system)) ||
+             (kind == FreedomJumpRecoveryKind::moon &&
+              (!moon || !same_system)) ||
+             (kind == FreedomJumpRecoveryKind::minor &&
+              (!minor || !same_system)))
     return std::unexpected{Error::invalid_target};
   std::uint64_t ordinal{14695981039346656037ULL};
   for (auto word :
@@ -247,5 +261,29 @@ auto freeze_freedom_jump_uncertainty(
                                       reading->remaining_ticks,
                                       reading->extra_radius_millimetres,
                                       offset};
+}
+} // namespace
+
+auto freeze_freedom_jump_uncertainty(
+    Seed seed, StarterCraftId craft, CraftFrameRecipe frame,
+    const std::optional<FreedomCraftLineage>& lineage,
+    std::uint64_t source_checksum, FreedomJumpRecoveryKind kind,
+    SimulationTick commit_tick, BodyTarget source, BodyTarget destination,
+    std::uint64_t attempt, const FreedomDriveRecoveryState& state)
+    -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
+  return freeze_jump_uncertainty(seed, craft, frame, lineage, source_checksum,
+                                 kind, commit_tick, source, destination,
+                                 attempt, state, false);
+}
+auto freeze_freedom_foreign_moon_uncertainty(
+    Seed seed, StarterCraftId craft, CraftFrameRecipe frame,
+    const std::optional<FreedomCraftLineage>& lineage,
+    std::uint64_t source_checksum, SimulationTick commit_tick,
+    BodyTarget source, BodyTarget destination, std::uint64_t attempt,
+    const FreedomDriveRecoveryState& state)
+    -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
+  return freeze_jump_uncertainty(seed, craft, frame, lineage, source_checksum,
+                                 FreedomJumpRecoveryKind::moon, commit_tick,
+                                 source, destination, attempt, state, true);
 }
 } // namespace apsis_drift

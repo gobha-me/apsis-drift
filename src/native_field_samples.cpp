@@ -129,6 +129,9 @@ auto NativeFreedomFlightSession::collect_field_sample(SurfaceLandmarkId id)
     candidate->knowledge_->field_samples = FreedomFieldSampleState{
         kFreedomFieldSamplesVersion, document_.origin.state.craft, {}, {}};
   auto& samples = *candidate->knowledge_->field_samples;
+  if (document_.moon &&
+      document_.moon->version == kFreedomForeignMoonWorldVersion)
+    samples.version = kFreedomNetworkFieldSamplesVersion;
   if (!std::ranges::any_of(samples.journal, [&](const auto& item) {
         return same_site(item, record->target, id);
       }))
@@ -204,7 +207,9 @@ auto NativeFreedomFlightSession::mark_field_sample_site(BodyTarget target,
     if (!site || !*site || (*site)->identity.id != id ||
         (*site)->identity.kind != record->kind)
       return std::unexpected{"The recorded Moon exposure is unavailable"};
-    marker.version = kFreedomMoonSurfaceMarkerVersion;
+    marker.version = document_.moon->version == kFreedomForeignMoonWorldVersion
+                         ? kFreedomNetworkMoonSurfaceMarkerVersion
+                         : kFreedomMoonSurfaceMarkerVersion;
     marker.point = FreedomMoonSurfaceMarkerPoint{target.system, target.body,
                                                  (*site)->position_metres,
                                                  document_.flight.tick};

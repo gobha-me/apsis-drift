@@ -465,14 +465,15 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     if (!observed || !fields(marker, {"version", "point"}) ||
         !unsigned_fields(marker, {"version"}) ||
         (marker["version"] != kFreedomSurfaceMarkerVersion &&
-         marker["version"] != kFreedomMoonSurfaceMarkerVersion))
+         marker["version"] != kFreedomMoonSurfaceMarkerVersion &&
+         marker["version"] != kFreedomNetworkMoonSurfaceMarkerVersion))
       return std::unexpected{failure("unsupported surface marker selection")};
     k.surface_marker =
         FreedomSurfaceMarkerState{marker["version"].get<std::uint32_t>(), {}};
     const auto& m = marker["point"];
     if (!m.is_null()) {
       const bool moon =
-          k.surface_marker->version == kFreedomMoonSurfaceMarkerVersion;
+          k.surface_marker->version != kFreedomSurfaceMarkerVersion;
       if (!(moon ? fields(m, {"target", "body_fixed_metres", "tick"})
                  : fields(m,
                           {"system", "planet", "body_fixed_metres", "tick"})) ||
@@ -542,12 +543,15 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const auto& landmarks = (*root)["moon_surface_landmarks"];
     if (!observed || !fields(landmarks, {"version", "inspections"}) ||
         !unsigned_fields(landmarks, {"version"}) ||
-        landmarks["version"] != kFreedomMoonSurfaceLandmarkVersion ||
+        (landmarks["version"] != kFreedomMoonSurfaceLandmarkVersion &&
+         landmarks["version"] != kFreedomNetworkMoonSurfaceLandmarkVersion) ||
         !landmarks["inspections"].is_array() ||
         landmarks["inspections"].size() >
             kMaximumFreedomSurfaceLandmarkInspections)
       return std::unexpected{failure("unsupported Moon exposure selection")};
     k.moon_surface_landmarks = FreedomMoonSurfaceLandmarkState{};
+    k.moon_surface_landmarks->version =
+        landmarks["version"].get<std::uint32_t>();
     for (const auto& inspection : landmarks["inspections"]) {
       if (!fields(inspection,
                   {"target", "cell", "site", "terrain_recipe", "tick"}) ||
@@ -617,7 +621,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     if (!observed ||
         !fields(samples, {"version", "carrier", "carried", "journal"}) ||
         !unsigned_fields(samples, {"version"}) ||
-        samples["version"] != kFreedomFieldSamplesVersion ||
+        (samples["version"] != kFreedomFieldSamplesVersion &&
+         samples["version"] != kFreedomNetworkFieldSamplesVersion) ||
         !samples["carried"].is_array() || !samples["journal"].is_array() ||
         samples["carried"].size() > kFreedomFieldSampleCapacity ||
         samples["journal"].size() > kMaximumFreedomSurfaceLandmarkInspections)
@@ -625,6 +630,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const auto carrier = sample_craft(samples["carrier"]);
     if (!carrier) return std::unexpected{carrier.error()};
     FreedomFieldSampleState state;
+    state.version = samples["version"].get<std::uint32_t>();
     state.carrier = *carrier;
     for (const auto& j : samples["carried"]) {
       auto r = sample_record_value(j);

@@ -111,7 +111,7 @@ action; the paused Controls action remains available. Every other flight/look
 demand must be neutral. The same walking controls,
 slope/step limits and return-access checks apply as on the home planet. Return
 to the hatch, board, release surface support and apply up thrust to lift off.
-**Select jump home** and the normal jump command return to the real home body,
+**Select jump to Origin Home** and the normal jump command return to the real home body,
 using the retained home model and actual station ephemeris. Local jumps are
 unavailable while outside, landed or attached to a port.
 Climb clear of the Moon's full terrain-and-hull envelope before selecting
@@ -173,6 +173,42 @@ existing version1 planetary point. The absent/v1 marker encoding and outer
 voyage formats remain unchanged. Source validation regenerates the actual
 origin Moon from its seed, including dry ground below the reference radius;
 retained metadata does not claim renewed terrain support.
+
+## A Moon beyond Origin
+
+After visiting another generated system, **Select nearby moon jump** also
+supports the genuine Moon of its first ordinary planet. Other planets do not
+silently gain Moons. Depart from that actual parent in free flight and clear
+its atmosphere, terrain and hull envelope. Land, walk, inspect exposures,
+collect specimens and use the personal marker with the same existing controls.
+
+The starter's three charges cover **Home → foreign parent → its Moon →
+Origin Home**. From the foreign Moon, **Select jump to Origin Home** selects a
+direct charted return; there is no required fourth leg through its parent.
+Each commitment uses one charge and the existing spool/transit and drive
+recovery rules. Selection is free. Using the last charge is allowed and warned
+about; it grants no reserve, refill or rescue service. Keep flight fuel for
+braking and ascent, and climb clear of the Moon's full departure envelope.
+
+Home return installs genuine free flight at the existing Origin station
+standoff. It does not dock, refill or record an invented parent visit. The
+actual planetary flight profile retained at Moon departure is used for return,
+with its body-bound orbit hold cleared. This is an expedition profile rather
+than a claim to reconstruct an earlier Home model. Cross-system distance uses
+the selected network anchors and each body's actual local frame.
+
+Explicit foreign-Moon selection adopts travel format61/state8/composed2 while
+retaining existing system, planet and Origin companion receipts. Moon world2
+and flight62 authenticate the real network catalog and parent. Historical
+Origin world1/formats42/54 and old travel encodings retain their contracts.
+Foreign marker3, inspection-state2 and specimen-state2 retain earlier notes and
+carry limits; explicit tool commands select the needed component version.
+Continue does not upgrade metadata or regenerate a different world.
+
+Qualification separates the charged three-leg outing after its labelled
+Home-space test placement from supported-ground fixtures. The latter exercise
+contact, walking and tools; they do not claim a flown descent. Both are
+separate from manual controller feel and rendered appearance acceptance.
 
 ## Presentation and checks
 

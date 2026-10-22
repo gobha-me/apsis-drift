@@ -123,6 +123,10 @@ For the [airless Moon trip](AIRLESS_MOON.md#local-voyage-and-operation), choose
 descent** deploys the gear; brake and descend with your thrusters. **Release
 support · use up thrusters** releases a landed craft so you can thrust upward.
 Keep fuel for ascent and clear the Moon's departure envelope before jumping home.
+The [first planet in another visited system](AIRLESS_MOON.md#a-moon-beyond-origin)
+also has its generated Moon. Its direct **Origin Home** return makes the full
+Home → foreign parent → Moon → Home outing fit three charges; distant service
+is not added, and using the last charge remains your choice.
 On foot, release walking and look controls and use **E**, captured **left click**
 or selected-pad **A/Cross** for the nearby hatch or geological inspection. The
 hatch takes priority when within reach; inspection opens a paused reader.

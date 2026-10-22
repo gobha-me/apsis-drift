@@ -1188,6 +1188,8 @@ auto surface_marker_session(NativeFreedomFlightSession session,
 }
 
 struct SampleMarkerScenario {
+  std::unique_ptr<NativeFreedomFlightSession> inspected;
+  SurfaceLandmarkId inspected_site;
   std::unique_ptr<NativeFreedomFlightSession> discarded;
   std::unique_ptr<NativeFreedomFlightSession> seated;
   std::optional<SurfaceLandmarkSite> site;
@@ -1601,6 +1603,17 @@ auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
     marker_scenario->seated =
         std::make_unique<NativeFreedomFlightSession>(session);
 }
+// Keep all specimen assertions on the original inspected by-value clone,
+// without retaining unrelated walking/landmark scenario stack frames.
+auto field_sample_scenario(const Fixture& f, SampleMarkerScenario& scenario)
+    -> void {
+  if (!scenario.inspected || !scenario.inspected_site.value)
+    throw std::runtime_error(
+        "Actual inspected sample scenario was not captured");
+  field_sample_session(*scenario.inspected, f, scenario.inspected_site,
+                       &scenario);
+  scenario.inspected.reset();
+}
 auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
                               const Fixture& f,
                               const std::filesystem::path& directory,
@@ -1780,7 +1793,15 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
             session.document().flight.tick == tick,
         "Inspection records the actual owner's site and first tick without "
         "awarding sensor facts, fuel, motion or time");
-  field_sample_session(session, f, requested, marker_scenario);
+  if (marker_scenario) {
+    // Capture the same inspected clone here, but exercise its independent
+    // specimen branch after the large legacy walking caller has returned.
+    marker_scenario->inspected =
+        std::make_unique<NativeFreedomFlightSession>(session);
+    marker_scenario->inspected_site = requested;
+  } else {
+    field_sample_session(session, f, requested);
+  }
   required(session.advance_surface_walk({}));
   const auto inspected = saved(session);
   required(session.inspect_surface_landmark(requested));
@@ -2712,6 +2733,7 @@ auto main(int argc, char** argv) -> int {
       persistence_and_session(f);
       surface_walking(f);
       surface_walk_session(f, {}, &marker_scenario);
+      field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
       assisted_commands(f);
       selected_gear_lifecycle(f);
@@ -2727,6 +2749,7 @@ auto main(int argc, char** argv) -> int {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       surface_walk_session(f, directory, &marker_scenario);
+      field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 2 && std::string_view{argv[1]} == "--resources") {
       research::FlightEnduranceMeter meter;
@@ -2739,6 +2762,7 @@ auto main(int argc, char** argv) -> int {
     } else if (argc == 2 && std::string_view{argv[1]} == "--walk") {
       surface_walking(f);
       surface_walk_session(f, {}, &marker_scenario);
+      field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 1) {
       hull_and_idle(f);

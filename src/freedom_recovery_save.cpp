@@ -73,7 +73,8 @@ auto decode_voyage(const Json& j)
       j["format_version"] == kFreedomNetworkTravelSaveFormatVersion ||
       j["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
       j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomStrainedTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomStrainedTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomForeignMoonTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomRecoveryVoyage{std::move(*d)};
@@ -134,7 +135,9 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   };
   if (old.field_samples) {
     if (!now.field_samples ||
-        now.field_samples->version != old.field_samples->version)
+        (now.field_samples->version != old.field_samples->version &&
+         !(old.field_samples->version == kFreedomFieldSamplesVersion &&
+           now.field_samples->version == kFreedomNetworkFieldSamplesVersion)))
       return false;
     for (const auto& record : old.field_samples->journal) {
       const auto& journal = now.field_samples->journal;
@@ -242,8 +245,13 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
     return a.target == b.target && a.site == b.site;
   };
   if (old.moon_surface_landmarks) {
-    if (!now.moon_surface_landmarks || now.moon_surface_landmarks->version !=
-                                           old.moon_surface_landmarks->version)
+    if (!now.moon_surface_landmarks ||
+        (now.moon_surface_landmarks->version !=
+             old.moon_surface_landmarks->version &&
+         !(old.moon_surface_landmarks->version ==
+               kFreedomMoonSurfaceLandmarkVersion &&
+           now.moon_surface_landmarks->version ==
+               kFreedomNetworkMoonSurfaceLandmarkVersion)))
       return false;
     for (const auto& inspection : old.moon_surface_landmarks->inspections) {
       const auto& records = now.moon_surface_landmarks->inspections;

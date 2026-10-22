@@ -8,7 +8,15 @@
 namespace apsis_drift {
 auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     -> std::expected<void, std::string> {
-  if ((resources_ && resources_->drive) ||
+  const auto origin_id =
+      generate_first_universe_route(document_.origin.recipe.universe_seed)
+          .origin;
+  if ((document_.moon &&
+       document_.moon->version == kFreedomForeignMoonWorldVersion) ||
+      system_.catalog.id != origin_id)
+    return select_foreign_moon_jump(target);
+  if ((travel_ && travel_->version == kFreedomForeignMoonTravelStateVersion) ||
+      (resources_ && resources_->drive) ||
       (knowledge_ &&
        freedom_knowledge_has_planetary_chart(knowledge_->recipe.version)))
     return select_composed_local_jump(target);
@@ -152,11 +160,13 @@ auto NativeFreedomFlightSession::local_jump_preview() const
   if (travel_ && travel_->composed) {
     const auto& route = *travel_->composed;
     if (route.active != FreedomComposedRouteKind::moon &&
-        route.active != FreedomComposedRouteKind::minor)
+        route.active != FreedomComposedRouteKind::minor &&
+        route.active != FreedomComposedRouteKind::foreign_moon)
       return std::unexpected{"Select a companion route first"};
-    const auto& slot = route.active == FreedomComposedRouteKind::moon
-                           ? route.moon
-                           : route.minor;
+    const auto& slot =
+        route.active == FreedomComposedRouteKind::moon    ? route.moon
+        : route.active == FreedomComposedRouteKind::minor ? route.minor
+                                                          : route.foreign_moon;
     if (travel_->phase == FreedomJumpPhase::transit && slot.committed)
       return *slot.committed;
     if (!route.selected_body)
@@ -168,13 +178,17 @@ auto NativeFreedomFlightSession::local_jump_preview() const
             "The current excursion has no authenticated home departure"};
       model = slot.outbound->request.home_model;
     }
-    const auto policy = route.active == FreedomComposedRouteKind::moon
+    const bool foreign = route.active == FreedomComposedRouteKind::foreign_moon;
+    if (foreign && !moon_) model.hold = OrbitHoldRequest{};
+    const auto policy = foreign ? kFreedomForeignMoonJumpVersion
+                        : route.active == FreedomComposedRouteKind::moon
                             ? kFreedomLocalBodyJumpVersion
                             : kFreedomMinorLocalBodyJumpVersion;
     FreedomLocalBodyJumpRequest request{policy, document_, *route.selected_body,
                                         travel_->next_attempt, model};
     if (resources_ && resources_->drive) {
-      request.version = route.active == FreedomComposedRouteKind::moon
+      request.version = foreign ? kFreedomRecoveryForeignMoonJumpVersion
+                        : route.active == FreedomComposedRouteKind::moon
                             ? kFreedomRecoveryLocalBodyJumpVersion
                             : kFreedomRecoveryMinorLocalBodyJumpVersion;
       request.recovery = resources_->drive;

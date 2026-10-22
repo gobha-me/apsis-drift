@@ -490,6 +490,8 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto admit_composed_travel() const
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto select_foreign_moon_jump(BodyTarget)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto select_composed_local_jump(BodyTarget)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto composed_body_jump_available() const

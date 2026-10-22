@@ -474,7 +474,8 @@ auto decode_flight(std::string_view text, bool system_import)
     return detail::decode_minor_flight(root);
   if (!system_import &&
       (root["format_version"] == kFreedomMoonFlightSaveFormatVersion ||
-       root["format_version"] == kFreedomNetworkMoonFlightSaveFormatVersion))
+       root["format_version"] == kFreedomNetworkMoonFlightSaveFormatVersion ||
+       root["format_version"] == kFreedomForeignMoonFlightSaveFormatVersion))
     return detail::decode_moon_flight(root);
   const bool importing =
       system_import &&

@@ -34,6 +34,10 @@ auto NativeFreedomFlightSession::enable_moon_surface_landmarks()
   auto candidate = *this;
   candidate.knowledge_->moon_surface_landmarks =
       FreedomMoonSurfaceLandmarkState{};
+  if (document_.moon &&
+      document_.moon->version == kFreedomForeignMoonWorldVersion)
+    candidate.knowledge_->moon_surface_landmarks->version =
+        kFreedomNetworkMoonSurfaceLandmarkVersion;
   const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
@@ -157,6 +161,9 @@ auto NativeFreedomFlightSession::inspect_moon_surface_landmark(
       kMaximumFreedomSurfaceLandmarkInspections)
     return std::unexpected{"The local exposure record is full"};
   auto candidate = *this;
+  if (document_.moon->version == kFreedomForeignMoonWorldVersion)
+    candidate.knowledge_->moon_surface_landmarks->version =
+        kFreedomNetworkMoonSurfaceLandmarkVersion;
   auto& records = candidate.knowledge_->moon_surface_landmarks->inspections;
   records.push_back({{system_.catalog.id, moon_->body},
                      found->site.identity.cell,

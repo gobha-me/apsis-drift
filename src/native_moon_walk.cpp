@@ -39,7 +39,10 @@ auto NativeFreedomFlightSession::store_moon_surface_marker(bool replace)
     return std::unexpected{"Surface marker moon actor owner is unavailable"};
   auto candidate = *this;
   candidate.knowledge_->surface_marker = FreedomSurfaceMarkerState{
-      kFreedomMoonSurfaceMarkerVersion,
+      document_.moon &&
+              document_.moon->version == kFreedomForeignMoonWorldVersion
+          ? kFreedomNetworkMoonSurfaceMarkerVersion
+          : kFreedomMoonSurfaceMarkerVersion,
       FreedomMoonSurfaceMarkerPoint{actor.frame.system,
                                     *actor.frame.body,
                                     {actor.foot_position_metres.x,

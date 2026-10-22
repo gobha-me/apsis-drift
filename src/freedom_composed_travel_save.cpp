@@ -186,6 +186,7 @@ auto recovery_kind(FreedomComposedRouteKind kind) -> FreedomJumpRecoveryKind {
       return FreedomJumpRecoveryKind::system;
     case FreedomComposedRouteKind::planet:
       return FreedomJumpRecoveryKind::planet;
+    case FreedomComposedRouteKind::foreign_moon:
     case FreedomComposedRouteKind::moon: return FreedomJumpRecoveryKind::moon;
     case FreedomComposedRouteKind::minor: return FreedomJumpRecoveryKind::minor;
   }
@@ -271,9 +272,13 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   const auto current = travel_target_of(flight);
   const auto& ledger = d.voyage.voyage.resources;
   const auto now = flight.flight.tick;
-  const bool strained = s.version == kFreedomStrainedTravelStateVersion;
+  const bool foreign = s.version == kFreedomForeignMoonTravelStateVersion;
+  const bool strained =
+      s.version == kFreedomStrainedTravelStateVersion ||
+      (foreign && ledger.version == kFreedomStrainedResourceVersion);
   const bool recovering =
-      strained || s.version == kFreedomRecoveringTravelStateVersion;
+      strained || s.version == kFreedomRecoveringTravelStateVersion ||
+      (foreign && ledger.version == kFreedomRecoveryResourceVersion);
   const auto resource_version = strained     ? kFreedomStrainedResourceVersion
                                 : recovering ? kFreedomRecoveryResourceVersion
                                              : kFreedomResourceVersion;
@@ -285,11 +290,14 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     return std::unexpected{failure(
         "Committed transit cannot retain unfinished stellar acquisition")};
   const bool knowledge_matches =
-      recovering ? (knowledge_version == kFreedomTravelKnowledgeVersion ||
-                    freedom_knowledge_uses_network(knowledge_version))
-                 : (flight.origin.network &&
-                    freedom_knowledge_has_planetary_chart(knowledge_version));
-  if ((!recovering && s.version != kFreedomComposedTravelStateVersion) ||
+      foreign      ? (flight.origin.network &&
+                 freedom_knowledge_uses_network(knowledge_version))
+      : recovering ? (knowledge_version == kFreedomTravelKnowledgeVersion ||
+                      freedom_knowledge_uses_network(knowledge_version))
+                   : (flight.origin.network &&
+                      freedom_knowledge_has_planetary_chart(knowledge_version));
+  if ((!foreign && !recovering &&
+       s.version != kFreedomComposedTravelStateVersion) ||
       !s.composed || s.local || s.prior_moon || s.origin_routes ||
       !s.next_attempt || !knowledge_matches ||
       ledger.version != resource_version ||
@@ -301,8 +309,11 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     return std::unexpected{failure("Composed travel requires explicit recipe5, "
                                    "one current world and actual craft/pilot")};
   const auto& c = *s.composed;
-  if (c.version != kFreedomComposedRoutesVersion ||
-      c.active > FreedomComposedRouteKind::minor ||
+  if (c.version != (foreign ? kFreedomForeignMoonComposedRoutesVersion
+                            : kFreedomComposedRoutesVersion) ||
+      c.active > (foreign ? FreedomComposedRouteKind::foreign_moon
+                          : FreedomComposedRouteKind::minor) ||
+      (!foreign && c.foreign_moon != FreedomComposedLocalCheckpoint{}) ||
       (c.active == FreedomComposedRouteKind::system && c.selected_body) ||
       (c.active != FreedomComposedRouteKind::system && s.selected))
     return std::unexpected{failure("Invalid composed route selection")};
@@ -335,6 +346,51 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
                         body_id(flight.origin.recipe.home_planet)};
   const BodyTarget moon{home.system, catalog->bodies[0].node.id};
   const BodyTarget minor{home.system, catalog->bodies[1].node.id};
+  const auto foreign_parent =
+      [&](BodyTarget target) -> std::optional<BodyTarget> {
+    if (!foreign || !network || target.system == home.system ||
+        target.body.kind != BodyKind::moon)
+      return {};
+    const auto owner =
+        resolve_freedom_network_system(*network, target.system, 2);
+    if (!owner) return {};
+    const auto moons = generate_secondary_body_catalog(*owner);
+    if (!moons || moons->bodies.empty() ||
+        moons->bodies[0].node.id != target.body)
+      return {};
+    return BodyTarget{target.system,
+                      body_id(owner->catalog.planets.front().descriptor.id)};
+  };
+  // The complete current ledger was authenticated at now above. Historical
+  // receipts inspect its evidence times, without treating later valid notes as
+  // future data in an imagined old copy of the entire ledger.
+  const auto known_at = [&](KnowledgeSubject subject, KnowledgeFact fact,
+                            NavigationKnowledgeLevel level,
+                            SimulationTick tick) {
+    return std::ranges::any_of(
+        d.voyage.knowledge.entries, [&](const auto& entry) {
+          return entry.subject == subject && entry.fact == fact &&
+                 std::ranges::any_of(
+                     entry.transitions, [&](const auto& evidence) {
+                       return evidence.level == level && evidence.tick <= tick;
+                     });
+        });
+  };
+  const auto visited_system = [&](BodyTarget parent, SimulationTick tick) {
+    return system_known_at(parent.system, tick) &&
+           known_at({KnowledgeSubjectKind::system, parent.system,
+                     parent.system.value},
+                    KnowledgeFact::presence, NavigationKnowledgeLevel::visited,
+                    tick);
+  };
+  const auto known_home_at = [&](SimulationTick tick) {
+    const KnowledgeSubject subject{KnowledgeSubjectKind::planet, home.system,
+                                   home.body.value};
+    return known_at(subject, KnowledgeFact::identity_type,
+                    NavigationKnowledgeLevel::resolved, tick) &&
+           known_at(subject, KnowledgeFact::location,
+                    NavigationKnowledgeLevel::resolved, tick);
+  };
   const auto pair =
       generate_first_intersystem_identities(flight.origin.recipe.universe_seed);
   if (s.selected &&
@@ -361,12 +417,22 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         allowed = (*current == home && *c.selected_body == minor) ||
                   (*current == minor && *c.selected_body == home);
         break;
+      case FreedomComposedRouteKind::foreign_moon: {
+        const auto outbound_parent = foreign_parent(*c.selected_body);
+        const auto return_parent = foreign_parent(*current);
+        allowed =
+            (flight.world && outbound_parent && *outbound_parent == *current &&
+             visited_system(*outbound_parent, now)) ||
+            (flight.moon && return_parent && *c.selected_body == home &&
+             known_home_at(now));
+        break;
+      }
       default: break;
     }
     if (!allowed)
       return std::unexpected{failure("Invalid typed composed destination")};
   }
-  std::array<Event, 6> events{};
+  std::array<Event, 8> events{};
   std::size_t count{};
   const auto add = [&](Event value) { events[count++] = value; };
   if (s.committed.has_value() != s.commitment_resources.has_value() ||
@@ -470,6 +536,42 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     add(event(last, kind, &*local.commitment_resources));
     add(event(out, kind, nullptr));
   }
+  if (foreign) {
+    const auto& local = c.foreign_moon;
+    if (local.committed.has_value() != local.commitment_resources.has_value() ||
+        local.committed.has_value() != local.outbound.has_value())
+      return std::unexpected{
+          failure("Unpaired foreign Moon proof, bill or outbound")};
+    if (local.committed) {
+      const auto& out = *local.outbound;
+      const auto& last = *local.committed;
+      const auto parent = foreign_parent(out.request.destination);
+      const auto policy = recovering ? kFreedomRecoveryForeignMoonJumpVersion
+                                     : kFreedomForeignMoonJumpVersion;
+      if (!parent || !receipt_valid(out, flight, policy) ||
+          !receipt_valid(last, flight, policy) ||
+          travel_target_of(out.request.source) != *parent ||
+          !visited_system(*parent, out.request.source.flight.tick) ||
+          !bill_valid(*local.commitment_resources, last.request.source,
+                      resource_version, last.request.recovery))
+        return std::unexpected{
+            failure("Invalid foreign Moon source or expedition outbound")};
+      if (travel_target_of(last.request.source) == out.request.destination) {
+        if (last.request.destination != home ||
+            last.request.attempt != out.request.attempt + 1 ||
+            last.request.home_model != out.request.home_model ||
+            out.arrival_tick > last.request.source.flight.tick ||
+            !known_home_at(last.request.source.flight.tick))
+          return std::unexpected{
+              failure("Foreign Moon return differs from its real outbound")};
+      } else if (last != out)
+        return std::unexpected{
+            failure("Open foreign Moon route differs from outbound")};
+      add(event(last, FreedomComposedRouteKind::foreign_moon,
+                &*local.commitment_resources));
+      add(event(out, FreedomComposedRouteKind::foreign_moon, nullptr));
+    }
+  }
   const Event* latest{};
   for (std::size_t i = 0; i < count; ++i) {
     const auto& e = events[i];
@@ -526,7 +628,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         }
     }
   }
-  for (const auto* checkpoint : {&c.moon, &c.minor})
+  for (const auto* checkpoint : {&c.moon, &c.minor, &c.foreign_moon})
     if (checkpoint->committed &&
         checkpoint->committed->request.destination != home &&
         (!latest || latest->local != &*checkpoint->committed))
@@ -641,8 +743,10 @@ auto encode_composed_travel(const FreedomTravelSaveDocument& d)
   auto moon = checkpoint_json(c.moon), minor = checkpoint_json(c.minor);
   if (!moon) return std::unexpected{moon.error()};
   if (!minor) return std::unexpected{minor.error()};
-  const Json root{
-      {"format_version", s.version == kFreedomStrainedTravelStateVersion
+  Json root{
+      {"format_version", s.version == kFreedomForeignMoonTravelStateVersion
+                             ? kFreedomForeignMoonTravelSaveFormatVersion
+                         : s.version == kFreedomStrainedTravelStateVersion
                              ? kFreedomStrainedTravelSaveFormatVersion
                          : s.version == kFreedomRecoveringTravelStateVersion
                              ? kFreedomRecoveringTravelSaveFormatVersion
@@ -671,6 +775,11 @@ auto encode_composed_travel(const FreedomTravelSaveDocument& d)
           {"minor", std::move(*minor)}}}}},
       {"craft_binding", travel_binding_json(*d.craft_binding)},
       {"seated_pilot", std::move(pilot)}};
+  if (s.version == kFreedomForeignMoonTravelStateVersion) {
+    auto value = checkpoint_json(c.foreign_moon);
+    if (!value) return std::unexpected{value.error()};
+    root["travel"]["composed"]["foreign_moon"] = std::move(*value);
+  }
   auto result = root.dump(2) + '\n';
   if (result.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure("Composed travel save exceeds limit")};
@@ -682,11 +791,15 @@ auto decode_composed_travel(const Json& root)
                      "seated_pilot"}) ||
       (root["format_version"] != kFreedomComposedTravelSaveFormatVersion &&
        root["format_version"] != kFreedomRecoveringTravelSaveFormatVersion &&
-       root["format_version"] != kFreedomStrainedTravelSaveFormatVersion))
+       root["format_version"] != kFreedomStrainedTravelSaveFormatVersion &&
+       root["format_version"] != kFreedomForeignMoonTravelSaveFormatVersion))
     return std::unexpected{failure("Invalid closed composed root")};
   const auto& s = root["travel"];
+  const bool foreign =
+      root["format_version"] == kFreedomForeignMoonTravelSaveFormatVersion;
   const auto version =
-      root["format_version"] == kFreedomStrainedTravelSaveFormatVersion
+      foreign ? kFreedomForeignMoonTravelStateVersion
+      : root["format_version"] == kFreedomStrainedTravelSaveFormatVersion
           ? kFreedomStrainedTravelStateVersion
       : root["format_version"] == kFreedomRecoveringTravelSaveFormatVersion
           ? kFreedomRecoveringTravelStateVersion
@@ -698,11 +811,20 @@ auto decode_composed_travel(const Json& root)
       s["phase"] > static_cast<unsigned>(FreedomJumpPhase::transit))
     return std::unexpected{failure("Invalid composed shared phase")};
   const auto& c = s["composed"];
-  if (!fields(c, {"version", "active", "selected_body", "planet_committed",
-                  "planet_commitment_resources", "moon", "minor"}) ||
+  auto shape = c;
+  if (foreign) {
+    if (!c.is_object() || !c.contains("foreign_moon"))
+      return std::unexpected{failure("Missing foreign Moon checkpoint")};
+    shape.erase("foreign_moon");
+  }
+  if (!fields(shape, {"version", "active", "selected_body", "planet_committed",
+                      "planet_commitment_resources", "moon", "minor"}) ||
       !uints(c, {"version", "active"}) ||
-      c["version"] != kFreedomComposedRoutesVersion ||
-      c["active"] > static_cast<unsigned>(FreedomComposedRouteKind::minor) ||
+      c["version"] != (foreign ? kFreedomForeignMoonComposedRoutesVersion
+                               : kFreedomComposedRoutesVersion) ||
+      c["active"] >
+          static_cast<unsigned>(foreign ? FreedomComposedRouteKind::foreign_moon
+                                        : FreedomComposedRouteKind::minor) ||
       root["craft_binding"] !=
           travel_binding_json(NativeStartingAssemblySelection{}))
     return std::unexpected{
@@ -719,6 +841,8 @@ auto decode_composed_travel(const Json& root)
   state.next_attempt = s["next_attempt"].get<std::uint64_t>();
   state.composed.emplace();
   auto& routes = *state.composed;
+  routes.version = foreign ? kFreedomForeignMoonComposedRoutesVersion
+                           : kFreedomComposedRoutesVersion;
   routes.active =
       static_cast<FreedomComposedRouteKind>(c["active"].get<unsigned>());
   if (!s["selected"].is_null()) {
@@ -757,6 +881,11 @@ auto decode_composed_travel(const Json& root)
   if (!minor) return std::unexpected{minor.error()};
   routes.moon = std::move(*moon);
   routes.minor = std::move(*minor);
+  if (foreign) {
+    auto value = checkpoint_value(c["foreign_moon"]);
+    if (!value) return std::unexpected{value.error()};
+    routes.foreign_moon = std::move(*value);
+  }
   if (!root["seated_pilot"].is_null()) {
     auto value = decode_freedom_boarding_state_json(
         root["seated_pilot"].dump(),
