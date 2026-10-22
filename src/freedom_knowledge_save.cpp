@@ -2,6 +2,7 @@
 
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <unordered_set>
@@ -111,6 +112,39 @@ auto bounded_nesting(std::string_view text) -> bool {
     }
   }
   return !depth && !quoted;
+}
+auto derelict_record_json(const FreedomDerelictObservation& r) -> Json {
+  return {
+      {"craft", r.craft.value},
+      {"tick", r.tick},
+      {"position_metres", Json::array({r.position_metres.x, r.position_metres.y,
+                                       r.position_metres.z})},
+      {"velocity_metres_per_second",
+       Json::array({r.velocity_metres_per_second.x,
+                    r.velocity_metres_per_second.y,
+                    r.velocity_metres_per_second.z})}};
+}
+auto derelict_record_value(const Json& j)
+    -> std::expected<FreedomDerelictObservation, SaveSchemaError> {
+  if (!fields(j, {"craft", "tick", "position_metres",
+                  "velocity_metres_per_second"}) ||
+      !unsigned_fields(j, {"craft", "tick"}))
+    return std::unexpected{failure("invalid closed derelict record")};
+  for (auto name : {"position_metres", "velocity_metres_per_second"}) {
+    const auto& vector = j[name];
+    if (!vector.is_array() || vector.size() != 3)
+      return std::unexpected{failure("derelict vector requires three values")};
+    for (const auto& component : vector)
+      if (!component.is_number() || !std::isfinite(component.get<double>()))
+        return std::unexpected{failure("finite derelict vector required")};
+  }
+  const auto& p = j["position_metres"];
+  const auto& v = j["velocity_metres_per_second"];
+  return FreedomDerelictObservation{
+      {j["craft"].get<std::uint64_t>()},
+      j["tick"].get<SimulationTick>(),
+      {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
+      {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()}};
 }
 auto parse(std::string_view text, std::size_t limit)
     -> std::expected<Json, SaveSchemaError> {
@@ -310,6 +344,15 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                            {"active", std::move(active)},
                            {"completed", std::move(completed)}};
   }
+  if (k.derelicts)
+    root["derelicts"] = {
+        {"version", k.derelicts->version},
+        {"contact", k.derelicts->contact
+                        ? derelict_record_json(*k.derelicts->contact)
+                        : Json(nullptr)},
+        {"inspection", k.derelicts->inspection
+                           ? derelict_record_json(*k.derelicts->inspection)
+                           : Json(nullptr)}};
   auto text = root.dump(2) + '\n';
   const auto limit = freedom_knowledge_uses_network(r.version)
                          ? kMaximumFreedomNetworkKnowledgeBytes
@@ -334,6 +377,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("field_samples");
   const bool search_selected =
       root->is_object() && root->contains("star_search");
+  const bool derelicts_selected =
+      root->is_object() && root->contains("derelicts");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
@@ -341,6 +386,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (surveys_selected) root_shape.erase("orbital_surveys");
   if (samples_selected) root_shape.erase("field_samples");
   if (search_selected) root_shape.erase("star_search");
+  if (derelicts_selected) root_shape.erase("derelicts");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -630,6 +676,25 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     }
     k.star_search = std::move(state);
   }
+  if (derelicts_selected) {
+    const auto& selected = (*root)["derelicts"];
+    if (!uncharted || !fields(selected, {"version", "contact", "inspection"}) ||
+        !unsigned_fields(selected, {"version"}) ||
+        selected["version"] != kFreedomDerelictVersion)
+      return std::unexpected{failure("invalid derelict state selection")};
+    FreedomDerelictState state;
+    if (!selected["contact"].is_null()) {
+      auto record = derelict_record_value(selected["contact"]);
+      if (!record) return std::unexpected{record.error()};
+      state.contact = *record;
+    }
+    if (!selected["inspection"].is_null()) {
+      auto record = derelict_record_value(selected["inspection"]);
+      if (!record) return std::unexpected{record.error()};
+      state.inspection = *record;
+    }
+    k.derelicts = state;
+  }
   const auto& entries = (*root)["entries"];
   const auto maximum_facts = uncharted ? kMaximumFreedomUnchartedKnowledgeFacts
                              : network ? kMaximumFreedomNetworkKnowledgeFacts
@@ -684,6 +749,8 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
       r.physical_catalog != flight.model.physical_catalog ||
       r.ephemeris != flight.model.physical_ephemeris ||
       r.craft_lineage != flight.origin.lineage ||
+      d.knowledge.derelicts.has_value() !=
+          flight.origin.derelicts.has_value() ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
       (freedom_knowledge_uses_network(r.version)) !=
           flight.origin.network.has_value() ||

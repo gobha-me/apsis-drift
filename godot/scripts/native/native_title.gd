@@ -97,7 +97,7 @@ func _ready() -> void:
 	network_choice.add_item("Four charted systems")
 	network_choice.add_item("Four systems + planetary charts")
 	network_choice.add_item("Four charted + two uncharted systems")
-	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The uncharted choice adds two generated systems found through Search nearby stars during flight. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
+	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The uncharted choice adds two generated systems found through Search nearby stars during flight and an exterior derelict to find with Scan local space. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
 	var drive_label := Label.new()

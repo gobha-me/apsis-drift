@@ -141,6 +141,7 @@ auto decode_minor_flight(const Json& root)
     if (!root.contains("network"))
       return std::unexpected{failure("$.network", "network selection missing")};
     shape.erase("network");
+    shape.erase("derelicts");
   }
   if (!fields(shape,
               {"application", "application_version", "format_version", "mode",
@@ -176,7 +177,9 @@ auto decode_minor_flight(const Json& root)
   origin.erase("flight");
   origin.erase("flight_model");
   origin.erase("world_owner");
-  origin["format_version"] = network ? kFreedomNetworkSaveFormatVersion
+  origin["format_version"] = network && origin.contains("derelicts")
+                                 ? kFreedomDerelictSaveFormatVersion
+                             : network ? kFreedomNetworkSaveFormatVersion
                              : origin.contains("craft_lineage")
                                  ? kFreedomCraftLineageSaveFormatVersion
                                  : kFreedomSaveFormatVersion;

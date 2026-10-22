@@ -196,6 +196,13 @@ auto validate_freedom_save_document(const FreedomSaveDocument& document)
                                         document.network->version)))
     return std::unexpected{error(SaveSchemaErrorCode::invalid_state,
                                  "$.network", "unsupported system network")};
+  if (document.derelicts &&
+      (document.derelicts->version != kFreedomDerelictSelectionVersion ||
+       !document.network ||
+       document.network->version != kFreedomUnchartedSystemNetworkVersion))
+    return std::unexpected{
+        error(SaveSchemaErrorCode::invalid_state, "$.derelicts",
+              "derelicts require explicit uncharted network")};
   if (document.lineage &&
       (document.lineage->version != kFreedomCraftLineageVersion ||
        !document.lineage->generation))
@@ -254,7 +261,8 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
   Json root = {
       {"application", kSaveApplication},
       {"application_version", kApplicationVersion},
-      {"format_version", document.network ? kFreedomNetworkSaveFormatVersion
+      {"format_version", document.derelicts ? kFreedomDerelictSaveFormatVersion
+                         : document.network ? kFreedomNetworkSaveFormatVersion
                          : document.lineage
                              ? kFreedomCraftLineageSaveFormatVersion
                              : kFreedomSaveFormatVersion},
@@ -280,6 +288,8 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
         {"generation", std::to_string(document.lineage->generation)}};
   if (document.network)
     root["network"] = {{"version", document.network->version}};
+  if (document.derelicts)
+    root["derelicts"] = {{"version", document.derelicts->version}};
   auto encoded = root.dump(2);
   encoded.push_back('\n');
   if (encoded.size() > kMaximumSaveDocumentBytes)
@@ -320,10 +330,14 @@ auto decode_freedom_save_document_json(std::string_view json_text)
   if (duplicate)
     return std::unexpected{error(SaveSchemaErrorCode::duplicate_key, "$",
                                  "JSON objects cannot repeat a key")};
-  const bool network =
+  const bool derelicts =
       root.is_object() && root.contains("format_version") &&
       root["format_version"].is_number_unsigned() &&
-      root["format_version"] == kFreedomNetworkSaveFormatVersion;
+      root["format_version"] == kFreedomDerelictSaveFormatVersion;
+  const bool network =
+      derelicts || (root.is_object() && root.contains("format_version") &&
+                    root["format_version"].is_number_unsigned() &&
+                    root["format_version"] == kFreedomNetworkSaveFormatVersion);
   const bool lineage =
       root.is_object() && root.contains("format_version") &&
       root["format_version"].is_number_unsigned() &&
@@ -331,6 +345,12 @@ auto decode_freedom_save_document_json(std::string_view json_text)
        (network && root.contains("craft_lineage")));
   auto shape = root;
   if (network && lineage) shape.erase("craft_lineage");
+  if (derelicts) {
+    if (!root.contains("derelicts"))
+      return std::unexpected{error(SaveSchemaErrorCode::missing_field,
+                                   "$.derelicts", "selection required")};
+    shape.erase("derelicts");
+  }
   const auto fields =
       network   ? exact_fields(shape,
                                {"application", "application_version",
@@ -355,7 +375,8 @@ auto decode_freedom_save_document_json(std::string_view json_text)
   if (!root.at("format_version").is_number_unsigned() ||
       (root.at("format_version") != kFreedomSaveFormatVersion &&
        root.at("format_version") != kFreedomCraftLineageSaveFormatVersion &&
-       root.at("format_version") != kFreedomNetworkSaveFormatVersion))
+       root.at("format_version") != kFreedomNetworkSaveFormatVersion &&
+       root.at("format_version") != kFreedomDerelictSaveFormatVersion))
     return std::unexpected{
         error(SaveSchemaErrorCode::unsupported_format_version,
               "$.format_version", "unsupported Freedom save version")};
@@ -434,6 +455,17 @@ auto decode_freedom_save_document_json(std::string_view json_text)
                 "$.network.version", "unsupported network selection")};
     document.network =
         FreedomNetworkSelection{selected.at("version").get<std::uint32_t>()};
+  }
+  if (derelicts) {
+    const auto& selected = root.at("derelicts");
+    if (auto valid = exact_fields(selected, {"version"}, "$.derelicts"); !valid)
+      return std::unexpected{valid.error()};
+    if (!selected.at("version").is_number_unsigned() ||
+        selected.at("version") != kFreedomDerelictSelectionVersion)
+      return std::unexpected{
+          error(SaveSchemaErrorCode::unsupported_format_version,
+                "$.derelicts.version", "unsupported derelict selection")};
+    document.derelicts = FreedomDerelictSelection{};
   }
   if (lineage) {
     const auto& selected = root.at("craft_lineage");

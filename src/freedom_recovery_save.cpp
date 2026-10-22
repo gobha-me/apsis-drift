@@ -116,6 +116,19 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  if (now.derelicts.has_value() != old.derelicts.has_value()) return false;
+  if (old.derelicts) {
+    if (now.derelicts->version != old.derelicts->version) return false;
+    const auto retained = [&](const auto& current_record,
+                              const auto& old_record) {
+      if (old_record) return current_record == old_record;
+      return !current_record || (current_record->craft == current &&
+                                 current_record->tick >= loss_tick);
+    };
+    if (!retained(now.derelicts->contact, old.derelicts->contact) ||
+        !retained(now.derelicts->inspection, old.derelicts->inspection))
+      return false;
+  }
   const auto same_sample = [](const auto& a, const auto& b) {
     return a.target == b.target && a.site == b.site;
   };
@@ -388,6 +401,7 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
         generation(current.origin) != old_generation + 1 ||
         current.origin.recipe != retired.origin.recipe ||
         current.origin.network != retired.origin.network ||
+        current.origin.derelicts != retired.origin.derelicts ||
         current.origin.state.station != retired.origin.state.station ||
         current.origin.state.craft == retired.origin.state.craft ||
         !retains(current.origin.state.discoveries,

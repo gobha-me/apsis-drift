@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/freedom_derelict.hpp"
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/planet_ambient.hpp"
@@ -271,6 +272,7 @@ struct FreedomKnowledge {
   std::optional<FreedomOrbitalSurveyState> orbital_surveys{};
   std::optional<FreedomFieldSampleState> field_samples{};
   std::optional<FreedomStarSearchState> star_search{};
+  std::optional<FreedomDerelictState> derelicts{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -292,7 +294,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_surface_landmarks,
   invalid_orbital_surveys,
   invalid_field_samples,
-  invalid_star_search
+  invalid_star_search,
+  invalid_derelicts
 };
 
 struct KnownIdentity {

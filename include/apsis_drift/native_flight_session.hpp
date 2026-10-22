@@ -151,6 +151,14 @@ struct NativeStarSearchView {
   std::string note;
 };
 
+struct NativeDerelictView {
+  bool selected{}, known{}, local{}, inspected{}, can_scan{}, can_inspect{};
+  std::uint64_t id{};
+  std::optional<RigidBodyState> hull;
+  double distance_metres{}, relative_speed_metres_per_second{};
+  std::string note, history;
+};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -242,6 +250,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto begin_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto star_search_view() const -> NativeStarSearchView;
+  [[nodiscard]] auto derelict_view() const -> NativeDerelictView;
+  [[nodiscard]] auto scan_derelict() -> std::expected<void, std::string>;
+  [[nodiscard]] auto inspect_derelict() -> std::expected<void, std::string>;
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;

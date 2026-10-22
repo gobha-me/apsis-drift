@@ -16,6 +16,13 @@ inline constexpr std::uint32_t kFreedomCraftLineageSaveFormatVersion{28};
 inline constexpr std::uint32_t kFreedomCraftLineageVersion{1};
 inline constexpr std::uint32_t kFreedomNetworkSaveFormatVersion{49};
 inline constexpr std::uint32_t kFreedomNetworkSelectionVersion{1};
+inline constexpr std::uint32_t kFreedomDerelictSaveFormatVersion{60};
+inline constexpr std::uint32_t kFreedomDerelictSelectionVersion{1};
+struct FreedomDerelictSelection {
+  std::uint32_t version{kFreedomDerelictSelectionVersion};
+  friend auto operator==(const FreedomDerelictSelection&,
+                         const FreedomDerelictSelection&) -> bool = default;
+};
 // Explicit opt-in descriptor; the bounded catalog is regenerated from the seed.
 struct FreedomNetworkSelection {
   std::uint32_t version{kFreedomNetworkSelectionVersion};
@@ -52,6 +59,7 @@ struct FreedomSaveDocument {
   FreedomStationState state;
   std::optional<FreedomCraftLineage> lineage{};
   std::optional<FreedomNetworkSelection> network{};
+  std::optional<FreedomDerelictSelection> derelicts{};
 
   friend auto operator==(const FreedomSaveDocument&, const FreedomSaveDocument&)
       -> bool = default;

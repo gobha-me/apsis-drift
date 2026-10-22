@@ -406,6 +406,17 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
                                       : kMaximumFreedomKnowledgeFacts))
     return std::unexpected{Error::oversized_ledger};
   if (auto v = validate_star_search(k, w, now); !v) return v;
+  if (k.derelicts) {
+    const auto valid_craft = [&](const auto& record) {
+      return !record || valid_sample_craft(w, record->craft);
+    };
+    if (k.recipe.version != kFreedomUnchartedKnowledgeVersion ||
+        !validate_freedom_derelict_state(k.recipe.universe_seed, *k.derelicts,
+                                         now) ||
+        !valid_craft(k.derelicts->contact) ||
+        !valid_craft(k.derelicts->inspection))
+      return std::unexpected{Error::invalid_derelicts};
+  }
   if (k.orbital_surveys) {
     const auto& surveys = *k.orbital_surveys;
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&

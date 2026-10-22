@@ -161,3 +161,27 @@ selected recovery/strain. Home → Frontier A → Frontier B → Home uses three
 charges. Fuel service still requires physical Origin docking; no extra station,
 free return, probe, relay, mission or economy is added. This finite prototype
 does not define the eventual universe's size or exploration ceiling.
+
+## Derelict inspection
+
+New **Four charted + two uncharted systems** journeys explicitly select one
+unpowered Wayfarer in the initially unknown region. Continue preserves absence
+in older journeys. Independent seed domain23 determines its identity and
+circular orbit around the first ordinary planet in the first added system;
+the existing catalog, clock and gravity own that orbit. No asset or world
+position is invented by the presentation layer.
+
+During ordinary seated flight above an ordinary planet's atmosphere, open
+**Controls → Scan local space**. The scan acquires a contact only in its actual
+parent-planet frame, within 100,000 km. Unsuccessful scans reveal no remote
+identity or coordinates. An earned contact shows a bearing, distance and relative
+speed; fly there manually. **Inspect derelict exterior** becomes available at
+100–500 m with relative speed at most 20 m/s. These instantaneous observation
+actions add no elapsed time, fuel or navigation facts. Resume explicitly to fly.
+
+The short exterior condition note persists through Save/Continue and ordinary
+craft recovery. This is a prototype exterior inspection: the hull has no
+collision response, boarding route, repair, towing, loot or sale value. Observe
+the indicated stand-off. The admitted Wayfarer model has retracted gear and no
+pilot or exhaust; its pose comes from C++ at the committed tick. Retained notes
+do not expose a moving remote pose when visiting another body.

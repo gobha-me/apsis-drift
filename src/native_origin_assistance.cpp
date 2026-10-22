@@ -30,26 +30,30 @@ auto NativeFreedomFlightSession::save_document() const
     return std::unexpected{"Origin service owner is unavailable"};
   auto voyage = std::visit(
       [](const auto& value)
-          -> std::expected<FreedomAssistanceVoyage, std::string> {
+          -> std::expected<std::unique_ptr<FreedomAssistanceVoyage>,
+                           std::string> {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument> ||
                       std::is_same_v<T, FreedomTravelSaveDocument> ||
                       std::is_same_v<T, FreedomRecoverySaveDocument> ||
                       std::is_same_v<T, FreedomSurfaceWalkSaveDocument> ||
                       std::is_same_v<T, FreedomConditionSaveDocument>)
-          return FreedomAssistanceVoyage{value};
+          return std::make_unique<FreedomAssistanceVoyage>(value);
         else
           return std::unexpected{
               "Origin service requires its complete player voyage"};
       },
       *player);
   if (!voyage) return std::unexpected{voyage.error()};
-  FreedomAssistanceSaveDocument wrapped{1, std::move(*voyage), *assistance_};
+  // Assistance-only envelopes must not reserve their full variant storage
+  // on every legacy Save call's stack, including nested surface validation.
+  auto wrapped = std::make_unique<FreedomAssistanceSaveDocument>(
+      1, std::move(**voyage), *assistance_);
   if (const auto valid =
-          validate_freedom_assistance_document(*assistance_world_, wrapped);
+          validate_freedom_assistance_document(*assistance_world_, *wrapped);
       !valid)
     return std::unexpected{valid.error().detail};
-  return NativeSaveDocument{std::move(wrapped)};
+  return NativeSaveDocument{std::move(*wrapped)};
 }
 
 auto NativeFreedomFlightSession::assistance_recipient_supported() const

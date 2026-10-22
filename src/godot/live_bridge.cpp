@@ -467,6 +467,10 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::begin_freedom_star_search);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_star_search"),
                                 &FreedomBridge::cancel_freedom_star_search);
+    godot::ClassDB::bind_method(godot::D_METHOD("scan_freedom_derelict"),
+                                &FreedomBridge::scan_freedom_derelict);
+    godot::ClassDB::bind_method(godot::D_METHOD("inspect_freedom_derelict"),
+                                &FreedomBridge::inspect_freedom_derelict);
     godot::ClassDB::bind_method(godot::D_METHOD("mark_freedom_surface_marker"),
                                 &FreedomBridge::mark_freedom_surface_marker);
     godot::ClassDB::bind_method(
@@ -1695,6 +1699,16 @@ class FreedomBridge : public godot::RefCounted {
   auto cancel_freedom_star_search() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.cancel_star_search();
+    });
+  }
+  auto scan_freedom_derelict() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.scan_derelict();
+    });
+  }
+  auto inspect_freedom_derelict() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.inspect_derelict();
     });
   }
   auto mark_freedom_surface_marker() -> bool {
@@ -3577,6 +3591,55 @@ class FreedomBridge : public godot::RefCounted {
                ? project_origin_service_status(saved_flight->session, true)
                : godot::Dictionary{};
   }
+  static auto project_derelict(const NativeFreedomFlightSession& session)
+      -> godot::Dictionary {
+    const auto view = session.derelict_view();
+    godot::Dictionary packet;
+    packet["version"] = std::int64_t{1};
+    packet["selected"] = view.selected;
+    packet["known"] = view.known;
+    packet["local"] = view.local;
+    packet["inspected"] = view.inspected;
+    packet["can_scan"] = view.can_scan;
+    packet["can_inspect"] = view.can_inspect;
+    packet["note"] = godot::String{view.note.c_str()};
+    packet["history"] = godot::String{view.history.c_str()};
+    packet["id"] = view.known ? godot::String{std::to_string(view.id).c_str()}
+                              : godot::String{};
+    packet["position"] = godot::Vector3{};
+    packet["basis"] = godot::Basis{};
+    packet["distance_metres"] = view.distance_metres;
+    packet["relative_speed_metres_per_second"] =
+        view.relative_speed_metres_per_second;
+    if (!view.local || !view.hull) return packet;
+    const auto player = require(session.relative_state());
+    const auto axes = project_saved_flight(session).system_axes;
+    const auto local = [&](RigidVector3 value) {
+      return godot::Vector3{
+          static_cast<godot::real_t>(axes[0].east * value.x +
+                                     axes[1].east * value.y +
+                                     axes[2].east * value.z),
+          static_cast<godot::real_t>(axes[0].up * value.x +
+                                     axes[1].up * value.y +
+                                     axes[2].up * value.z),
+          static_cast<godot::real_t>(-(axes[0].north * value.x +
+                                       axes[1].north * value.y +
+                                       axes[2].north * value.z))};
+    };
+    packet["position"] =
+        local({view.hull->position_metres.x - player.position_metres.x,
+               view.hull->position_metres.y - player.position_metres.y,
+               view.hull->position_metres.z - player.position_metres.z});
+    godot::Basis basis;
+    for (int i = 0; i < 3; ++i) {
+      const auto direction = rotate_saved(
+          view.hull->orientation,
+          {i == 0 ? 1.0 : 0.0, i == 1 ? 1.0 : 0.0, i == 2 ? 1.0 : 0.0});
+      basis.set_column(i, local({direction.x, direction.y, direction.z}));
+    }
+    packet["basis"] = basis;
+    return packet;
+  }
   static auto project_origin_service_craft(
       const NativeFreedomFlightSession& session) -> godot::Dictionary {
     godot::Dictionary packet;
@@ -3673,12 +3736,14 @@ class FreedomBridge : public godot::RefCounted {
   static auto project_flight_state(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     auto result = project_player_flight_state(selected);
-    if (result.is_empty() || !selected.session.origin_assistance())
-      return result;
+    if (result.is_empty()) return result;
     try {
-      auto status = project_origin_service_status(selected.session);
-      status["craft"] = project_origin_service_craft(selected.session);
-      result["origin_service"] = status;
+      result["derelict"] = project_derelict(selected.session);
+      if (selected.session.origin_assistance()) {
+        auto status = project_origin_service_status(selected.session);
+        status["craft"] = project_origin_service_craft(selected.session);
+        result["origin_service"] = status;
+      }
     } catch (const std::exception&) {
       result.clear();
     }

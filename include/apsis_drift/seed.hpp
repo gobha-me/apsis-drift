@@ -39,6 +39,7 @@ enum class SeedDomain : std::uint64_t {
   jump_recovery_uncertainty = 20,
   origin_service_craft = 21,
   freedom_uncharted_systems = 22,
+  freedom_derelict = 23,
 };
 
 // Derives one child seed without consuming or exposing mutable random state.

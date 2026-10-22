@@ -518,6 +518,7 @@ auto decode_flight(std::string_view text, bool system_import)
           failure(SaveSchemaErrorCode::missing_field, "$.network",
                   "network flight requires explicit selection")};
     shape_root.erase("network");
+    shape_root.erase("derelicts");
   }
   auto shape =
       active ? fields(shape_root,
@@ -570,7 +571,9 @@ auto decode_flight(std::string_view text, bool system_import)
   origin.erase("flight");
   origin.erase("flight_model");
   origin.erase("world_owner");
-  origin["format_version"] = network ? kFreedomNetworkSaveFormatVersion
+  origin["format_version"] = network && origin.contains("derelicts")
+                                 ? kFreedomDerelictSaveFormatVersion
+                             : network ? kFreedomNetworkSaveFormatVersion
                              : origin.contains("craft_lineage")
                                  ? kFreedomCraftLineageSaveFormatVersion
                                  : kFreedomSaveFormatVersion;
