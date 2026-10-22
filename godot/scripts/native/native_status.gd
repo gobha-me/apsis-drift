@@ -322,7 +322,7 @@ static func summary(value: Dictionary, walking_keys: String = "WASD") -> String:
 		if resources.get("propulsion_refused", false): lines.append("Insufficient fuel · thrust unavailable")
 		if jump.has("destination_name"):
 			if not jump.destination_name is String or jump.destination_name.is_empty() or jump.destination_name.length() > 128: return "Jump observations unavailable"
-			lines.append("Planet target · " + jump.destination_name)
+			lines.append(("Jump target · " if jump.get("route_kind") == "foreign_moon" else "Planet target · ") + jump.destination_name)
 		else:
 			for row in rows:
 				if row is Dictionary and row.get("system_id", "") == jump.get("selected", "") and not row.get("current", false):

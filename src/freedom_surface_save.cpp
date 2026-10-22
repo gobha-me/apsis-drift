@@ -80,6 +80,7 @@ auto decode_base(const Json& j)
       version == kFreedomMinorFlightSaveFormatVersion ||
       version == kFreedomNetworkFlightSaveFormatVersion ||
       version == kFreedomNetworkMoonFlightSaveFormatVersion ||
+      version == kFreedomForeignMoonFlightSaveFormatVersion ||
       version == kFreedomNetworkMinorFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};

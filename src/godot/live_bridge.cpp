@@ -1423,10 +1423,20 @@ class FreedomBridge : public godot::RefCounted {
                     std::get<KnownIdentity>((*identity)->value).name.c_str()};
             }
           } else {
+            if (composed.active == FreedomComposedRouteKind::foreign_moon) {
+              jump["route_kind"] = "foreign_moon";
+              if (composed.selected_body)
+                jump["destination_name"] =
+                    composed.selected_body->body.kind == BodyKind::moon
+                        ? "Moon"
+                        : "Origin Home";
+            }
             const auto& checkpoint =
                 composed.active == FreedomComposedRouteKind::moon
                     ? composed.moon
-                    : composed.minor;
+                : composed.active == FreedomComposedRouteKind::minor
+                    ? composed.minor
+                    : composed.foreign_moon;
             if (checkpoint.committed)
               arrival = checkpoint.committed->arrival_tick;
           }
@@ -1528,7 +1538,9 @@ class FreedomBridge : public godot::RefCounted {
         return std::unexpected{
             "Return home requires an actual companion owner"};
       return session.select_local_jump(
-          {session.system().catalog.id,
+          {generate_first_universe_route(
+               session.document().origin.recipe.universe_seed)
+               .origin,
            body_id(session.document().origin.recipe.home_planet)});
     });
   }
@@ -2781,7 +2793,8 @@ class FreedomBridge : public godot::RefCounted {
         marker.point.has_value() && !session.recovery_pending();
     result["system_name"] = godot::String{
         marker.known_system_name.value_or("Unresolved system").c_str()};
-    const bool lunar = version == kFreedomMoonSurfaceMarkerVersion;
+    const bool lunar = version == kFreedomMoonSurfaceMarkerVersion ||
+                       version == kFreedomNetworkMoonSurfaceMarkerVersion;
     result[lunar ? "body_name" : "planet_name"] = godot::String{
         marker.known_body_name
             .value_or(lunar ? "Unresolved moon" : "Unresolved planet")

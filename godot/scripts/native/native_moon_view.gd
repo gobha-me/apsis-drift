@@ -167,7 +167,7 @@ func build_ui() -> void:
 	liftoff_button.pressed.connect(func(): port_command("liftoff_freedom_surface"))
 	column.add_child(liftoff_button)
 	moon_select_button = Button.new()
-	moon_select_button.text = "Select jump home"
+	moon_select_button.text = "Select jump to Origin Home"
 	moon_select_button.pressed.connect(select_home)
 	column.add_child(moon_select_button)
 	moon_jump_button = Button.new()
@@ -288,7 +288,7 @@ func select_home() -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
-	report_action_status("Home selected. One charge commits after spooling.")
+	report_action_status("Origin Home selected. One charge commits after spooling.")
 	update_view(0.0)
 
 func landed_hatch_available() -> bool:
@@ -365,7 +365,7 @@ func update_compact_hud() -> void:
 	liftoff_button.disabled = not landed or surface_walking() or jumping
 	moon_select_button.disabled = landed or surface_walking() or jumping
 	moon_jump_button.disabled = not state.get("jump", {}).get("available", false) and state.get("jump", {}).get("phase", "idle") != "spool"
-	moon_jump_button.text = "Cancel local spool" if state.get("jump", {}).get("phase", "idle") == "spool" else "Begin local jump"
+	moon_jump_button.text = ("Cancel spool" if state.jump.phase == "spool" else "Begin jump to Origin Home") if state.jump.get("route_kind") == "foreign_moon" else ("Cancel local spool" if state.jump.phase == "spool" else "Begin local jump")
 	var jump_reason := str(state.jump.get("refusal", "Local jump unavailable."))
 	moon_jump_button.tooltip_text = jump_reason if moon_jump_button.disabled else ""
 	if not moon_jump_button.disabled and state.jump.get("phase", "idle") == "idle" and state.jump.get("recovery") is Dictionary:

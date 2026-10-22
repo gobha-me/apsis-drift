@@ -43,8 +43,10 @@ inline constexpr std::uint32_t kFreedomPlanetaryStartingChartVersion{3};
 }
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
+inline constexpr std::uint32_t kFreedomNetworkMoonSurfaceMarkerVersion{3};
 inline constexpr std::uint32_t kFreedomSurfaceLandmarkVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceLandmarkVersion{1};
+inline constexpr std::uint32_t kFreedomNetworkMoonSurfaceLandmarkVersion{2};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomNetworkKnowledgeFacts{256};
@@ -54,6 +56,7 @@ inline constexpr std::uint32_t kFreedomOrbitalSurveyVersion{1};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyTicks{3600};
 inline constexpr std::size_t kMaximumFreedomOrbitalSurveys{16};
 inline constexpr std::uint32_t kFreedomFieldSamplesVersion{1};
+inline constexpr std::uint32_t kFreedomNetworkFieldSamplesVersion{2};
 inline constexpr std::size_t kFreedomFieldSampleCapacity{4};
 
 // Preserve the existing typed identities. Future BodyId hierarchy adds an

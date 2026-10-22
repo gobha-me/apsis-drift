@@ -644,6 +644,86 @@ func check_moon_marker(phases: String, assets: String, output: String) -> void:
 	shell.free()
 	await process_frame
 
+func check_foreign_outing(phases: String, assets: String, output: String) -> void:
+	# The C++ sidecar contains real paid travel after one labelled Home-space
+	# placement. Repeat its Moon/return commands through the actual native UI.
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := shell_for(owner, phases.path_join("foreign-parent.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	if not check(view is FlightView and not view is MoonView, "Foreign parent did not stage the actual planetary view"):
+		shell.free(); return
+	view.select_moon_jump()
+	var selected: Dictionary = owner.get_freedom_flight_state()
+	if not check(selected.jump.get("route_kind") == "foreign_moon" and selected.resources.jump_charges == 2 and view.error.is_empty(), "Actual planet UI refused its genuine foreign Moon selection"):
+		shell.free(); return
+	view.jump_requested()
+	var neutral := PackedFloat64Array()
+	neutral.resize(12)
+	if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Foreign cancel-spool tick refused"):
+		shell.free(); return
+	view.state = owner.get_freedom_flight_state()
+	view.jump_requested()
+	check(owner.get_freedom_flight_state().jump.phase == "idle" and owner.get_freedom_flight_state().resources.jump_charges == 2, "Actual UI cancellation spent a foreign jump charge")
+	view.jump_requested()
+	for tick in 600:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual foreign Moon travel tick refused: " + str(owner.get_last_error())):
+			shell.free(); return
+	var arrival: Dictionary = owner.get_freedom_flight_state()
+	check(MoonState.valid(arrival) and arrival.resources.jump_charges == 1 and arrival.jump.phase == "idle", "Foreign arrival lost the typed Moon or starter's final charge")
+	check(save_bytes(owner, output.path_join("foreign-arrival-native.json")) == FileAccess.get_file_as_bytes(phases.path_join("foreign-arrival.json")), "Native UI foreign arrival differs from the independent C++ full Save")
+	shell.switch_journey_view()
+	view = shell.current_view
+	if not check(view is MoonView and view.paused and view.error.is_empty() and shell.error.is_empty(), "Foreign Moon failed the actual borrowed-Wayfarer view handoff"):
+		shell.free(); return
+	view.set_process(false)
+	view.select_home()
+	var home_choice: Dictionary = owner.get_freedom_flight_state()
+	check(home_choice.jump.get("destination_name") == "Origin Home" and "Origin Home" in view.moon_select_button.text, "Foreign Moon UI did not identify direct charted Origin Home")
+	view.jump_requested()
+	for tick in 600:
+		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual foreign-to-Home tick refused: " + str(owner.get_last_error())):
+			shell.free(); return
+	check(save_bytes(owner, output.path_join("foreign-home-native.json")) == FileAccess.get_file_as_bytes(phases.path_join("foreign-home.json")), "Native direct Home return differs from independent C++ full Save")
+	shell.switch_journey_view()
+	view = shell.current_view
+	var home: Dictionary = owner.get_freedom_flight_state()
+	check(view is FlightView and not view is MoonView and view.paused and view.error.is_empty() and shell.error.is_empty() and home.resources.jump_charges == 0 and not home.attached, "Three-charge outing did not return to free-flight Home with the actual planetary controls")
+	shell.free()
+	await process_frame
+	for label in ["foreign-landed", "foreign-outside", "foreign-marked"]:
+		var ground_owner: Variant = ClassDB.instantiate("FreedomBridge")
+		var source := phases.path_join(label + ".json")
+		var ground_shell := shell_for(ground_owner, source, assets)
+		if ground_shell == null: continue
+		var ground_view: Control = ground_shell.current_view
+		var ground: Dictionary = ground_owner.get_freedom_flight_state()
+		var original := FileAccess.get_file_as_bytes(source)
+		if check(ground_view is MoonView and ground_view.paused and MoonState.valid(ground) and save_bytes(ground_owner, output.path_join(label + "-native.json")) == original, "Foreign supported/walking Continue failed: " + label) and label == "foreign-marked":
+			check(ground.surface_marker.version == 3 and ground.surface_marker.present and ground.surface_marker.current_body and ground_view.surface_walking(), "Foreign marked foot state lost marker3 or its actual local bearing")
+			var samples: Dictionary = ground_owner.get_freedom_field_samples()
+			if check(samples.carried.size() == 1 and samples.journal.size() == 1, "Foreign specimen/retained note projection is missing"):
+				var checker := preload("res://tests/native_field_samples.gd").new()
+				checker.output = output.path_join("foreign-samples")
+				DirAccess.make_dir_recursive_absolute(checker.output)
+				await checker.check_archive(self, ground_view, ground_owner, original, samples.journal[0], true, "foreign")
+				var reference: Variant = ClassDB.instantiate("FreedomBridge")
+				var note: Dictionary = samples.journal[0]
+				if check(reference.stage_freedom_continue(source) and reference.commit_pending_freedom_start(reference.get_pending_freedom_start().candidate_id) and reference.mark_freedom_field_sample_site(note.system_id, note.body_kind, note.body_id, note.site_id, true), "Independent foreign marker replacement refused"):
+					var expected := save_bytes(reference, output.path_join("foreign-replace-direct.json"))
+					ground_view.controls_menu.show_observations()
+					var reader: Control = ground_view.controls_menu.observations_view
+					for page in reader.titles().size():
+						if reader.mark_button.visible: break
+						reader.next_button.pressed.emit()
+					if check(reader.mark_button.visible and not reader.mark_button.disabled and reader.mark_button.text == "Replace marker", "Foreign archive omitted the explicit same-body replacement action"):
+						await checker.activate_archive(self, ground_view, reader.mark_button, false)
+						check(save_bytes(ground_owner, output.path_join("foreign-replace-native.json")) == expected and ground_owner.get_freedom_field_samples() == samples, "Foreign archive replacement differs from direct C++ or changes specimens/first notes")
+					reader.back_button.pressed.emit()
+				failures += checker.failures
+		ground_shell.free()
+		await process_frame
+
 func run() -> void:
 	CompanionLayoutChecks.check_inputs(check)
 	if failures: quit(1); return
@@ -711,6 +791,7 @@ func run() -> void:
 	await check_moon_marker(phases, assets, output)
 	failures += await MoonExposures.run(self, phases, assets, output.path_join("exposures"))
 	failures += await OriginServiceChecks.run(self, phases, assets, output.path_join("service"), Callable(self, "activate_marker"))
+	await check_foreign_outing(phases, assets, output)
 	for label in PHASES: check(FileAccess.get_file_as_bytes(phases.path_join(label + ".json")) == originals[label], "Native Moon test rewrote C++ source phase: " + label)
 	print("Native Moon: %d failures" % failures)
 	quit(1 if failures else 0)

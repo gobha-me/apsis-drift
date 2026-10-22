@@ -94,4 +94,14 @@ enum class FreedomJumpRecoveryError : std::uint8_t {
     BodyTarget destination, std::uint64_t attempt,
     const FreedomDriveRecoveryState&)
     -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError>;
+// Policy6's owning family authenticates the actual foreign parent/Moon and
+// charted Origin. This entrypoint alone admits planet->Moon within one system
+// or Moon->planet across systems; historical local/system target rules stay
+// unchanged. It retains the Moon stamp kind and actual domain20 target words.
+[[nodiscard]] auto freeze_freedom_foreign_moon_uncertainty(
+    Seed, StarterCraftId, CraftFrameRecipe,
+    const std::optional<FreedomCraftLineage>&, std::uint64_t source_checksum,
+    SimulationTick commit_tick, BodyTarget source, BodyTarget destination,
+    std::uint64_t attempt, const FreedomDriveRecoveryState&)
+    -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError>;
 } // namespace apsis_drift

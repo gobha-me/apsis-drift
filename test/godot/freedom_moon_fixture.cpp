@@ -4,6 +4,7 @@
 // velocity, fuel, clock or world is assigned from it. Partial outputs on any
 // refusal remain evidence; never silently substitute a supported ground start.
 #include "../moon_contact_fixture.hpp"
+#include "../native_foreign_moon_fixture.hpp"
 #include "apsis_drift/freedom_assistance_save.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/save_file.hpp"
@@ -483,7 +484,14 @@ int main(int argc, char** argv) {
     const auto directory =
         std::filesystem::absolute(argc == 2 ? argv[1] : "moon-voyage-fixture")
             .lexically_normal();
-    return integration(directory);
+    const auto result = integration(directory);
+    if (result != 0) return result;
+    // Separate charged foreign outing; the continuous Origin route above
+    // remains unchanged. Its only saved-space boundary is labelled explicitly.
+    const auto foreign_checks =
+        test_fixture::run_foreign_moon_outing(2, directory);
+    std::cout << "FOREIGN OUTING checks=" << foreign_checks << '\n';
+    return 0;
   } catch (const std::exception& e) {
     std::cerr << "FAIL " << e.what() << '\n';
     return 1;

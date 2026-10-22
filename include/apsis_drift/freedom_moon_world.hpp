@@ -9,6 +9,8 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomMoonFlightSaveFormatVersion{42};
 inline constexpr std::uint32_t kFreedomNetworkMoonFlightSaveFormatVersion{54};
 inline constexpr std::uint32_t kFreedomMoonWorldVersion{1};
+inline constexpr std::uint32_t kFreedomForeignMoonWorldVersion{2};
+inline constexpr std::uint32_t kFreedomForeignMoonFlightSaveFormatVersion{62};
 
 // Explicit moon selection, mutually exclusive with the old planet selection.
 // These recipes never reinterpret the historical planet model fields.

@@ -12,7 +12,10 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-freedom-minor-fixture PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   # Opt-in real Moon voyage exporter; intentionally absent from default CTest.
-  add_executable(apsis-drift-freedom-moon-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_moon_fixture.cpp")
+  add_executable(apsis-drift-freedom-moon-fixture
+    "${PROJECT_SOURCE_DIR}/test/godot/freedom_moon_fixture.cpp"
+    "${PROJECT_SOURCE_DIR}/test/native_foreign_moon_fixture.cpp"
+    "${PROJECT_SOURCE_DIR}/test/native_foreign_moon_ground.cpp")
   target_include_directories(apsis-drift-freedom-moon-fixture PRIVATE "${PROJECT_SOURCE_DIR}/src")
   target_link_libraries(apsis-drift-freedom-moon-fixture PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-freedom-moon-fixture PRIVATE

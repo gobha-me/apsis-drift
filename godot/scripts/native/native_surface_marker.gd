@@ -8,15 +8,15 @@ static func body_name(marker: Dictionary) -> String:
 static func valid(value: Dictionary) -> bool:
 	if not value.has("surface_marker"): return true
 	var marker: Variant = value.surface_marker
-	if not marker is Dictionary or typeof(marker.get("version")) != TYPE_INT or marker.version not in [1, 2]: return false
-	var lunar: bool = marker.version == 2
+	if not marker is Dictionary or typeof(marker.get("version")) != TYPE_INT or marker.version not in [1, 2, 3]: return false
+	var lunar: bool = marker.version in [2, 3]
 	for field in ["selected", "present", "current_body", "can_mark", "can_clear"]:
 		if typeof(marker.get(field)) != TYPE_BOOL: return false
 	for field in ["system_name", "body_name" if lunar else "planet_name"]:
 		if not marker.get(field) is String or marker[field].length() > 256: return false
 	if (marker.current_body and not marker.present) or (marker.present and not marker.selected) or (marker.can_clear and not marker.present): return false
 	if lunar:
-		# Explicit v2 is closed: no PlanetId alias or stale local bearing.
+		# Explicit lunar versions are closed: no PlanetId alias or stale local bearing.
 		var keys := ["version", "selected", "present", "current_body", "can_mark", "can_clear", "system_name", "body_name"]
 		if not marker.selected: return false
 		if marker.present: keys.append_array(["system_id", "body_kind", "body_version", "body_id", "tick"])

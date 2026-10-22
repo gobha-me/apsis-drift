@@ -106,6 +106,20 @@ auto system_for(const KnowledgeWorld& w, SystemId id)
       w.additional, [&](const auto& s) { return s.catalog.id == id; });
   return found == w.additional.end() ? nullptr : &*found;
 }
+auto moon_owner(const KnowledgeWorld& w, BodyTarget target, bool network)
+    -> std::optional<PhysicalMoonDescriptor> {
+  if (target.body.kind != BodyKind::moon ||
+      (!network && target.system != w.origin.catalog.id) ||
+      (network && !w.network))
+    return {};
+  const auto* system = system_for(w, target.system);
+  if (!system) return {};
+  const auto catalog = generate_secondary_body_catalog(*system);
+  if (!catalog) return {};
+  const auto moon = generate_physical_moon_descriptor(*catalog, target.body);
+  if (!moon) return {};
+  return *moon;
+}
 auto planet(const KnowledgeWorld& w, KnowledgeSubject s)
     -> const LocalSystemPlanet* {
   const auto* system = system_for(w, s.system);
@@ -295,13 +309,12 @@ auto valid_sample_source(const FreedomKnowledge& k, const KnowledgeWorld& w,
                  inspection.tick <= r.tick;
         });
   }
-  if (r.target.body.kind != BodyKind::moon ||
-      r.target.system != w.origin.catalog.id || !k.moon_surface_landmarks ||
+  if (r.target.body.kind != BodyKind::moon || !k.moon_surface_landmarks ||
       r.terrain_recipe != kMoonTerrainRecipeVersion)
     return false;
-  const auto catalog = generate_secondary_body_catalog(w.origin);
-  if (!catalog) return false;
-  const auto moon = generate_physical_moon_descriptor(*catalog, r.target.body);
+  const auto moon = moon_owner(w, r.target,
+                               k.field_samples->version ==
+                                   kFreedomNetworkFieldSamplesVersion);
   if (!moon) return false;
   const auto identity = identify_moon_surface_landmark(
       *moon, r.cell, kMoonSurfaceLandmarkVersion);
@@ -478,7 +491,11 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
          k.recipe.version != kFreedomTravelKnowledgeVersion &&
          !freedom_knowledge_uses_network(k.recipe.version)) ||
         (k.surface_marker->version != kFreedomSurfaceMarkerVersion &&
-         k.surface_marker->version != kFreedomMoonSurfaceMarkerVersion))
+         k.surface_marker->version != kFreedomMoonSurfaceMarkerVersion &&
+         k.surface_marker->version != kFreedomNetworkMoonSurfaceMarkerVersion))
+      return std::unexpected{Error::invalid_surface_marker};
+    if (k.surface_marker->version == kFreedomNetworkMoonSurfaceMarkerVersion &&
+        !w.network)
       return std::unexpected{Error::invalid_surface_marker};
     if (k.surface_marker->point) {
       if (k.surface_marker->version == kFreedomSurfaceMarkerVersion) {
@@ -498,13 +515,10 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
       } else {
         const auto* m = std::get_if<FreedomMoonSurfaceMarkerPoint>(
             &*k.surface_marker->point);
-        // Match the physical Moon's existing origin-only owner selection,
-        // independently of the current travel/recovery body. Regeneration
-        // authenticates the complete source before accepting saved geometry.
-        if (!m || m->system != w.origin.catalog.id || m->tick > now)
-          return std::unexpected{Error::invalid_surface_marker};
-        const auto catalog = generate_secondary_body_catalog(w.origin);
-        if (!catalog || !generate_physical_moon_descriptor(*catalog, m->body))
+        if (!m || m->tick > now ||
+            !moon_owner(w, {m->system, m->body},
+                        k.surface_marker->version ==
+                            kFreedomNetworkMoonSurfaceMarkerVersion))
           return std::unexpected{Error::invalid_surface_marker};
         const auto& p = m->position;
         const auto radius = std::hypot(p.x, p.y, p.z);
@@ -558,10 +572,11 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
          k.recipe.version != kFreedomTravelKnowledgeVersion &&
          !freedom_knowledge_uses_network(k.recipe.version)) ||
-        landmarks.version != kFreedomMoonSurfaceLandmarkVersion)
+        (landmarks.version != kFreedomMoonSurfaceLandmarkVersion &&
+         landmarks.version != kFreedomNetworkMoonSurfaceLandmarkVersion) ||
+        (landmarks.version == kFreedomNetworkMoonSurfaceLandmarkVersion &&
+         !w.network))
       return std::unexpected{Error::invalid_surface_landmarks};
-    const auto catalog = generate_secondary_body_catalog(w.origin);
-    if (!catalog) return std::unexpected{Error::invalid_surface_landmarks};
     const auto inspection_key = [](const auto& item) {
       return std::tuple{item.target.system.value, item.target.body.version,
                         item.target.body.kind, item.target.body.value,
@@ -569,17 +584,17 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     };
     for (std::size_t i = 0; i < landmarks.inspections.size(); ++i) {
       const auto& inspection = landmarks.inspections[i];
-      if (inspection.target.system != w.origin.catalog.id ||
-          inspection.tick > now ||
+      if (inspection.tick > now ||
           inspection.terrain_recipe != kMoonTerrainRecipeVersion ||
           (i && !(inspection_key(landmarks.inspections[i - 1]) <
                   inspection_key(inspection))))
         return std::unexpected{Error::invalid_surface_landmarks};
-      const auto moon =
-          generate_physical_moon_descriptor(*catalog, inspection.target.body);
+      const auto moon = moon_owner(
+          w, inspection.target,
+          landmarks.version == kFreedomNetworkMoonSurfaceLandmarkVersion);
       if (!moon) return std::unexpected{Error::invalid_surface_landmarks};
       const auto identity = identify_moon_surface_landmark(
-          *moon, inspection.cell, landmarks.version);
+          *moon, inspection.cell, kMoonSurfaceLandmarkVersion);
       if (!identity || !*identity || (*identity)->id != inspection.site)
         return std::unexpected{Error::invalid_surface_landmarks};
     }
@@ -592,8 +607,10 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     if ((k.recipe.version != kFreedomObservedKnowledgeVersion &&
          k.recipe.version != kFreedomTravelKnowledgeVersion &&
          !freedom_knowledge_uses_network(k.recipe.version)) ||
-        samples.version != kFreedomFieldSamplesVersion || !carrier ||
-        samples.carrier != *carrier || !samples.carrier.value ||
+        (samples.version != kFreedomFieldSamplesVersion &&
+         samples.version != kFreedomNetworkFieldSamplesVersion) ||
+        (samples.version == kFreedomNetworkFieldSamplesVersion && !w.network) ||
+        !carrier || samples.carrier != *carrier || !samples.carrier.value ||
         samples.carried.size() > kFreedomFieldSampleCapacity ||
         samples.journal.size() > kMaximumFreedomSurfaceLandmarkInspections)
       return std::unexpected{Error::invalid_field_samples};

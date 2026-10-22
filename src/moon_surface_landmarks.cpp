@@ -40,9 +40,9 @@ auto validate_owner(const PhysicalMoonDescriptor& owner)
   if (owner.body.version != kBodyIdentityVersion ||
       owner.body.kind != BodyKind::moon)
     return std::unexpected{Error::invalid_body};
-  if (!validate_physical_moon_descriptor(owner) ||
-      owner.catalog.owner.catalog.kind != LocalSystemKind::origin_home ||
-      !owner.catalog.owner.origin_universe_seed)
+  // The complete source-bound descriptor authenticates both procedural and
+  // Origin catalogs; terrain/identity arithmetic below remains recipe1.
+  if (!validate_physical_moon_descriptor(owner))
     return std::unexpected{Error::invalid_owner};
   return {};
 }

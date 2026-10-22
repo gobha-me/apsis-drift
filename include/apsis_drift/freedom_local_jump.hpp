@@ -10,10 +10,14 @@ inline constexpr std::uint32_t kFreedomMinorLocalBodyJumpVersion{2};
 inline constexpr std::uint32_t kFreedomRecoveryLocalBodyJumpVersion{3};
 inline constexpr std::uint32_t kFreedomRecoveryMinorLocalBodyJumpVersion{4};
 inline constexpr double kFreedomLocalMinorArrivalClearanceMetres{11000.0};
+inline constexpr std::uint32_t kFreedomForeignMoonJumpVersion{5};
+inline constexpr std::uint32_t kFreedomRecoveryForeignMoonJumpVersion{6};
 
 // source.tick is the actual COMMIT tick after the ordinary kJumpSpoolTicks.
 // The outer native journey owns selection/spooling, charges and provenance of
-// home_model on return. Outbound home_model must equal the actual source model.
+// home_model on return. Legacy outbound home_model equals the source model.
+// Foreign5/6 use the actual parent expedition model with only hold cleared;
+// their outer foreign checkpoint binds that same profile on direct Home return.
 struct FreedomLocalBodyJumpRequest {
   std::uint32_t version{kFreedomLocalBodyJumpVersion};
   FreedomFlightSaveDocument source;
@@ -57,6 +61,7 @@ enum class FreedomLocalBodyJumpError : std::uint8_t {
   unclear_departure,
   unclear_arrival,
   invalid_frozen_solution,
+  beyond_qualified_policy,
 };
 // Legacy1/2 preserve exact home<->Moon/minor geometry. Recovery3/4 require
 // explicit recovery1 input and add its bounded independent location error.
