@@ -165,4 +165,73 @@ auto NativeFreedomFlightSession::discard_field_sample(BodyTarget target,
   *this = std::move(candidate);
   return {};
 }
+auto NativeFreedomFlightSession::mark_field_sample_site(BodyTarget target,
+                                                        SurfaceLandmarkId id,
+                                                        bool replace)
+    -> std::expected<void, std::string> {
+  if (recovery_pending() || !knowledge_ || !knowledge_->field_samples ||
+      (travel_ && travel_->phase != FreedomJumpPhase::idle) || !id.value ||
+      !validate_freedom_knowledge(*knowledge_, document_.flight.tick))
+    return std::unexpected{"Marking a specimen site requires an idle journey "
+                           "and an authentic retained note"};
+  const auto& journal = knowledge_->field_samples->journal;
+  const auto record = std::ranges::find_if(
+      journal, [&](const auto& item) { return same_site(item, target, id); });
+  if (record == journal.end())
+    return std::unexpected{"No retained specimen note for that site"};
+  const bool present = knowledge_->surface_marker &&
+                       knowledge_->surface_marker->point.has_value();
+  if (present != replace)
+    return std::unexpected{
+        replace ? "No surface marker to replace"
+                : "Use Replace marker to change the saved point"};
+  const auto body = relative_state();
+  if (!body || target.system != system_.catalog.id ||
+      body->frame.system != target.system || minor_)
+    return std::unexpected{"Return to the recorded specimen's body first"};
+  FreedomSurfaceMarkerState marker;
+  if (moon_) {
+    if (target.body != moon_->body || body->frame.body != target.body ||
+        body->frame.kind != RigidFrameKind::body_relative_inertial ||
+        !document_.moon ||
+        document_.moon->terrain_recipe != record->terrain_recipe)
+      return std::unexpected{
+          "The recorded Moon or terrain recipe is not loaded"};
+    auto field =
+        MoonSurfaceLandmarkField::create(*moon_, record->terrain_recipe);
+    if (!field) return std::unexpected{"Recorded Moon terrain owner refused"};
+    const auto site = field->site(record->cell);
+    if (!site || !*site || (*site)->identity.id != id ||
+        (*site)->identity.kind != record->kind)
+      return std::unexpected{"The recorded Moon exposure is unavailable"};
+    marker.version = kFreedomMoonSurfaceMarkerVersion;
+    marker.point = FreedomMoonSurfaceMarkerPoint{target.system, target.body,
+                                                 (*site)->position_metres,
+                                                 document_.flight.tick};
+  } else {
+    if (!body->frame.planet || target.body != body_id(*body->frame.planet) ||
+        body->frame.kind != RigidFrameKind::planet_relative_inertial ||
+        document_.model.terrain_policy != record->terrain_recipe)
+      return std::unexpected{
+          "The recorded planet or terrain recipe is not loaded"};
+    auto field = SurfaceLandmarkField::create(system_, target.body,
+                                              record->terrain_recipe);
+    if (!field) return std::unexpected{"Recorded planet terrain owner refused"};
+    const auto site = field->site(record->cell);
+    if (!site || !*site || (*site)->identity.id != id ||
+        (*site)->identity.kind != record->kind)
+      return std::unexpected{"The recorded planetary exposure is unavailable"};
+    marker.point = FreedomSurfaceMarkerPoint{target.system, *body->frame.planet,
+                                             (*site)->position_metres,
+                                             document_.flight.tick};
+  }
+  auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
+  candidate->knowledge_->surface_marker = std::move(marker);
+  const auto saved = candidate->player_save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
+  *this = std::move(*candidate);
+  return {};
+}
 } // namespace apsis_drift

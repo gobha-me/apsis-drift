@@ -33,6 +33,32 @@ func check_archive(tree: SceneTree, view: Control, owner: Variant, expected: Pac
 	reader.back_button.pressed.emit()
 	check(view.paused and not reader.visible and view.controls_menu.observations_button.has_focus(), "Archive Back resumed flight or lost invoking focus")
 
+func activate_archive(tree: SceneTree, view: Control, button: Button, controller: bool) -> void:
+	# Reader controls are outside the main controls-menu scroll container.
+	var mode := button.process_mode
+	button.process_mode = Node.PROCESS_MODE_ALWAYS
+	await tree.process_frame
+	button.grab_focus()
+	if check(button.visible and not button.disabled and button.has_focus(), "Archive marker action is not focusable"):
+		for down in [true, false]:
+			var event: InputEvent
+			if controller:
+				var pad := InputEventJoypadButton.new()
+				pad.device = view.player_input.device
+				pad.button_index = JOY_BUTTON_A
+				pad.pressed = down
+				event = pad
+			else:
+				var key := InputEventKey.new()
+				key.keycode = KEY_ENTER
+				key.physical_keycode = KEY_ENTER
+				key.pressed = down
+				event = key
+			Input.parse_input_event(event)
+			Input.flush_buffered_events()
+			await tree.process_frame
+	button.process_mode = mode
+
 static func saved_knowledge(bytes: PackedByteArray) -> Dictionary:
 	var value: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 	for depth in 16:
@@ -142,3 +168,52 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	await tree.process_frame
 	check(view.paused and view.surface_walking() and owner.get_freedom_field_samples() == recollected and owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and save_bytes(owner, "continued") == final_bytes, "Continue changed actual specimens/first notes/actor/state or complete Save bytes")
 	await check_archive(tree, view, owner, final_bytes, notes[0], true, "continued")
+
+	# Revisit from a discarded specimen's retained note. Compare the complete
+	# explicit UI result against an independent direct C++ command, then Continue.
+	check(owner.discard_freedom_field_sample(source.system_id, source.body_kind, source.body_id, source.site_id), "Discard before recorded-site marking refused")
+	if owner.get_freedom_flight_state().surface_marker.present:
+		check(owner.clear_freedom_surface_marker(), "Clear existing marker before explicit Mark refused")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	var mark_before := save_bytes(owner, "mark-before")
+	check(peer.stage_freedom_continue(output.path_join("field-samples-mark-before.json")) and peer.commit_pending_freedom_start(peer.get_pending_freedom_start().candidate_id), "Independent marker reference Continue refused")
+	view.controls_menu.show_observations()
+	var archive: Control = view.controls_menu.observations_view
+	for index in archive.titles().size():
+		if archive.mark_button.visible: break
+		archive.next_button.pressed.emit()
+	if not check(archive.mark_button.visible and not archive.mark_button.disabled and archive.mark_button.text == "Mark site" and "Specimen not carried." in archive.body.text, "Discarded actual note did not offer explicit Mark site"): return
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	archive.mark_button.pressed.emit()
+	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.journey_dialog_open = true
+	archive.mark_button.pressed.emit()
+	view.journey_dialog_open = false
+	check(save_bytes(owner, "mark-guard") == mark_before, "Unfocused/covered archive changed complete marker state")
+	check(peer.mark_freedom_field_sample_site(source.system_id, source.body_kind, source.body_id, source.site_id, false) and peer.save_freedom_as(expected_path), "Direct retained-site Mark refused")
+	await activate_archive(tree, view, archive.mark_button, false)
+	var marked := save_bytes(owner, "marked")
+	var marker: Dictionary = owner.get_freedom_flight_state().surface_marker
+	if not check(marked == FileAccess.get_file_as_bytes(expected_path) and marker.present and marker.current_body and marker.distance_metres <= 8.0 and archive.mark_button.text == "Replace marker" and owner.get_freedom_field_samples().journal == notes and owner.get_freedom_field_samples().carried.is_empty() and owner.get_freedom_observations() == observations and view.paused, "Actual retained-site Mark differs from C++, loses bearing/notes, or changes other state"): return
+	var marker_device: int = view.player_input.device
+	var marker_pads: Dictionary = view.player_input.available_pads.duplicate()
+	view.player_input.device = 19
+	view.player_input.available_pads[19] = true
+	view.player_input.install()
+	await activate_archive(tree, view, archive.mark_button, true)
+	view.player_input.available_pads = marker_pads
+	view.player_input.device = marker_device
+	view.player_input.install()
+	check(save_bytes(owner, "mark-replaced") == marked, "Controller same-site Replace changed time, position or first notes")
+	archive.back_button.pressed.emit()
+	check(view.paused and view.controls_menu.observations_button.has_focus(), "Marker archive Back resumed or lost focus")
+	# Restore a carried specimen through the ordinary collection command so the
+	# continuing Moon return route still exercises its existing pouch contract.
+	check(owner.collect_freedom_field_sample(site_id), "Recollection after marking refused")
+	var marked_carried := save_bytes(owner, "marked-carried")
+	if not check(shell.select_start(owner, {"mode": "continue", "value": output.path_join("field-samples-marked-carried.json"), "assets": assets}), "Marked retained site Continue refused"): return
+	view = shell.current_view
+	view.set_process(false)
+	await tree.process_frame
+	check(view.paused and owner.get_freedom_field_samples() == recollected and owner.get_freedom_flight_state().surface_marker == marker and save_bytes(owner, "marked-continued") == marked_carried, "Marked site Continue lost marker, notes or complete bytes")

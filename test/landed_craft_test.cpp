@@ -1187,10 +1187,184 @@ auto surface_marker_session(NativeFreedomFlightSession session,
         "fact history and clock");
 }
 
+struct SampleMarkerScenario {
+  std::unique_ptr<NativeFreedomFlightSession> discarded;
+  std::unique_ptr<NativeFreedomFlightSession> seated;
+  std::optional<SurfaceLandmarkSite> site;
+};
+
+// Normalize only the current personal marker when checking the complete Save;
+// retained loss snapshots and all other metadata must remain exact.
+auto without_sample_marker(std::string_view text) -> nlohmann::ordered_json {
+  auto value = nlohmann::ordered_json::parse(text);
+  auto* inner = &value;
+  for (unsigned layer = 0; layer < 8; ++layer) {
+    if (inner->contains("knowledge")) {
+      inner->at("knowledge").erase("surface_marker");
+      return value;
+    }
+    inner = &inner->at("voyage");
+  }
+  throw std::runtime_error("Sample marker fixture lacks current knowledge");
+}
+// Keep large codec/admission results in short scopes so nested Continue
+// checks fit the ordinary test stack.
+auto reopen_sample_marker(std::string_view text)
+    -> std::unique_ptr<NativeFreedomFlightSession> {
+  std::unique_ptr<NativeStartup> selected;
+  {
+    auto document = std::make_unique<NativeSaveDocument>();
+    {
+      auto decoded = decode_native_save_document_json(text);
+      if (!decoded) throw std::runtime_error(decoded.error().detail);
+      *document = std::move(*decoded);
+    }
+    auto candidate = native_select_save_document(std::move(*document));
+    if (!candidate) throw std::runtime_error(candidate.error());
+    selected = std::make_unique<NativeStartup>(std::move(*candidate));
+  }
+  auto opened = NativeFreedomFlightSession::open(std::move(*selected));
+  if (!opened) throw std::runtime_error(opened.error());
+  return std::make_unique<NativeFreedomFlightSession>(std::move(*opened));
+}
+auto sample_marker_continue(std::string_view text) -> bool {
+  const auto resumed = reopen_sample_marker(text);
+  return required(encode_native_save_document_json(
+             required(resumed->save_document()))) == text &&
+         required(resumed->surface_marker_view()).current_body;
+}
+// Keep this scenario's admission storage local to its own test phase.
+[[gnu::noinline]] auto sample_marker_recipe_refusal(
+    const NativeFreedomFlightSession& source, BodyTarget target,
+    SurfaceLandmarkId site) -> void {
+  // Historical recipe metadata fixture, not an inspection/collection claim
+  // under another terrain recipe. The current supported body stays unchanged.
+  auto document = std::make_unique<FreedomSurfaceWalkSaveDocument>();
+  {
+    auto current = source.surface_walk_document();
+    if (!current) throw std::runtime_error(current.error());
+    *document = std::move(*current);
+  }
+  auto& knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(document->voyage.voyage).knowledge;
+  const auto other_policy =
+      source.document().model.terrain_policy == 1 ? 2U : 1U;
+  for (auto& record : knowledge.field_samples->journal)
+    if (record.target == target && record.site == site)
+      record.terrain_recipe = other_policy;
+  for (auto& inspection : knowledge.surface_landmarks->inspections)
+    if (inspection.system == target.system &&
+        inspection.planet.value == target.body.value && inspection.site == site)
+      inspection.terrain_policy = other_policy;
+  const auto saved = std::make_unique<NativeSaveDocument>(std::move(*document));
+  auto candidate =
+      reopen_sample_marker(required(encode_native_save_document_json(*saved)));
+  const auto before = required(
+      encode_native_save_document_json(required(candidate->save_document())));
+  check(!candidate->mark_field_sample_site(target, site, false) &&
+            required(encode_native_save_document_json(
+                required(candidate->save_document()))) == before,
+        "Authentic historical site note cannot silently switch the loaded "
+        "terrain recipe");
+}
+// Keep this scenario's Save/recovery storage local to its own test phase.
+[[gnu::noinline]] auto planet_sample_marker(
+    const NativeFreedomFlightSession& source, const Fixture& f,
+    const SurfaceLandmarkSite& site) -> void {
+  const auto bytes = [](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  auto marked = std::make_unique<NativeFreedomFlightSession>(source);
+  if (marked->knowledge()->surface_marker &&
+      marked->knowledge()->surface_marker->point)
+    required(marked->clear_surface_marker());
+  const BodyTarget target{f.owner.catalog.id, body_id(f.planet.id)};
+  const auto id = site.identity.id;
+  const auto before = bytes(*marked);
+  auto foreign = target;
+  ++foreign.body.version;
+  check(!marked->mark_field_sample_site(target, id, true) &&
+            !marked->mark_field_sample_site(foreign, id, false) &&
+            !marked->mark_field_sample_site(target, {}, false) &&
+            bytes(*marked) == before,
+        "Absent-marker replacement and malformed/unknown note keys refuse "
+        "atomically");
+  required(marked->mark_field_sample_site(target, id, false));
+  const auto after = bytes(*marked);
+  const auto& point = std::get<FreedomSurfaceMarkerPoint>(
+      *marked->knowledge()->surface_marker->point);
+  check(marked->knowledge()->surface_marker->version == 1 &&
+            point.system == target.system && point.planet == f.planet.id &&
+            point.position == site.position_metres &&
+            point.tick == source.document().flight.tick &&
+            marked->knowledge()->field_samples->carried.empty() &&
+            without_sample_marker(after) == without_sample_marker(before),
+        "Discarded planet specimen's exact recorded centre changes only the "
+        "personal marker");
+  check(!marked->mark_field_sample_site(target, id, false) &&
+            bytes(*marked) == after,
+        "Mark cannot silently overwrite an existing personal point");
+  required(marked->mark_field_sample_site(target, id, true));
+  check(bytes(*marked) == after, "Explicit same-site replacement is "
+                                 "deterministic and preserves first notes");
+  check(sample_marker_continue(after),
+        "Retained-site marker survives complete Continue and uses the existing "
+        "local bearing");
+  required(marked->clear_surface_marker());
+  // An explicitly declared loss exercises the existing recovery contract; this
+  // does not claim a new collision or a flown destruction event.
+  required(marked->record_loss(FreedomLossCause::recoverable_destruction,
+                               marked->document().origin.state.craft,
+                               marked->document().flight.tick,
+                               required(rigid_body_state_checksum(
+                                   f.context, marked->document().flight))));
+  const auto pending = bytes(*marked);
+  check(!marked->mark_field_sample_site(target, id, false) &&
+            bytes(*marked) == pending,
+        "Pending loss cannot edit a retained specimen's marker");
+  required(marked->complete_recovery());
+  const auto recovered = bytes(*marked);
+  required(marked->mark_field_sample_site(target, id, false));
+  check(marked->walker() && !marked->surface_walker() &&
+            marked->knowledge()->field_samples->carried.empty() &&
+            marked->knowledge()->field_samples->journal ==
+                source.knowledge()->field_samples->journal &&
+            without_sample_marker(bytes(*marked)) ==
+                without_sample_marker(recovered),
+        "Replacement at the same Home body can mark an old collector's note "
+        "without recreating its pouch");
+}
+
+// Run only after the large legacy walking fixture has returned. These are
+// snapshots of its genuine discarded/aboard states, not newly placed actors.
+auto sample_marker_scenarios(const Fixture& f, SampleMarkerScenario& scenario)
+    -> void {
+  if (!scenario.discarded || !scenario.seated || !scenario.site)
+    throw std::runtime_error("Actual sample marker scenario was not captured");
+  planet_sample_marker(*scenario.discarded, f, *scenario.site);
+  const BodyTarget target{f.owner.catalog.id, body_id(f.planet.id)};
+  const auto site = scenario.site->identity.id;
+  sample_marker_recipe_refusal(*scenario.discarded, target, site);
+  auto& session = *scenario.seated;
+  const auto saved = [](const NativeFreedomFlightSession& live) {
+    return required(
+        encode_native_save_document_json(required(live.save_document())));
+  };
+  const auto aboard_note = saved(session);
+  required(session.mark_field_sample_site(target, site, false));
+  check(!session.surface_walker() && without_sample_marker(saved(session)) ==
+                                         without_sample_marker(aboard_note),
+        "Same-body seated craft may mark a previously collected site without "
+        "leaving the hatch");
+}
+
 // Run on a clone of the genuinely walked/inspected planet exposure. The
 // existing exported route remains specimen-absent and byte-identical.
 auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
-                          SurfaceLandmarkId site) -> void {
+                          SurfaceLandmarkId site,
+                          SampleMarkerScenario* marker_scenario = nullptr)
+    -> void {
   const auto saved = [](const NativeFreedomFlightSession& live) {
     return required(
         encode_native_save_document_json(required(live.save_document())));
@@ -1201,6 +1375,7 @@ auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
   check(!session.knowledge()->field_samples &&
             session.field_sample_collection_available(site).has_value() &&
             session.field_sample_collection_available(site).has_value() &&
+            !session.mark_field_sample_site(target, site, false) &&
             saved(session) == initial,
         "Actual inspected planet exposure availability is read-only and sample "
         "state remains opt-in");
@@ -1258,6 +1433,11 @@ auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
             session.document().flight.tick == tick + 1,
         "Discard frees the planet pouch while retaining its first note without "
         "advancing time");
+  if (marker_scenario) {
+    marker_scenario->discarded =
+        std::make_unique<NativeFreedomFlightSession>(session);
+    marker_scenario->site = found->site;
+  }
   required(session.collect_field_sample(site));
   check(session.knowledge()->field_samples->carried.size() == 1 &&
             session.knowledge()->field_samples->carried.front().tick ==
@@ -1348,6 +1528,10 @@ auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
           "Present actual planet specimens enter the ordinary intersystem "
           "owner without local proof deletion");
     required(traveler.begin_jump());
+    const auto spooling = saved(traveler);
+    check(!traveler.mark_field_sample_site(target, site, false) &&
+              saved(traveler) == spooling,
+          "Active jump atomically refuses a retained-site marker");
     traveler = resume_jump(traveler);
     const auto source_tick = traveler.document().flight.tick;
     const auto charges = traveler.resources()->jump_charges;
@@ -1402,16 +1586,26 @@ auto field_sample_session(NativeFreedomFlightSession session, const Fixture& f,
           "Actual charged intersystem arrival retains the exact carried "
           "specimen and first notes while the independent aboard-discard "
           "branch stays unchanged");
+    const auto elsewhere = saved(traveler);
+    check(!traveler.mark_field_sample_site(target, site, false) &&
+              saved(traveler) == elsewhere,
+          "An actual foreign-system arrival cannot mark a remote retained "
+          "exposure");
   }
   required(session.discard_field_sample(target, site));
   check(session.knowledge()->field_samples->carried.empty() &&
             session.knowledge()->field_samples->journal == collected.journal,
         "Owned specimens may be discarded aboard while first notes stay "
         "retained");
+  if (marker_scenario)
+    marker_scenario->seated =
+        std::make_unique<NativeFreedomFlightSession>(session);
 }
 auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
                               const Fixture& f,
-                              const std::filesystem::path& directory) -> void {
+                              const std::filesystem::path& directory,
+                              SampleMarkerScenario* marker_scenario = nullptr)
+    -> void {
   auto field = required(SurfaceLandmarkField::create(
       f.owner, body_id(f.planet.id), f.terrain_policy));
   // Bounded, deterministic fixture placement around the existing fixed test
@@ -1586,7 +1780,7 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
             session.document().flight.tick == tick,
         "Inspection records the actual owner's site and first tick without "
         "awarding sensor facts, fuel, motion or time");
-  field_sample_session(session, f, requested);
+  field_sample_session(session, f, requested, marker_scenario);
   required(session.advance_surface_walk({}));
   const auto inspected = saved(session);
   required(session.inspect_surface_landmark(requested));
@@ -1623,7 +1817,9 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
 }
 
 auto surface_walk_session(const Fixture& f,
-                          const std::filesystem::path& directory = {}) -> void {
+                          const std::filesystem::path& directory = {},
+                          SampleMarkerScenario* marker_scenario = nullptr)
+    -> void {
   auto station = required(
       NativeFreedomFlightSession::open(required(native_new_game(Seed{42}))));
   for (unsigned tick = 0; tick < 2960; ++tick)
@@ -1648,7 +1844,7 @@ auto surface_walk_session(const Fixture& f,
       {NativeStartup::Mode::freedom, selected, f.planet, {}}));
   required(session.commit_touchdown(required(
       rigid_body_state_checksum(f.context, session.document().flight))));
-  surface_landmark_session(selected, f, directory);
+  surface_landmark_session(selected, f, directory, marker_scenario);
   const auto anchor = session.surface()->landed;
   const auto resources = session.resources();
   const auto initial_tick = session.document().flight.tick;
@@ -2501,6 +2697,7 @@ auto main(int argc, char** argv) -> int {
          std::string_view{argv[1]} == "--daynight-fixtures");
     const Fixture f{local_detail ? kFreedomLocalDetailTerrainPolicy
                                  : kFreedomLegacyTerrainPolicy};
+    SampleMarkerScenario marker_scenario;
     if (argc == 2 && std::string_view{argv[1]} == "--daynight") {
       daynight_snapshots(f);
     } else if (argc == 3 &&
@@ -2514,7 +2711,8 @@ auto main(int argc, char** argv) -> int {
       hull_and_idle(f);
       persistence_and_session(f);
       surface_walking(f);
-      surface_walk_session(f);
+      surface_walk_session(f, {}, &marker_scenario);
+      sample_marker_scenarios(f, marker_scenario);
       assisted_commands(f);
       selected_gear_lifecycle(f);
     } else if (argc == 3 &&
@@ -2528,7 +2726,8 @@ auto main(int argc, char** argv) -> int {
                 std::string_view{argv[1]} == "--local-detail-walk-fixtures")) {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
-      surface_walk_session(f, directory);
+      surface_walk_session(f, directory, &marker_scenario);
+      sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 2 && std::string_view{argv[1]} == "--resources") {
       research::FlightEnduranceMeter meter;
       assisted_commands(f, &meter, true);
@@ -2539,7 +2738,8 @@ auto main(int argc, char** argv) -> int {
       observed_lifecycle(f);
     } else if (argc == 2 && std::string_view{argv[1]} == "--walk") {
       surface_walking(f);
-      surface_walk_session(f);
+      surface_walk_session(f, {}, &marker_scenario);
+      sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 1) {
       hull_and_idle(f);
       persistence_and_session(f);

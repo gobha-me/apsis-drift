@@ -425,6 +425,7 @@ func build_ui() -> void:
 	observations_view.controls = preferences_provider
 	observations_view.query = Callable(bridge, "get_freedom_observations")
 	observations_view.notes_query = func(): return preload("res://scripts/native/exploration_notes.gd").read_bridge(bridge)
+	observations_view.mark_command = mark_recorded_sample_site
 	observations_view.back_requested.connect(close_observations)
 	add_child(observations_view)
 	# The station owns device/focus filtering before forwarding reader scrolling.
@@ -768,6 +769,14 @@ func open_observations() -> void:
 	observations_view.open()
 
 
+func mark_recorded_sample_site(target: Dictionary, replace: bool) -> Dictionary:
+	if not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not observations_open() or settings_open() or crew_open() or preferences_provider == null or not preferences_provider.waiting_action.is_empty():
+		return {"ok": false, "reason": "Return to the focused, paused archive before marking a site."}
+	var result: Dictionary = preload("res://scripts/native/exploration_notes.gd").mark_bridge(bridge, target, replace)
+	if result.ok: update_view(0.0)
+	return result
+
+
 func close_observations() -> void:
 	if not observations_open(): return
 	observations_view.hide()
@@ -1101,7 +1110,7 @@ func _input(event: InputEvent) -> void:
 	elif observations_open():
 		# Station device selection does not reinstall the flight UI InputMap.
 		# Resolve this small reader's pad actions after the ownership guards above.
-		var buttons := [observations_view.previous_button, observations_view.next_button, observations_view.back_button]
+		var buttons: Array = observations_view.navigation_buttons()
 		if pressed and button == JOY_BUTTON_A:
 			var current := get_viewport().gui_get_focus_owner()
 			if current in buttons and not current.disabled: current.pressed.emit()

@@ -119,6 +119,58 @@ func run() -> void:
 	check(view.page == 2 and note.label in view.body.text and "Specimen not carried." in view.body.text and "ship time 0.0 s" in view.body.text and notes_calls[0] == 1, "Note page lost first provenance, disposition or query neutrality")
 	view.open()
 	check(view.page == 0 and notes_calls[0] == 2, "Reopened field archive did not refresh exactly once")
+	# The only writer is an explicit retained-site action, with typed identity
+	# and replacement intent. Navigation/reading never invokes it.
+	var marker_present := [false]
+	var commands: Array = []
+	view.notes_query = func():
+		notes_calls[0] += 1
+		return {"samples": {"selected": true, "capacity": 4, "carried": [], "journal": [note]}, "derelict": null, "navigation": {"system_id": note.system_id, "body_kind": note.body_kind, "body_id": note.body_id, "present": marker_present[0], "idle": true}}
+	view.mark_command = func(target: Dictionary, replace: bool):
+		commands.append([target.duplicate(true), replace])
+		marker_present[0] = true
+		return {"ok": true, "reason": "Personal marker set."}
+	view.open()
+	check(commands.is_empty() and not view.mark_button.visible, "Facts page exposed or invoked a site command")
+	view.page = 2
+	view.refresh()
+	check(view.mark_button.visible and not view.mark_button.disabled and view.mark_button.text == "Mark site", "Recorded site omitted its explicit marker action")
+	root.size = Vector2i(640, 450)
+	for i in 5: await process_frame
+	print("Marker short-window geometry: window=%s viewport=%s reader=%s controls=%s" % [root.size, view.get_viewport_rect(), view.get_global_rect(), view._buttons.get_global_rect()])
+	for button in view.navigation_buttons():
+		check(button.get_global_rect().end.x <= view.get_viewport_rect().end.x + 0.5 and button.get_global_rect().end.y <= view.get_viewport_rect().end.y + 0.5, "Short-window marker controls escaped the window")
+	var read_count: int = notes_calls[0]
+	var fact_count := queries
+	view.mark_button.grab_focus()
+	await key(KEY_ENTER, true)
+	await key(KEY_ENTER, false)
+	check(commands.size() == 1 and commands[0] == [{"system_id": note.system_id, "body_kind": note.body_kind, "body_id": note.body_id, "site_id": note.site_id}, false] and view.mark_button.text == "Replace marker" and view.mark_button.has_focus() and view.page == 2 and notes_calls[0] == read_count + 1 and queries == fact_count and not controls.enabled, "Explicit marker lost identity, replacement intent, pause, focus or bounded refresh")
+	for i in 3: await process_frame
+	for button in view.navigation_buttons():
+		check(button.get_global_rect().end.x <= view.get_viewport_rect().end.x + 0.5 and button.get_global_rect().end.y <= view.get_viewport_rect().end.y + 0.5, "Short-window Replace controls escaped logical canvas")
+	await pad(JOY_BUTTON_A, true)
+	await pad(JOY_BUTTON_A, false)
+	check(commands.size() == 2 and commands[1][1] == true, "Selected-controller action did not explicitly replace")
+	controls.focused = false
+	view.mark_button.pressed.emit()
+	controls.focused = true
+	controls.waiting_action = "rise"
+	view.mark_button.pressed.emit()
+	controls.waiting_action = ""
+	check(commands.size() == 2, "Unfocused/remapping marker command reached the provider")
+	view.hide()
+	view.mark_button.pressed.emit()
+	check(commands.size() == 2, "Hidden archive issued a marker command")
+	view.show()
+	view.change_page(1)
+	view.mark_button.pressed.emit()
+	check(commands.size() == 2 and not view.mark_button.visible, "Non-note page retained a stale site command")
+	view.notes_query = func(): return {"samples": {"selected": true, "capacity": 4, "carried": [], "journal": [note]}, "derelict": null, "navigation": {"system_id": "999", "body_kind": note.body_kind, "body_id": note.body_id, "present": true, "idle": true}}
+	view.open()
+	view.page = 2
+	view.refresh()
+	check(view.mark_button.visible and view.mark_button.disabled and "Return" in view.mark_button.tooltip_text, "Remote note enabled a local marker command")
 	view.notes_query = Callable()
 	menu.back_from_nested()
 	menu.observations_query = func(): return null

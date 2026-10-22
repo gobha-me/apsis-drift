@@ -1,5 +1,5 @@
 extends RefCounted
-## Read-only pages from retained C++ projections, queried once when opened.
+## Retained C++ projections, queried on opening or after an explicit marker action.
 const Derelict = preload("res://scripts/native/native_derelict_view.gd")
 const ROW_FIELDS := ["system_id", "body_kind", "body_id", "site_id", "craft_id", "tick", "kind", "label", "source_name"]
 const MAX_TEXT := 256
@@ -7,13 +7,15 @@ const MAX_TEXT := 256
 static func read_bridge(owner: Variant) -> Dictionary:
 	var samples: Variant = null
 	var derelict: Variant = null
+	var navigation: Variant = null
 	if owner is Object and is_instance_valid(owner):
 		if owner.has_method("get_freedom_field_samples"):
 			samples = owner.call("get_freedom_field_samples")
 		if owner.has_method("get_freedom_flight_state"):
 			var flight: Variant = owner.call("get_freedom_flight_state")
 			derelict = flight.get("derelict", null) if flight is Dictionary else false
-	return {"samples": samples, "derelict": derelict}
+			navigation = navigation_context(flight)
+	return {"samples": samples, "derelict": derelict, "navigation": navigation}
 
 static func word(value: Variant, tick: bool = false) -> bool:
 	if not value is String: return false
@@ -56,11 +58,42 @@ static func samples_valid(value: Variant) -> bool:
 		carried[key] = true
 	return true
 
+# Keep only the currently loaded body's identity and the single marker state.
+# No terrain coordinates or undiscovered descriptors cross this boundary.
+static func navigation_context(flight: Variant) -> Variant:
+	if not flight is Dictionary: return null
+	var kind: Variant = flight.get("body_kind", "planet")
+	var body: Variant = flight.get("body_id", flight.get("planet_id"))
+	var marker: Variant = flight.get("surface_marker")
+	var jump: Variant = flight.get("jump")
+	if not kind is String or kind not in ["planet", "moon", "minor"] or not word(flight.get("system_id")) or not word(body): return null
+	if not marker is Dictionary or not marker.get("present") is bool or not jump is Dictionary or not jump.get("phase") is String: return null
+	return {"system_id": flight.system_id, "body_kind": kind, "body_id": body, "present": marker.present, "idle": jump.phase == "idle"}
+
+static func navigation_valid(value: Variant) -> bool:
+	return value is Dictionary and value.size() == 5 and word(value.get("system_id")) and value.get("body_kind") is String and value.get("body_kind") in ["planet", "moon", "minor"] and word(value.get("body_id")) and value.get("present") is bool and value.get("idle") is bool
+
+static func site_action(row: Dictionary, navigation: Variant) -> Dictionary:
+	var target := {}
+	for field in ["system_id", "body_kind", "body_id", "site_id"]: target[field] = row[field]
+	var available := navigation_valid(navigation)
+	var local: bool = available and row.system_id == navigation.system_id and row.body_kind == navigation.body_kind and row.body_id == navigation.body_id
+	return {"target": target, "replace": available and navigation.present, "available": local and navigation.idle, "reason": "Set the existing personal marker at this recorded exposure. This does not certify a safe route or landing." if local and navigation.idle else "Wait until the jump completes." if local else "Return to this note's body before marking its site." if available else "Marker navigation is unavailable."}
+
+static func mark_bridge(owner: Variant, target: Dictionary, replace: bool) -> Dictionary:
+	if target.size() != 4 or not target.get("body_kind") is String or target.get("body_kind") not in ["planet", "moon"]: return {"ok": false, "reason": "Select an actual retained specimen note."}
+	for field in ["system_id", "body_id", "site_id"]:
+		if not word(target.get(field)): return {"ok": false, "reason": "Invalid retained site identity."}
+	if not owner is Object or not is_instance_valid(owner) or not owner.has_method("mark_freedom_field_sample_site"): return {"ok": false, "reason": "Marker navigation is unavailable."}
+	var ok: Variant = owner.call("mark_freedom_field_sample_site", target.system_id, target.body_kind, target.body_id, target.site_id, replace)
+	if not ok is bool: return {"ok": false, "reason": "Marker command returned an invalid result."}
+	return {"ok": ok, "reason": "Personal marker set to the recorded exposure. Check its bearing after returning to controls; the route is not certified safe." if ok else str(owner.call("get_last_error")) if owner.has_method("get_last_error") else "Marker command refused."}
+
 static func unavailable(family: String) -> Dictionary:
 	return {"title": family, "text": family + " are unavailable. Reading this page does not change the voyage."}
 
 static func pages(candidate: Variant) -> Array:
-	if not candidate is Dictionary or candidate.size() != 2 or not candidate.has("samples") or not candidate.has("derelict"):
+	if not candidate is Dictionary or candidate.size() not in [2, 3] or not candidate.has("samples") or not candidate.has("derelict") or (candidate.size() == 3 and not candidate.has("navigation")):
 		return [unavailable("Exploration notes")]
 	var result: Array = []
 	var samples: Variant = candidate.samples
@@ -71,7 +104,7 @@ static func pages(candidate: Variant) -> Array:
 		var carried := {}
 		for row in samples.carried: carried[site_key(row)] = true
 		for row in samples.journal:
-			result.append({"title": row.label + " · " + row.source_name, "text": "%s\nSource: %s · %s\n%s\n\nFirst collection · ship time %.1f s\nField identification from the exposure; composition has not been analyzed." % [row.label, row.source_name, str(row.body_kind).capitalize(), "Specimen carried." if carried.has(site_key(row)) else "Specimen not carried.", float(row.tick) / 120.0]})
+			result.append({"title": row.label + " · " + row.source_name, "text": "%s\nSource: %s · %s\n%s\n\nFirst collection · ship time %.1f s\nField identification from the exposure; composition has not been analyzed." % [row.label, row.source_name, str(row.body_kind).capitalize(), "Specimen carried." if carried.has(site_key(row)) else "Specimen not carried.", float(row.tick) / 120.0], "site_action": site_action(row, candidate.get("navigation"))})
 	var derelict: Variant = candidate.derelict
 	if derelict != null:
 		if not Derelict.valid_packet(derelict):

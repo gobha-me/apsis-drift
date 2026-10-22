@@ -1,10 +1,14 @@
 extends "res://scripts/flight/flight_basics.gd"
 ## Reuse the paused reference's pagination, readable sizing and pad scrolling.
 ## This view consumes C++ records and retained notes, never world descriptors.
+## Mark site is an explicit command; reading and pagination remain read-only.
 var query: Callable
 var notes_query: Callable
 var readings: Dictionary = {}
 var note_pages: Array = []
+var mark_command: Callable
+var mark_button: Button
+var action_message := ""
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const ExplorationNotes = preload("res://scripts/native/exploration_notes.gd")
 const VALUE_FIELDS := {
@@ -41,6 +45,64 @@ static func valid_readings(candidate: Variant) -> bool:
 					if typeof(fact.value.get(key)) != fields[key]: return false
 	return true
 
+func _ready() -> void:
+	super._ready()
+	mark_button = _button(_buttons, "Mark site", mark_current_site)
+	_buttons.move_child(mark_button, 2)
+	refresh()
+	_apply_readable_scale()
+
+func navigation_buttons() -> Array:
+	var result: Array = []
+	for button in [previous_button, next_button, mark_button, back_button]:
+		if is_instance_valid(button) and button.visible and not button.disabled: result.append(button)
+	return result
+
+func _apply_readable_scale() -> void:
+	super._apply_readable_scale()
+	if is_instance_valid(mark_button):
+		mark_button.add_theme_font_size_override("font_size", roundi(24 * _readable_scale))
+		mark_button.custom_minimum_size.y = 48 * _readable_scale
+
+func change_page(direction: int) -> void:
+	action_message = ""
+	super.change_page(direction)
+
+func current_site_action() -> Dictionary:
+	var facts_count: int = 1 if readings.has("error") else readings.get("subjects", []).size()
+	var index: int = page - facts_count
+	if index < 0 or index >= note_pages.size(): return {}
+	return note_pages[index].get("site_action", {})
+
+func refresh_marker_action() -> void:
+	if not is_instance_valid(mark_button): return
+	var action := current_site_action()
+	mark_button.visible = not action.is_empty()
+	mark_button.disabled = action.is_empty() or not action.get("available", false) or not mark_command.is_valid()
+	mark_button.text = "Replace marker" if action.get("replace", false) else "Mark site"
+	mark_button.tooltip_text = str(action.get("reason", ""))
+	if mark_button.has_focus() and (not mark_button.visible or mark_button.disabled): back_button.grab_focus()
+	var ordered := navigation_buttons()
+	for index in ordered.size():
+		var button: Button = ordered[index]
+		button.focus_neighbor_left = button.get_path_to(ordered[posmod(index - 1, ordered.size())])
+		button.focus_neighbor_right = button.get_path_to(ordered[(index + 1) % ordered.size()])
+		button.focus_previous = button.focus_neighbor_left
+		button.focus_next = button.focus_neighbor_right
+
+func mark_current_site() -> void:
+	if not is_visible_in_tree() or not is_instance_valid(mark_button) or not mark_button.visible or mark_button.disabled or not mark_command.is_valid() or not is_instance_valid(controls) or not controls.focused or not controls.waiting_action.is_empty(): return
+	var action := current_site_action()
+	if action.is_empty() or not action.get("available", false): return
+	var result: Variant = mark_command.call(action.target.duplicate(true), action.replace)
+	if not result is Dictionary or not result.get("ok") is bool or not result.get("reason") is String: return
+	# Explicit actions refresh the one-shot projection, including stale marker
+	# presence after a refusal. Reading ordinary pages never invokes a command.
+	note_pages = ExplorationNotes.pages(notes_query.call()) if notes_query.is_valid() else []
+	action_message = result.reason
+	refresh()
+	if mark_button.visible and not mark_button.disabled: mark_button.grab_focus()
+
 func titles() -> Array:
 	var subjects: Array = readings.get("subjects", [])
 	var result: Array = ["Unavailable observations"] if readings.has("error") else subjects.duplicate()
@@ -48,6 +110,7 @@ func titles() -> Array:
 	return result if not result.is_empty() else ["No records"]
 
 func open() -> void:
+	action_message = ""
 	var candidate: Variant = query.call() if query.is_valid() else null
 	readings = candidate if valid_readings(candidate) else {"error": "Observation records are unavailable."}
 	note_pages = ExplorationNotes.pages(notes_query.call()) if notes_query.is_valid() else []
@@ -75,8 +138,10 @@ func refresh() -> void:
 		body.text += " Reading this page does not start sensors or upgrade a save."
 	else:
 		body.text = subject_text(subjects[page])
+	if not action_message.is_empty(): body.text += "\n\n" + action_message
 	previous_button.disabled = count < 2
 	next_button.disabled = count < 2
+	refresh_marker_action()
 	if is_visible_in_tree() and next_button.disabled:
 		back_button.grab_focus()
 
