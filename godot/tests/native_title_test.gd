@@ -70,7 +70,7 @@ func run() -> void:
 	await settle()
 	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and shell.current_view == null, "Title generated a world before selection")
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
-	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 3 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
+	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 4 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
 	check(title.recovery_choice != null and title.recovery_choice.selected == 0 and title.recovery_choice.item_count == 3 and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive rules changed the default or lost independent keyboard selection")
 	check(title.origin_service_choice != null and not title.origin_service_choice.button_pressed and title.origin_service_choice.focus_mode == Control.FOCUS_ALL, "Fuel service must remain explicit opt-in with keyboard/controller access")
 	title.open_settings()

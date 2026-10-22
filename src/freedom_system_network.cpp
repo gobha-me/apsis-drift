@@ -1,6 +1,7 @@
 #include "apsis_drift/freedom_system_network.hpp"
 
 #include <algorithm>
+#include <array>
 
 namespace apsis_drift {
 namespace {
@@ -51,14 +52,20 @@ auto ceiling_distance(UniversePositionMetres d, std::uint64_t bound)
   return lower;
 }
 auto axes(UniverseAxisDirection direction)
-    -> std::array<UniversePositionMetres, 2> {
+    -> std::array<UniversePositionMetres, 3> {
   switch (direction) {
-    case UniverseAxisDirection::positive_x: return {{{1, 0, 0}, {0, 1, 0}}};
-    case UniverseAxisDirection::negative_x: return {{{-1, 0, 0}, {0, 1, 0}}};
-    case UniverseAxisDirection::positive_y: return {{{0, 1, 0}, {0, 0, 1}}};
-    case UniverseAxisDirection::negative_y: return {{{0, -1, 0}, {0, 0, 1}}};
-    case UniverseAxisDirection::positive_z: return {{{0, 0, 1}, {1, 0, 0}}};
-    case UniverseAxisDirection::negative_z: return {{{0, 0, -1}, {1, 0, 0}}};
+    case UniverseAxisDirection::positive_x:
+      return {{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+    case UniverseAxisDirection::negative_x:
+      return {{{-1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+    case UniverseAxisDirection::positive_y:
+      return {{{0, 1, 0}, {0, 0, 1}, {1, 0, 0}}};
+    case UniverseAxisDirection::negative_y:
+      return {{{0, -1, 0}, {0, 0, 1}, {1, 0, 0}}};
+    case UniverseAxisDirection::positive_z:
+      return {{{0, 0, 1}, {1, 0, 0}, {0, 1, 0}}};
+    case UniverseAxisDirection::negative_z:
+      return {{{0, 0, -1}, {1, 0, 0}, {0, 1, 0}}};
   }
   return {};
 }
@@ -72,15 +79,24 @@ auto lookup(const FreedomSystemNetwork& network, SystemId id)
 
 auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
     -> std::expected<FreedomSystemNetwork, Error> {
-  if (version != kFreedomSystemNetworkVersion)
+  if (!freedom_system_network_version_supported(version))
     return std::unexpected{Error::unsupported_version};
   const auto legacy = generate_first_intersystem_identities(universe_seed);
   const auto route = generate_first_universe_route(universe_seed);
   if (!validate_first_universe_route(route))
     return std::unexpected{Error::invalid_geometry};
+  const auto original_seed =
+      derive_seed(universe_seed, SeedDomain::freedom_system_network,
+                  kFreedomSystemNetworkVersion);
   const auto seed =
-      derive_seed(universe_seed, SeedDomain::freedom_system_network, version);
+      version == kFreedomSystemNetworkVersion
+          ? original_seed
+          : derive_seed(universe_seed, SeedDomain::freedom_uncharted_systems,
+                        kFreedomUnchartedSystemNetworkVersion);
   FreedomSystemNetwork result{version, universe_seed, seed, {}};
+  result.nodes.resize(version == kFreedomSystemNetworkVersion
+                          ? kFreedomSystemNetworkSize
+                          : kFreedomUnchartedSystemNetworkSize);
   result.nodes[0] = {0, legacy.origin_system_seed, legacy.origin_system,
                      route.origin_position};
   result.nodes[1] = {1, legacy.target_system_seed, legacy.target_system,
@@ -88,13 +104,17 @@ auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
   const auto frame = axes(route.direction);
   const auto h = static_cast<std::int64_t>(route.distance_light_seconds / 2);
   const auto q = static_cast<std::int64_t>(route.distance_light_seconds / 4);
-  for (std::uint32_t ordinal = 2; ordinal < 4; ++ordinal) {
-    const auto system_seed = derive_seed(seed, SeedDomain::system, ordinal);
-    const std::int64_t side = ordinal == 2 ? 1 : -1;
+  for (std::uint32_t ordinal = 2; ordinal < result.nodes.size(); ++ordinal) {
+    const auto system_seed =
+        derive_seed(ordinal < kFreedomSystemNetworkSize ? original_seed : seed,
+                    SeedDomain::system, ordinal);
+    const std::int64_t side = ordinal % 2 == 0 ? 1 : -1;
+    const auto perpendicular =
+        frame[ordinal < kFreedomSystemNetworkSize ? 1 : 2];
     const UniversePositionMetres point{
-        (h * frame[0].x + side * q * frame[1].x) * kMetresPerLightSecond,
-        (h * frame[0].y + side * q * frame[1].y) * kMetresPerLightSecond,
-        (h * frame[0].z + side * q * frame[1].z) * kMetresPerLightSecond};
+        (h * frame[0].x + side * q * perpendicular.x) * kMetresPerLightSecond,
+        (h * frame[0].y + side * q * perpendicular.y) * kMetresPerLightSecond,
+        (h * frame[0].z + side * q * perpendicular.z) * kMetresPerLightSecond};
     result.nodes[ordinal] = {ordinal, system_seed, SystemId{system_seed.value},
                              point};
   }
@@ -108,12 +128,21 @@ auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
         return std::unexpected{Error::invalid_network};
   }
   // All coordinates are exact integer light-seconds. h<=D/2 and q<=D/4:
-  // H-A/H-B/N-A/N-B <D, A-B<=D/2, and H-N==D. The minimum D>=172800ls
-  // also puts every link far outside two local-system boundaries.
+  // H-A/H-B/N-A/N-B <D, A-B<=D/2, and H-N==D. Recipe2's remaining-axis
+  // nodes have the same h/+/-q offsets: their mutual links are2q, and links
+  // across the two perpendicular axes are sqrt(2)*q. Thus all15 remain<=D.
+  // The minimum D>=172800ls also separates all nodes beyond two local systems.
   return result;
 }
 auto validate_freedom_system_network(const FreedomSystemNetwork& network)
     -> std::expected<void, Error> {
+  if (!freedom_system_network_version_supported(network.version))
+    return std::unexpected{Error::unsupported_version};
+  const auto size = network.version == kFreedomSystemNetworkVersion
+                        ? kFreedomSystemNetworkSize
+                        : kFreedomUnchartedSystemNetworkSize;
+  if (network.nodes.size() != size)
+    return std::unexpected{Error::invalid_network};
   const auto expected =
       generate_freedom_system_network(network.universe_seed, network.version);
   if (!expected) return std::unexpected{expected.error()};

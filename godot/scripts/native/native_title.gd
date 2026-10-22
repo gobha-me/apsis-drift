@@ -96,7 +96,8 @@ func _ready() -> void:
 	network_choice.add_item("Nearby systems")
 	network_choice.add_item("Four charted systems")
 	network_choice.add_item("Four systems + planetary charts")
-	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
+	network_choice.add_item("Four charted + two uncharted systems")
+	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The uncharted choice adds two generated systems found through Search nearby stars during flight. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
 	var drive_label := Label.new()
@@ -174,7 +175,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return

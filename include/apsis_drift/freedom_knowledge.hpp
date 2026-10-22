@@ -13,12 +13,32 @@ inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomNetworkKnowledgeVersion{4};
 inline constexpr std::uint32_t kFreedomPlanetaryKnowledgeVersion{5};
+inline constexpr std::uint32_t kFreedomUnchartedKnowledgeVersion{6};
+inline constexpr std::uint32_t kFreedomUnchartedStartingChartVersion{4};
+inline constexpr std::uint32_t kFreedomStarSearchVersion{1};
+inline constexpr std::uint32_t kFreedomStarSearchTicks{1200};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomPlanetaryStartingChartVersion{3};
 [[nodiscard]] constexpr auto freedom_knowledge_uses_network(
     std::uint32_t version) -> bool {
   return version == kFreedomNetworkKnowledgeVersion ||
-         version == kFreedomPlanetaryKnowledgeVersion;
+         version == kFreedomPlanetaryKnowledgeVersion ||
+         version == kFreedomUnchartedKnowledgeVersion;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_has_planetary_chart(
+    std::uint32_t version) -> bool {
+  return version == kFreedomPlanetaryKnowledgeVersion ||
+         version == kFreedomUnchartedKnowledgeVersion;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_network_version(
+    std::uint32_t version) -> std::uint32_t {
+  return version == kFreedomUnchartedKnowledgeVersion ? 2U : 1U;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_chart_version(
+    std::uint32_t version) -> std::uint32_t {
+  return version == kFreedomUnchartedKnowledgeVersion   ? 4U
+         : version == kFreedomPlanetaryKnowledgeVersion ? 3U
+                                                        : 2U;
 }
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
@@ -27,6 +47,7 @@ inline constexpr std::uint32_t kFreedomMoonSurfaceLandmarkVersion{1};
 inline constexpr std::size_t kMaximumFreedomSurfaceLandmarkInspections{64};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomNetworkKnowledgeFacts{256};
+inline constexpr std::size_t kMaximumFreedomUnchartedKnowledgeFacts{384};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyVersion{1};
 inline constexpr std::uint32_t kFreedomOrbitalSurveyTicks{3600};
@@ -91,6 +112,8 @@ struct FreedomKnowledgeRecipe {
   // stay origin-only; registration itself grants no observations. Version4
   // selects the explicit four-system domain2/chart2/topology2. Version5
   // additionally grants ordinary-planet identity/location through chart3.
+  // Version6/chart4 selects network2: the same four charted systems and two
+  // initially unknown systems whose anchors require actual stellar acquisition.
   std::uint32_t world_domain{};
   // Explicit recovery selection bounds historical craft provenance to the
   // admitted generations. Absence retains the exact starter-only contract.
@@ -211,6 +234,31 @@ struct FreedomFieldSampleState {
   friend auto operator==(const FreedomFieldSampleState&,
                          const FreedomFieldSampleState&) -> bool = default;
 };
+// Private acquisition target stays in the authoritative ledger; the native
+// progress view reveals no target identity or coordinates until completion.
+struct FreedomStarSearchAcquisition {
+  SystemId source, target;
+  StarterCraftId craft;
+  SimulationTick started_tick{}, last_tick{};
+  std::uint32_t acquired_ticks{};
+  friend auto operator==(const FreedomStarSearchAcquisition&,
+                         const FreedomStarSearchAcquisition&) -> bool = default;
+};
+struct FreedomStarSearchRecord {
+  SystemId source, target;
+  StarterCraftId craft;
+  SimulationTick started_tick{}, completed_tick{};
+  friend auto operator==(const FreedomStarSearchRecord&,
+                         const FreedomStarSearchRecord&) -> bool = default;
+};
+struct FreedomStarSearchState {
+  std::uint32_t version{kFreedomStarSearchVersion};
+  std::optional<FreedomStarSearchAcquisition> active;
+  // Acquisition order, at most two records; never a generated catalog dump.
+  std::vector<FreedomStarSearchRecord> completed;
+  friend auto operator==(const FreedomStarSearchState&,
+                         const FreedomStarSearchState&) -> bool = default;
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
@@ -222,6 +270,7 @@ struct FreedomKnowledge {
   // Explicit player-selected acquisition; absence preserves historical bytes.
   std::optional<FreedomOrbitalSurveyState> orbital_surveys{};
   std::optional<FreedomFieldSampleState> field_samples{};
+  std::optional<FreedomStarSearchState> star_search{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -242,7 +291,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_surface_marker,
   invalid_surface_landmarks,
   invalid_orbital_surveys,
-  invalid_field_samples
+  invalid_field_samples,
+  invalid_star_search
 };
 
 struct KnownIdentity {
@@ -332,6 +382,13 @@ struct FreedomKnownPlanetRow {
 [[nodiscard]] auto apply_freedom_knowledge(const FreedomKnowledge&,
                                            const KnowledgeEvidence&,
                                            SimulationTick now)
+    -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
+[[nodiscard]] auto begin_freedom_star_search(const FreedomKnowledge&, SystemId,
+                                             StarterCraftId, SimulationTick)
+    -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
+[[nodiscard]] auto advance_freedom_star_search(const FreedomKnowledge&,
+                                               SystemId, StarterCraftId,
+                                               SimulationTick, bool qualifying)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
 [[nodiscard]] auto query_freedom_knowledge(const FreedomKnowledge&,
                                            KnowledgeSubject, KnowledgeFact,

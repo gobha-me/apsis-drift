@@ -179,6 +179,25 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
          now.orbital_surveys->active->started_tick < loss_tick))
       return false;
   }
+  if (old.star_search &&
+      (!now.star_search ||
+       now.star_search->version != old.star_search->version ||
+       !retains(now.star_search->completed, old.star_search->completed)))
+    return false;
+  if (now.star_search) {
+    const auto retained_count =
+        old.star_search ? old.star_search->completed.size() : 0;
+    for (auto i = retained_count; i < now.star_search->completed.size(); ++i) {
+      const auto& record = now.star_search->completed[i];
+      if (record.craft != current || record.started_tick < loss_tick ||
+          record.completed_tick < loss_tick)
+        return false;
+    }
+    if (now.star_search->active &&
+        (now.star_search->active->craft != current ||
+         now.star_search->active->started_tick < loss_tick))
+      return false;
+  }
   // Inspections are append-only personal history. Unlike the editable marker,
   // replacement cannot clear a selection or rewrite an already recorded site.
   const auto same_site = [](const auto& a, const auto& b) {
@@ -485,6 +504,7 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   }
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
   if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();
+  if (knowledge.star_search) knowledge.star_search->active.reset();
   if (knowledge.field_samples) {
     knowledge.field_samples->carried.clear();
     knowledge.field_samples->carrier = *identity;

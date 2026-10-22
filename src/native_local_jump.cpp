@@ -10,7 +10,7 @@ auto NativeFreedomFlightSession::select_local_jump(BodyTarget target)
     -> std::expected<void, std::string> {
   if ((resources_ && resources_->drive) ||
       (knowledge_ &&
-       knowledge_->recipe.version == kFreedomPlanetaryKnowledgeVersion))
+       freedom_knowledge_has_planetary_chart(knowledge_->recipe.version)))
     return select_composed_local_jump(target);
   if (recovery_pending() ||
       (travel_ && travel_->phase != FreedomJumpPhase::idle))
@@ -346,6 +346,8 @@ auto NativeFreedomFlightSession::advance_local_jump(
         candidate.travel_->phase = FreedomJumpPhase::transit;
         candidate.docking_.reset();
         result.jump_committed = true;
+        if (candidate.knowledge_ && candidate.knowledge_->star_search)
+          candidate.knowledge_->star_search->active.reset();
       }
     }
   } else {

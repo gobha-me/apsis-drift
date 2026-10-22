@@ -280,11 +280,15 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   const auto drive_version = strained ? kFreedomStrainedDriveRecoveryVersion
                                       : kFreedomDriveRecoveryVersion;
   const auto knowledge_version = d.voyage.knowledge.recipe.version;
+  if (s.phase == FreedomJumpPhase::transit && d.voyage.knowledge.star_search &&
+      d.voyage.knowledge.star_search->active)
+    return std::unexpected{failure(
+        "Committed transit cannot retain unfinished stellar acquisition")};
   const bool knowledge_matches =
       recovering ? (knowledge_version == kFreedomTravelKnowledgeVersion ||
                     freedom_knowledge_uses_network(knowledge_version))
                  : (flight.origin.network &&
-                    knowledge_version == kFreedomPlanetaryKnowledgeVersion);
+                    freedom_knowledge_has_planetary_chart(knowledge_version));
   if ((!recovering && s.version != kFreedomComposedTravelStateVersion) ||
       !s.composed || s.local || s.prior_moon || s.origin_routes ||
       !s.next_attempt || !knowledge_matches ||
@@ -310,6 +314,16 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
       return std::unexpected{failure("Composed network unavailable")};
     network = *generated;
   }
+  const auto system_known_at = [&](SystemId id, SimulationTick tick) {
+    if (knowledge_version != kFreedomUnchartedKnowledgeVersion) return true;
+    const auto node = find_freedom_system_network_node(*network, id);
+    if (!node) return false;
+    if (node->ordinal < kFreedomSystemNetworkSize) return true;
+    const auto& search = d.voyage.knowledge.star_search;
+    return search && std::ranges::any_of(search->completed, [&](const auto& r) {
+             return r.target == id && r.completed_tick <= tick;
+           });
+  };
   const auto home_system =
       generate_physical_origin_system(flight.origin.recipe.universe_seed, 2);
   if (!home_system)
@@ -324,7 +338,8 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   const auto pair =
       generate_first_intersystem_identities(flight.origin.recipe.universe_seed);
   if (s.selected &&
-      (!flight.world || *s.selected == current->system ||
+      (!system_known_at(*s.selected, now) || !flight.world ||
+       *s.selected == current->system ||
        (network ? !find_freedom_system_network_node(*network, *s.selected)
                 : (*s.selected != pair.origin_system &&
                    *s.selected != pair.target_system))))
@@ -333,7 +348,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     bool allowed{};
     switch (c.active) {
       case FreedomComposedRouteKind::planet:
-        allowed = knowledge_version == kFreedomPlanetaryKnowledgeVersion &&
+        allowed = freedom_knowledge_has_planetary_chart(knowledge_version) &&
                   flight.world && c.selected_body->system == current->system &&
                   *c.selected_body != *current &&
                   known_planet(d.voyage.knowledge, *c.selected_body, now);
@@ -362,7 +377,8 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     const auto& f = *s.committed;
     const auto& r = f.preview.request;
     const auto& bill = *s.commitment_resources;
-    if (!validate_frozen_freedom_jump_arrival(f) ||
+    if (!system_known_at(r.destination, r.source.tick) ||
+        !validate_frozen_freedom_jump_arrival(f) ||
         r.version != (recovering ? kFreedomRecoveryJumpTargetingVersion
                                  : kFreedomNetworkJumpTargetingVersion) ||
         !f.preview.volume || !f.preview.volume->clear() ||
@@ -398,7 +414,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   }
   if (c.planet_committed) {
     const auto& f = *c.planet_committed;
-    if (knowledge_version != kFreedomPlanetaryKnowledgeVersion ||
+    if (!freedom_knowledge_has_planetary_chart(knowledge_version) ||
         f.version != (recovering ? kFreedomRecoveryPlanetJumpVersion
                                  : kFreedomPlanetJumpVersion) ||
         !validate_frozen_freedom_planet_jump_arrival(f) ||

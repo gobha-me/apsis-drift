@@ -144,6 +144,13 @@ struct NativeOrbitalSurveyView {
   std::optional<KnownLanding> result;
 };
 
+struct NativeStarSearchView {
+  bool selected{}, active{}, can_begin{};
+  std::uint32_t acquired_ticks{};
+  std::size_t completed{};
+  std::string note;
+};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -232,6 +239,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto cancel_orbital_survey()
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_view() const -> NativeOrbitalSurveyView;
+  [[nodiscard]] auto begin_star_search() -> std::expected<void, std::string>;
+  [[nodiscard]] auto cancel_star_search() -> std::expected<void, std::string>;
+  [[nodiscard]] auto star_search_view() const -> NativeStarSearchView;
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
@@ -432,6 +442,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_flight(const NativeFlightControls&,
                                     SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto star_search_conditions() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_star_search_tick()
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_orbital_survey_tick()

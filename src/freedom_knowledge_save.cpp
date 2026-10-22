@@ -287,6 +287,29 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"carried", std::move(carried)},
         {"journal", std::move(journal)}};
   }
+  if (k.star_search) {
+    const auto& search = *k.star_search;
+    Json active = nullptr;
+    if (search.active) {
+      const auto& item = *search.active;
+      active = {{"source", item.source.value},
+                {"target", item.target.value},
+                {"craft", item.craft.value},
+                {"started_tick", item.started_tick},
+                {"last_tick", item.last_tick},
+                {"acquired_ticks", item.acquired_ticks}};
+    }
+    Json completed = Json::array();
+    for (const auto& item : search.completed)
+      completed.push_back({{"source", item.source.value},
+                           {"target", item.target.value},
+                           {"craft", item.craft.value},
+                           {"started_tick", item.started_tick},
+                           {"completed_tick", item.completed_tick}});
+    root["star_search"] = {{"version", search.version},
+                           {"active", std::move(active)},
+                           {"completed", std::move(completed)}};
+  }
   auto text = root.dump(2) + '\n';
   const auto limit = freedom_knowledge_uses_network(r.version)
                          ? kMaximumFreedomNetworkKnowledgeBytes
@@ -309,12 +332,15 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("orbital_surveys");
   const bool samples_selected =
       root->is_object() && root->contains("field_samples");
+  const bool search_selected =
+      root->is_object() && root->contains("star_search");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
   if (moon_landmarks_selected) root_shape.erase("moon_surface_landmarks");
   if (surveys_selected) root_shape.erase("orbital_surveys");
   if (samples_selected) root_shape.erase("field_samples");
+  if (search_selected) root_shape.erase("star_search");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -322,7 +348,10 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   const bool network = r.contains("version") &&
                        r["version"].is_number_unsigned() &&
                        (r["version"] == kFreedomNetworkKnowledgeVersion ||
-                        r["version"] == kFreedomPlanetaryKnowledgeVersion);
+                        r["version"] == kFreedomPlanetaryKnowledgeVersion ||
+                        r["version"] == kFreedomUnchartedKnowledgeVersion);
+  const bool uncharted =
+      network && r["version"] == kFreedomUnchartedKnowledgeVersion;
   if (!network && text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
@@ -563,9 +592,48 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     }
     k.field_samples = std::move(state);
   }
+  if (search_selected) {
+    const auto& search = (*root)["star_search"];
+    if (!uncharted || !fields(search, {"version", "active", "completed"}) ||
+        !unsigned_fields(search, {"version"}) ||
+        search["version"] != kFreedomStarSearchVersion ||
+        !search["completed"].is_array() || search["completed"].size() > 2)
+      return std::unexpected{failure("invalid star search state")};
+    FreedomStarSearchState state;
+    if (!search["active"].is_null()) {
+      const auto& item = search["active"];
+      if (!fields(item, {"source", "target", "craft", "started_tick",
+                         "last_tick", "acquired_ticks"}) ||
+          !unsigned_fields(item, {"source", "target", "craft", "started_tick",
+                                  "last_tick", "acquired_ticks"}) ||
+          item["acquired_ticks"] >= kFreedomStarSearchTicks)
+        return std::unexpected{failure("invalid active star search")};
+      state.active = FreedomStarSearchAcquisition{
+          {item["source"].get<std::uint64_t>()},
+          {item["target"].get<std::uint64_t>()},
+          {item["craft"].get<std::uint64_t>()},
+          item["started_tick"].get<SimulationTick>(),
+          item["last_tick"].get<SimulationTick>(),
+          item["acquired_ticks"].get<std::uint32_t>()};
+    }
+    for (const auto& item : search["completed"]) {
+      if (!fields(item, {"source", "target", "craft", "started_tick",
+                         "completed_tick"}) ||
+          !unsigned_fields(item, {"source", "target", "craft", "started_tick",
+                                  "completed_tick"}))
+        return std::unexpected{failure("invalid completed star search")};
+      state.completed.push_back({{item["source"].get<std::uint64_t>()},
+                                 {item["target"].get<std::uint64_t>()},
+                                 {item["craft"].get<std::uint64_t>()},
+                                 item["started_tick"].get<SimulationTick>(),
+                                 item["completed_tick"].get<SimulationTick>()});
+    }
+    k.star_search = std::move(state);
+  }
   const auto& entries = (*root)["entries"];
-  const auto maximum_facts = network ? kMaximumFreedomNetworkKnowledgeFacts
-                                     : kMaximumFreedomKnowledgeFacts;
+  const auto maximum_facts = uncharted ? kMaximumFreedomUnchartedKnowledgeFacts
+                             : network ? kMaximumFreedomNetworkKnowledgeFacts
+                                       : kMaximumFreedomKnowledgeFacts;
   if (!entries.is_array() || entries.size() > maximum_facts)
     return std::unexpected{failure("invalid or oversized fact array")};
   for (const auto& e : entries) {
@@ -621,9 +689,9 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
           flight.origin.network.has_value() ||
       (flight.origin.network
            ? (r.world_domain != 2 ||
-              r.chart != (r.version == kFreedomPlanetaryKnowledgeVersion
-                              ? kFreedomPlanetaryStartingChartVersion
-                              : 2) ||
+              flight.origin.network->version !=
+                  freedom_knowledge_network_version(r.version) ||
+              r.chart != freedom_knowledge_chart_version(r.version) ||
               r.topology != 2)
            : ((r.version == kFreedomTravelKnowledgeVersion) !=
               (flight.world.has_value() || flight.moon.has_value() ||
@@ -640,6 +708,14 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
         flight.minor || active.system != system || !planet ||
         active.planet != *planet)
       return std::unexpected{failure("active orbital survey owner mismatch")};
+  }
+  if (d.knowledge.star_search && d.knowledge.star_search->active) {
+    const auto& active = *d.knowledge.star_search->active;
+    const auto system =
+        flight.world ? flight.world->system : flight.flight.frame.system;
+    if (active.craft != flight.origin.state.craft || flight.moon ||
+        flight.minor || active.source != system)
+      return std::unexpected{failure("active star search owner mismatch")};
   }
   return {};
 }

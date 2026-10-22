@@ -191,7 +191,7 @@ auto validate_freedom_save_document(const FreedomSaveDocument& document)
     return std::unexpected{error(SaveSchemaErrorCode::identity_mismatch,
                                  "$.recipe", "recipe does not match its seed")};
   if (document.network &&
-      (document.network->version != kFreedomNetworkSelectionVersion ||
+      (!freedom_system_network_version_supported(document.network->version) ||
        !generate_freedom_system_network(recipe.universe_seed,
                                         document.network->version)))
     return std::unexpected{error(SaveSchemaErrorCode::invalid_state,
@@ -426,11 +426,14 @@ auto decode_freedom_save_document_json(std::string_view json_text)
     if (auto valid = exact_fields(selected, {"version"}, "$.network"); !valid)
       return std::unexpected{valid.error()};
     if (!selected.at("version").is_number_unsigned() ||
-        selected.at("version") != kFreedomNetworkSelectionVersion)
+        selected.at("version") > std::numeric_limits<std::uint32_t>::max() ||
+        !freedom_system_network_version_supported(
+            selected.at("version").get<std::uint32_t>()))
       return std::unexpected{
           error(SaveSchemaErrorCode::unsupported_format_version,
                 "$.network.version", "unsupported network selection")};
-    document.network = FreedomNetworkSelection{};
+    document.network =
+        FreedomNetworkSelection{selected.at("version").get<std::uint32_t>()};
   }
   if (lineage) {
     const auto& selected = root.at("craft_lineage");

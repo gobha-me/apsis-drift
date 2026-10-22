@@ -155,8 +155,8 @@ auto NativeFreedomFlightSession::jump_selection_available(
   } else if (travel_->version != kFreedomTravelStateVersion &&
              !((travel_->version == kFreedomRecoveringTravelStateVersion ||
                 travel_->version == kFreedomStrainedTravelStateVersion ||
-                (knowledge_->recipe.version ==
-                     kFreedomPlanetaryKnowledgeVersion &&
+                (freedom_knowledge_has_planetary_chart(
+                     knowledge_->recipe.version) &&
                  travel_->version == kFreedomComposedTravelStateVersion)) &&
                travel_->composed)) {
     return std::unexpected{"Unsupported native travel selection"};
@@ -190,8 +190,8 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
   }
   auto candidate = *this;
   if ((candidate.resources_ && candidate.resources_->drive) ||
-      candidate.knowledge_->recipe.version ==
-          kFreedomPlanetaryKnowledgeVersion) {
+      freedom_knowledge_has_planetary_chart(
+          candidate.knowledge_->recipe.version)) {
     if (const auto prepared = candidate.prepare_composed_travel(); !prepared)
       return prepared;
     candidate.travel_->composed->active = FreedomComposedRouteKind::system;
@@ -459,6 +459,8 @@ auto NativeFreedomFlightSession::advance_jump(
         candidate.docking_.reset();
         // Port attachment ends here; the actual seated pilot does not.
         result.jump_committed = true;
+        if (candidate.knowledge_ && candidate.knowledge_->star_search)
+          candidate.knowledge_->star_search->active.reset();
       }
     }
   } else {

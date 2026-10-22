@@ -329,6 +329,10 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("stage_freedom_network_new_game", "universe_seed"),
         &FreedomBridge::stage_freedom_network_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_uncharted_network_new_game",
+                        "universe_seed"),
+        &FreedomBridge::stage_freedom_uncharted_network_new_game);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_planetary_network_new_game",
                         "universe_seed"),
         &FreedomBridge::stage_freedom_planetary_network_new_game);
@@ -459,6 +463,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("cancel_freedom_orbital_survey"),
         &FreedomBridge::cancel_freedom_orbital_survey);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_star_search"),
+                                &FreedomBridge::begin_freedom_star_search);
+    godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_star_search"),
+                                &FreedomBridge::cancel_freedom_star_search);
     godot::ClassDB::bind_method(godot::D_METHOD("mark_freedom_surface_marker"),
                                 &FreedomBridge::mark_freedom_surface_marker);
     godot::ClassDB::bind_method(
@@ -823,6 +831,11 @@ class FreedomBridge : public godot::RefCounted {
     return stage_freedom_new_game_selection(universe_seed,
                                             native_network_new_game);
   }
+  auto stage_freedom_uncharted_network_new_game(
+      const godot::String& universe_seed) -> bool {
+    return stage_freedom_new_game_selection(universe_seed,
+                                            native_uncharted_network_new_game);
+  }
   auto stage_freedom_planetary_network_new_game(
       const godot::String& universe_seed) -> bool {
     return stage_freedom_new_game_selection(universe_seed,
@@ -830,10 +843,14 @@ class FreedomBridge : public godot::RefCounted {
   }
   auto stage_freedom_jump_recovery_new_game(const godot::String& universe_seed,
                                             std::int64_t chart_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 2) {
+    if (chart_kind < 0 || chart_kind > 3) {
       last_error = "Unsupported starting chart choice";
       return false;
     }
+    if (chart_kind == 3)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_recovery_new_game(seed, 3); });
     if (chart_kind == 0)
       return stage_freedom_new_game_selection(
           universe_seed,
@@ -848,10 +865,14 @@ class FreedomBridge : public godot::RefCounted {
   }
   auto stage_freedom_jump_strain_new_game(const godot::String& universe_seed,
                                           std::int64_t chart_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 2) {
+    if (chart_kind < 0 || chart_kind > 3) {
       last_error = "Unsupported starting chart choice";
       return false;
     }
+    if (chart_kind == 3)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_strain_new_game(seed, 3); });
     if (chart_kind == 0)
       return stage_freedom_new_game_selection(
           universe_seed,
@@ -867,7 +888,7 @@ class FreedomBridge : public godot::RefCounted {
   auto stage_freedom_origin_assistance_new_game(
       const godot::String& universe_seed, std::int64_t chart_kind,
       std::int64_t drive_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 2 || drive_kind < 0 || drive_kind > 2) {
+    if (chart_kind < 0 || chart_kind > 3 || drive_kind < 0 || drive_kind > 2) {
       last_error = "Unsupported starting chart or drive choice";
       return false;
     }
@@ -1528,8 +1549,8 @@ class FreedomBridge : public godot::RefCounted {
     result["reason"] = "Planetary charts are not selected for this journey";
     if (!saved_flight) return result;
     const auto& session = saved_flight->session;
-    if (!session.knowledge() || session.knowledge()->recipe.version !=
-                                    kFreedomPlanetaryKnowledgeVersion)
+    if (!session.knowledge() || !freedom_knowledge_has_planetary_chart(
+                                    session.knowledge()->recipe.version))
       return result;
     if (session.moon() || session.minor()) {
       result["reason"] = "Return to planetary space before selecting a planet";
@@ -1664,6 +1685,16 @@ class FreedomBridge : public godot::RefCounted {
   auto cancel_freedom_orbital_survey() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.cancel_orbital_survey();
+    });
+  }
+  auto begin_freedom_star_search() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_star_search();
+    });
+  }
+  auto cancel_freedom_star_search() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.cancel_star_search();
     });
   }
   auto mark_freedom_surface_marker() -> bool {
@@ -2019,6 +2050,7 @@ class FreedomBridge : public godot::RefCounted {
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = project_moon_surface_walk_actor(selected);
     result["orbital_survey"] = project_orbital_survey(selected.session);
+    result["star_search"] = project_star_search(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
     godot::Dictionary surface;
@@ -2188,6 +2220,7 @@ class FreedomBridge : public godot::RefCounted {
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = godot::Dictionary{};
     result["orbital_survey"] = project_orbital_survey(selected.session);
+    result["star_search"] = project_star_search(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
     godot::Dictionary surface;
@@ -2651,6 +2684,18 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  static auto project_star_search(const NativeFreedomFlightSession& session)
+      -> godot::Dictionary {
+    const auto view = session.star_search_view();
+    godot::Dictionary result;
+    result["selected"] = view.selected;
+    result["active"] = view.active;
+    result["can_begin"] = view.can_begin;
+    result["acquired_ticks"] = static_cast<std::int64_t>(view.acquired_ticks);
+    result["completed"] = static_cast<std::int64_t>(view.completed);
+    result["note"] = godot::String{view.note.c_str()};
+    return result;
+  }
   static auto project_orbital_survey(const NativeFreedomFlightSession& session)
       -> godot::Dictionary {
     const auto view = session.orbital_survey_view();
@@ -2988,6 +3033,7 @@ class FreedomBridge : public godot::RefCounted {
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
       result["orbital_survey"] = project_orbital_survey(selected.session);
+      result["star_search"] = project_star_search(selected.session);
       result["surface_marker"] =
           project_surface_marker(selected, view.system_axes);
       result["surface_landmarks"] = project_surface_landmarks(selected, view);

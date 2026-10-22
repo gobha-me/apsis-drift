@@ -479,8 +479,140 @@ auto network_roundtrip(const std::filesystem::path& path) -> void {
         "Origin service replenishes the physically docked four-system craft");
   live = resume(live, path);
 }
+auto uncharted_roundtrip(const std::filesystem::path& path) -> void {
+  const Seed seed{42};
+  const auto network = need(generate_freedom_system_network(seed, 2));
+  auto live = need(NativeFreedomFlightSession::open(
+      need(native_uncharted_network_new_game(seed))));
+  check(live.document().origin.network == FreedomNetworkSelection{2} &&
+            live.knowledge()->recipe.version == 6 && live.walker() &&
+            live.docking()->attached && !live.star_search_view().can_begin,
+        "Explicit uncharted selection starts on the station, not in a "
+        "discovery fixture");
+  const auto initial =
+      need(encode_native_save_document_json(need(live.save_document())));
+  check(!live.begin_star_search() && need(encode_native_save_document_json(need(
+                                         live.save_document()))) == initial,
+        "Station search refusal preserves the exact selected journey");
+  for (unsigned t = 0; t < 1194; ++t)
+    need(live.advance_walk({0, -1, 0}));
+  need(live.begin_boarding());
+  for (SimulationTick t = 0; t < kGameplayBoardingTicks; ++t)
+    need(live.advance_walk({}));
+  need(live.release_port());
+  auto source =
+      std::get<FreedomKnowledgeSaveDocument>(need(live.save_document()));
+  auto& flight =
+      std::get<FreedomBoardingSaveDocument>(source.voyage.voyage.base)
+          .voyage.flight;
+  const auto home = need(find_local_system_planet(
+      live.system(), flight.origin.recipe.home_planet));
+  // Explicit saved-space placement; actual station walk/boarding is retained.
+  // Searches, jumps and final powered station capture below advance real ticks.
+  flight.flight.position_metres = {
+      0, 0, static_cast<double>(home->descriptor.radius.value) * 10000};
+  flight.flight.linear_velocity_metres_per_second = {};
+  flight.flight.angular_velocity_radians_per_second = {};
+  flight.flight = need(canonicalize_rigid_body_state(
+      RigidBodyWorldContext{live.system()}, flight.flight));
+  live = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(std::move(source)))));
+  const auto frozen =
+      need(encode_native_save_document_json(need(live.save_document())));
+  for (auto i : {4U, 5U})
+    check(!live.select_jump(network.nodes[i].system) &&
+              need(encode_native_save_document_json(
+                  need(live.save_document()))) == frozen,
+          "Guessed genuine but unobserved system IDs cannot select a native "
+          "jump");
+  for (unsigned discovery = 0; discovery < 2; ++discovery) {
+    const auto before = live.resources()->jump_charges;
+    need(live.begin_star_search());
+    for (unsigned t = 0; t < kFreedomStarSearchTicks; ++t) {
+      need(live.advance({}));
+      if (t == 599) {
+        const auto text =
+            need(encode_native_save_document_json(need(live.save_document())));
+        auto copy = need(
+            NativeFreedomFlightSession::open(need(native_select_save_document(
+                need(decode_native_save_document_json(text))))));
+        check(copy.star_search_view().acquired_ticks == 600 &&
+                  need(encode_native_save_document_json(
+                      need(copy.save_document()))) == text,
+              "Partial stellar search survives actual native Save/Continue "
+              "exactly");
+        if (discovery == 0) {
+          need(copy.select_jump(network.nodes[1].system));
+          need(copy.begin_jump());
+          need(copy.advance({}));
+          check(copy.star_search_view().active &&
+                    copy.star_search_view().acquired_ticks == 600,
+                "Uncommitted spool holds an unfinished stellar search");
+          need(copy.cancel_jump());
+          auto committing = copy;
+          need(committing.begin_jump());
+          for (SimulationTick n = 0; n < kJumpSpoolTicks; ++n)
+            need(committing.advance({}));
+          check(!committing.star_search_view().active &&
+                    committing.resources()->jump_charges == 2,
+                "Actual jump commitment discards unfinished acquisition");
+          auto malformed = need(committing.travel_document());
+          malformed.voyage.knowledge.star_search->active =
+              copy.knowledge()->star_search->active;
+          const auto forged = malformed;
+          check(!validate_freedom_travel_document(malformed) &&
+                    !encode_freedom_travel_document_json(malformed) &&
+                    malformed == forged,
+                "Continue refuses restored precommit search in genuine "
+                "committed transit");
+        }
+        live = std::move(copy);
+      }
+    }
+    const auto& search = *live.knowledge()->star_search;
+    check(!search.active && search.completed.size() == discovery + 1 &&
+              live.resources()->jump_charges == before,
+          "Search completes on real flight ticks without spending jump fuel");
+    const auto target = search.completed.back().target;
+    const auto unseen = need(resolve_freedom_network_system(network, target));
+    for (const auto& body : unseen.catalog.planets)
+      check(
+          !need(query_freedom_knowledge(
+              *live.knowledge(),
+              {KnowledgeSubjectKind::planet, target, body.descriptor.id.value},
+              KnowledgeFact::identity_type, live.document().flight.tick)),
+          "Stellar fix grants no remote planetary identities");
+    need(live.select_jump(target));
+    leg(live, path);
+    check(live.system() == unseen &&
+              live.resources()->jump_charges == before - 1 &&
+              !live.replenish_resources(),
+          "Actual charged arrival installs the generated previously unknown "
+          "catalog without service");
+  }
+  check(!live.begin_star_search() && live.star_search_view().completed == 2,
+        "Exhausted finite search cannot reroll contacts");
+  need(live.select_jump(network.nodes[0].system));
+  leg(live, path);
+  check(live.resources()->jump_charges == 0,
+        "Home to uncharted X to uncharted Y to Home spends exactly three "
+        "charges");
+  const auto fuel = live.resources()->flight_quanta;
+  check(origin_route_reuse_fixture::capture_home(live) > 0 &&
+            live.resources()->flight_quanta < fuel && live.docking()->attached,
+        "The empty drive returns by physical fuelled station capture");
+  need(live.replenish_resources());
+  check(live.resources()->jump_charges == 3 &&
+            live.knowledge()->star_search->completed.size() == 2,
+        "Physical Origin service restores charges while discoveries remain "
+        "recorded");
+  live = resume(live, path);
+}
 } // namespace
-auto main() -> int {
+auto main(int argc, char** argv) -> int {
+  const bool uncharted =
+      argc == 2 && std::string_view{argv[1]} == "--uncharted";
+  if (argc != 1 && !uncharted) return 2;
   const auto directory =
       std::filesystem::temp_directory_path() /
       ("apsis-native-jump-" +
@@ -488,6 +620,12 @@ auto main() -> int {
            std::chrono::steady_clock::now().time_since_epoch().count()));
   try {
     std::filesystem::create_directories(directory);
+    if (uncharted) {
+      uncharted_roundtrip(directory / "uncharted.json");
+      std::filesystem::remove_all(directory);
+      std::cout << checks << " uncharted native checks\n";
+      return failures ? 1 : 0;
+    }
     network_roundtrip(directory / "network.json");
     invalid(directory / "phase.json");
     station_selection(directory / "phase.json");

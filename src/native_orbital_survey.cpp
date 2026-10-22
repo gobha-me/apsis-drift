@@ -205,9 +205,11 @@ auto NativeFreedomFlightSession::advance_orbital_survey_tick()
 auto NativeFreedomFlightSession::advance_player(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
-  if (!knowledge_ || !knowledge_->orbital_surveys ||
-      !knowledge_->orbital_surveys->active)
-    return advance_flight(controls, step);
+  const bool survey = knowledge_ && knowledge_->orbital_surveys &&
+                      knowledge_->orbital_surveys->active;
+  const bool stars =
+      knowledge_ && knowledge_->star_search && knowledge_->star_search->active;
+  if (!survey && !stars) return advance_flight(controls, step);
   // Only this outer transaction counts a committed flight interval. Recursive
   // frame/impact/aid integration cannot count twice, and a refused acquisition
   // cannot commit a partial physical step.
@@ -215,6 +217,8 @@ auto NativeFreedomFlightSession::advance_player(
   auto result = candidate.advance_flight(controls, step);
   if (!result) return std::unexpected{result.error()};
   if (auto acquired = candidate.advance_orbital_survey_tick(); !acquired)
+    return std::unexpected{acquired.error()};
+  if (auto acquired = candidate.advance_star_search_tick(); !acquired)
     return std::unexpected{acquired.error()};
   *this = std::move(candidate);
   return result;

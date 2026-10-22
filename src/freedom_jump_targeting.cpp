@@ -204,7 +204,8 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
        r.version != kFreedomNetworkJumpTargetingVersion) ||
       (r.version == kFreedomNetworkJumpTargetingVersion) !=
           r.network.has_value() ||
-      (r.network && r.network->version != kFreedomSystemNetworkVersion))
+      (r.network &&
+       !freedom_system_network_version_supported(r.network->version)))
     return std::unexpected{Error::unsupported_policy};
   if (!r.attempt) return std::unexpected{Error::invalid_attempt};
   if (r.profile != IntersystemRuleProfile::assisted &&

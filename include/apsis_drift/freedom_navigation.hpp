@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "apsis_drift/freedom_resources.hpp"
 #include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/universe_navigation.hpp"
@@ -22,7 +24,8 @@ namespace apsis_drift {
 [[nodiscard]] auto resolve_freedom_network_chart(
     const FreedomSystemNetwork&, SystemId current_system,
     const FreedomResources&, bool selection_open = true,
-    const FreedomSaveDocument* instance_owner = nullptr)
+    const FreedomSaveDocument* instance_owner = nullptr,
+    std::span<const SystemId> acquired_systems = {})
     -> std::expected<UniverseNavigationView, UniverseNavigationError>;
 
 } // namespace apsis_drift

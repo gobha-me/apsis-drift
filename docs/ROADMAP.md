@@ -106,6 +106,14 @@ retains the existing charge rules and composes prior route receipts. This is the
 bounded implementation scope selected on 2026-10-21;
 existing journeys and the broader deferred horizon keep their meanings.
 
+On 2026-10-22 the owner selected **discovering and visiting uncharted generated
+systems** ([#672](https://github.com/gobha-me/apsis-drift/issues/672)). The bounded
+[discoverable region](FREEDOM_TOPOLOGY.md#discoverable-systems) keeps four charted
+systems and adds two initially unknown generated systems. Stellar acquisition
+uses real flight ticks; actual charged jumps and local observations earn visits
+and planetary knowledge. Existing journeys, resources and drive rules retain
+their meanings. Probes, relays and the wider #207 horizon remain separate.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

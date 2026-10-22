@@ -1,9 +1,9 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <vector>
 
 #include "apsis_drift/physical_local_system.hpp"
 #include "apsis_drift/universe_navigation.hpp"
@@ -12,6 +12,14 @@ namespace apsis_drift {
 // Explicit new selection only. Legacy pair generation and saves stay version1.
 inline constexpr std::uint32_t kFreedomSystemNetworkVersion{1};
 inline constexpr std::size_t kFreedomSystemNetworkSize{4};
+inline constexpr std::uint32_t kFreedomUnchartedSystemNetworkVersion{2};
+inline constexpr std::size_t kFreedomUnchartedSystemNetworkSize{6};
+
+[[nodiscard]] constexpr auto freedom_system_network_version_supported(
+    std::uint32_t version) -> bool {
+  return version == kFreedomSystemNetworkVersion ||
+         version == kFreedomUnchartedSystemNetworkVersion;
+}
 
 struct FreedomSystemNetworkNode {
   std::uint32_t ordinal{};
@@ -25,8 +33,10 @@ struct FreedomSystemNetwork {
   std::uint32_t version{kFreedomSystemNetworkVersion};
   Seed universe_seed;
   Seed network_seed;
-  // Stable Home, original neighbor, added2, added3 order; no mutable discovery.
-  std::array<FreedomSystemNetworkNode, kFreedomSystemNetworkSize> nodes;
+  // Stable Home, original neighbor, added2..5 order; no mutable discovery.
+  // Admission requires exact canonical equality and size4/6, before lookup or
+  // coordinate arithmetic. Recipe1's default remains the original four nodes.
+  std::vector<FreedomSystemNetworkNode> nodes;
   friend auto operator==(const FreedomSystemNetwork&,
                          const FreedomSystemNetwork&) -> bool = default;
 };
