@@ -245,6 +245,8 @@ func setup_controls() -> void:
 	controls_menu = PauseMenu.new()
 	controls_menu.controls = player_input
 	controls_menu.saved_flight = true
+	controls_menu.observations_query = Callable(bridge, "get_freedom_observations")
+	controls_menu.exploration_notes_query = func(): return preload("res://scripts/native/exploration_notes.gd").read_bridge(bridge)
 	controls_menu.saved_wayfarer = supports_surface_controls()
 	controls_menu.ship_audio_available = ship_audio != null
 	controls_menu.audio_preferences = audio_preferences

@@ -120,7 +120,7 @@ class NativeCiTest(unittest.TestCase):
                             ("arrival", "approach", "withdraw", "home")}
                     if family == "derelict_saves":
                         row["files_sha256"] = {n + ".json": SHA for n in
-                            ("station", "approach", "contact", "near", "inspection")}
+                            ("station", "approach", "contact", "near", "inspection", "recovered")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",

@@ -131,6 +131,14 @@ inspected exposure. **Sample pouch** shows its source and retained field notes;
 Discard frees one of four slots. See [hand specimens](FREEDOM_SURFACE_LANDMARKS.md#hand-specimens)
 for persistence and replacement rules.
 
+**Recorded observations** is available at the station and in planetary, Moon
+and asteroid controls. After the body records, its pages include retained
+specimen notes and any acquired derelict contact/history. A collection page
+distinguishes a currently carried specimen from its first-collection note;
+discard or recovery does not erase that note. The archive shows retained
+information, without operating sensors or providing a remote moving position.
+Back returns to paused controls.
+
 ## Save and report problems
 
 [Save / Save As, Load and Continue](NATIVE_PROFILES.md) persist the actor, craft,

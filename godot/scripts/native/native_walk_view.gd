@@ -424,6 +424,7 @@ func build_ui() -> void:
 	observations_view = preload("res://scripts/native/recorded_observations.gd").new()
 	observations_view.controls = preferences_provider
 	observations_view.query = Callable(bridge, "get_freedom_observations")
+	observations_view.notes_query = func(): return preload("res://scripts/native/exploration_notes.gd").read_bridge(bridge)
 	observations_view.back_requested.connect(close_observations)
 	add_child(observations_view)
 	# The station owns device/focus filtering before forwarding reader scrolling.

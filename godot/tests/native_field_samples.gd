@@ -15,6 +15,24 @@ func save_bytes(owner: Variant, name: String) -> PackedByteArray:
 	if not check(owner.save_freedom_as(path), "Save refused: " + str(owner.get_last_error())): return PackedByteArray()
 	return FileAccess.get_file_as_bytes(path)
 
+func check_archive(tree: SceneTree, view: Control, owner: Variant, expected: PackedByteArray, sample: Dictionary, carried: bool, label: String) -> void:
+	if not check(view.controls_menu.observations_button != null, "Companion/planet controls omit the archive"): return
+	var facts: Dictionary = owner.get_freedom_observations()
+	view.controls_menu.show_observations()
+	var reader: Control = view.controls_menu.observations_view
+	if not check(reader.visible and view.paused and reader.readings == facts, "Archive lost pause or displaced actual recorded facts"): return
+	var found := false
+	for index in reader.titles().size():
+		if sample.label in reader.body.text and str(sample.source_name) in reader.body.text:
+			found = true
+			break
+		reader.next_button.pressed.emit()
+	await tree.process_frame
+	check(found and ("Specimen carried." if carried else "Specimen not carried.") in reader.body.text and ("ship time %.1f s" % (float(sample.tick) / 120.0)) in reader.body.text, "Actual retained note lost source, carrying status or first provenance")
+	check(save_bytes(owner, "archive-" + label) == expected, "Reading exploration notes changed the complete voyage")
+	reader.back_button.pressed.emit()
+	check(view.paused and not reader.visible and view.controls_menu.observations_button.has_focus(), "Archive Back resumed flight or lost invoking focus")
+
 static func saved_knowledge(bytes: PackedByteArray) -> Dictionary:
 	var value: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 	for depth in 16:
@@ -91,6 +109,7 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	check(owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and view.paused and view.sample_collect_button.disabled, "Collection changed clock/actor/craft/resources/facts or left duplicate collection enabled")
 	var notes: Array = collected.journal.duplicate(true)
 	var first_metadata: Dictionary = saved_knowledge(first).field_samples
+	await check_archive(tree, view, owner, first, notes[0], true, "collected")
 	check(not owner.get_freedom_field_sample_availability(site_id).get("available", true) and not owner.collect_freedom_field_sample(site_id) and save_bytes(owner, "duplicate") == first, "Duplicate specimen was admitted or changed full saved bytes")
 	await activate.call(view, view.sample_pouch_button, false)
 	check(reader.visible and reader.heading.text == "FIELD SAMPLES" and collected.carried[0].label in reader.body.text and collected.carried[0].source_name in reader.body.text and reader.back_button.has_focus() and save_bytes(owner, "reader") == first, "Populated pouch reader changed the voyage or omitted truthful source text")
@@ -108,6 +127,7 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	view.player_input.install()
 	var discarded: Dictionary = owner.get_freedom_field_samples()
 	var discarded_bytes := save_bytes(owner, "discarded")
+	await check_archive(tree, view, owner, discarded_bytes, notes[0], false, "discarded")
 	if not check(discarded.selected and discarded.carried.is_empty() and discarded.journal == notes and saved_knowledge(discarded_bytes).field_samples.journal == first_metadata.journal and not view.sample_collect_button.disabled and owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations, "Controller Discard lost first notes, changed physics, or failed to free the slot"): return
 	var source: Dictionary = collected.carried[0]
 	if not check(peer.discard_freedom_field_sample(source.system_id, source.body_kind, source.body_id, source.site_id) and peer.save_freedom_as(expected_path) and FileAccess.get_file_as_bytes(expected_path) == discarded_bytes, "Controls Discard differs from the complete direct C++ result"): return
@@ -121,3 +141,4 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	view.set_process(false)
 	await tree.process_frame
 	check(view.paused and view.surface_walking() and owner.get_freedom_field_samples() == recollected and owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and save_bytes(owner, "continued") == final_bytes, "Continue changed actual specimens/first notes/actor/state or complete Save bytes")
+	await check_archive(tree, view, owner, final_bytes, notes[0], true, "continued")
