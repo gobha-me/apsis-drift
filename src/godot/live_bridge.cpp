@@ -275,7 +275,10 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomConditionSaveDocument>(selected.document))
+        std::holds_alternative<FreedomConditionSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomAssistanceSaveDocument>(
+            selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -338,6 +341,16 @@ class FreedomBridge : public godot::RefCounted {
                         "chart_kind"),
         &FreedomBridge::stage_freedom_jump_strain_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_origin_assistance_new_game",
+                        "universe_seed", "chart_kind", "drive_kind"),
+        &FreedomBridge::stage_freedom_origin_assistance_new_game);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("request_freedom_origin_assistance"),
+        &FreedomBridge::request_freedom_origin_assistance);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("cancel_freedom_origin_assistance"),
+        &FreedomBridge::cancel_freedom_origin_assistance);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_continue", "save_path"),
         &FreedomBridge::stage_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("stage_freedom_recovery"),
@@ -385,6 +398,9 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::begin_freedom_disembarking);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_boarding_state"),
                                 &FreedomBridge::get_freedom_boarding_state);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_origin_assistance_state"),
+        &FreedomBridge::get_freedom_origin_assistance_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_observations"),
@@ -757,6 +773,8 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomConditionSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomAssistanceSaveDocument>(
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
@@ -846,9 +864,33 @@ class FreedomBridge : public godot::RefCounted {
         universe_seed,
         +[](Seed seed) { return native_jump_strain_new_game(seed, 2); });
   }
-  auto stage_freedom_new_game_selection(
-      const godot::String& universe_seed,
-      std::expected<NativeStartup, std::string> (*factory)(Seed)) -> bool {
+  auto stage_freedom_origin_assistance_new_game(
+      const godot::String& universe_seed, std::int64_t chart_kind,
+      std::int64_t drive_kind) -> bool {
+    if (chart_kind < 0 || chart_kind > 2 || drive_kind < 0 || drive_kind > 2) {
+      last_error = "Unsupported starting chart or drive choice";
+      return false;
+    }
+    return stage_freedom_new_game_selection(
+        universe_seed, [chart_kind, drive_kind](Seed seed) {
+          return native_origin_assistance_new_game(
+              seed, static_cast<std::uint32_t>(chart_kind),
+              static_cast<std::uint32_t>(drive_kind));
+        });
+  }
+  auto request_freedom_origin_assistance() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.request_origin_assistance();
+    });
+  }
+  auto cancel_freedom_origin_assistance() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.cancel_origin_assistance();
+    });
+  }
+  template <class Factory>
+  auto stage_freedom_new_game_selection(const godot::String& universe_seed,
+                                        Factory factory) -> bool {
     try {
       if (pending)
         throw std::invalid_argument("A Freedom start is already pending");
@@ -2903,7 +2945,7 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
-  static auto project_flight_state(const SavedFlightWorld& selected)
+  static auto project_player_flight_state(const SavedFlightWorld& selected)
       -> godot::Dictionary {
     godot::Dictionary result;
     try {
@@ -3408,6 +3450,189 @@ class FreedomBridge : public godot::RefCounted {
         result["optics"] = optics;
       }
 
+    } catch (const std::exception&) {
+      result.clear();
+    }
+    return result;
+  }
+
+  static auto service_owner(const NativeFreedomFlightSession& session)
+      -> const OriginServiceCraftState& {
+    return *std::visit(
+        [](const auto& value) -> const OriginServiceCraftState* {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_same_v<T, OriginServiceCraftState>)
+            return &value;
+          else if constexpr (std::is_same_v<T, OriginServiceSortie>)
+            return &value.service;
+          else
+            return &value.last.service;
+        },
+        *session.origin_assistance());
+  }
+  static auto project_origin_service_status(
+      const NativeFreedomFlightSession& session, bool assess_request = false)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    result["selected"] = session.origin_assistance().has_value();
+    if (!session.origin_assistance()) return result;
+    const auto& service = service_owner(session);
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["craft_id"] = decimal(service.descriptor.id.value);
+    result["reserved_port"] =
+        static_cast<std::int64_t>(service.descriptor.home_port.ordinal);
+    result["cargo_quanta"] = decimal(service.resources.cargo_quanta);
+    result["delivered_quanta"] =
+        decimal(service.delivery ? service.delivery->delivered_quanta : 0);
+    result["jump_charges"] =
+        static_cast<std::int64_t>(service.resources.jump_charges);
+    result["cargo_fraction"] =
+        static_cast<double>(service.resources.cargo_quanta) /
+        static_cast<double>(service.descriptor.cargo_capacity_quanta);
+    result["phase"] = "Stationed at D2";
+    result["cancel_available"] = false;
+    if (const auto* sortie =
+            std::get_if<OriginServiceSortie>(&*session.origin_assistance())) {
+      constexpr std::array names{
+          "Request accepted",        "Leaving Origin",
+          "Jumping to beacon",       "In transit to beacon",
+          "Approaching your ship",   "Delivering fuel",
+          "Withdrawing from beacon", "Jumping home",
+          "In transit home",         "Approaching Origin",
+          "Returned to D2",          "Canceled at D2"};
+      result["phase"] = names.at(static_cast<std::size_t>(sortie->phase));
+      result["cancel_available"] =
+          !sortie->return_requested &&
+          sortie->phase != OriginServiceSortiePhase::completed &&
+          sortie->phase != OriginServiceSortiePhase::canceled;
+      if (sortie->return_requested && !service.attached)
+        result["phase"] = "Returning · request canceled";
+    }
+    if (const auto* unavailable = std::get_if<OriginServiceUnavailable>(
+            &*session.origin_assistance())) {
+      result["phase"] = "Service unavailable · last contact " +
+                        decimal(unavailable->last.service.body.tick);
+      result["cancel_available"] = false;
+    }
+    result["request_available"] = false;
+    result["refusal"] = "";
+    if (assess_request) {
+      const auto available = session.origin_assistance_available();
+      result["request_available"] = available.has_value();
+      if (!available)
+        result["refusal"] = godot::String{available.error().c_str()};
+    }
+    return result;
+  }
+  auto get_freedom_origin_assistance_state() const -> godot::Dictionary {
+    return saved_flight
+               ? project_origin_service_status(saved_flight->session, true)
+               : godot::Dictionary{};
+  }
+  static auto project_origin_service_craft(
+      const NativeFreedomFlightSession& session) -> godot::Dictionary {
+    godot::Dictionary packet;
+    if (!session.origin_assistance()) return packet;
+    const auto* world = session.origin_assistance_world();
+    if (!world) throw std::invalid_argument("Missing service world context");
+    const auto& service = service_owner(session);
+    packet["version"] = std::int64_t{1};
+    packet["craft_id"] =
+        godot::String{std::to_string(service.descriptor.id.value).c_str()};
+    packet["visible"] = false;
+    packet["position"] = godot::Vector3{};
+    packet["basis"] = godot::Basis{};
+    const auto coordinates = [](RigidVector3 value) {
+      godot::PackedFloat64Array result;
+      for (const auto v : {value.x, value.y, value.z})
+        result.append(v);
+      return result;
+    };
+    godot::Dictionary force;
+    force["mode"] = "freedom_flight";
+    force["frame_id"] = "2";
+    force["attached"] = service.attached;
+    const auto& applied = session.origin_assistance_propulsion();
+    force["positive_force_body"] = coordinates(applied.positive_force_newtons);
+    force["negative_force_body"] = coordinates(applied.negative_force_newtons);
+    const auto frame = require(resolve_craft_frame(service.body.craft));
+    godot::PackedFloat64Array positive, negative;
+    for (const auto value : frame.properties.positive_force_newtons)
+      positive.append(value);
+    for (const auto value : frame.properties.negative_force_newtons)
+      negative.append(value);
+    force["positive_force_ratings"] = positive;
+    force["negative_force_ratings"] = negative;
+    packet["propulsion"] = force;
+    if (std::holds_alternative<OriginServiceUnavailable>(
+            *session.origin_assistance()))
+      return packet;
+    if (const auto* sortie =
+            std::get_if<OriginServiceSortie>(&*session.origin_assistance());
+        sortie && (sortie->phase == OriginServiceSortiePhase::outward_transit ||
+                   sortie->phase == OriginServiceSortiePhase::return_transit))
+      return packet;
+    if (session.minor() ||
+        session.system().catalog.id != world->origin().catalog.id)
+      return packet;
+    const bool service_on_moon =
+        service.body.frame.kind == RigidFrameKind::body_relative_inertial;
+    if (service_on_moon != session.moon().has_value()) return packet;
+    const auto player = require(session.relative_state());
+    std::array<LocalPositionMetres, 3> axes;
+    RigidBodyState observed = service.body;
+    if (session.moon()) {
+      if (session.moon()->body != world->moon().body ||
+          observed.frame != player.frame)
+        return packet;
+      axes = project_saved_moon_flight(session).system_axes;
+    } else {
+      const auto station =
+          generate_origin_station(service.descriptor.universe_seed);
+      if (player.frame.planet != station.orbit.host_planet) return packet;
+      observed = require(
+          reframe_rigid_body(RigidBodyWorldContext{world->origin(), &station},
+                             service.body, {player.frame, player.tick}));
+      axes = project_saved_flight(session).system_axes;
+    }
+    const auto local = [&](RigidVector3 value) {
+      return godot::Vector3{
+          static_cast<godot::real_t>(axes[0].east * value.x +
+                                     axes[1].east * value.y +
+                                     axes[2].east * value.z),
+          static_cast<godot::real_t>(axes[0].up * value.x +
+                                     axes[1].up * value.y +
+                                     axes[2].up * value.z),
+          static_cast<godot::real_t>(-(axes[0].north * value.x +
+                                       axes[1].north * value.y +
+                                       axes[2].north * value.z))};
+    };
+    packet["position"] =
+        local({observed.position_metres.x - player.position_metres.x,
+               observed.position_metres.y - player.position_metres.y,
+               observed.position_metres.z - player.position_metres.z});
+    godot::Basis basis;
+    for (int i = 0; i < 3; ++i) {
+      const auto direction = rotate_saved(
+          observed.orientation,
+          {i == 0 ? 1.0 : 0.0, i == 1 ? 1.0 : 0.0, i == 2 ? 1.0 : 0.0});
+      basis.set_column(i, local({direction.x, direction.y, direction.z}));
+    }
+    packet["basis"] = basis;
+    packet["visible"] = true;
+    return packet;
+  }
+  static auto project_flight_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    auto result = project_player_flight_state(selected);
+    if (result.is_empty() || !selected.session.origin_assistance())
+      return result;
+    try {
+      auto status = project_origin_service_status(selected.session);
+      status["craft"] = project_origin_service_craft(selected.session);
+      result["origin_service"] = status;
     } catch (const std::exception&) {
       result.clear();
     }

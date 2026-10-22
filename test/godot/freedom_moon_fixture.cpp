@@ -4,6 +4,7 @@
 // velocity, fuel, clock or world is assigned from it. Partial outputs on any
 // refusal remain evidence; never silently substitute a supported ground start.
 #include "../moon_contact_fixture.hpp"
+#include "apsis_drift/freedom_assistance_save.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/save_file.hpp"
 
@@ -245,6 +246,94 @@ auto phase(const std::filesystem::path& directory,
             << (s.surface_walker() ? s.surface_walker()->heading_radians : 0)
             << '\n';
 }
+template <class T>
+auto service_knowledge(T& value) -> FreedomKnowledgeSaveDocument& {
+  if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+    return value;
+  else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
+    return value.voyage;
+  else if constexpr (std::is_same_v<T, FreedomSurfaceWalkSaveDocument>)
+    return service_knowledge(value.voyage);
+  else
+    return std::visit(
+        [](auto& inner) -> FreedomKnowledgeSaveDocument& {
+          return service_knowledge(inner);
+        },
+        value.voyage);
+}
+auto service_checkpoints(const std::filesystem::path& directory,
+                         const NativeFreedomFlightSession& actual_landed)
+    -> void {
+  const auto original = bytes(actual_landed);
+  check(actual_landed.moon() && actual_landed.surface() &&
+            actual_landed.surface()->moon_landed,
+        "Service sidecars require the genuine already flown landing");
+  auto saved = need(actual_landed.save_document());
+  auto voyage = std::visit(
+      [](const auto& value) -> FreedomAssistanceVoyage {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_constructible_v<FreedomAssistanceVoyage, T>)
+          return value;
+        else
+          throw std::runtime_error(
+              "Service sidecar needs a complete existing typed voyage");
+      },
+      saved);
+  // LABELLED metadata fixture: only flight fuel becomes0 and one initial
+  // source-bound station actor is explicitly selected at the SAME clock.
+  // No flown exhaustion, historical auto-adoption or NPC arrival is claimed.
+  std::visit(
+      [](auto& value) {
+        service_knowledge(value).voyage.resources.flight_quanta = 0;
+      },
+      voyage);
+  const auto world = need(make_origin_assistance_world_context(
+      actual_landed.document().origin.recipe.universe_seed));
+  const auto actor = need(initialize_origin_service_craft(
+      world.origin(), actual_landed.document().flight.tick));
+  FreedomAssistanceSaveDocument selected{1, std::move(voyage), actor};
+  auto service = need(NativeFreedomFlightSession::open(need(
+      native_select_save_document(NativeSaveDocument{std::move(selected)}))));
+  phase(directory, service, "service-landed");
+  const auto initial = service.document();
+  const auto resource = *service.resources();
+  need(service.request_origin_assistance());
+  check(
+      service.document() == initial && *service.resources() == resource,
+      "Real service request is zero-time and does not alter player fuel/state");
+  phase(directory, service, "service-requested");
+  const auto per_tick = actor.descriptor.transfer_quanta_per_tick;
+  const auto target = per_tick * 600;
+  unsigned ticks{};
+  for (; ticks < 60000; ++ticks) {
+    need(service.advance({}));
+    const auto* sortie =
+        std::get_if<OriginServiceSortie>(&*service.origin_assistance());
+    if (!sortie)
+      throw std::runtime_error(
+          "Service route became unavailable before partial delivery");
+    if (sortie->service.delivery) {
+      const auto delivered = sortie->service.delivery->delivered_quanta;
+      check(delivered <= target,
+            "Partial sidecar must stop at exactly600actual credits");
+      if (delivered == target) {
+        check(sortie->phase == OriginServiceSortiePhase::delivering &&
+                  service.resources()->flight_quanta == target &&
+                  sortie->service.body.tick == service.document().flight.tick,
+              "Partial delivery retains real same-clock NPC/player fuel "
+              "evidence");
+        phase(directory, service, "service-partial600");
+        break;
+      }
+    }
+  }
+  check(ticks < 60000, "Bounded real service route reaches partial600 without "
+                       "a fallback fixture");
+  check(bytes(actual_landed) == original,
+        "Service sidecars preserve the original actual landed source exactly");
+  std::cout << "SERVICE SIDECARS actual_ticks=" << ticks + 1
+            << " credits=600 · labelled initial zero-fuel metadata only\n";
+}
 auto integration(const std::filesystem::path& directory) -> int {
   const auto started = std::chrono::steady_clock::now();
   if (!std::filesystem::create_directory(directory))
@@ -313,6 +402,7 @@ auto integration(const std::filesystem::path& directory) -> int {
       contact_detail(s);
       phase(directory, previous, "touchdown-source");
       phase(directory, s, "landed");
+      const auto service_source = s;
       s = continued(s);
       need(s.begin_surface_walk());
       s = continued(s);
@@ -355,6 +445,9 @@ auto integration(const std::filesystem::path& directory) -> int {
       std::cout << "COMPLETE real route landing/walk/return/ascent clocks and "
                    "complete Save/Continue preserved checks="
                 << checks << '\n';
+      // Existing eight phase exports and original report precede this bounded
+      // sidecar branch; the original live route is never modified by it.
+      service_checkpoints(directory, service_source);
       return 0;
     }
     if (distance < 1 && s.surface_maneuver().note ==

@@ -117,7 +117,7 @@ auto NativeFreedomFlightSession::begin_port_approach()
     candidate.document_.flight = *relative;
     // Dispatch once to the unchanged relative action and its physical gates.
     if (auto armed = candidate.begin_port_approach(); !armed) return armed;
-    const auto saved = candidate.save_document();
+    const auto saved = candidate.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};

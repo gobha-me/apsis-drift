@@ -131,7 +131,7 @@ auto NativeFreedomFlightSession::begin_orbital_survey()
       FreedomOrbitalSurveyAcquisition{
           system_.catalog.id, rotation_.rotation.planet,
           document_.origin.state.craft, document_.flight.tick, 0};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -202,8 +202,8 @@ auto NativeFreedomFlightSession::advance_orbital_survey_tick()
   return {};
 }
 
-auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
-                                         SimulationSeconds step)
+auto NativeFreedomFlightSession::advance_player(
+    const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
   if (!knowledge_ || !knowledge_->orbital_surveys ||
       !knowledge_->orbital_surveys->active)

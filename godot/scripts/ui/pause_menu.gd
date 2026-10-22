@@ -408,8 +408,9 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		elif name == "Cancel surface aid":
 			button.disabled = failed or surface.get("maneuver", "off") == "off"
 		elif name.begins_with("Target"):
-			button.disabled = failed or attached or not state.get("station_available", true)
-			button.tooltip_text = "Release the attached port before selecting another." if attached else "Select the port to approach."
+			var reserved: bool = state.get("origin_service", {}).get("reserved_port", 0) == (1 if name == "Target D1" else 2)
+			button.disabled = failed or reserved or attached or not state.get("station_available", true)
+			button.tooltip_text = "Reserved for Origin fuel service, including while it is away." if reserved else "Release the attached port before selecting another." if attached else "Select the port to approach."
 		elif name == "Release attached port":
 			button.disabled = failed or not attached
 			button.tooltip_text = "Release the physical attachment." if attached else "No port is attached."

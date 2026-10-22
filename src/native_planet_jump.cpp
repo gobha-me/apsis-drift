@@ -47,7 +47,7 @@ auto NativeFreedomFlightSession::admit_composed_travel() const
     -> std::expected<void, std::string> {
   if (const auto document = travel_document(); !document)
     return std::unexpected{document.error()};
-  const auto saved = save_document();
+  const auto saved = player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

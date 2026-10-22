@@ -33,6 +33,11 @@ struct NativeStartup {
 [[nodiscard]] auto native_jump_strain_new_game(Seed universe_seed,
                                                std::uint32_t chart_kind)
     -> std::expected<NativeStartup, std::string>;
+// Explicit one-responder selection; existing chart/drive factories stay exact.
+[[nodiscard]] auto native_origin_assistance_new_game(Seed universe_seed,
+                                                     std::uint32_t chart_kind,
+                                                     std::uint32_t drive_kind)
+    -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
 

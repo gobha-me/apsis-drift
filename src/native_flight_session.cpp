@@ -33,6 +33,32 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomAssistanceActor> assistance;
+  std::shared_ptr<const OriginAssistanceWorldContext> assistance_world;
+  if (auto* wrapped =
+          std::get_if<FreedomAssistanceSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Origin assistance requires Freedom"};
+    const auto flight = assistance_player_flight(wrapped->voyage);
+    auto owner = make_origin_assistance_world_context(
+        flight.origin.recipe.universe_seed);
+    if (!owner) return std::unexpected{owner.error().detail};
+    if (const auto valid =
+            validate_freedom_assistance_document(*owner, *wrapped);
+        !valid)
+      return std::unexpected{valid.error().detail};
+    assistance_world =
+        std::make_shared<const OriginAssistanceWorldContext>(std::move(*owner));
+    assistance = wrapped->actor;
+    // Keep this large inner document off the shared admission stack frame.
+    // Construct it independently before replacing the wrapper that owns it.
+    const auto voyage = std::visit(
+        [](auto& value) {
+          return std::make_unique<NativeSaveDocument>(std::move(value));
+        },
+        wrapped->voyage);
+    selected.document = std::move(*voyage);
+  }
   std::optional<CraftCondition> condition;
   std::optional<CraftCondition> retired_condition;
   if (auto* wrapped =
@@ -43,10 +69,14 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
       return std::unexpected{valid.error().detail};
     condition = wrapped->condition;
     retired_condition = wrapped->retired_condition;
-    auto voyage = std::move(wrapped->voyage);
-    selected.document = std::visit(
-        [](auto& value) -> NativeSaveDocument { return std::move(value); },
-        voyage);
+    // Keep this large inner document off the shared admission stack frame.
+    // Construct it independently before replacing the wrapper that owns it.
+    const auto voyage = std::visit(
+        [](auto& value) {
+          return std::make_unique<NativeSaveDocument>(std::move(value));
+        },
+        wrapped->voyage);
+    selected.document = std::move(*voyage);
   }
   bool surface_walk_selected{};
   std::optional<PlanetSurfaceWalkerState> surface_actor;
@@ -194,6 +224,8 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
         "Selected home planet differs from the saved physical owner"};
   NativeFreedomFlightSession result{std::move(document), std::move(*hydrated),
                                     std::move(selected.source_save)};
+  result.assistance_ = assistance;
+  result.assistance_world_ = std::move(assistance_world);
   result.docking_ = docking;
   result.actor_ = actor;
   if (!assembly && travel_binding) assembly = std::move(travel_binding);
@@ -340,6 +372,9 @@ auto NativeFreedomFlightSession::begin_boarding_route(
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
     -> std::expected<void, std::string> {
+  if (origin_assistance_port_reserved(
+          {document_.origin.state.station, ordinal}))
+    return std::unexpected{"D2 is reserved for the Origin service craft"};
   if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (recovery_pending())
     return std::unexpected{
@@ -362,6 +397,8 @@ auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
 
 auto NativeFreedomFlightSession::assess_port() const
     -> std::expected<OriginDockAssessment, std::string> {
+  if (docking_ && origin_assistance_port_reserved(docking_->target))
+    return std::unexpected{"D2 is reserved for the Origin service craft"};
   if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (!docking_) return std::unexpected{"Select an Origin port first"};
   const auto station =
@@ -378,6 +415,8 @@ auto NativeFreedomFlightSession::assess_port() const
 
 auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
+  if (docking_ && origin_assistance_port_reserved(docking_->target))
+    return std::unexpected{"D2 is reserved for the Origin service craft"};
   if (minor_) return std::unexpected{"Minor inspection has no station port"};
   if (recovery_pending())
     return std::unexpected{
@@ -425,7 +464,7 @@ auto NativeFreedomFlightSession::capture_port()
       !observed)
     return observed;
   if (document_.model.frame_policy == kFreedomReleaseSystemFramePolicy) {
-    const auto saved = captured.save_document();
+    const auto saved = captured.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};
@@ -468,7 +507,7 @@ auto NativeFreedomFlightSession::release_port()
         return std::unexpected{"System release handoff refused"};
       candidate.document_.flight = *system_body;
     }
-    const auto saved = candidate.save_document();
+    const auto saved = candidate.player_save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)
       return std::unexpected{encoded.error().detail};
@@ -951,7 +990,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
   return result;
 }
 
-auto NativeFreedomFlightSession::advance_walk(
+auto NativeFreedomFlightSession::advance_player_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
   if (surface_walker_)
@@ -1017,7 +1056,7 @@ auto NativeFreedomFlightSession::advance_walk(
   return *flight;
 }
 
-auto NativeFreedomFlightSession::save_document() const
+auto NativeFreedomFlightSession::player_save_document() const
     -> std::expected<NativeSaveDocument, std::string> {
   if (condition_) {
     auto selected = condition_document();
@@ -1197,7 +1236,7 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     if (!body) return std::unexpected{"Stowed gear frame handoff refused"};
     candidate.document_.flight = *body;
   }
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

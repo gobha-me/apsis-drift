@@ -8,6 +8,13 @@ namespace apsis_drift {
 namespace {
 
 auto missing_recovery_owner(const NativeSaveDocument& document) -> bool {
+  if (const auto* assistance =
+          std::get_if<FreedomAssistanceSaveDocument>(&document))
+    return std::visit(
+        [](const auto& voyage) {
+          return missing_recovery_owner(NativeSaveDocument{voyage});
+        },
+        assistance->voyage);
   if (const auto* condition =
           std::get_if<FreedomConditionSaveDocument>(&document))
     return std::visit(
@@ -21,7 +28,8 @@ auto missing_recovery_owner(const NativeSaveDocument& document) -> bool {
         if constexpr (std::is_same_v<T, SaveDocument> ||
                       std::is_same_v<T, FreedomRecoverySaveDocument> ||
                       std::is_same_v<T, FreedomSurfaceWalkSaveDocument> ||
-                      std::is_same_v<T, FreedomConditionSaveDocument>)
+                      std::is_same_v<T, FreedomConditionSaveDocument> ||
+                      std::is_same_v<T, FreedomAssistanceSaveDocument>)
           return false;
         else if constexpr (std::is_same_v<T, FreedomSaveDocument>)
           return d.lineage.has_value();
@@ -268,6 +276,18 @@ auto select_document(FreedomConditionSaveDocument document,
   selected->document = std::move(document);
   return selected;
 }
+auto select_document(FreedomAssistanceSaveDocument document,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_assistance_document(document); !valid)
+    return std::unexpected{valid.error().detail};
+  auto selected = std::visit(
+      [&](const auto& voyage) { return select_document(voyage, source); },
+      document.voyage);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
 } // namespace
 
 auto native_new_game(Seed universe_seed)
@@ -354,6 +374,25 @@ auto native_jump_strain_new_game(Seed universe_seed, std::uint32_t chart_kind)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_origin_assistance_new_game(Seed seed, std::uint32_t chart_kind,
+                                       std::uint32_t drive_kind)
+    -> std::expected<NativeStartup, std::string> {
+  if (chart_kind > 2 || drive_kind > 2)
+    return std::unexpected{"Unsupported assistance chart/drive choice"};
+  auto selected =
+      drive_kind == 2   ? native_jump_strain_new_game(seed, chart_kind)
+      : drive_kind == 1 ? native_jump_recovery_new_game(seed, chart_kind)
+      : chart_kind == 2 ? native_planetary_network_new_game(seed)
+      : chart_kind == 1 ? native_network_new_game(seed)
+                        : native_new_game(seed);
+  if (!selected) return std::unexpected{selected.error()};
+  auto* voyage = std::get_if<FreedomKnowledgeSaveDocument>(&selected->document);
+  if (!voyage) return std::unexpected{"Unsupported initial assistance voyage"};
+  auto assistance = make_freedom_assistance_document(std::move(*voyage));
+  if (!assistance) return std::unexpected{assistance.error().detail};
+  return native_select_save_document(std::move(*assistance));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);
@@ -398,6 +437,19 @@ auto native_select_save_document(
 
 auto prepare_native_freedom_station_start(NativeStartup selected)
     -> std::expected<NativeFreedomStationStart, std::string> {
+  if (const auto* assistance =
+          std::get_if<FreedomAssistanceSaveDocument>(&selected.document)) {
+    if (auto valid = validate_freedom_assistance_document(*assistance); !valid)
+      return std::unexpected{valid.error().detail};
+    auto inner = selected;
+    inner.document = std::visit(
+        [](const auto& voyage) -> NativeSaveDocument { return voyage; },
+        assistance->voyage);
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
   if (const auto* condition =
           std::get_if<FreedomConditionSaveDocument>(&selected.document)) {
     if (auto valid = validate_freedom_condition_document(*condition); !valid)

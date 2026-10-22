@@ -405,6 +405,7 @@ The owner-selected follow-through on 2026-10-22 is **temporary drive strain firs
 actual rescue afterward**. [#667](https://github.com/gobha-me/apsis-drift/issues/667)
 adds cumulative, naturally cooling recovery debt through the existing
 [drive contract](FREEDOM_JUMP_RECOVERY.md#temporary-drive-strain), with explicit
-new-journey selection and preserved historical behavior. Actual responder-based
-rescue remains the next direction to decompose; this adds no instant evacuation,
-economy, maintenance or permanent hull damage.
+new-journey selection and preserved historical behavior. The next bounded increment is [Origin fuel service](ORIGIN_FUEL_SERVICE.md)
+([#669](https://github.com/gobha-me/apsis-drift/issues/669)): one actual finite-fuel
+responder for a supported home-Moon ship, with shared time and Save/Continue.
+This adds no instant evacuation, economy, maintenance or permanent hull damage.

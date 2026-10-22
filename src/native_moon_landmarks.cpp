@@ -34,7 +34,7 @@ auto NativeFreedomFlightSession::enable_moon_surface_landmarks()
   auto candidate = *this;
   candidate.knowledge_->moon_surface_landmarks =
       FreedomMoonSurfaceLandmarkState{};
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
@@ -169,7 +169,7 @@ auto NativeFreedomFlightSession::inspect_moon_surface_landmark(
            std::tuple{b.target.system.value, b.target.body.version,
                       b.target.body.kind, b.target.body.value, b.site.value};
   });
-  const auto saved = candidate.save_document();
+  const auto saved = candidate.player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};

@@ -310,7 +310,9 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	match options.mode:
 		"recovery": staged = owner.stage_freedom_recovery()
 		"new_game":
-			if options.get("drive_strain", false):
+			if options.get("origin_service", false):
+				staged = owner.stage_freedom_origin_assistance_new_game(options.value, 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0)
+			elif options.get("drive_strain", false):
 				staged = owner.stage_freedom_jump_strain_new_game(options.value, 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0)
 			elif options.get("drive_recovery", false):
 				staged = owner.stage_freedom_jump_recovery_new_game(options.value, 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0)
@@ -704,7 +706,7 @@ func switch_journey_view() -> void:
 	parent.remove_child(model)
 	var candidate: Control = WalkView.new() if wants_walk else MinorView.new() if wants_minor else MoonView.new() if wants_moon else FlightView.new()
 	inherit_controller(previous, candidate)
-	var pending := {"walk_state": walk, "flight_state": flight, "station_geometry": bridge.get_freedom_station_geometry()}
+	var pending := {"walk_state": walk, "flight_state": flight, "station_geometry": bridge.get_freedom_station_geometry(), "craft_binding": bridge.get_freedom_craft_binding()}
 	if not candidate.stage(bridge, assets_root, pending, model, true) or not candidate.ready_to_commit():
 		error = candidate.error if not candidate.error.is_empty() else "Wayfarer view handoff failed"
 		if model.get_parent() != null: model.get_parent().remove_child(model)

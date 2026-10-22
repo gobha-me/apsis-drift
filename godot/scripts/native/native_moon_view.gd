@@ -16,6 +16,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	if not valid_body_state(state):
 		error = "The typed lunar presentation is unavailable"
 		return false
+	service_binding = pending.get("craft_binding", {}).duplicate(true)
 	bridge = owner
 	assets_root = assets
 	staged_model = model
@@ -144,6 +145,7 @@ func build_ui() -> void:
 	hud_scroll.add_child(column)
 	primary_status = hud_text()
 	column.add_child(primary_status)
+	build_origin_service_ui(column)
 	assist_button = CheckButton.new()
 	assist_button.text = "Flight assistance"
 	assist_button.set_pressed_no_signal(state.assistance)
@@ -253,6 +255,7 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	setup_frame_diagnostics(controls_menu.save_button.get_parent())
+	setup_origin_service_controls(controls_menu.save_button.get_parent())
 	add_body_controls(controls_menu.save_button.get_parent())
 	setup_field_sample_controls(controls_menu.save_button.get_parent())
 	player_input.pause_requested.connect(toggle_pause)
@@ -374,6 +377,10 @@ func update_view(delta: float, _defer_exhaust: bool = false) -> void:
 	if not valid_body_state(state):
 		if error.is_empty(): error = "Invalid typed lunar observation"
 		return
+	if not refresh_service_craft(state, delta):
+		pause_on_error("The service Wayfarer presentation is unavailable")
+		return
+	refresh_origin_service_ui(delta)
 	ship.basis = state.body_basis
 	if cockpit_displays != null and not cockpit_displays.refresh(state, delta, paused):
 		pause_on_error("The lunar instrument readings are unavailable")

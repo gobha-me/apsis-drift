@@ -32,6 +32,7 @@ var status: Label
 var reference: Control
 var chooser: FileDialog
 var theme_owner: Theme
+var origin_service_choice: CheckButton
 var busy := false
 var focused := true
 var readable_scale := -1.0
@@ -107,6 +108,10 @@ func _ready() -> void:
 	recovery_choice.add_item("Recovery + temporary strain · 45–90 seconds")
 	recovery_choice.tooltip_text = "Recovery adds up to 2 km arrival uncertainty to early jumps. Temporary strain also carries unfinished recovery into the next cycle, up to 90 seconds. Waiting clears it. Each jump costs one charge. Existing saves keep their drive rules."
 	column.add_child(recovery_choice)
+	origin_service_choice = CheckButton.new()
+	origin_service_choice.text = "Origin fuel service · prototype"
+	origin_service_choice.tooltip_text = "One service Wayfarer, with finite fuel and jump charges. Request fuel while seated in a supported ship on the home moon. D2 is reserved for it. Existing saves keep their current rules."
+	column.add_child(origin_service_choice)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -169,7 +174,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return
