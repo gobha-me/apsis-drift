@@ -328,6 +328,7 @@ jobs:
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
           apsis-drift-native-orbital-survey-tests
+          apsis-drift-native-derelict-tests
 
       - name: Package the verified engine and native executables
         run: >-
