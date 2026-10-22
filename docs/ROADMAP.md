@@ -400,3 +400,11 @@ resolution setting or proof that every target view has passed. Preserve the
 working prototype and record missing consumer/hardware evidence separately.
 
 The owner-selected first drive-recovery increment is scoped in [Freedom jump recovery](FREEDOM_JUMP_RECOVERY.md) (#664), following charted planetary travel (#662). It adds no mission, upgrade or economy gate.
+
+The owner-selected follow-through on 2026-10-22 is **temporary drive strain first,
+actual rescue afterward**. [#667](https://github.com/gobha-me/apsis-drift/issues/667)
+adds cumulative, naturally cooling recovery debt through the existing
+[drive contract](FREEDOM_JUMP_RECOVERY.md#temporary-drive-strain), with explicit
+new-journey selection and preserved historical behavior. Actual responder-based
+rescue remains the next direction to decompose; this adds no instant evacuation,
+economy, maintenance or permanent hull damage.

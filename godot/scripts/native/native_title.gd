@@ -22,7 +22,7 @@ var seed_label: Label
 var seed: LineEdit
 var new_button: Button
 var network_choice: OptionButton
-var recovery_choice: CheckButton
+var recovery_choice: OptionButton
 var continue_button: Button
 var reference_button: Button
 var settings_button: Button
@@ -98,9 +98,14 @@ func _ready() -> void:
 	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
-	recovery_choice = CheckButton.new()
-	recovery_choice.text = "Drive recovery · early jumps add arrival uncertainty"
-	recovery_choice.tooltip_text = "45 seconds after each arrival. Early jumps still cost one charge, with up to 2 km extra arrival spread. Existing saves keep their drive rules."
+	var drive_label := Label.new()
+	drive_label.text = "Jump drive"
+	column.add_child(drive_label)
+	recovery_choice = OptionButton.new()
+	recovery_choice.add_item("Standard")
+	recovery_choice.add_item("Recovery · 45 seconds")
+	recovery_choice.add_item("Recovery + temporary strain · 45–90 seconds")
+	recovery_choice.tooltip_text = "Recovery adds up to 2 km arrival uncertainty to early jumps. Temporary strain also carries unfinished recovery into the next cycle, up to 90 seconds. Waiting clears it. Each jump costs one charge. Existing saves keep their drive rules."
 	column.add_child(recovery_choice)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
@@ -164,7 +169,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.button_pressed})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return

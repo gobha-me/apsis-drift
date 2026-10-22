@@ -13,8 +13,12 @@ auto NativeFreedomFlightSession::prepare_composed_travel()
                                           kFreedomPlanetaryKnowledgeVersion ||
                                       !document_.origin.network)))
     return std::unexpected{"Travel requires its explicitly selected chart"};
-  const auto version = recovering ? kFreedomRecoveringTravelStateVersion
-                                  : kFreedomComposedTravelStateVersion;
+  const auto version =
+      recovering
+          ? (resources_->drive->version == kFreedomStrainedDriveRecoveryVersion
+                 ? kFreedomStrainedTravelStateVersion
+                 : kFreedomRecoveringTravelStateVersion)
+          : kFreedomComposedTravelStateVersion;
   if (travel_) {
     if (travel_->version != version || !travel_->composed)
       return std::unexpected{
@@ -68,7 +72,8 @@ auto NativeFreedomFlightSession::planet_jump_selection_available(
     return std::unexpected{
         "Return to Origin home before selecting an ordinary planet"};
   if (travel_ && ((travel_->version != kFreedomComposedTravelStateVersion &&
-                   travel_->version != kFreedomRecoveringTravelStateVersion) ||
+                   travel_->version != kFreedomRecoveringTravelStateVersion &&
+                   travel_->version != kFreedomStrainedTravelStateVersion) ||
                   !travel_->composed))
     return std::unexpected{
         "Historical travel cannot silently adopt a new policy"};
@@ -330,12 +335,12 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
                                 : FreedomJumpRecoveryKind::minor;
           const auto checksum =
               planetary ? planet->source_checksum : local->source_checksum;
-          const auto stamp = make_freedom_jump_recovery_stamp(
-              kind, state.next_attempt, checksum,
+          const auto next_drive = advance_freedom_drive_recovery(
+              *candidate.resources_->drive, kind, state.next_attempt, checksum,
               candidate.document_.flight.tick);
-          if (!stamp)
+          if (!next_drive)
             return std::unexpected{"Recovery commitment clock refused"};
-          candidate.resources_->drive->last_use = *stamp;
+          candidate.resources_->drive = *next_drive;
         }
         --candidate.resources_->jump_charges;
         ++state.next_attempt;

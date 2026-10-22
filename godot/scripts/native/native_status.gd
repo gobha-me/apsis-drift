@@ -191,6 +191,27 @@ class SurfaceAidCue extends RefCounted:
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
 
+static func drive_recovery_text(recovery: Variant, phase: String, detailed := false) -> String:
+	if not recovery is Dictionary or typeof(recovery.get("version")) != TYPE_INT or recovery.version not in [1, 2]: return "Drive recovery unavailable"
+	var strained: bool = recovery.version == 2
+	if recovery.size() != (7 if strained else 5) or typeof(recovery.get("ready")) != TYPE_BOOL or typeof(recovery.get("pending_arrival")) != TYPE_BOOL: return "Drive recovery unavailable"
+	var cycle: float = 45.0
+	if strained:
+		for field in ["cycle_seconds", "next_recovery_seconds"]:
+			if not finite_number(recovery.get(field)) or recovery[field] < 45.0 or recovery[field] > 90.0: return "Drive recovery unavailable"
+		cycle = recovery.cycle_seconds
+	if not finite_number(recovery.get("remaining_seconds")) or recovery.remaining_seconds < 0 or recovery.remaining_seconds > cycle: return "Drive recovery unavailable"
+	if not finite_number(recovery.get("extra_radius_metres")) or recovery.extra_radius_metres < 0 or recovery.extra_radius_metres > 2000: return "Drive recovery unavailable"
+	if recovery.ready != (recovery.remaining_seconds == 0.0) or (recovery.ready and recovery.extra_radius_metres != 0.0) or (recovery.pending_arrival and (phase != "transit" or recovery.remaining_seconds != cycle)): return "Drive recovery unavailable"
+	if recovery.pending_arrival:
+		return "Drive strain · recovery starts on arrival (%.1f s)" % cycle if strained else "Drive recovery · starts on arrival"
+	if recovery.ready:
+		return "Drive ready · next recovery %.1f s" % recovery.next_recovery_seconds if strained else "Drive ready"
+	var text := "Drive cooling · %.1f s left of %.1f s · extra arrival spread ≤ %.0f m" % [recovery.remaining_seconds, cycle, recovery.extra_radius_metres] if strained else "Drive recovery · %.1f s · extra arrival spread ≤ %.0f m" % [recovery.remaining_seconds, recovery.extra_radius_metres]
+	if strained: text += "\nEarly jump: next recovery ≤ %.1f s; waiting clears strain." % recovery.next_recovery_seconds
+	if detailed: text += "\nEarly jump available for 1 charge; spooling reduces these bounds."
+	return text
+
 static func surface_position_text(walking: Dictionary) -> String:
 	for field in ["latitude", "longitude"]:
 		if not finite_number(walking.get(field)): return "Surface position unavailable"
@@ -274,12 +295,9 @@ static func summary(value: Dictionary, walking_keys: String = "WASD") -> String:
 		if row is Dictionary and row.get("current", false): location = str(row.get("name", location)); break
 	var lines := PackedStringArray([mode + " · " + location])
 	if jump.has("recovery"):
-		var recovery: Variant = jump.recovery
-		if not recovery is Dictionary or recovery.size() != 5 or typeof(recovery.get("version")) != TYPE_INT or recovery.get("version") != 1 or typeof(recovery.get("ready")) != TYPE_BOOL or typeof(recovery.get("pending_arrival")) != TYPE_BOOL: return "Drive recovery unavailable"
-		if not finite_number(recovery.get("remaining_seconds")) or recovery.remaining_seconds < 0 or recovery.remaining_seconds > 45: return "Drive recovery unavailable"
-		if not finite_number(recovery.get("extra_radius_metres")) or recovery.extra_radius_metres < 0 or recovery.extra_radius_metres > 2000: return "Drive recovery unavailable"
-		if recovery.ready != (recovery.remaining_seconds == 0.0) or (recovery.ready and recovery.extra_radius_metres != 0.0) or (recovery.pending_arrival and (phase != "transit" or recovery.remaining_seconds != 45.0)): return "Drive recovery unavailable"
-		lines.append("Drive recovery · starts on arrival" if recovery.pending_arrival else "Drive ready" if recovery.ready else "Drive recovery · %.1f s · extra arrival spread ≤ %.0f m" % [recovery.remaining_seconds, recovery.extra_radius_metres])
+		var recovery_text := drive_recovery_text(jump.recovery, phase)
+		if recovery_text == "Drive recovery unavailable": return recovery_text
+		lines.append(recovery_text)
 	if not outside.is_empty():
 		if not outside.get("eye_position") is Vector3 or not outside.eye_position.is_finite(): return "Ground observations unavailable"
 		var blocked := movement_feedback(outside.get("movement_blockage"))

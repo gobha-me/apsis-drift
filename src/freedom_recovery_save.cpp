@@ -72,7 +72,8 @@ auto decode_voyage(const Json& j)
       j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
       j["format_version"] == kFreedomNetworkTravelSaveFormatVersion ||
       j["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomStrainedTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomRecoveryVoyage{std::move(*d)};
@@ -355,6 +356,8 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
     if (old_resources.version != current_resources.version ||
         old_resources.drive.has_value() !=
             current_resources.drive.has_value() ||
+        (old_resources.drive && current_resources.drive &&
+         old_resources.drive->version != current_resources.drive->version) ||
         (current_resources.drive && current_resources.drive->last_use &&
          (current_resources.drive->last_use->commit_tick <
               retired.flight.tick ||
@@ -475,9 +478,10 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   assembly->journey.voyage.docking = {geometry->version, safe->port, true};
   FreedomResources resources{1, *identity, body->craft, body->tick};
   if (recovery_knowledge(d.voyage).voyage.resources.drive) {
-    resources.version = kFreedomRecoveryResourceVersion;
+    const auto& old_ledger = recovery_knowledge(d.voyage).voyage.resources;
+    resources.version = old_ledger.version;
     resources.drive = FreedomDriveRecoveryState{
-        kFreedomDriveRecoveryVersion, replacement.origin.lineage, {}};
+        old_ledger.drive->version, replacement.origin.lineage, {}};
   }
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
   if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();

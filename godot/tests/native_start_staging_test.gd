@@ -232,6 +232,7 @@ func run() -> void:
 		var drive_hash := FileAccess.get_sha256(drive_save)
 		check(shell.select_start(bridge, {"mode": "continue", "value": drive_save, "assets": args[0]}) and shell.current_view.paused, "Selected drive Continue failed actual station staging")
 		check(bridge.save_freedom_as(drive_save) and FileAccess.get_sha256(drive_save) == drive_hash, "Selected drive Continue changed complete station Save")
+
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

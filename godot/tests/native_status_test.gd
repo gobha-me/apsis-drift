@@ -52,6 +52,34 @@ func _initialize() -> void:
 			"ready": damaged.jump.recovery.ready = true
 			"pending": damaged.jump.recovery.pending_arrival = true
 		check("unavailable" in Status.summary(damaged), "Inconsistent recovery packet reached HUD: " + damage)
+	var strained := snapshot.duplicate(true)
+	strained.jump.recovery = {"version": 2, "remaining_seconds": 75.0, "extra_radius_metres": 2000.0, "ready": false, "pending_arrival": false, "cycle_seconds": 75.0, "next_recovery_seconds": 90.0}
+	var strained_before := strained.duplicate(true)
+	check("75.0 s left of 75.0 s" in Status.summary(strained) and "next recovery ≤ 90.0 s" in Status.summary(strained), "Strain HUD lost current cooling or the next-arrival consequence")
+	check("1 charge" in Status.drive_recovery_text(strained.jump.recovery, "idle", true), "Strain changed or hid the one-charge early-jump bill")
+	for field in ["cycle_seconds", "next_recovery_seconds", "remaining_seconds", "extra_radius_metres"]:
+		for invalid in [null, true, NAN, INF, -INF, -1.0, "75"]:
+			var damaged := strained.duplicate(true)
+			damaged.jump.recovery[field] = invalid
+			check("unavailable" in Status.summary(damaged), "Malformed strain reading reached HUD: " + field)
+	for change in [{"cycle_seconds": 44.9}, {"cycle_seconds": 90.1}, {"cycle_seconds": 60.0}, {"next_recovery_seconds": 44.9}, {"next_recovery_seconds": 90.1}, {"version": 3}, {"version": 2.0}]:
+		var damaged := strained.duplicate(true)
+		damaged.jump.recovery.merge(change, true)
+		check("unavailable" in Status.summary(damaged), "Unsupported strain cycle reached HUD: " + str(change))
+	var pending := strained.duplicate(true)
+	pending.jump.phase = "transit"
+	pending.jump.remaining_seconds = 2.0
+	pending.jump.recovery.pending_arrival = true
+	check("starts on arrival (75.0 s)" in Status.summary(pending), "Pending strain pretended cooling had already started")
+	pending.jump.recovery.remaining_seconds = 74.0
+	check("unavailable" in Status.summary(pending), "Pending strain countdown advanced before actual arrival")
+	var cooled := strained.duplicate(true)
+	cooled.jump.recovery.remaining_seconds = 0.0
+	cooled.jump.recovery.extra_radius_metres = 0.0
+	cooled.jump.recovery.ready = true
+	cooled.jump.recovery.next_recovery_seconds = 45.0
+	check("Drive ready · next recovery 45.0 s" in Status.summary(cooled), "Fully cooled drive retained a longer next cycle")
+	check(strained == strained_before, "Strain formatting changed authoritative observations")
 
 	check("Atmosphere" in Status.summary(snapshot) and "Reference altitude 0.90 km" in Status.summary(snapshot) and "Known neighbor" in Status.summary(snapshot), "Reference height, modeled air or selected target lost")
 	check(not "Coasting" in Status.summary(snapshot), "Powered or assisted flight granted coasting")

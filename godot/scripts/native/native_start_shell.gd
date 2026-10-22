@@ -310,7 +310,9 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	match options.mode:
 		"recovery": staged = owner.stage_freedom_recovery()
 		"new_game":
-			if options.get("drive_recovery", false):
+			if options.get("drive_strain", false):
+				staged = owner.stage_freedom_jump_strain_new_game(options.value, 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0)
+			elif options.get("drive_recovery", false):
 				staged = owner.stage_freedom_jump_recovery_new_game(options.value, 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0)
 			else:
 				staged = owner.stage_freedom_planetary_network_new_game(options.value) if options.get("planetary", false) else owner.stage_freedom_network_new_game(options.value) if options.get("network", false) else owner.stage_freedom_new_game(options.value)

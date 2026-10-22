@@ -2,6 +2,7 @@
 
 #include "apsis_drift/intersystem_jump.hpp"
 
+#include <algorithm>
 #include <limits>
 
 namespace apsis_drift {
@@ -10,6 +11,27 @@ using Error = FreedomJumpRecoveryError;
 auto valid_kind(FreedomJumpRecoveryKind kind) -> bool {
   return kind >= FreedomJumpRecoveryKind::system &&
          kind <= FreedomJumpRecoveryKind::minor;
+}
+auto strained_stamp(FreedomJumpRecoveryKind kind, std::uint64_t attempt,
+                    std::uint64_t source_checksum, SimulationTick commit_tick,
+                    SimulationTick duration)
+    -> std::expected<FreedomJumpRecoveryStamp, Error> {
+  if (!valid_kind(kind)) return std::unexpected{Error::invalid_stamp};
+  if (!attempt || attempt == std::numeric_limits<std::uint64_t>::max())
+    return std::unexpected{Error::invalid_attempt};
+  if (duration < kFreedomDriveRecoveryTicks ||
+      duration > kFreedomDriveMaximumRecoveryTicks ||
+      (attempt == 1 && duration != kFreedomDriveRecoveryTicks))
+    return std::unexpected{Error::invalid_stamp};
+  if (commit_tick > std::numeric_limits<SimulationTick>::max() -
+                        kJumpTransitTicks - duration - 3)
+    return std::unexpected{Error::invalid_clock};
+  return FreedomJumpRecoveryStamp{kind,
+                                  attempt,
+                                  source_checksum,
+                                  commit_tick,
+                                  commit_tick + kJumpTransitTicks,
+                                  duration};
 }
 auto hash_word(std::uint64_t& value, std::uint64_t word) -> void {
   for (unsigned byte = 0; byte < 8; ++byte) {
@@ -48,7 +70,8 @@ auto make_freedom_jump_recovery_stamp(FreedomJumpRecoveryKind kind,
 auto validate_freedom_drive_recovery(const FreedomDriveRecoveryState& state,
                                      SimulationTick now)
     -> std::expected<void, FreedomJumpRecoveryError> {
-  if (state.version != kFreedomDriveRecoveryVersion)
+  if (state.version != kFreedomDriveRecoveryVersion &&
+      state.version != kFreedomStrainedDriveRecoveryVersion)
     return std::unexpected{Error::unsupported_policy};
   if (now == std::numeric_limits<SimulationTick>::max())
     return std::unexpected{Error::invalid_clock};
@@ -57,8 +80,13 @@ auto validate_freedom_drive_recovery(const FreedomDriveRecoveryState& state,
     return std::unexpected{Error::invalid_owner};
   if (!state.last_use) return {};
   const auto& stamp = *state.last_use;
-  const auto expected = make_freedom_jump_recovery_stamp(
-      stamp.kind, stamp.attempt, stamp.source_checksum, stamp.commit_tick);
+  const auto expected =
+      state.version == kFreedomDriveRecoveryVersion
+          ? make_freedom_jump_recovery_stamp(stamp.kind, stamp.attempt,
+                                             stamp.source_checksum,
+                                             stamp.commit_tick)
+          : strained_stamp(stamp.kind, stamp.attempt, stamp.source_checksum,
+                           stamp.commit_tick, stamp.recovery_ticks);
   if (!expected || *expected != stamp)
     return std::unexpected{Error::invalid_stamp};
   if (stamp.commit_tick > now || (stamp.arrival_tick > now &&
@@ -88,18 +116,47 @@ auto freedom_jump_recovery_reading(const FreedomDriveRecoveryState& state,
   const auto arrival = state.last_use->arrival_tick;
   const bool pending = now < arrival;
   const auto elapsed = pending ? SimulationTick{} : now - arrival;
-  const auto remaining = elapsed >= kFreedomDriveRecoveryTicks
-                             ? 0
-                             : kFreedomDriveRecoveryTicks - elapsed;
-  constexpr auto n = kFreedomDriveRecoveryTicks;
-  constexpr auto denominator = n * n * n;
-  // Loose product bound <2^60 even before using r<=N and the cubic's maximum.
+  const auto n = state.last_use->recovery_ticks;
+  const auto remaining = elapsed >= n ? 0 : n - elapsed;
+  const auto denominator = n * n * n;
+  // Even the loose 2,000,000 * 3 * 10800^3 bound is <2^63; adding
+  // denominator-1 cannot overflow. Version1 retains the exact integer cubic.
   const auto numerator =
       static_cast<std::uint64_t>(kFreedomJumpRecoveryMaximumRadiusMillimetres) *
       remaining * remaining * (3 * n - 2 * remaining);
   const auto radius =
       static_cast<std::uint32_t>((numerator + denominator - 1) / denominator);
-  return FreedomJumpRecoveryReading{remaining, radius, remaining == 0, pending};
+  const auto next = state.version == kFreedomStrainedDriveRecoveryVersion
+                        ? std::min(kFreedomDriveMaximumRecoveryTicks,
+                                   kFreedomDriveRecoveryTicks + remaining)
+                        : kFreedomDriveRecoveryTicks;
+  return FreedomJumpRecoveryReading{remaining, radius, remaining == 0,
+                                    pending,   n,      next};
+}
+auto advance_freedom_drive_recovery(const FreedomDriveRecoveryState& prior,
+                                    FreedomJumpRecoveryKind kind,
+                                    std::uint64_t attempt,
+                                    std::uint64_t source_checksum,
+                                    SimulationTick commit_tick)
+    -> std::expected<FreedomDriveRecoveryState, FreedomJumpRecoveryError> {
+  if (const auto valid = validate_freedom_drive_recovery(prior, commit_tick);
+      !valid)
+    return std::unexpected{valid.error()};
+  if ((!prior.last_use && attempt != 1) ||
+      (prior.last_use && attempt != prior.last_use->attempt + 1))
+    return std::unexpected{Error::invalid_attempt};
+  const auto reading = freedom_jump_recovery_reading(prior, commit_tick);
+  if (!reading) return std::unexpected{reading.error()};
+  if (reading->pending_arrival) return std::unexpected{Error::pending_arrival};
+  auto stamp = prior.version == kFreedomDriveRecoveryVersion
+                   ? make_freedom_jump_recovery_stamp(
+                         kind, attempt, source_checksum, commit_tick)
+                   : strained_stamp(kind, attempt, source_checksum, commit_tick,
+                                    reading->next_recovery_ticks);
+  if (!stamp) return std::unexpected{stamp.error()};
+  auto next = prior;
+  next.last_use = *stamp;
+  return next;
 }
 auto freeze_freedom_jump_uncertainty(
     Seed seed, StarterCraftId craft, CraftFrameRecipe frame,
@@ -112,13 +169,16 @@ auto freeze_freedom_jump_uncertainty(
           state, seed, craft, frame, lineage, commit_tick);
       !valid)
     return std::unexpected{valid.error()};
-  if (const auto stamp = make_freedom_jump_recovery_stamp(
-          kind, attempt, source_checksum, commit_tick);
-      !stamp)
-    return std::unexpected{stamp.error()};
-  if ((!state.last_use && attempt != 1) ||
-      (state.last_use && attempt != state.last_use->attempt + 1))
-    return std::unexpected{Error::invalid_attempt};
+  if (state.version == kFreedomDriveRecoveryVersion) {
+    // Retain the historical refusal order as well as the old sampling words.
+    if (const auto stamp = make_freedom_jump_recovery_stamp(
+            kind, attempt, source_checksum, commit_tick);
+        !stamp)
+      return std::unexpected{stamp.error()};
+  }
+  const auto advanced = advance_freedom_drive_recovery(
+      state, kind, attempt, source_checksum, commit_tick);
+  if (!advanced) return std::unexpected{advanced.error()};
   const auto reading = freedom_jump_recovery_reading(state, commit_tick);
   if (!reading) return std::unexpected{reading.error()};
   if (reading->pending_arrival) return std::unexpected{Error::pending_arrival};
@@ -143,7 +203,7 @@ auto freeze_freedom_jump_uncertainty(
     return std::unexpected{Error::invalid_target};
   std::uint64_t ordinal{14695981039346656037ULL};
   for (auto word :
-       {std::uint64_t{kFreedomDriveRecoveryVersion},
+       {std::uint64_t{state.version},
         std::uint64_t{static_cast<unsigned>(kind)}, craft.value, frame.id.value,
         std::uint64_t{frame.version}, source_checksum, commit_tick, attempt})
     hash_word(ordinal, word);
@@ -162,6 +222,12 @@ auto freeze_freedom_jump_uncertainty(
           stamp.source_checksum, stamp.commit_tick, stamp.arrival_tick})
       hash_word(ordinal, word);
   }
+  if (state.version == kFreedomStrainedDriveRecoveryVersion) {
+    // Do not add words to the historical version1 stream. The new sampler
+    // authenticates both the cooling cycle and the next commitment duration.
+    hash_word(ordinal, reading->cycle_ticks);
+    hash_word(ordinal, advanced->last_use->recovery_ticks);
+  }
   const auto sample =
       derive_seed(seed, SeedDomain::jump_recovery_uncertainty, ordinal);
   const double scale = static_cast<double>(reading->extra_radius_millimetres) /
@@ -175,7 +241,7 @@ auto freeze_freedom_jump_uncertainty(
       reading->extra_radius_millimetres
           ? RigidVector3{component(0), component(16), component(32)}
           : RigidVector3{};
-  return FrozenFreedomJumpUncertainty{kFreedomDriveRecoveryVersion,
+  return FrozenFreedomJumpUncertainty{state.version,
                                       source_checksum,
                                       sample,
                                       reading->remaining_ticks,

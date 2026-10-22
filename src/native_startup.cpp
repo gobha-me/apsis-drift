@@ -343,6 +343,17 @@ auto native_jump_recovery_new_game(Seed universe_seed, std::uint32_t chart_kind)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_jump_strain_new_game(Seed universe_seed, std::uint32_t chart_kind)
+    -> std::expected<NativeStartup, std::string> {
+  auto start = native_jump_recovery_new_game(universe_seed, chart_kind);
+  if (!start) return std::unexpected{start.error()};
+  auto& ledger =
+      std::get<FreedomKnowledgeSaveDocument>(start->document).voyage.resources;
+  ledger.version = kFreedomStrainedResourceVersion;
+  ledger.drive->version = kFreedomStrainedDriveRecoveryVersion;
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);

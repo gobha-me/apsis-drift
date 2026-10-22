@@ -6,7 +6,9 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomDriveRecoveryVersion{1};
+inline constexpr std::uint32_t kFreedomStrainedDriveRecoveryVersion{2};
 inline constexpr SimulationTick kFreedomDriveRecoveryTicks{5400};
+inline constexpr SimulationTick kFreedomDriveMaximumRecoveryTicks{10800};
 inline constexpr std::uint32_t kFreedomJumpRecoveryMaximumRadiusMillimetres{
     2000000};
 enum class FreedomJumpRecoveryKind : std::uint8_t {
@@ -19,6 +21,7 @@ struct FreedomJumpRecoveryStamp {
   FreedomJumpRecoveryKind kind{};
   std::uint64_t attempt{}, source_checksum{};
   SimulationTick commit_tick{}, arrival_tick{};
+  SimulationTick recovery_ticks{kFreedomDriveRecoveryTicks};
   friend auto operator==(const FreedomJumpRecoveryStamp&,
                          const FreedomJumpRecoveryStamp&) -> bool = default;
 };
@@ -33,6 +36,8 @@ struct FreedomJumpRecoveryReading {
   SimulationTick remaining_ticks{};
   std::uint32_t extra_radius_millimetres{};
   bool ready{}, pending_arrival{};
+  SimulationTick cycle_ticks{kFreedomDriveRecoveryTicks};
+  SimulationTick next_recovery_ticks{kFreedomDriveRecoveryTicks};
   friend auto operator==(const FreedomJumpRecoveryReading&,
                          const FreedomJumpRecoveryReading&) -> bool = default;
 };
@@ -72,6 +77,14 @@ enum class FreedomJumpRecoveryError : std::uint8_t {
     FreedomJumpRecoveryKind, std::uint64_t attempt,
     std::uint64_t source_checksum, SimulationTick commit_tick)
     -> std::expected<FreedomJumpRecoveryStamp, FreedomJumpRecoveryError>;
+// Commit from the actual prior state. Version1 retains its fixed45s policy;
+// version2 carries remaining arrival-based debt, capped at90s. No debit or
+// mutable clock is owned here. Pending prior transit cannot commit another use.
+[[nodiscard]] auto advance_freedom_drive_recovery(
+    const FreedomDriveRecoveryState&, FreedomJumpRecoveryKind,
+    std::uint64_t attempt, std::uint64_t source_checksum,
+    SimulationTick commit_tick)
+    -> std::expected<FreedomDriveRecoveryState, FreedomJumpRecoveryError>;
 // The family authenticates actual typed geometry; no caller-owned position or
 // replacement universe is supplied. All inputs are retained in its request.
 [[nodiscard]] auto freeze_freedom_jump_uncertainty(

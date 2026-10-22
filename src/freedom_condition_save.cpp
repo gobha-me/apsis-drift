@@ -76,7 +76,8 @@ auto decode_voyage(const Json& j)
       j["format_version"] == kFreedomOriginLocalTravelSaveFormatVersion ||
       j["format_version"] == kFreedomNetworkTravelSaveFormatVersion ||
       j["format_version"] == kFreedomComposedTravelSaveFormatVersion ||
-      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion) {
+      j["format_version"] == kFreedomRecoveringTravelSaveFormatVersion ||
+      j["format_version"] == kFreedomStrainedTravelSaveFormatVersion) {
     auto d = decode_freedom_travel_document_json(text);
     if (!d) return std::unexpected(d.error());
     return FreedomConditionVoyage{std::move(*d)};

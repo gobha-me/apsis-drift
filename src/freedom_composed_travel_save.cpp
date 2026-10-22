@@ -193,8 +193,13 @@ auto recovery_kind(FreedomComposedRouteKind kind) -> FreedomJumpRecoveryKind {
 }
 auto stamp_of(const Event& e)
     -> std::expected<FreedomJumpRecoveryStamp, FreedomJumpRecoveryError> {
-  return make_freedom_jump_recovery_stamp(recovery_kind(e.kind), e.attempt,
-                                          e.source_checksum, e.source_tick);
+  if (!e.recovery_input)
+    return std::unexpected{FreedomJumpRecoveryError::invalid_state};
+  const auto next = advance_freedom_drive_recovery(
+      *e.recovery_input, recovery_kind(e.kind), e.attempt, e.source_checksum,
+      e.source_tick);
+  if (!next) return std::unexpected{next.error()};
+  return *next->last_use;
 }
 auto event(const FrozenLocalBodyJumpArrival& f, FreedomComposedRouteKind kind,
            const FreedomResources* bill) -> Event {
@@ -212,12 +217,11 @@ auto event(const FrozenLocalBodyJumpArrival& f, FreedomComposedRouteKind kind,
           f.request.recovery ? &*f.request.recovery : nullptr};
 }
 auto bill_valid(const FreedomResources& bill,
-                const FreedomFlightSaveDocument& source, bool recovering,
+                const FreedomFlightSaveDocument& source,
+                std::uint32_t resource_version,
                 const std::optional<FreedomDriveRecoveryState>& input) -> bool {
   return validate_freedom_resources(bill, source).has_value() &&
-         bill.jump_charges > 0 &&
-         bill.version == (recovering ? kFreedomRecoveryResourceVersion
-                                     : kFreedomResourceVersion) &&
+         bill.jump_charges > 0 && bill.version == resource_version &&
          bill.drive == input;
 }
 auto receipt_valid(const FrozenLocalBodyJumpArrival& f,
@@ -267,7 +271,14 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   const auto current = travel_target_of(flight);
   const auto& ledger = d.voyage.voyage.resources;
   const auto now = flight.flight.tick;
-  const bool recovering = s.version == kFreedomRecoveringTravelStateVersion;
+  const bool strained = s.version == kFreedomStrainedTravelStateVersion;
+  const bool recovering =
+      strained || s.version == kFreedomRecoveringTravelStateVersion;
+  const auto resource_version = strained     ? kFreedomStrainedResourceVersion
+                                : recovering ? kFreedomRecoveryResourceVersion
+                                             : kFreedomResourceVersion;
+  const auto drive_version = strained ? kFreedomStrainedDriveRecoveryVersion
+                                      : kFreedomDriveRecoveryVersion;
   const auto knowledge_version = d.voyage.knowledge.recipe.version;
   const bool knowledge_matches =
       recovering ? (knowledge_version == kFreedomTravelKnowledgeVersion ||
@@ -277,9 +288,10 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
   if ((!recovering && s.version != kFreedomComposedTravelStateVersion) ||
       !s.composed || s.local || s.prior_moon || s.origin_routes ||
       !s.next_attempt || !knowledge_matches ||
-      ledger.version != (recovering ? kFreedomRecoveryResourceVersion
-                                    : kFreedomResourceVersion) ||
-      ledger.drive.has_value() != recovering || !current || !d.craft_binding ||
+      ledger.version != resource_version ||
+      ledger.drive.has_value() != recovering ||
+      (ledger.drive && ledger.drive->version != drive_version) || !current ||
+      !d.craft_binding ||
       *d.craft_binding != NativeStartingAssemblySelection{} ||
       !travel_valid_pilot_binding(d, flight))
     return std::unexpected{failure("Composed travel requires explicit recipe5, "
@@ -365,9 +377,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         r.source.tick > now || !validate_freedom_resources(bill) ||
         bill.craft != r.craft || bill.frame != r.source.craft ||
         bill.tick != r.source.tick || !bill.jump_charges ||
-        bill.version != (recovering ? kFreedomRecoveryResourceVersion
-                                    : kFreedomResourceVersion) ||
-        bill.drive != r.recovery ||
+        bill.version != resource_version || bill.drive != r.recovery ||
         (recovering && (!bill.drive || !f.recovery ||
                         !validate_freedom_drive_recovery(
                             *bill.drive, r.universe_seed, r.craft,
@@ -396,7 +406,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         f.request.attempt == std::numeric_limits<std::uint64_t>::max() ||
         f.arrival_tick >= std::numeric_limits<SimulationTick>::max() - 2 ||
         !bill_valid(*c.planet_commitment_resources, f.request.source,
-                    recovering, f.request.recovery))
+                    resource_version, f.request.recovery))
       return std::unexpected{failure("Invalid composed planet proof/bill")};
     add({FreedomComposedRouteKind::planet, f.request.attempt,
          f.request.source.flight.tick, f.arrival_tick,
@@ -428,7 +438,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
         travel_target_of(out.request.source) != home ||
         out.request.destination != target ||
         !bill_valid(*local.commitment_resources, last.request.source,
-                    recovering, last.request.recovery))
+                    resource_version, last.request.recovery))
       return std::unexpected{
           failure("Invalid companion source or current outbound")};
     if (travel_target_of(last.request.source) == target) {
@@ -481,7 +491,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     }
     for (std::size_t i = 0; i < count; ++i) {
       const auto& e = events[i];
-      if (!e.recovery_input ||
+      if (!e.recovery_input || e.recovery_input->version != drive_version ||
           (!e.recovery_input->last_use && e.attempt != 1) ||
           (e.recovery_input->last_use &&
            (e.recovery_input->last_use->attempt >=
@@ -616,7 +626,9 @@ auto encode_composed_travel(const FreedomTravelSaveDocument& d)
   if (!moon) return std::unexpected{moon.error()};
   if (!minor) return std::unexpected{minor.error()};
   const Json root{
-      {"format_version", s.version == kFreedomRecoveringTravelStateVersion
+      {"format_version", s.version == kFreedomStrainedTravelStateVersion
+                             ? kFreedomStrainedTravelSaveFormatVersion
+                         : s.version == kFreedomRecoveringTravelStateVersion
                              ? kFreedomRecoveringTravelSaveFormatVersion
                              : kFreedomComposedTravelSaveFormatVersion},
       {"voyage", Json::parse(*voyage)},
@@ -653,11 +665,14 @@ auto decode_composed_travel(const Json& root)
   if (!fields(root, {"format_version", "voyage", "travel", "craft_binding",
                      "seated_pilot"}) ||
       (root["format_version"] != kFreedomComposedTravelSaveFormatVersion &&
-       root["format_version"] != kFreedomRecoveringTravelSaveFormatVersion))
+       root["format_version"] != kFreedomRecoveringTravelSaveFormatVersion &&
+       root["format_version"] != kFreedomStrainedTravelSaveFormatVersion))
     return std::unexpected{failure("Invalid closed composed root")};
   const auto& s = root["travel"];
   const auto version =
-      root["format_version"] == kFreedomRecoveringTravelSaveFormatVersion
+      root["format_version"] == kFreedomStrainedTravelSaveFormatVersion
+          ? kFreedomStrainedTravelStateVersion
+      : root["format_version"] == kFreedomRecoveringTravelSaveFormatVersion
           ? kFreedomRecoveringTravelStateVersion
           : kFreedomComposedTravelStateVersion;
   if (!fields(s, {"version", "phase", "selected", "spool_tick", "next_attempt",
