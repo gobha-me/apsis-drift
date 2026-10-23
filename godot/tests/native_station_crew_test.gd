@@ -2,6 +2,7 @@ extends SceneTree
 ## Real station Continue, input and unchanged journey. No staged film actors.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const Crew = preload("res://scripts/native/native_station_crew.gd")
+const Notes = preload("res://scripts/native/exploration_notes.gd")
 var failures := 0
 
 func check(value: bool, message: String) -> bool:
@@ -36,12 +37,12 @@ func pad(view: Control, device: int, code: int, pressed: bool) -> void:
 	view._input(event)
 
 func packet_refusals(packet: Dictionary, walking: Dictionary) -> void:
-	for damage in ["version", "version_type", "future_version", "station", "tick", "ordinal", "short", "nan", "heading", "height", "available", "topics", "two_topics", "five_topics", "duplicate", "topic_id", "topic_text", "extra"]:
+	for damage in ["version", "version_type", "future_version", "station", "tick", "ordinal", "short", "nan", "heading", "height", "available", "topics", "two_topics", "six_topics", "duplicate", "topic_id", "topic_text", "extra"]:
 		var bad := packet.duplicate(true)
 		match damage:
 			"version": bad.version = 1
-			"version_type": bad.version = 2.0
-			"future_version": bad.version = 3
+			"version_type": bad.version = 3.0
+			"future_version": bad.version = 4
 			"station": bad.station_id = "0"
 			"tick": bad.tick = str(int(packet.tick) + 1)
 			"ordinal": bad.ordinal = 2
@@ -52,13 +53,25 @@ func packet_refusals(packet: Dictionary, walking: Dictionary) -> void:
 			"available": bad.available = 1
 			"topics": bad.topics = []
 			"two_topics": bad.topics.resize(2)
-			"five_topics":
-				while bad.topics.size() < 5: bad.topics.append({"id": bad.topics.size() + 1, "title": "Extra", "text": "Out of scope"})
+			"six_topics":
+				while bad.topics.size() < 6: bad.topics.append({"id": bad.topics.size() + 1, "title": "Extra", "text": "Out of scope"})
 			"duplicate": bad.topics[1].id = bad.topics[0].id
 			"topic_id": bad.topics[0].id = 1.0
 			"topic_text": bad.topics[0].text = 0
 			"extra": bad.extra = true
 		check(not Crew.valid_packet(bad, walking), "Malformed crew packet accepted: " + damage)
+
+func topic_layouts(packet: Dictionary, walking: Dictionary) -> void:
+	for optional_ids in [[], [4], [5], [4, 5]]:
+		var candidate := packet.duplicate(true)
+		candidate.topics = candidate.topics.slice(0, 3)
+		for id in optional_ids: candidate.topics.append({"id": id, "title": "Synthetic bounded topic", "text": "Presentation validation only."})
+		check(Crew.valid_packet(candidate, walking), "Independent optional topic IDs refused: " + str(optional_ids))
+	for ids in [[5, 4], [4, 4], [6], [0]]:
+		var candidate := packet.duplicate(true)
+		candidate.topics = candidate.topics.slice(0, 3)
+		for id in ids: candidate.topics.append({"id": id, "title": "Synthetic invalid topic", "text": "Presentation validation only."})
+		check(not Crew.valid_packet(candidate, walking), "Malformed optional topic order/identity accepted: " + str(ids))
 
 func asset_refusals(assets: String, output: String) -> void:
 	var layout: Variant = JSON.parse_string(FileAccess.get_file_as_string(assets.path_join("crew/idle-frames.json")))
@@ -112,7 +125,7 @@ func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, out
 		await process_frame
 		await process_frame
 		check(view.crew_open() and view.paused and view.crew_reader.readable_theme.default_font_size >= 20, "Crew reader resize lost paused readable modal")
-		for button in view.crew_reader.topics + [view.crew_reader.back]:
+		for button in view.crew_reader.topics + [view.crew_reader.keep, view.crew_reader.back]:
 			if not button.visible: continue
 			button.grab_focus()
 			await process_frame
@@ -233,7 +246,7 @@ func earned_contact_topics(shell: Control, owner: Variant, phases: String, asset
 		check(record.known and record.inspected == (label == "recovered"), "Crew fixture lacks the actual retained contact/inspection distinction: " + label)
 		var walking: Dictionary = owner.get_freedom_walk_state()
 		var packet: Dictionary = owner.get_freedom_station_crew()
-		if not check(Crew.valid_packet(packet, walking) and packet.topics.size() == 4 and packet.topics[3].id == 4 and packet.topics[3].title == "Can you look at my contact log?", "Earned contact omitted the explicit fourth topic: " + label):
+		if not check(Crew.valid_packet(packet, walking) and packet.topics.size() in [4, 5] and packet.topics[3].id == 4 and packet.topics[3].title == "Can you look at my contact log?", "Earned contact omitted the explicit fourth topic: " + label):
 			return
 		packet_refusals(packet, walking)
 		var response: String = packet.topics[3].text
@@ -314,6 +327,138 @@ func earned_contact_topics(shell: Control, owner: Variant, phases: String, asset
 		file.store_string(JSON.stringify({"schema": "apsis.crew-earned-contact-native/1", "completed": failures == 0, "rows": rows, "scope": "Actual earned contact/inspection retained by classified recovery, real facing ticks and paused input/read/Continue; no new facts, NPC memory or manual-controller acceptance"}, "\t") + "\n")
 		file.close()
 
+func knowledge_in(document: Variant) -> Dictionary:
+	var value: Variant = document
+	for depth in 16:
+		if not value is Dictionary: return {}
+		if value.get("knowledge") is Dictionary: return value.knowledge
+		value = value.get("voyage", value.get("base"))
+	return {}
+
+func lead_interactions(shell: Control, owner: Variant, phases: String, assets: String, output: String) -> void:
+	var source := phases.path_join("lead-station.json")
+	for gesture in ["keyboard", "mouse", "pad"]:
+		var prefix := output.path_join("lead-" + gesture)
+		if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Actual lead station Continue refused: " + gesture): return
+		var view: Control = shell.current_view
+		view.set_process(false)
+		view.set_process_input(false)
+		view.preferences_provider.persist = false
+		await process_frame
+		await process_frame
+		var initial := save(owner, prefix + "-initial.json")
+		var flight: Dictionary = owner.get_freedom_flight_state()
+		var facts: Dictionary = owner.get_freedom_observations()
+		var offer: Dictionary = owner.get_freedom_station_stellar_lead()
+		if not check(Notes.station_lead_valid(offer) and offer.can_keep and not offer.kept and initial == FileAccess.get_file_as_bytes(source), "Lead fixture lacks an authentic unkept zero-time offer: " + gesture): return
+		check(owner.get_freedom_station_stellar_lead() == offer and save(owner, prefix + "-read.json") == initial, "Reading the offer received or rerolled it")
+		# A wrong same-context clock token must refuse before any receipt exists.
+		var stale := "0" if offer.offer_tick != "0" else "1"
+		check(not owner.receive_freedom_station_stellar_lead(stale) and save(owner, prefix + "-stale.json") == initial, "Stale lead clock token changed the voyage")
+		if gesture == "pad":
+			Input.joy_connection_changed.emit(0, true)
+			if view.selected_pad != 0:
+				pad(view, 0, JOY_BUTTON_START, true)
+				pad(view, 0, JOY_BUTTON_START, false)
+		view.observe_neutral_controls()
+		view.resume_requested()
+		key(view, KEY_E, true)
+		key(view, KEY_E, false)
+		if not check(view.crew_open() and view.paused, "Actual lead conversation failed focused neutral entry: " + gesture): return
+		var topic: Button
+		for button in view.crew_reader.topics:
+			if button.visible and button.get_meta("topic_id") == 5: topic = button
+		if not check(topic != null and not view.crew_reader.keep.visible, "Lead topic absent or Keep visible before explicit topic selection"): return
+		topic.grab_focus()
+		if gesture == "pad":
+			pad(view, 0, JOY_BUTTON_A, true)
+			pad(view, 0, JOY_BUTTON_A, false)
+		else:
+			key(view, KEY_ENTER, true)
+			key(view, KEY_ENTER, false)
+		if not check(view.crew_reader.keep.visible and not view.crew_reader.keep.disabled and view.crew_reader.offer_tick == offer.offer_tick and save(owner, prefix + "-topic.json") == initial, "Selecting lead text recorded it or lost the current offer"): return
+		var dialogue: String = ""
+		for response in owner.get_freedom_station_crew().topics:
+			if response.id == 5: dialogue = response.text
+		check(not dialogue.is_empty() and dialogue in view.crew_reader.text.text, "Actual lead reader replaced the fresh C++ conversation with generic note text")
+		# The only mutation is the explicit Keep; direct signal calls retain all
+		# the owning station view's focus, modal and independent-demand guards.
+		key(view, KEY_W, true)
+		view.crew_reader.keep.pressed.emit()
+		key(view, KEY_W, false)
+		view.save_dialog.show()
+		view.crew_reader.keep.pressed.emit()
+		view.save_dialog.hide()
+		view.journey_dialog_open = true
+		view.crew_reader.keep.pressed.emit()
+		view.journey_dialog_open = false
+		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		view.crew_reader.keep.pressed.emit()
+		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+		check(not owner.get_freedom_station_stellar_lead().kept and save(owner, prefix + "-guarded.json") == initial, "Held demand/focus/modal bypassed Keep guards")
+		view.crew_reader.keep.grab_focus()
+		if gesture == "mouse":
+			await mouse_topic(view.crew_reader.keep)
+		elif gesture == "pad":
+			pad(view, 7, JOY_BUTTON_A, true)
+			pad(view, 7, JOY_BUTTON_A, false)
+			check(not owner.get_freedom_station_stellar_lead().kept, "Foreign controller received the report")
+			pad(view, 0, JOY_BUTTON_A, true)
+			pad(view, 0, JOY_BUTTON_A, false)
+		else:
+			key(view, KEY_ENTER, true)
+			key(view, KEY_ENTER, false)
+		var kept: Dictionary = owner.get_freedom_station_stellar_lead()
+		var bytes := save(owner, prefix + "-kept.json")
+		if not check(Notes.station_lead_valid(kept) and kept.kept and not kept.can_keep and kept.status == "unverified" and view.paused and not view.crew_reader.keep.visible and view.crew_reader.back.has_focus(), "Explicit Keep failed or resumed the journey: " + gesture): return
+		for response in owner.get_freedom_station_crew().topics:
+			if response.id == 5: check(response.text in view.crew_reader.text.text, "Keep retained the old offer instead of the fresh C++ confirmation")
+		var before_document: Variant = JSON.parse_string(initial.get_string_from_utf8())
+		var after_document: Variant = JSON.parse_string(bytes.get_string_from_utf8())
+		var knowledge := knowledge_in(after_document)
+		check(knowledge.has("station_stellar_lead"), "Explicit Keep failed to retain its typed knowledge component")
+		knowledge.erase("station_stellar_lead")
+		check(after_document == before_document and owner.get_freedom_flight_state() == flight and owner.get_freedom_observations() == facts, "Keep changed more than its one note: clock, resources, actor, chart or facts")
+		view.crew_reader.keep.pressed.emit()
+		check(not owner.receive_freedom_station_stellar_lead(offer.offer_tick) and save(owner, prefix + "-duplicate.json") == bytes, "Duplicate Keep changed the first receipt or voyage")
+		key(view, KEY_ESCAPE, true)
+		key(view, KEY_ESCAPE, false)
+		check(view.paused and not view.crew_open(), "Lead reader Back resumed walking")
+		if gesture == "pad": Input.joy_connection_changed.emit(0, false)
+		if not check(shell.select_start(owner, {"mode": "continue", "value": prefix + "-kept.json", "assets": assets}), "Kept lead Continue refused"): return
+		check(owner.get_freedom_station_stellar_lead() == kept and save(owner, prefix + "-continued.json") == bytes and shell.current_view.paused and not shell.current_view.crew_open(), "Continue changed the retained report or reopened a transient reader")
+	# Each source below is produced by real C++ receipt/search/arrival/recovery.
+	# Reading these snapshots does not claim the Godot reader flew those legs.
+	for phase in ["lead-kept", "lead-confirmed", "lead-visited", "lead-recovered"]:
+		var path := phases.path_join(phase + ".json")
+		if not check(shell.select_start(owner, {"mode": "continue", "value": path, "assets": assets}), "Lead archive phase Continue refused: " + phase): return
+		var view: Control = shell.current_view
+		view.set_process(false)
+		view.set_process_input(false)
+		var bytes := save(owner, output.path_join(phase + "-archive-before.json"))
+		var lead: Dictionary = owner.get_freedom_station_stellar_lead()
+		var status: String = {"lead-kept": "unverified", "lead-confirmed": "sensor_fix_acquired", "lead-visited": "visited", "lead-recovered": "visited"}[phase]
+		if not check(Notes.station_lead_valid(lead) and lead.kept and lead.status == status, "Actual lead phase lacks authoritative retained status: " + phase): return
+		var menu: CanvasLayer = null
+		var reader: Control
+		if view.has_method("open_observations"):
+			view.open_observations()
+			reader = view.observations_view
+		else:
+			menu = view.controls_menu
+			menu.show_observations()
+			reader = menu.observations_view
+		var found := false
+		for index in reader.titles().size():
+			var page: Dictionary = reader.titles()[index]
+			if page.get("title") == "STATION LEAD":
+				reader.page = index
+				reader.refresh()
+				found = lead.note in reader.body.text and "Origin bay attendant" in reader.body.text
+		check(found and reader.visible and view.paused and save(owner, output.path_join(phase + "-archive-after.json")) == bytes, "Archive omitted/changed the retained note or complete Save: " + phase)
+		reader.back_button.pressed.emit()
+		check(not reader.visible and view.paused, "Lead archive Back resumed the journey")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 4: quit(1); return
@@ -341,8 +486,9 @@ func run() -> void:
 	view.preferences_provider.persist = false
 	var packet: Dictionary = owner.get_freedom_station_crew()
 	if not check(Crew.valid_packet(packet, view.state) and view.paused and packet.name == "Bay attendant" and packet.foot_position_metres == PackedFloat64Array([1.3, 0, 0]), "Actual station crew binding unavailable"): shell.free(); quit(1); return
-	check(packet.version == 2 and packet.topics.size() == 3, "Unacquired contact exposed an extra crew topic")
+	check(packet.version == 3 and packet.topics.size() in [3, 4] and (packet.topics.size() == 3 or packet.topics[3].id == 5), "Unacquired contact exposed an extra crew topic")
 	packet_refusals(packet, view.state)
+	topic_layouts(packet, view.state)
 	asset_refusals(assets, output)
 	idle_views(view, packet)
 	var initial := save(owner, output.path_join("continued.json"))
@@ -401,8 +547,9 @@ func run() -> void:
 	for topic in packet.topics:
 		view.select_crew_topic(topic.id)
 		check(view.crew_reader.text.text == topic.text, "Crew reader did not present the actual selected C++ topic")
+	view.select_crew_topic(1)
 	var text: String = view.crew_reader.text.text
-	check(not view.crew_reader.topics[3].visible and view.crew_reader.topics[3].disabled, "Unknown-contact reader retained a hidden fourth action")
+	check(not view.crew_reader.keep.visible and not view.crew_reader.topics[4].visible and (not view.crew_reader.topics[3].visible or view.crew_reader.topics[3].get_meta("topic_id") == 5), "Unknown-contact reader invented topic4 or showed Keep without selecting a report")
 	view.select_crew_topic(4)
 	check(view.crew_reader.text.text == text, "Stale contact topic fabricated a response without earned knowledge")
 	view.select_crew_topic(999)
@@ -466,6 +613,7 @@ func run() -> void:
 	# regressions run independently before the existing original-route reset.
 	stop_talk_regressions(shell, owner, source, assets, output)
 	await earned_contact_topics(shell, owner, derelict_phases, assets, output, packet.topics)
+	await lead_interactions(shell, owner, derelict_phases, assets, output)
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Original station route reset refused"): shell.free(); quit(1); return
 	view = shell.current_view
 	view.set_process(false)

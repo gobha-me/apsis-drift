@@ -15,13 +15,34 @@ static func read_bridge(owner: Variant) -> Dictionary:
 			var flight: Variant = owner.call("get_freedom_flight_state")
 			derelict = flight.get("derelict", null) if flight is Dictionary else false
 			navigation = navigation_context(flight)
-	return {"samples": samples, "derelict": derelict, "navigation": navigation}
+	var result := {"samples": samples, "derelict": derelict, "navigation": navigation}
+	if owner is Object and is_instance_valid(owner) and owner.has_method("get_freedom_station_stellar_lead"):
+		result["station_lead"] = owner.call("get_freedom_station_stellar_lead")
+	return result
 
 static func word(value: Variant, tick: bool = false) -> bool:
 	if not value is String: return false
 	if tick and value == "0": return true
 	if not Derelict.valid_identity(value): return false
 	return not tick or value != "18446744073709551615"
+
+static func station_lead_valid(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 9: return false
+	for field in ["version", "selected", "kept", "can_keep", "offer_tick", "received_tick", "status", "source", "note"]:
+		if not value.has(field): return false
+	if typeof(value.version) != TYPE_INT or value.version != 1: return false
+	for field in ["selected", "kept", "can_keep"]:
+		if not value[field] is bool: return false
+	for field in ["offer_tick", "received_tick", "status", "source", "note"]:
+		if not value[field] is String: return false
+	if value.note.strip_edges().is_empty() or value.note.length() > 2048: return false
+	if not value.selected:
+		return not value.kept and not value.can_keep and value.offer_tick.is_empty() and value.received_tick.is_empty() and value.source.is_empty() and value.status == "unselected"
+	if value.kept:
+		return not value.can_keep and value.offer_tick.is_empty() and word(value.received_tick, true) and value.source == "Origin bay attendant" and value.status in ["unverified", "sensor_fix_acquired", "visited"]
+	if not value.received_tick.is_empty() or value.status != "unrecorded": return false
+	if value.can_keep: return word(value.offer_tick, true) and value.source == "Origin bay attendant"
+	return value.offer_tick.is_empty() and value.source.is_empty()
 
 static func row_valid(row: Variant) -> bool:
 	if not row is Dictionary or row.size() != ROW_FIELDS.size(): return false
@@ -93,7 +114,11 @@ static func unavailable(family: String) -> Dictionary:
 	return {"title": family, "text": family + " are unavailable. Reading this page does not change the voyage."}
 
 static func pages(candidate: Variant) -> Array:
-	if not candidate is Dictionary or candidate.size() not in [2, 3] or not candidate.has("samples") or not candidate.has("derelict") or (candidate.size() == 3 and not candidate.has("navigation")):
+	if not candidate is Dictionary or not candidate.has("samples") or not candidate.has("derelict"):
+		return [unavailable("Exploration notes")]
+	for field in candidate:
+		if field not in ["samples", "derelict", "navigation", "station_lead"]: return [unavailable("Exploration notes")]
+	if candidate.size() < 2 or candidate.size() > 4:
 		return [unavailable("Exploration notes")]
 	var result: Array = []
 	var samples: Variant = candidate.samples
@@ -114,4 +139,11 @@ static func pages(candidate: Variant) -> Array:
 			text += "\n\n" + derelict.history if derelict.inspected else "\n\nExterior inspection has not been recorded."
 			text += "\n\nRetained contact note. This archive does not show a live position or approach clearance."
 			result.append({"title": "DERELICT CONTACT", "text": text})
+	if candidate.has("station_lead"):
+		var lead: Variant = candidate.station_lead
+		if not station_lead_valid(lead):
+			result.append(unavailable("Station lead"))
+		elif lead.kept:
+			var status: String = {"unverified": "Unverified report", "sensor_fix_acquired": "Sensor fix acquired", "visited": "Visited"}[lead.status]
+			result.append({"title": "STATION LEAD", "text": "%s\nSource: %s\nReceived · ship time %.1f s\n\n%s\n\nThis stable stellar report has no expiry or freshness promise. It reserves no claim and offers no reward." % [status, lead.source, float(lead.received_tick) / 120.0, lead.note]})
 	return result

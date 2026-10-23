@@ -121,7 +121,8 @@ class NativeCiTest(unittest.TestCase):
                      "foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw")}
                     if family == "derelict_saves":
                         row["files_sha256"] = {n + ".json": SHA for n in
-                            ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered")}
+                            ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered",
+                     "lead-station", "lead-kept", "lead-confirmed", "lead-visited", "lead-recovered")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
@@ -411,13 +412,14 @@ class NativeCiTest(unittest.TestCase):
                 self.assertEqual(rows.count("derelict_saves"), 1)
                 self.assertEqual(binaries.count(ci.FIXTURES["derelict"]), 1)
 
-    def test_derelict_roster_requires_contact_recovery_in_both_cohorts(self):
+    def test_derelict_roster_requires_contact_recovery_and_stellar_leads_in_both_cohorts(self):
         args = self.make_check()
         for group in (2, 4):
             original = ci.read_json(self.root / f"work-{group}/native-contracts-unit/report.json")
             row = next(r for r in original["setup"] if r.get("family") == "derelict_saves")
-            self.assertEqual(len(row["files_sha256"]), 7)
+            self.assertEqual(len(row["files_sha256"]), 12)
             self.assertIn("contact-recovered.json", row["files_sha256"])
+            self.assertIn("lead-recovered.json", row["files_sha256"])
             for name in row["files_sha256"]:
                 with self.subTest(group=group, missing=name):
                     def remove(r):

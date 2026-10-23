@@ -184,6 +184,10 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto station_crew() const
       -> std::expected<OriginCrewView, std::string>;
+  [[nodiscard]] auto station_stellar_lead_view() const
+      -> std::expected<NativeStationStellarLeadView, std::string>;
+  [[nodiscard]] auto receive_station_stellar_lead(SimulationTick offered_tick)
+      -> std::expected<void, std::string>;
   [[nodiscard]] static auto open(NativeStartup selected)
       -> std::expected<NativeFreedomFlightSession, std::string>;
   [[nodiscard]] auto document() const -> const FreedomFlightSaveDocument& {

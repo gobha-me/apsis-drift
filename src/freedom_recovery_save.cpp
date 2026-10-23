@@ -118,6 +118,13 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  if (old.station_stellar_lead) {
+    if (now.station_stellar_lead != old.station_stellar_lead) return false;
+  } else if (now.station_stellar_lead &&
+             (now.station_stellar_lead->craft != current ||
+              now.station_stellar_lead->received_tick < loss_tick)) {
+    return false;
+  }
   if (now.derelicts.has_value() != old.derelicts.has_value()) return false;
   if (old.derelicts) {
     if (now.derelicts->version != old.derelicts->version) return false;

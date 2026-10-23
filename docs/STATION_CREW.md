@@ -32,6 +32,27 @@ the attendant supplies no unseen contacts, coordinates or extra discovery facts.
 Reading either response leaves the save unchanged. There is no rumor timer,
 reward, new relationship state or requirement to return before exploring further.
 
+## One optional stellar lead
+
+In a journey with the six-system uncharted region, the attendant may offer
+**Heard anything beyond the chart?** Reading it remains save-neutral. Choose
+**Keep this lead** to retain one report in **Recorded observations →
+Exploration notes**. It records the source and ship time; it grants no navigation
+fix or selectable destination.
+
+Use the existing **Search nearby stars** action in ordinary space flight.
+Its actual sensor acquisition can confirm the report; a physical arrival adds
+a separate visited status. Search order remains unchanged. The original note
+survives Continue and standard recovery, including its original craft provenance.
+The report concerns a stable star and has no expiry or freshness promise. It
+reserves no salvage claim, offers no reward and gates no departure or scanner.
+
+C++ owns the independently versioned optional knowledge note and validates the
+actual attendant context, offered tick and complete save before receipt. Godot
+receives source/status text and a known-clock offer token, without the unknown
+target's identity or position. Unsupported and historical journeys retain their
+existing recipes and absent-note encodings.
+
 The decorative bubble cooldown currently uses Godot's signed integer clock
 conversion. Extreme unsigned save clocks can suppress chatter; C++ conversation
 eligibility, saved time and the journey remain independent of that display limit.

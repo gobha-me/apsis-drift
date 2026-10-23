@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -118,7 +119,7 @@ auto crew_log_topic(const NativeFreedomFlightSession& live, bool inspected)
       *live.walker(), live.document().flight.tick));
   for (unsigned repeat = 0; repeat < 3; ++repeat) {
     const auto crew = need(live.station_crew());
-    check(crew.topic_count == 4 && crew.topic_count == crew.topics.size() &&
+    check(crew.topic_count == 4 && crew.topic_count < crew.topics.size() &&
               crew.available == baseline.available &&
               crew.reason == baseline.reason &&
               crew.station == baseline.station &&
@@ -274,6 +275,123 @@ auto exercise(const std::filesystem::path& output) -> void {
   resumed = continued(resumed, output / "recovered.json");
   crew_log_topic(resumed, true);
 }
+auto stellar_lead_exercise(const std::filesystem::path& output) -> void {
+  // Independent journey: none of the seven original derelict phases receives
+  // a report. Keep a large native session off this additional fixture's stack.
+  auto live = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_uncharted_network_new_game({42})))));
+  const auto initial =
+      need(encode_native_save_document_json(need(live->save_document())));
+  check(!live->receive_station_stellar_lead(live->document().flight.tick) &&
+            need(encode_native_save_document_json(
+                need(live->save_document()))) == initial,
+        "Report receipt requires the actual eligible attendant context");
+  need(live->advance_walk({0, 0, -std::numbers::pi / 2}));
+  const auto offer = need(live->station_stellar_lead_view());
+  const auto crew = need(live->station_crew());
+  check(offer.selected && !offer.kept && offer.can_keep &&
+            offer.offer_tick == live->document().flight.tick &&
+            !offer.received_tick && offer.status == "unrecorded" &&
+            crew.available && crew.topic_count == 4 && crew.topics[3].id == 5 &&
+            !live->knowledge()->derelicts->contact,
+        "Actual nearby attendant offers stable topic5 without inventing "
+        "earned contact topic4 or a navigation fix");
+  *live = continued(*live, output / "lead-station.json");
+  const auto before =
+      need(encode_native_save_document_json(need(live->save_document())));
+  const auto document = live->document();
+  const auto resources = live->resources();
+  auto expected_knowledge = *live->knowledge();
+  for (unsigned read = 0; read < 3; ++read) {
+    check(need(live->station_stellar_lead_view()).offer_tick ==
+                  offer.offer_tick &&
+              need(live->station_crew()).topics[3].id == 5 &&
+              !live->receive_station_stellar_lead(live->document().flight.tick +
+                                                  1) &&
+              need(encode_native_save_document_json(
+                  need(live->save_document()))) == before,
+          "Report reads and stale receipt preserve complete current Save");
+  }
+  need(live->receive_station_stellar_lead(*offer.offer_tick));
+  expected_knowledge.station_stellar_lead =
+      live->knowledge()->station_stellar_lead;
+  const auto kept = need(live->station_stellar_lead_view());
+  check(kept.kept && !kept.can_keep && !kept.offer_tick &&
+            kept.received_tick == offer.offer_tick &&
+            kept.status == "unverified" &&
+            *live->knowledge() == expected_knowledge &&
+            live->document() == document && live->resources() == resources,
+        "Explicit receipt adds only the immutable personal note, without "
+        "time, fuel, facts or a chart destination");
+  const auto note = *live->knowledge()->station_stellar_lead;
+  const auto kept_bytes =
+      need(encode_native_save_document_json(need(live->save_document())));
+  check(!live->receive_station_stellar_lead(*offer.offer_tick) &&
+            need(encode_native_save_document_json(
+                need(live->save_document()))) == kept_bytes,
+        "Duplicate Keep refuses without rerolling or changing the note");
+  *live = continued(*live, output / "lead-kept.json");
+  for (unsigned tick = 0; tick < 1194; ++tick)
+    need(live->advance_walk({0, -1, 0}));
+  need(live->begin_boarding());
+  for (SimulationTick tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    need(live->advance_walk({}));
+  need(live->release_port());
+  need(live->set_assistance(false));
+  auto source =
+      std::get<FreedomKnowledgeSaveDocument>(need(live->save_document()));
+  auto& flight =
+      std::get<FreedomBoardingSaveDocument>(source.voyage.voyage.base)
+          .voyage.flight;
+  const auto home = need(find_local_system_planet(
+      live->system(), flight.origin.recipe.home_planet));
+  // The same disclosed saved-space placement as the original fixture. The
+  // following search ticks and charged visit are real, not a flown ascent.
+  flight.flight.position_metres = {
+      0, 0, static_cast<double>(home->descriptor.radius.value) * 10000};
+  flight.flight.linear_velocity_metres_per_second = {};
+  flight.flight.angular_velocity_radians_per_second = {};
+  flight.flight = need(canonicalize_rigid_body_state(
+      RigidBodyWorldContext{live->system()}, flight.flight));
+  *live = need(NativeFreedomFlightSession::open(
+      need(native_select_save_document(std::move(source)))));
+  need(live->begin_star_search());
+  for (SimulationTick tick = 0; tick < kFreedomStarSearchTicks; ++tick)
+    need(live->advance({}));
+  check(live->knowledge()->star_search->completed.size() == 1 &&
+            live->knowledge()->star_search->completed[0].target ==
+                note.target &&
+            live->knowledge()->station_stellar_lead == note &&
+            need(live->station_stellar_lead_view()).status ==
+                "sensor_fix_acquired",
+        "Only the unchanged real 1200-tick ship search confirms the report");
+  *live = continued(*live, output / "lead-confirmed.json");
+  need(live->select_jump(note.target));
+  need(live->begin_jump());
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick)
+    need(live->advance({}));
+  check(
+      need(live->station_stellar_lead_view()).status == "visited" &&
+          live->resources()->jump_charges == 2 &&
+          live->knowledge()->station_stellar_lead == note,
+      "Actual charged target-system arrival supplies distinct visit evidence");
+  *live = continued(*live, output / "lead-visited.json");
+  need(live->record_loss(
+      FreedomLossCause::recoverable_destruction,
+      live->document().origin.state.craft, live->document().flight.tick,
+      need(rigid_body_state_checksum(RigidBodyWorldContext{live->system()},
+                                     live->document().flight))));
+  need(live->complete_recovery());
+  check(live->walker().has_value() &&
+            live->document().origin.state.craft != note.craft &&
+            live->knowledge()->station_stellar_lead == note &&
+            need(live->station_stellar_lead_view()).status == "visited",
+        "Explicit classified recovery preserves the personal report and "
+        "genuine visit, including its historical craft provenance");
+  *live = continued(*live, output / "lead-recovered.json");
+}
 } // namespace
 
 auto main(int argc, char** argv) -> int {
@@ -286,6 +404,7 @@ auto main(int argc, char** argv) -> int {
                                                     .count()));
   try {
     exercise(output);
+    stellar_lead_exercise(output);
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     ++failures;

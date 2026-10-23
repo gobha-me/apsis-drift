@@ -409,6 +409,26 @@ auto validate_star_search(const FreedomKnowledge& k, const KnowledgeWorld& w,
   }
   return {};
 }
+auto validate_station_stellar_lead(const FreedomKnowledge& k,
+                                   const KnowledgeWorld& w, SimulationTick now)
+    -> std::expected<void, Error> {
+  if (!k.station_stellar_lead) return {};
+  const auto& lead = *k.station_stellar_lead;
+  if (k.recipe.version != kFreedomUnchartedKnowledgeVersion || !k.star_search ||
+      lead.version != kFreedomStationStellarLeadVersion ||
+      lead.station != w.station.id || lead.attendant != 1 ||
+      lead.received_tick > now || !valid_sample_craft(w, lead.craft))
+    return std::unexpected{Error::invalid_station_stellar_lead};
+  // Validate the whole ledger at now, then reconstruct only evidence that
+  // existed at receipt. Later sensor fixes cannot reroll a retained report.
+  std::vector<FreedomStarSearchRecord> prior;
+  for (const auto& record : k.star_search->completed)
+    if (record.completed_tick <= lead.received_tick) prior.push_back(record);
+  if (next_star_target(w, w.origin.catalog.id, prior, lead.received_tick) !=
+      lead.target)
+    return std::unexpected{Error::invalid_station_stellar_lead};
+  return {};
+}
 auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
               SimulationTick now) -> std::expected<void, Error> {
   if (now == std::numeric_limits<SimulationTick>::max())
@@ -419,6 +439,7 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
                                       : kMaximumFreedomKnowledgeFacts))
     return std::unexpected{Error::oversized_ledger};
   if (auto v = validate_star_search(k, w, now); !v) return v;
+  if (auto v = validate_station_stellar_lead(k, w, now); !v) return v;
   if (k.derelicts) {
     const auto valid_craft = [&](const auto& record) {
       return !record || valid_sample_craft(w, record->craft);
@@ -795,6 +816,56 @@ auto apply_freedom_knowledge(const FreedomKnowledge& k,
   }
   if (auto v = validate(next, *w, now); !v) return std::unexpected{v.error()};
   return next;
+}
+auto offer_freedom_station_stellar_lead(const FreedomKnowledge& k,
+                                        StarterCraftId craft,
+                                        SimulationTick now)
+    -> std::expected<FreedomStationStellarLead, FreedomKnowledgeError> {
+  const auto w = world(k.recipe);
+  if (!w) return std::unexpected{w.error()};
+  if (auto v = validate(k, *w, now); !v) return std::unexpected{v.error()};
+  if (k.recipe.version != kFreedomUnchartedKnowledgeVersion || !k.star_search ||
+      k.station_stellar_lead)
+    return std::unexpected{Error::invalid_station_stellar_lead};
+  const auto current = derive_freedom_craft_identity(
+      k.recipe.universe_seed,
+      k.recipe.craft_lineage ? k.recipe.craft_lineage->generation : 0);
+  const auto target =
+      next_star_target(*w, w->origin.catalog.id, k.star_search->completed, now);
+  if (!current || craft != *current || !target)
+    return std::unexpected{Error::invalid_station_stellar_lead};
+  return FreedomStationStellarLead{
+      kFreedomStationStellarLeadVersion, w->station.id, 1, craft, now, *target};
+}
+auto receive_freedom_station_stellar_lead(const FreedomKnowledge& k,
+                                          const FreedomStationStellarLead& lead,
+                                          SimulationTick now)
+    -> std::expected<FreedomKnowledge, FreedomKnowledgeError> {
+  const auto offer = offer_freedom_station_stellar_lead(k, lead.craft, now);
+  if (!offer) return std::unexpected{offer.error()};
+  if (*offer != lead)
+    return std::unexpected{Error::invalid_station_stellar_lead};
+  auto next = k;
+  next.station_stellar_lead = lead;
+  return next;
+}
+auto freedom_station_stellar_lead_status(const FreedomKnowledge& k,
+                                         SimulationTick now)
+    -> std::expected<FreedomStationStellarLeadStatus, FreedomKnowledgeError> {
+  const auto w = world(k.recipe);
+  if (!w) return std::unexpected{w.error()};
+  if (auto v = validate(k, *w, now); !v) return std::unexpected{v.error()};
+  using Status = FreedomStationStellarLeadStatus;
+  if (!k.station_stellar_lead) return Status::absent;
+  const auto target = k.station_stellar_lead->target;
+  const auto presence =
+      locate(k, {KnowledgeSubjectKind::system, target, target.value},
+             KnowledgeFact::presence);
+  if (presence != k.entries.end()) return Status::visited;
+  if (std::ranges::any_of(k.star_search->completed,
+                          [&](const auto& r) { return r.target == target; }))
+    return Status::sensor_fix_acquired;
+  return Status::unverified;
 }
 auto begin_freedom_star_search(const FreedomKnowledge& k, SystemId source,
                                StarterCraftId craft, SimulationTick now)

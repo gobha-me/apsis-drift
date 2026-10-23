@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -24,9 +25,17 @@ struct OriginCrewView {
   double heading_radians{}, height_metres{1.85};
   bool available{};
   std::string reason;
-  std::array<OriginCrewTopic, 4> topics{};
+  std::array<OriginCrewTopic, 5> topics{};
   std::size_t topic_count{3};
   std::string_view remark;
+};
+// Read-only presentation of a personal report. Neither the private target nor
+// a generated position crosses this boundary; navigation still needs sensors.
+struct NativeStationStellarLeadView {
+  bool selected{}, kept{}, can_keep{};
+  std::optional<SimulationTick> offer_tick, received_tick;
+  std::string_view status{"unselected"}, source{""};
+  std::string_view note{"This journey has no station stellar report"};
 };
 [[nodiscard]] auto origin_station_crew(const OriginStationDescriptor&,
                                        const OriginWalkerState&, SimulationTick)

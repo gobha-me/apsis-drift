@@ -23,6 +23,7 @@ var initial_frame_diagnostics := false
 var mouse_look := MouseLook.new()
 const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 const StationCrew = preload("res://scripts/native/native_station_crew.gd")
+const ExplorationNotes = preload("res://scripts/native/exploration_notes.gd")
 const CrewConversation = preload("res://scripts/native/station_crew_conversation.gd")
 var crew_actor: Node3D
 var crew_reader: Control
@@ -433,6 +434,7 @@ func build_ui() -> void:
 	observations_view.set_process_input(false)
 	crew_reader = CrewConversation.new()
 	crew_reader.topic_requested.connect(select_crew_topic)
+	crew_reader.keep_requested.connect(keep_station_lead)
 	crew_reader.back_requested.connect(close_crew_conversation)
 	add_child(crew_reader)
 	save_dialog.canceled.connect(save_canceled)
@@ -695,11 +697,38 @@ func select_crew_topic(id: int) -> void:
 	if not StationCrew.valid_packet(packet, state) or not packet.available: return
 	for topic in packet.topics:
 		if topic.id == id:
+			crew_reader.clear_lead()
 			crew_reader.text.text = topic.text
+			if id == 5:
+				var lead: Variant = bridge.get_freedom_station_stellar_lead()
+				if ExplorationNotes.station_lead_valid(lead): crew_reader.show_lead(lead, topic.text)
 			return
+
+func keep_station_lead() -> void:
+	if not crew_open() or not paused or not focused or journey_dialog_open or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or crew_reader.keep.disabled or not crew_reader.keep.visible: return
+	var packet: Variant = bridge.get_freedom_station_crew()
+	if not StationCrew.valid_packet(packet, state) or not packet.available: return
+	var offered := false
+	for topic in packet.topics:
+		if topic.id == 5: offered = true
+	if not offered: return
+	var lead: Variant = bridge.get_freedom_station_stellar_lead()
+	if not ExplorationNotes.station_lead_valid(lead) or not lead.can_keep or lead.offer_tick != crew_reader.offer_tick:
+		crew_reader.clear_lead()
+		crew_reader.text.text = "This offer is no longer available. Choose the topic again to review the current report."
+		return
+	var kept: bool = bridge.receive_freedom_station_stellar_lead(crew_reader.offer_tick)
+	crew_reader.clear_lead()
+	if kept:
+		# Rebuild from the fresh C++ response and note, never append to old text.
+		select_crew_topic(5)
+	else:
+		crew_reader.text.text = str(bridge.get_last_error())
+	crew_reader.back.grab_focus()
 
 func close_crew_conversation() -> void:
 	if not crew_open() or not focused: return
+	crew_reader.clear_lead()
 	crew_reader.hide()
 	controls_armed = false
 	refresh_hud()

@@ -391,6 +391,12 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_crew"),
                                 &FreedomBridge::get_freedom_station_crew);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_station_stellar_lead"),
+        &FreedomBridge::get_freedom_station_stellar_lead);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("receive_freedom_station_stellar_lead", "offer_tick"),
+        &FreedomBridge::receive_freedom_station_stellar_lead);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("advance_freedom_walk", "elapsed", "controls"),
         &FreedomBridge::advance_freedom_walk);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_boarding"),
@@ -1724,6 +1730,21 @@ class FreedomBridge : public godot::RefCounted {
       return session.cancel_star_search();
     });
   }
+  auto receive_freedom_station_stellar_lead(const godot::Variant& value)
+      -> bool {
+    if (value.get_type() != godot::Variant::STRING) {
+      last_error = "Station report offer requires a decimal tick string";
+      return false;
+    }
+    const auto tick = identity_word(static_cast<godot::String>(value));
+    if (!tick || *tick == std::numeric_limits<SimulationTick>::max()) {
+      last_error = "Station report offer requires a canonical bounded tick";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.receive_station_stellar_lead(*tick);
+    });
+  }
   auto scan_freedom_derelict() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.scan_derelict();
@@ -2716,7 +2737,7 @@ class FreedomBridge : public godot::RefCounted {
     if (!crew || crew->topic_count < 3 ||
         crew->topic_count > crew->topics.size())
       return result;
-    result["version"] = 2;
+    result["version"] = 3;
     result["station_id"] =
         godot::String{std::to_string(crew->station.value).c_str()};
     result["tick"] = godot::String{
@@ -2744,6 +2765,29 @@ class FreedomBridge : public godot::RefCounted {
     }
     result["topics"] = topics;
     result["remark"] = godot::String{crew->remark.data()};
+    return result;
+  }
+
+  auto get_freedom_station_stellar_lead() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.station_stellar_lead_view();
+    if (!view) return result;
+    result["version"] = 1;
+    result["selected"] = view->selected;
+    result["kept"] = view->kept;
+    result["can_keep"] = view->can_keep;
+    result["offer_tick"] =
+        view->offer_tick
+            ? godot::String{std::to_string(*view->offer_tick).c_str()}
+            : godot::String{};
+    result["received_tick"] =
+        view->received_tick
+            ? godot::String{std::to_string(*view->received_tick).c_str()}
+            : godot::String{};
+    result["status"] = godot::String{view->status.data()};
+    result["source"] = godot::String{view->source.data()};
+    result["note"] = godot::String{view->note.data()};
     return result;
   }
 

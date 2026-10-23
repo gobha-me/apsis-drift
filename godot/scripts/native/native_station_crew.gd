@@ -11,7 +11,7 @@ var frames: Dictionary = {}
 var last_view := ""
 
 static func valid_packet(value: Variant, walking: Dictionary) -> bool:
-	if not value is Dictionary or value.size() != 12 or value.get("version") != 2 or not value.get("version") is int or value.get("ordinal") != 1 or not value.get("ordinal") is int: return false
+	if not value is Dictionary or value.size() != 12 or value.get("version") != 3 or not value.get("version") is int or value.get("ordinal") != 1 or not value.get("ordinal") is int: return false
 	for field in ["station_id", "tick"]:
 		if not NativeEnvironment.decimal(value.get(field)) or value[field] != walking.get(field): return false
 	for field in ["name", "reason", "remark"]:
@@ -20,11 +20,14 @@ static func valid_packet(value: Variant, walking: Dictionary) -> bool:
 	for component in value.foot_position_metres:
 		if not is_finite(component) or absf(component) > 1000.0: return false
 	if not value.get("heading_radians") is float or not is_finite(value.heading_radians) or absf(value.heading_radians) > PI or value.get("height_metres") != 1.85 or not value.get("height_metres") is float: return false
-	if not value.get("topics") is Array or not value.topics.size() in [3, 4]: return false
+	if not value.get("topics") is Array or not value.topics.size() in [3, 4, 5]: return false
 	var ids := {}
 	for index in value.topics.size():
 		var topic: Variant = value.topics[index]
-		if not topic is Dictionary or topic.size() != 3 or not topic.get("id") is int or topic.id != index + 1 or ids.has(topic.id): return false
+		if not topic is Dictionary or topic.size() != 3 or not topic.get("id") is int or ids.has(topic.id): return false
+		if index < 3:
+			if topic.id != index + 1: return false
+		elif topic.id not in [4, 5] or topic.id <= value.topics[index - 1].id: return false
 		if not topic.get("title") is String or topic.title.is_empty() or topic.title.length() > 96 or not topic.get("text") is String or topic.text.is_empty() or topic.text.length() > 2048: return false
 		ids[topic.id] = true
 	return true
