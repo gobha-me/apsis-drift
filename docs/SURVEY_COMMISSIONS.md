@@ -83,3 +83,9 @@ The separate [ordinary paid-survey reference](FREEDOM_ENDURANCE.md#ordinary-paid
 measures a fully flown seed 42 paid trip with a positive operating cash
 change after restoration. It is a C++ test-pilot reference; broader balance,
 failed/delayed work and player review remain open.
+
+The [incomplete-work reference](research/incomplete-paid-survey-reference-v1.json)
+separately flies outward and home without completing the measurement. It records
+zero payment, actual restoration costs and acceptance of fresh work after
+explicit abandonment. It establishes that one next action remains viable for
+that candidate; expiry, sparse starts and player pacing remain separate.

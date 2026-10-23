@@ -734,7 +734,10 @@ def main(argv=None):
                 [str(phases), "--neighbor", "--commands", "--continue-from=" + str(work / "missing-continuation.json")],
                 [str(phases), "--charted-arrivals"],
                 [str(phases), "--neighbor", "--commands", "--charted-arrivals"],
-                [str(phases), "--neighbor", "--commands", "--commission", "--charted-arrivals", "--charted-arrivals"])):
+                [str(phases), "--neighbor", "--commands", "--commission", "--charted-arrivals", "--charted-arrivals"],
+                [str(phases), "--incomplete-commission"],
+                [str(phases), "--neighbor", "--commands", "--incomplete-commission"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--incomplete-commission", "--incomplete-commission"])):
             refusal_log = work / f"{name}-refusal-{index}.log"
             code, timed_out, _ = run_logged(
                 [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
