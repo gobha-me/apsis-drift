@@ -56,5 +56,9 @@ The earlier measured reference voyage would cost 39 credits under these rates,
 but it was not a fulfilled commission. Automated scenarios use disclosed
 initialized space/orbit/approach poses and financial boundary fixtures. They do
 not establish ordinary commission profitability, sparse-start viability or
-player pacing. Those remain part of
+player pacing. A separate [ordinary paid-survey reference](FREEDOM_ENDURANCE.md#ordinary-paid-survey-reference)
+now measures one fully flown seed 42 trip: cash of 180 after enrollment becomes
+237 after actual payment and complete fuel restoration, over 103 game minutes.
+This single candidate does not settle pricing, failed work, sparse starts or
+player pacing; those remain part of
 [#293](https://github.com/gobha-me/apsis-drift/issues/293).

@@ -111,6 +111,56 @@ exceeds the sum of both traces by about 198%. These margins support a forgiving
 initial Freedom budget without constant refueling; they do not certify manual
 piloting, arbitrary terrain, damage, fuel-enabled integration or every new seed.
 
+## Ordinary paid-survey reference
+
+The opt-in `--neighbor --commands --commission` measurement starts seed 42 through
+the public planetary-chart New Game factory, explicitly enrolls in paid
+operations and accepts an Origin commission. Its test pilot walks, boards,
+departs, jumps, approaches the destination through real thrust, acquires the
+measurement in orbital flight, returns, captures, submits and buys restoration.
+It initializes no flight pose, velocity, clock, resource or financial state.
+The candidate controller is test instrumentation, not a gameplay autopilot.
+
+GCC and Clang completed all 21 checkpoint/Continue boundaries with all 46 route
+artifacts byte-identical. The [compact reference](research/paid-survey-reference-v1.json)
+retains exact quantities, recipes, controller parameters and evidence hashes:
+
+| Quantity | Measured result |
+| --- | ---: |
+| Elapsed game ticks at 120 Hz | 742,012 / 103.057 minutes |
+| Flight fuel consumed | 915,747,858,965,318 Q / 30.20% of tank |
+| Jump charges before restoration | 3→2→1 |
+| Fresh qualifying measurement | 3,600 ticks / 30 seconds |
+| Flight + jump restoration | 13+30=43 credits |
+| New berth bill during trip | 0; initial four hours prepaid |
+| Cash after enrollment → report → restoration | 180→280→237 |
+| Stores after confirmed purchase | Full flight tank and 3 jump charges |
+
+The opening 200 credits include 20 for the first four berth hours; final cash of
+237 is 57 above the enrolled balance and 37 above the original budget. The actual
+qualifying measurement runs from tick 522,813 through 526,412 inclusive. Its raw
+owner record starts at 4,401, before qualification; that field is not thirty
+seconds of earlier acquired work. No insurance or operating tab is used.
+
+Reproduce it in a new empty directory after building the native fixture:
+
+```sh
+mkdir paid-trip
+build-native/src/godot/apsis-drift-freedom-planetary-fixture \
+  "$PWD/paid-trip" --neighbor --commands --commission
+```
+
+`trace.json` records completion, finance and resource totals. Checkpoint saves
+retain Continue comparisons; `commission-progress.json` is an interim snapshot,
+including on failure. The additional recorded financial commands are supported
+by the C++ uninterrupted peer, not the existing Godot voyage-replay helper.
+
+This is one candidate using the default Standard drive and Assisted profile,
+not an optimal route, manual handling, GPU performance or a seed distribution.
+Its travel time of 103 minutes needs player review. The failed/delayed-work case,
+typical/sparse starts, later berth bills and broader balance remain #293 work;
+the prototype prices remain provisional.
+
 ## Atmosphere/gravity reference matrix
 
 Each row uses an actual generated physical catalog 2/ephemeris 2 body and the
@@ -173,16 +223,20 @@ consumes none; repeated completion cannot debit twice. Zero charges refuses
 the jump while preserving other state. Departure/arrival/history and charge
 debit commit together. Outbound plus return leaves one reserve:3→2→1.
 
-For this playable, no cooldown, pressure/gravity risk or fuel conversion hides
-an extra charge. Beyond-rated/repeated-use/condition risk remains #193/#248 and
-must not quietly redefine this in-range charge contract. Actual neighboring
-native travel and its fuel-enabled acceptance remain #176/#194/#251.
+The one-charge rule also applies to early jumps under the separately selected
+[drive recovery and temporary strain policies](FREEDOM_JUMP_RECOVERY.md).
+Their recovery time affects arrival uncertainty, without a lockout or extra
+charge. Broader pressure/gravity, permanent condition and extended-range rules
+remain #193/#248 work and must not redefine this resource contract implicitly.
 
 Free deterministic station replenishment belongs to #246: verify the actual
 craft is attached to a supported service port, then refill both pools to their
 exact versioned capacities atomically. Proximity, pause/load, elapsed real time
 or a speculative market quote does not refill. Surface depletion can leave
 jump charges intact; no automatic surface jump or damage immunity is implied.
+The later, explicitly selected [paid operating prototype](PAID_OPERATIONS.md)
+replaces free service with a confirmed quote in enrolled journeys; this original
+resource contract does not select an economy for historical saves.
 Standard replacement/recovery belongs to #247 and must remain available when
 ordinary return is impossible. No field harvesting, tow economy or suit fuel
 pool is invented by this contract.
