@@ -67,8 +67,21 @@ func packet_controls(packet: Dictionary) -> void:
 		var bad := packet.duplicate(true)
 		bad.merge(change, true)
 		check(not Office.valid_packet(bad), "malformed office packet accepted: " + str(change.keys()))
-	var progress := {"active": true, "completed": false, "expired": false, "acquired_ticks": 3599, "earnings": "0"}
+	var progress := {"active": true, "completed": false, "expired": false, "acquired_ticks": 3599, "earnings": "0", "remaining_ticks": 1}
 	check(FlightView.valid_commission_progress(progress), "bounded partial progress refused")
+	check("29.9 / 30 s" in FlightView.commission_progress_text(progress) and "less than 1 s" in FlightView.commission_progress_text(progress), "3599 intervals or last pre-deadline tick round up")
+	var complete := progress.duplicate()
+	complete.merge({"completed": true, "acquired_ticks": 3600, "remaining_ticks": 120}, true)
+	check("report ready" in FlightView.commission_progress_text(complete) and "0:00:01 left" in FlightView.commission_progress_text(complete), "completed report loses remaining submission time")
+	complete.merge({"expired": true, "remaining_ticks": 0}, true)
+	check(FlightView.valid_commission_progress(complete) and FlightView.commission_progress_text(complete) == "Commission · deadline passed", "deadline equality does not expire a completed report")
+	var inactive := {"active": false, "completed": false, "expired": false, "acquired_ticks": 0, "earnings": "100", "remaining_ticks": 0}
+	check(FlightView.valid_commission_progress(inactive) and FlightView.commission_progress_text(inactive).is_empty(), "inactive paid account invents active countdown")
+	for bad_remaining in [null, false, 1.0, NAN, INF, -1, 1728001, 0]:
+		var bad := progress.duplicate(true)
+		bad.remaining_ticks = bad_remaining
+		check(not FlightView.valid_commission_progress(bad), "malformed or inconsistent remaining ticks accepted")
+
 	for change in [{"extra": true}, {"active": 1}, {"completed": null}, {"expired": "no"}, {"acquired_ticks": 3599.0}, {"acquired_ticks": NAN}, {"acquired_ticks": -1}, {"acquired_ticks": 3601}, {"acquired_ticks": 3600}, {"earnings": 0}, {"earnings": "01"}, {"earnings": "18446744073709551616"}]:
 		var bad := progress.duplicate(true)
 		bad.merge(change, true)
@@ -77,6 +90,14 @@ func packet_controls(packet: Dictionary) -> void:
 		var bad := progress.duplicate(true)
 		bad.erase(field)
 		check(not FlightView.valid_commission_progress(bad), "missing progress field accepted: " + field)
+
+func progress_matches_office(owner: Variant, packet: Dictionary) -> bool:
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var progress: Variant = state.get("survey_commission")
+	if not FlightView.valid_commission_progress(progress): return false
+	# Retained seed42 fixture clocks fit signed int; this is not a uint64 parser.
+	var remaining := maxi(0, int(packet.deadline_tick) - int(packet.tick)) if packet.sequence != 0 else 0
+	return progress.remaining_ticks == remaining and progress.active == (packet.sequence != 0) and progress.completed == packet.completed and progress.expired == packet.expired and progress.acquired_ticks == packet.acquired_ticks
 
 func malformed_commands(owner: Variant, packet: Dictionary, output: String) -> void:
 	var before := save(owner, output.path_join("arguments-before.json"))
@@ -207,6 +228,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	view.open_survey_commissions()
 	page = reader(view)
 	check(page.visible and page.packet.acquired_ticks == 3599 and not page.packet.completed and page.submit_button.disabled and page.accept_button.disabled and "29.9" in page.details.text, "3599-interval reader falsely completed or omitted actual progress")
+	check(progress_matches_office(owner, page.packet) and "29.9 / 30 s" in view.primary_status.text, "actual near HUD countdown differs from C++ office")
 	check(save(owner, output.path_join("near-reader.json")) == originals["commission-near"], "near reader acquired work while paused")
 	view.survey_commission_command("submit")
 	view.survey_commission_command("abandon")
@@ -223,6 +245,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	view.pause_controls("Commission completion proof paused")
 	view.open_survey_commissions()
 	page = reader(view)
+	check(progress_matches_office(owner, page.packet) and "report ready" in view.primary_status.text, "actual completed HUD lost submission countdown")
 	check(page.visible and page.packet.completed and page.packet.acquired_ticks == 3600 and page.packet.earnings == "0" and view.state.survey_commission.completed and save(owner, output.path_join("complete-ui.json")) == originals["commission-complete"], "one genuine completing tick differs from C++ fixture or pays remotely")
 	oracle = restore(output.path_join("complete-ui.json"))
 	if oracle != null:
@@ -244,6 +267,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	await tree.process_frame
 	page.submit_button.pressed.emit()
 	check(view.paused and page.visible and page.packet.earnings == "100" and page.packet.sequence == 0 and not page.packet.last_payment.is_empty() and save(owner, output.path_join("paid-ui.json")) == originals["commission-paid"], "Submit differs from direct C++ full Save or lacks payment receipt")
+	check(progress_matches_office(owner, page.packet), "actual paid inactive account retains countdown")
 	var paid := save(owner, output.path_join("paid-before-duplicate.json"))
 	check(not owner.submit_freedom_survey_commission("1"), "duplicate backend submission paid again")
 	page.submit_button.pressed.emit()
@@ -263,6 +287,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	backend = restore(fixtures.path_join("commission-expired.json"))
 	if backend != null:
 		var expired: Dictionary = backend.get_freedom_survey_commissions()
+		check(progress_matches_office(backend, expired), "actual exact-deadline fixture has nonzero remaining ticks")
 		check(Office.valid_packet(expired) and expired.completed and expired.expired and not expired.can_submit and not backend.submit_freedom_survey_commission(str(expired.sequence)) and save(backend, output.path_join("expired-refused.json")) == originals["commission-expired"], "expired completed report paid or changed source")
 	backend = null
 	for phase in originals:
