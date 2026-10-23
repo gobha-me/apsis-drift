@@ -35,7 +35,8 @@ for a new journey, or [two additional uncharted systems](docs/FREEDOM_TOPOLOGY.m
 to discover in flight; existing saves retain their original map. New uncharted
 journeys also include a [derelict exterior to find and inspect](docs/FREEDOM_TOPOLOGY.md#derelict-inspection).
 Optional [survey work](docs/SURVEY_COMMISSIONS.md) earns credits for fresh orbital
-measurements. Separately selected [paid operations](docs/PAID_OPERATIONS.md) adds
+measurements, and an [Origin buyer](docs/SPECIMEN_SALES.md) purchases carried
+geological specimens. Separately selected [paid operations](docs/PAID_OPERATIONS.md) adds
 quoted fuel costs, berth bills and a disclosed replacement excess.
 An optional [Origin fuel service](docs/ORIGIN_FUEL_SERVICE.md) sends one actual
 service Wayfarer to a supported home-Moon ship; its fuel and charges are finite.

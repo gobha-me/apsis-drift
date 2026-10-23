@@ -464,6 +464,11 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_specimen_sale"),
+                                &FreedomBridge::get_freedom_specimen_sale);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("sell_freedom_specimens", "token"),
+        &FreedomBridge::sell_freedom_specimens);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_paid_operations"),
                                 &FreedomBridge::get_freedom_paid_operations);
     godot::ClassDB::bind_method(
@@ -1734,6 +1739,31 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto sell_freedom_specimens(const godot::Variant& value) -> bool {
+    if (value.get_type() != godot::Variant::STRING) {
+      last_error = "Specimen sale requires a bounded quote token string";
+      return false;
+    }
+    const auto text = static_cast<godot::String>(value);
+    if (text.length() < 1 || text.length() > 4096) {
+      last_error = "Specimen sale requires a bounded quote token string";
+      return false;
+    }
+    const auto encoded = text.utf8();
+    if (encoded.length() < 1 || encoded.length() > 4096) {
+      last_error = "Specimen sale requires a bounded quote token string";
+      return false;
+    }
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
+    if (token.find('\0') != std::string::npos) {
+      last_error = "Specimen sale requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.sell_specimens(token);
+    });
+  }
   static auto paid_token(const godot::Variant& value)
       -> std::optional<std::string> {
     if (value.get_type() != godot::Variant::STRING) return std::nullopt;
@@ -2912,6 +2942,39 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  auto get_freedom_specimen_sale() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.specimen_sale_view();
+    if (!view || view->token.size() > 4096 || view->note.size() > 1024 ||
+        view->contents.size() > 4096 ||
+        view->token.find('\0') != std::string::npos ||
+        view->note.find('\0') != std::string::npos ||
+        view->contents.find('\0') != std::string::npos)
+      return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = 1;
+    result["supported"] = view->supported;
+    result["at_origin"] = view->at_origin;
+    result["paid_selected"] = view->paid_selected;
+    result["can_sell"] = view->can_sell;
+    result["carried_count"] = static_cast<std::int64_t>(view->carried_count);
+    result["capacity"] = static_cast<std::int64_t>(view->capacity);
+    result["tick"] = decimal(view->tick);
+    result["unit_credits"] = decimal(view->unit_credits);
+    result["gross_credits"] = decimal(view->gross_credits);
+    result["earned_credits"] = decimal(view->earned_credits);
+    result["insurance_credits"] = decimal(view->insurance_credits);
+    result["tab_credits"] = decimal(view->tab_credits);
+    result["net_credits"] = decimal(view->net_credits);
+    result["cash_after"] = decimal(view->cash_after);
+    result["token"] = godot::String{view->token.c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    result["contents"] = godot::String{view->contents.c_str()};
+    return result;
+  }
   auto get_freedom_paid_operations() const -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;

@@ -60,6 +60,8 @@ inline constexpr std::size_t kMaximumFreedomOrbitalSurveys{16};
 inline constexpr std::uint32_t kFreedomFieldSamplesVersion{1};
 inline constexpr std::uint32_t kFreedomNetworkFieldSamplesVersion{2};
 inline constexpr std::size_t kFreedomFieldSampleCapacity{4};
+inline constexpr std::uint32_t kFreedomSpecimenSalesVersion{1};
+inline constexpr std::uint64_t kFreedomSpecimenSaleCredits{40};
 
 // Preserve the existing typed identities. Future BodyId hierarchy adds an
 // explicit subject kind/version; it never silently reinterprets PlanetId.
@@ -240,6 +242,22 @@ struct FreedomFieldSampleState {
   friend auto operator==(const FreedomFieldSampleState&,
                          const FreedomFieldSampleState&) -> bool = default;
 };
+// A sale retains the exact physical records once removed from the pouch.
+// First-collection notes remain in field_samples, outside this personal income.
+struct FreedomSpecimenSaleReceipt {
+  StarterCraftId seller;
+  SimulationTick sold_tick{};
+  std::vector<FreedomFieldSampleRecord> specimens;
+  friend auto operator==(const FreedomSpecimenSaleReceipt&,
+                         const FreedomSpecimenSaleReceipt&) -> bool = default;
+};
+struct FreedomSpecimenSalesAccount {
+  std::uint32_t version{kFreedomSpecimenSalesVersion};
+  std::uint32_t sold_count{};
+  FreedomSpecimenSaleReceipt latest;
+  friend auto operator==(const FreedomSpecimenSalesAccount&,
+                         const FreedomSpecimenSalesAccount&) -> bool = default;
+};
 // Private acquisition target stays in the authoritative ledger; the native
 // progress view reveals no target identity or coordinates until completion.
 struct FreedomStarSearchAcquisition {
@@ -301,6 +319,7 @@ struct FreedomKnowledge {
   std::optional<SurveyCommissionAccount> survey_commissions{};
   // Explicit personal operating profile; absence preserves historical saves.
   std::optional<PaidOperationsAccount> paid_operations{};
+  std::optional<FreedomSpecimenSalesAccount> specimen_sales{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -326,7 +345,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_derelicts,
   invalid_station_stellar_lead,
   invalid_survey_commissions,
-  invalid_paid_operations
+  invalid_paid_operations,
+  invalid_specimen_sales
 };
 
 struct KnownIdentity {

@@ -129,6 +129,11 @@ acceptance, a fresh remote orbital reference measurement and retained prototype
 credits on submission. Existing free-service Freedom journeys remain unchanged.
 The provisional reward is not evidence of a balanced paid operating loop.
 
+On 2026-10-23 the owner selected an optional
+[Origin specimen buyer](SPECIMEN_SALES.md) under #293: existing physical pouch
+contents become another earning route while field notes remain. The fixed
+prototype price is not a quoted owner decision or balance evidence.
+
 On 2026-10-23 the owner selected retaining completed survey reports with a
 disclosed recovery excess. The separately opt-in [paid operating prototype](PAID_OPERATIONS.md)
 adds provisional fuel and berth prices, bounded operating support and

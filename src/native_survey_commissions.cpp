@@ -111,11 +111,15 @@ auto NativeFreedomFlightSession::commit_survey_commission_account(
     const auto paid =
         account.paid_count != survey_paid_count()
             ? settle_paid_survey_income(
-                  *knowledge_->paid_operations, account.paid_count,
+                  *knowledge_->paid_operations,
+                  PaidIncomeCounts{account.paid_count,
+                                   paid_income_counts().specimen_sold},
                   document_.flight.tick, paid_operations_generation())
-            : reconcile_paid_berth(*knowledge_->paid_operations,
-                                   account.paid_count, document_.flight.tick,
-                                   paid_operations_generation());
+            : reconcile_paid_berth(
+                  *knowledge_->paid_operations,
+                  PaidIncomeCounts{account.paid_count,
+                                   paid_income_counts().specimen_sold},
+                  document_.flight.tick, paid_operations_generation());
     if (!paid) return std::unexpected{paid.error()};
     candidate.knowledge_->paid_operations = *paid;
   }

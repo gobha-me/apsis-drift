@@ -22,7 +22,8 @@ quote or insufficient cash changes neither. Menus and offline time do not
 advance game time. The first new berth period becomes due exactly four game
 hours after enrollment, with subsequent periods due hourly. Reading or saving
 never posts another bill; every transaction uses the same elapsed-time bill.
-Prior settled survey earnings carry into the opening cash balance.
+Prior settled survey and [specimen-sale](SPECIMEN_SALES.md) earnings carry into
+the opening cash balance.
 
 A poor pilot at Origin can accept fresh survey work and review a **noncash
 operating retainer** before acquiring any measurement. It restores the starter
@@ -42,9 +43,11 @@ unlimited debt, and the sole starter is never seized. Losses before enrollment
 have no retroactive fee. Continue grants no new opening budget or replacement.
 
 C++ owns quantities, time, quotes, billing, income and replacement settlement.
-The absent-by-default version1 `paid_operations` record contains fixed-purpose
-counters in the existing knowledge envelope. Cash derives from the opening
-budget plus settled survey gross minus cumulative expenditure; there is no
+The absent-by-default `paid_operations` record contains fixed-purpose counters
+in the existing knowledge envelope. Survey-only version1 stays byte-exact; an
+explicit specimen sale or enrollment with earlier sales selects version2 and
+its additional settled-specimen counter, carrying every existing account value. Cash derives from the opening
+budget plus settled income minus cumulative expenditure; there is no
 second stored wallet or invoice history. Godot displays these terms and sends
 explicit, bounded quote tokens. World generation and physical flight stay
 unchanged.

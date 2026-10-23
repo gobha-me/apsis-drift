@@ -416,6 +416,25 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"settled_paid_count", account.settled_paid_count},
         {"supported_sequence", account.supported_sequence},
         {"charged_generation", account.charged_generation}};
+    if (account.version == kPaidSpecimenOperationsVersion)
+      root["paid_operations"]["settled_specimen_count"] =
+          account.settled_specimen_count;
+  }
+  if (k.specimen_sales) {
+    const auto& sales = *k.specimen_sales;
+    Json specimens = Json::array();
+    for (const auto& record : sales.latest.specimens) {
+      const auto encoded = sample_record_json(record);
+      if (!encoded) return std::unexpected{encoded.error()};
+      specimens.push_back(*encoded);
+    }
+    root["specimen_sales"] = {
+        {"version", sales.version},
+        {"sold_count", sales.sold_count},
+        {"latest",
+         {{"seller", std::to_string(sales.latest.seller.value)},
+          {"sold_tick", sales.latest.sold_tick},
+          {"specimens", std::move(specimens)}}}};
   }
   if (k.station_stellar_lead) {
     const auto& lead = *k.station_stellar_lead;
@@ -463,6 +482,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("survey_commissions");
   const bool paid_selected =
       root->is_object() && root->contains("paid_operations");
+  const bool sales_selected =
+      root->is_object() && root->contains("specimen_sales");
   const bool lead_selected =
       root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
@@ -478,6 +499,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (lead_selected) root_shape.erase("station_stellar_lead");
   if (commissions_selected) root_shape.erase("survey_commissions");
   if (paid_selected) root_shape.erase("paid_operations");
+  if (sales_selected) root_shape.erase("specimen_sales");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -807,19 +829,32 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   }
   if (paid_selected) {
     const auto& account = (*root)["paid_operations"];
+    auto account_shape = account;
+    const bool specimens_selected =
+        account.is_object() && account.contains("settled_specimen_count");
+    if (specimens_selected) account_shape.erase("settled_specimen_count");
     if (!network ||
         (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
          r["version"] != kFreedomUnchartedKnowledgeVersion) ||
-        !fields(account, {"version", "started_tick", "billed_through_hours",
-                          "spent_credits", "operating_tab", "recovery_due",
-                          "settled_paid_count", "supported_sequence",
-                          "charged_generation"}) ||
+        !fields(account_shape,
+                {"version", "started_tick", "billed_through_hours",
+                 "spent_credits", "operating_tab", "recovery_due",
+                 "settled_paid_count", "supported_sequence",
+                 "charged_generation"}) ||
         !unsigned_fields(account,
                          {"version", "started_tick", "billed_through_hours",
                           "spent_credits", "operating_tab", "recovery_due",
                           "settled_paid_count", "supported_sequence",
                           "charged_generation"}) ||
-        account["version"] != kPaidOperationsVersion ||
+        (account["version"] != kPaidOperationsVersion &&
+         account["version"] != kPaidSpecimenOperationsVersion) ||
+        (specimens_selected !=
+         (account["version"] == kPaidSpecimenOperationsVersion)) ||
+        (specimens_selected &&
+         (!account["settled_specimen_count"].is_number_unsigned() ||
+          account["settled_specimen_count"] == 0 ||
+          account["settled_specimen_count"] >
+              std::numeric_limits<std::uint32_t>::max())) ||
         account["settled_paid_count"] >
             std::numeric_limits<std::uint32_t>::max() ||
         account["supported_sequence"] >
@@ -834,7 +869,40 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
         account["recovery_due"].get<std::uint64_t>(),
         account["settled_paid_count"].get<std::uint32_t>(),
         account["supported_sequence"].get<std::uint32_t>(),
-        account["charged_generation"].get<std::uint64_t>()};
+        account["charged_generation"].get<std::uint64_t>(),
+        specimens_selected
+            ? account["settled_specimen_count"].get<std::uint32_t>()
+            : 0U};
+  }
+  if (sales_selected) {
+    const auto& sales = (*root)["specimen_sales"];
+    if (!network ||
+        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
+         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+        !fields(sales, {"version", "sold_count", "latest"}) ||
+        !unsigned_fields(sales, {"version", "sold_count"}) ||
+        sales["version"] != kFreedomSpecimenSalesVersion ||
+        sales["sold_count"] == 0 ||
+        sales["sold_count"] > std::numeric_limits<std::uint32_t>::max())
+      return std::unexpected{failure("invalid closed specimen sale account")};
+    const auto& latest = sales["latest"];
+    if (!fields(latest, {"seller", "sold_tick", "specimens"}) ||
+        !unsigned_fields(latest, {"sold_tick"}) ||
+        !latest["specimens"].is_array() || latest["specimens"].empty() ||
+        latest["specimens"].size() > kFreedomFieldSampleCapacity)
+      return std::unexpected{failure("invalid closed specimen sale receipt")};
+    const auto seller = sample_craft(latest["seller"]);
+    if (!seller) return std::unexpected{seller.error()};
+    FreedomSpecimenSaleReceipt receipt{
+        *seller, latest["sold_tick"].get<SimulationTick>(), {}};
+    for (const auto& record : latest["specimens"]) {
+      const auto decoded = sample_record_value(record);
+      if (!decoded) return std::unexpected{decoded.error()};
+      receipt.specimens.push_back(*decoded);
+    }
+    k.specimen_sales = FreedomSpecimenSalesAccount{
+        sales["version"].get<std::uint32_t>(),
+        sales["sold_count"].get<std::uint32_t>(), std::move(receipt)};
   }
   if (lead_selected) {
     const auto& lead = (*root)["station_stellar_lead"];

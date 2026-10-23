@@ -12,6 +12,12 @@ auto NativeFreedomFlightSession::survey_paid_count() const -> std::uint32_t {
              ? knowledge_->survey_commissions->paid_count
              : 0;
 }
+auto NativeFreedomFlightSession::paid_income_counts() const
+    -> PaidIncomeCounts {
+  return {survey_paid_count(), knowledge_ && knowledge_->specimen_sales
+                                   ? knowledge_->specimen_sales->sold_count
+                                   : 0};
+}
 auto NativeFreedomFlightSession::paid_operations_generation() const
     -> std::uint64_t {
   return document_.origin.lineage ? document_.origin.lineage->generation : 0;
@@ -34,8 +40,8 @@ auto NativeFreedomFlightSession::effective_paid_operations_account() const
     -> std::expected<PaidOperationsAccount, std::string> {
   if (!knowledge_ || !knowledge_->paid_operations)
     return std::unexpected{"Paid operations are not selected"};
-  return reconcile_paid_berth(*knowledge_->paid_operations, survey_paid_count(),
-                              document_.flight.tick,
+  return reconcile_paid_berth(*knowledge_->paid_operations,
+                              paid_income_counts(), document_.flight.tick,
                               paid_operations_generation());
 }
 auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
@@ -45,16 +51,20 @@ auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
     token += ':';
     token += std::to_string(value);
   };
-  for (const auto value : {document_.origin.recipe.universe_seed.value,
-                           document_.origin.state.craft.value,
-                           document_.flight.tick, resources_->flight_quanta,
-                           static_cast<std::uint64_t>(resources_->jump_charges),
-                           static_cast<std::uint64_t>(survey_paid_count()),
-                           paid_operations_generation()})
+  for (const auto value :
+       {document_.origin.recipe.universe_seed.value,
+        document_.origin.state.craft.value, document_.flight.tick,
+        resources_->flight_quanta,
+        static_cast<std::uint64_t>(resources_->jump_charges),
+        static_cast<std::uint64_t>(survey_paid_count()),
+        paid_operations_generation(),
+        static_cast<std::uint64_t>(paid_income_counts().specimen_sold)})
     word(value);
   word(knowledge_->paid_operations.has_value());
   if (knowledge_->paid_operations) {
     const auto& account = *knowledge_->paid_operations;
+    word(account.version);
+    word(account.settled_specimen_count);
     for (const auto value :
          {account.started_tick, account.billed_through_hours,
           account.spent_credits, account.operating_tab, account.recovery_due,
@@ -81,7 +91,8 @@ auto NativeFreedomFlightSession::paid_operations_view() const
   view.terms =
       "Optional paid operating prototype. Enroll once at Origin: a 200-credit "
       "opening budget includes four prepaid hours of lodging and parking "
-      "for 20 credits; prior survey earnings are retained. Flight fuel "
+      "for 20 credits; prior survey and specimen earnings are retained. Flight "
+      "fuel "
       "costs up to 40 credits per full tank; jump charges cost 15 each. "
       "One berth bill costs 5 credits per game hour. Menus and offline time "
       "do not advance that clock. Each replacement charges a 100-credit "
@@ -117,7 +128,7 @@ auto NativeFreedomFlightSession::paid_operations_view() const
   view.jump_credits = *jumps;
   view.service_credits = *flight + *jumps;
   view.token = paid_operations_token();
-  const auto count = survey_paid_count();
+  const auto count = paid_income_counts();
   const auto generation = paid_operations_generation();
   if (!view.selected) {
     const auto initial = make_paid_operations(count, view.tick, generation);
@@ -196,8 +207,9 @@ auto NativeFreedomFlightSession::enable_paid_operations(std::string_view token)
   if (!view) return std::unexpected{view.error()};
   if (!view->can_enable || token != view->token)
     return std::unexpected{"Review current paid operating terms at Origin"};
-  const auto account = make_paid_operations(
-      survey_paid_count(), document_.flight.tick, paid_operations_generation());
+  const auto account =
+      make_paid_operations(paid_income_counts(), document_.flight.tick,
+                           paid_operations_generation());
   if (!account) return std::unexpected{account.error()};
   auto candidate = *this;
   candidate.knowledge_->paid_operations = *account;
@@ -215,7 +227,7 @@ auto NativeFreedomFlightSession::purchase_paid_fuel(std::string_view token)
   if (!view->can_purchase || token != view->token)
     return std::unexpected{"Review a current affordable fuel quote at Origin"};
   const auto paid = purchase_paid_service(
-      *knowledge_->paid_operations, survey_paid_count(), document_.flight.tick,
+      *knowledge_->paid_operations, paid_income_counts(), document_.flight.tick,
       paid_operations_generation(), view->service_credits);
   if (!paid) return std::unexpected{paid.error()};
   auto candidate = *this;
@@ -239,7 +251,7 @@ auto NativeFreedomFlightSession::request_paid_retainer(std::string_view token)
     return std::unexpected{"Review an eligible fresh-work retainer at Origin"};
   const auto& work = *knowledge_->survey_commissions->active;
   const auto supported = fund_paid_retainer(
-      *knowledge_->paid_operations, survey_paid_count(), document_.flight.tick,
+      *knowledge_->paid_operations, paid_income_counts(), document_.flight.tick,
       paid_operations_generation(), work.sequence, work.deadline_tick,
       view->service_credits);
   if (!supported) return std::unexpected{supported.error()};

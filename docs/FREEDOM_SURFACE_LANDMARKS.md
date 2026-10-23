@@ -117,8 +117,9 @@ Save and Continue preserve the pouch and notes through walking, boarding and
 travel. Standard craft replacement clears the carried specimens, binds the
 empty pouch to the replacement craft and keeps the notes. The retired voyage
 snapshot retains its old pouch; this does not imply a rendered wreck or a
-retrieval mechanic. This increment has no specimen sale, assay, deposit,
-extraction, flight-mass change or collection animation.
+retrieval mechanic. The optional [Origin specimen buyer](SPECIMEN_SALES.md) can buy carried
+specimens in planetary-chart journeys. Assay, deposit, extraction, flight-mass
+changes and collection animation remain separate.
 
 C++ owns collection, discard and validation. Optional version1 `field_samples`
 metadata in voyage knowledge stores the current carrier, up to four carried

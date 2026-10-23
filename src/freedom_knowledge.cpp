@@ -459,12 +459,14 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
       return std::unexpected{Error::invalid_survey_commissions};
   }
   if (k.paid_operations) {
-    const auto count =
-        k.survey_commissions ? k.survey_commissions->paid_count : 0U;
+    const PaidIncomeCounts counts{
+        k.survey_commissions ? k.survey_commissions->paid_count : 0U,
+        k.specimen_sales ? k.specimen_sales->sold_count : 0U};
     const auto generation =
         k.recipe.craft_lineage ? k.recipe.craft_lineage->generation : 0;
     if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
-        !validate_paid_operations(*k.paid_operations, count, now, generation) ||
+        !validate_paid_operations(*k.paid_operations, counts, now,
+                                  generation) ||
         (k.paid_operations->supported_sequence &&
          (!k.survey_commissions || k.paid_operations->supported_sequence >=
                                        k.survey_commissions->next_sequence)))
@@ -682,6 +684,34 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
       if (specimen.craft != samples.carrier || note == samples.journal.end() ||
           note->tick > specimen.tick)
         return std::unexpected{Error::invalid_field_samples};
+    }
+  }
+  if (k.specimen_sales) {
+    const auto& sales = *k.specimen_sales;
+    const auto& receipt = sales.latest;
+    if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
+        !k.field_samples || sales.version != kFreedomSpecimenSalesVersion ||
+        receipt.specimens.empty() ||
+        receipt.specimens.size() > kFreedomFieldSampleCapacity ||
+        sales.sold_count < receipt.specimens.size() ||
+        receipt.sold_tick > now || !valid_sample_craft(w, receipt.seller))
+      return std::unexpected{Error::invalid_specimen_sales};
+    for (std::size_t i = 0; i < receipt.specimens.size(); ++i) {
+      const auto& specimen = receipt.specimens[i];
+      const auto note =
+          std::ranges::find_if(k.field_samples->journal, [&](const auto& item) {
+            return same_sample_source(item, specimen);
+          });
+      // The sale removed this exact collection. A later collected record may
+      // share the site and its retained first note without duplicating it.
+      if (specimen.craft != receipt.seller ||
+          !valid_sample_source(k, w, specimen, receipt.sold_tick) ||
+          note == k.field_samples->journal.end() ||
+          note->tick > specimen.tick ||
+          std::ranges::find(k.field_samples->carried, specimen) !=
+              k.field_samples->carried.end() ||
+          (i && !(sample_key(receipt.specimens[i - 1]) < sample_key(specimen))))
+        return std::unexpected{Error::invalid_specimen_sales};
     }
   }
   for (std::size_t i = 0; i < k.entries.size(); ++i) {

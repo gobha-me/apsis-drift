@@ -495,6 +495,9 @@ func back_from_nested() -> bool:
 
 func close_commissions() -> void:
 	if not is_instance_valid(commissions_view) or not controls.focused: return
+	if commissions_view.sale_open():
+		commissions_view.close_sale()
+		return
 	if commissions_view.paid_open():
 		commissions_view.close_paid()
 		return
