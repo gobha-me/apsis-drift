@@ -494,7 +494,10 @@ func back_from_nested() -> bool:
 	return false
 
 func close_commissions() -> void:
-	if not is_instance_valid(commissions_view): return
+	if not is_instance_valid(commissions_view) or not controls.focused: return
+	if commissions_view.paid_open():
+		commissions_view.close_paid()
+		return
 	commissions_view.hide()
 	menu_margin.show()
 	if panel.visible and is_instance_valid(commissions_button):

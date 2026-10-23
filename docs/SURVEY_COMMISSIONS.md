@@ -20,8 +20,8 @@ the planet's terrain survey is already complete. Station walking and seated
 attached flight use the same account and office.
 
 These are provisional earnings, not a balanced operating economy. Flight/jump
-fuel service remains free; rent, purchases, debt and spending are not selected
-by this increment. The account starts with zero earned credits. The broader
+fuel service remains free unless the player separately enables the
+[paid operating prototype](PAID_OPERATIONS.md). The account starts with zero earned credits. The broader
 paid-operation contract remains [#293](https://github.com/gobha-me/apsis-drift/issues/293).
 
 ## Terms and time

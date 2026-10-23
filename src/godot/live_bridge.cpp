@@ -464,6 +464,17 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_paid_operations"),
+                                &FreedomBridge::get_freedom_paid_operations);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("enable_freedom_paid_operations", "token"),
+        &FreedomBridge::enable_freedom_paid_operations);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("purchase_freedom_paid_fuel", "token"),
+        &FreedomBridge::purchase_freedom_paid_fuel);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("request_freedom_paid_retainer", "token"),
+        &FreedomBridge::request_freedom_paid_retainer);
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_freedom_survey_commissions"),
         &FreedomBridge::get_freedom_survey_commissions);
@@ -1723,6 +1734,48 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  static auto paid_token(const godot::Variant& value)
+      -> std::optional<std::string> {
+    if (value.get_type() != godot::Variant::STRING) return std::nullopt;
+    const auto text = static_cast<godot::String>(value);
+    if (text.length() < 1 || text.length() > 1024) return std::nullopt;
+    const auto encoded = text.utf8();
+    if (encoded.length() < 1 || encoded.length() > 1024) return std::nullopt;
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
+    if (token.find('\0') != std::string::npos) return std::nullopt;
+    return token;
+  }
+  auto enable_freedom_paid_operations(const godot::Variant& value) -> bool {
+    const auto token = paid_token(value);
+    if (!token) {
+      last_error = "Paid enrollment requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.enable_paid_operations(*token);
+    });
+  }
+  auto purchase_freedom_paid_fuel(const godot::Variant& value) -> bool {
+    const auto token = paid_token(value);
+    if (!token) {
+      last_error = "Paid fuel service requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.purchase_paid_fuel(*token);
+    });
+  }
+  auto request_freedom_paid_retainer(const godot::Variant& value) -> bool {
+    const auto token = paid_token(value);
+    if (!token) {
+      last_error = "Paid retainer requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.request_paid_retainer(*token);
+    });
+  }
   static auto commission_sequence(const godot::Variant& value)
       -> std::optional<std::uint32_t> {
     if (value.get_type() != godot::Variant::STRING) return std::nullopt;
@@ -2859,6 +2912,47 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  auto get_freedom_paid_operations() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.paid_operations_view();
+    if (!view || view->token.size() > 1024 || view->terms.size() > 4096 ||
+        view->note.size() > 1024)
+      return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = 1;
+    result["supported"] = view->supported;
+    result["selected"] = view->selected;
+    result["at_origin"] = view->at_origin;
+    result["can_enable"] = view->can_enable;
+    result["can_purchase"] = view->can_purchase;
+    result["can_retainer"] = view->can_retainer;
+    result["missing_jump_charges"] =
+        static_cast<std::int64_t>(view->missing_jump_charges);
+    result["tick"] = decimal(view->tick);
+    result["started_tick"] = decimal(view->started_tick);
+    result["berth_until_tick"] = decimal(view->berth_until_tick);
+    result["cash"] = decimal(view->cash);
+    result["opening_cash"] = decimal(view->opening_cash);
+    result["operating_tab"] = decimal(view->operating_tab);
+    result["recovery_due"] = decimal(view->recovery_due);
+    result["missing_flight_quanta"] = decimal(view->missing_flight_quanta);
+    result["capacity_quanta"] = decimal(view->capacity_quanta);
+    result["flight_credits"] = decimal(view->flight_credits);
+    result["jump_credits"] = decimal(view->jump_credits);
+    result["service_credits"] = decimal(view->service_credits);
+    result["retainer_cash"] = decimal(view->retainer_cash);
+    result["retainer_tab"] = decimal(view->retainer_tab);
+    result["retainer_subsidy"] = decimal(view->retainer_subsidy);
+    result["retainer_berth"] = decimal(view->retainer_berth);
+    result["retainer_total"] = decimal(view->retainer_total);
+    result["token"] = godot::String{view->token.c_str()};
+    result["terms"] = godot::String{view->terms.c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    return result;
+  }
   auto get_freedom_survey_commissions() const -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;

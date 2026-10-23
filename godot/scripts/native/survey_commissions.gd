@@ -2,6 +2,13 @@ extends Control
 ## A read-only, paused office reader. The owner revalidates every command.
 signal action_requested(action: String)
 signal back_requested
+signal paid_open_requested
+signal paid_action_requested(action: String)
+
+const PaidOperations = preload("res://scripts/native/paid_operations.gd")
+var paid_view: Control
+var paid_button: Button
+var paid_packet: Dictionary = {}
 
 var packet: Dictionary = {}
 var accept_button: Button
@@ -106,10 +113,18 @@ func _ready() -> void:
 	abandon_button.text = "Abandon commission"
 	abandon_button.pressed.connect(func(): action_requested.emit("abandon"))
 	column.add_child(abandon_button)
+	paid_button = Button.new()
+	paid_button.text = "Paid operations · terms and fuel quotes"
+	paid_button.pressed.connect(func(): paid_open_requested.emit())
+	column.add_child(paid_button)
 	back = Button.new()
 	back.text = "Back · remain paused"
 	back.pressed.connect(func(): back_requested.emit())
 	column.add_child(back)
+	paid_view = PaidOperations.new()
+	paid_view.action_requested.connect(func(action: String): paid_action_requested.emit(action))
+	paid_view.back_requested.connect(func(): back_requested.emit())
+	add_child(paid_view)
 	resized.connect(layout_reader)
 	get_window().size_changed.connect(layout_reader)
 	hide()
@@ -119,9 +134,13 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in [accept_button, submit_button, abandon_button, back]: button.custom_minimum_size.y = ceili(44 * scale)
+	for button in [accept_button, submit_button, abandon_button, paid_button, back]:
+		button.custom_minimum_size.y = ceili(44 * scale)
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func open(value: Dictionary) -> void:
+	paid_view.hide()
+	panel.show()
 	show()
 	scroll.scroll_vertical = 0
 	refresh(value)
@@ -136,10 +155,14 @@ func refresh(value: Dictionary) -> void:
 	accept_button.disabled = packet.is_empty() or not packet.can_accept
 	submit_button.disabled = packet.is_empty() or not packet.can_submit
 	abandon_button.disabled = packet.is_empty() or not packet.can_abandon
+	paid_button.disabled = paid_packet.is_empty()
 	if packet.is_empty():
 		details.text = "Commission office unavailable: the current response was invalid. Return to Controls and try again."
 	else:
-		var lines := PackedStringArray(["Optional earning prototype · 100 credits per fresh report.\n30 seconds of qualifying orbital measurement · accepted terms reserved for four game hours.\nFuel service remains free; no rent, bills, debt or spending in this stage.", "Earned credits: " + packet.earnings])
+		var operating := "Fuel service remains free unless you explicitly select paid operations."
+		if not paid_packet.is_empty() and paid_packet.selected:
+			operating = "Paid operations selected · Cash: %s · Operating tab: %s · Insurance excess: %s.\nOpen Paid operations for current berth coverage and fuel quotes." % [paid_packet.cash, paid_packet.operating_tab, paid_packet.recovery_due]
+		var lines := PackedStringArray(["Optional survey work · 100 credits per fresh report.\n30 seconds of qualifying orbital measurement · accepted terms reserved for four game hours.\n" + operating, "Historical gross survey earnings: " + packet.earnings])
 		if not packet.body_name.is_empty(): lines.append("Target: " + packet.body_name)
 		if packet.sequence != 0:
 			lines.append("Commission #%d · %.1f / 30 s\nReport due at ship time %s · Time left: %s." % [packet.sequence, floorf(float(packet.acquired_ticks) / 12.0) / 10.0, clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
@@ -148,15 +171,40 @@ func refresh(value: Dictionary) -> void:
 		lines.append(packet.note)
 		if not packet.last_payment.is_empty(): lines.append("Latest report paid: 100 credits. Receipt retained.")
 		details.text = "\n\n".join(lines)
-	if focused in [accept_button, submit_button, abandon_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
+	if focused in [accept_button, submit_button, abandon_button, paid_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
 
 func navigate(direction: int) -> void:
+	if paid_open():
+		paid_view.navigate(direction)
+		return
 	var buttons: Array[Button] = []
-	for button in [accept_button, submit_button, abandon_button, back]:
+	for button in [accept_button, submit_button, abandon_button, paid_button, back]:
 		if button.visible and not button.disabled: buttons.append(button)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
 
 func accept() -> void:
+	if paid_open():
+		paid_view.accept()
+		return
 	var target := get_viewport().gui_get_focus_owner()
-	if target in [accept_button, submit_button, abandon_button, back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in [accept_button, submit_button, abandon_button, paid_button, back] and target.visible and not target.disabled: target.pressed.emit()
+
+func paid_open() -> bool:
+	return is_instance_valid(paid_view) and paid_view.visible
+
+func refresh_paid(value: Dictionary) -> void:
+	paid_packet = value.duplicate(true) if PaidOperations.valid_packet(value) else {}
+	refresh(packet)
+
+func open_paid(value: Dictionary) -> void:
+	refresh_paid(value)
+	panel.hide()
+	paid_view.open(paid_packet)
+
+func close_paid() -> void:
+	if not paid_open(): return
+	paid_view.hide()
+	panel.show()
+	paid_button.grab_focus()
+	scroll.ensure_control_visible(paid_button)

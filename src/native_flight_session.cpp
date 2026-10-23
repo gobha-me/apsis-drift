@@ -1123,6 +1123,9 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
 
 auto NativeFreedomFlightSession::replenish_resources()
     -> std::expected<void, std::string> {
+  if (knowledge_ && knowledge_->paid_operations)
+    return std::unexpected{"Paid operations require an explicit station fuel "
+                           "quote or an eligible operating retainer"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};

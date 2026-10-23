@@ -221,5 +221,7 @@ func run() -> void:
 	await process_frame
 	var commissions := preload("res://tests/survey_commissions_test.gd").new()
 	failures += await commissions.run(self, args[0], args[1], output.path_join("commissions"))
+	var paid := preload("res://tests/paid_operations_test.gd").new()
+	failures += await paid.run(self, args[0], args[1], output.path_join("paid-operations"))
 	print("Orbital survey checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

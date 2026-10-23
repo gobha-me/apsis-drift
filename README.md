@@ -26,7 +26,7 @@ New Game starts on Origin Station. Walk to Wayfarer, board and sit, release the
 port and use real thrusters to depart. The prototype supports atmospheric
 flight, suitable dry-ground landing, suited walking, reboarding and home return.
 It starts with finite flight fuel and three jump charges; station refueling is
-free. A [local moon voyage](docs/AIRLESS_MOON.md) adds charged travel to one
+free by default. A [local moon voyage](docs/AIRLESS_MOON.md) adds charged travel to one
 airless moon, manual descent, walking, ascent and a jump home.
 An [asteroid inspection trip](docs/ASTEROID_INSPECTION.md) adds close flight around
 one existing minor body, an explicit stand-off limit and a charged return.
@@ -34,6 +34,9 @@ The title screen also offers [four charted systems](docs/FREEDOM_TOPOLOGY.md#opt
 for a new journey, or [two additional uncharted systems](docs/FREEDOM_TOPOLOGY.md#discoverable-systems)
 to discover in flight; existing saves retain their original map. New uncharted
 journeys also include a [derelict exterior to find and inspect](docs/FREEDOM_TOPOLOGY.md#derelict-inspection).
+Optional [survey work](docs/SURVEY_COMMISSIONS.md) earns credits for fresh orbital
+measurements. Separately selected [paid operations](docs/PAID_OPERATIONS.md) adds
+quoted fuel costs, berth bills and a disclosed replacement excess.
 An optional [Origin fuel service](docs/ORIGIN_FUEL_SERVICE.md) sends one actual
 service Wayfarer to a supported home-Moon ship; its fuel and charges are finite.
 **Esc / Start · Controls** opens paused controls and Flight basics.

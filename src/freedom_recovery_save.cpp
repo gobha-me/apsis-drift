@@ -164,6 +164,50 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
   return paid <= (now_tick - loss_tick) / kSurveyCommissionMeasurementTicks +
                      (retained_ready ? 1U : 0U);
 }
+auto retains_paid_operations(const FreedomKnowledge& now,
+                             const FreedomKnowledge& old,
+                             SimulationTick loss_tick) -> bool {
+  if (!now.paid_operations) return !old.paid_operations;
+  if (!old.paid_operations)
+    return now.paid_operations->started_tick >= loss_tick;
+  const auto new_generation =
+      now.recipe.craft_lineage ? now.recipe.craft_lineage->generation : 0;
+  const auto prior_count =
+      old.survey_commissions ? old.survey_commissions->paid_count : 0U;
+  const auto charged = charge_paid_recovery(*old.paid_operations, prior_count,
+                                            loss_tick, new_generation);
+  if (!charged) return false;
+  const auto& current = *now.paid_operations;
+  const auto& required = *charged;
+  if (current.version != required.version ||
+      current.started_tick != required.started_tick ||
+      current.billed_through_hours < required.billed_through_hours ||
+      current.spent_credits < required.spent_credits ||
+      current.supported_sequence < required.supported_sequence ||
+      current.settled_paid_count < required.settled_paid_count ||
+      current.recovery_due > required.recovery_due)
+    return false;
+  // Actual post-loss spending/support may change the final debt amounts. Keep
+  // necessary conservation and income-priority bounds rather than inventing
+  // an unbounded transaction history or requiring the immediate result forever.
+  // Counts are validated u32 values; their difference times100 fits in u64.
+  const auto income = static_cast<std::uint64_t>(current.settled_paid_count -
+                                                 required.settled_paid_count) *
+                      kPaidSurveyRewardCredits;
+  const auto insurance = std::min(required.recovery_due, income);
+  const auto tab_payment =
+      std::min(required.operating_tab, (income - insurance) / 2);
+  if (current.recovery_due != required.recovery_due - insurance ||
+      current.operating_tab < required.operating_tab - tab_payment)
+    return false;
+  const auto debt_reduction =
+      required.recovery_due - current.recovery_due +
+      (current.operating_tab < required.operating_tab
+           ? required.operating_tab - current.operating_tab
+           : 0);
+  return current.spent_credits - required.spent_credits >=
+         std::max(insurance + tab_payment, debt_reduction);
+}
 auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
                        StarterCraftId current, SimulationTick loss_tick,
                        SimulationTick now_tick) -> bool {
@@ -179,6 +223,7 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   if (!retains_commissions(now.survey_commissions, old.survey_commissions,
                            current, loss_tick, now_tick))
     return false;
+  if (!retains_paid_operations(now, old, loss_tick)) return false;
   if (old.station_stellar_lead) {
     if (now.station_stellar_lead != old.station_stellar_lead) return false;
   } else if (now.station_stellar_lead &&
@@ -611,6 +656,16 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
     knowledge.recipe.world_domain = 1;
   }
   knowledge.recipe.craft_lineage = replacement.origin.lineage;
+  if (knowledge.paid_operations) {
+    const auto count = knowledge.survey_commissions
+                           ? knowledge.survey_commissions->paid_count
+                           : 0U;
+    const auto charged = charge_paid_recovery(
+        *knowledge.paid_operations, count, replacement.flight.tick,
+        replacement.origin.lineage->generation);
+    if (!charged) return std::unexpected{failure(charged.error())};
+    knowledge.paid_operations = *charged;
+  }
   auto result = d;
   // Retired travel/crew/hardware remain history. A fresh craft has no jump
   // commitment, lost hardware, surface anchor or completed pilot entry.

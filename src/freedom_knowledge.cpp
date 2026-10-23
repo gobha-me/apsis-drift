@@ -458,6 +458,18 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
          !valid_commission(account.latest_paid->commission)))
       return std::unexpected{Error::invalid_survey_commissions};
   }
+  if (k.paid_operations) {
+    const auto count =
+        k.survey_commissions ? k.survey_commissions->paid_count : 0U;
+    const auto generation =
+        k.recipe.craft_lineage ? k.recipe.craft_lineage->generation : 0;
+    if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
+        !validate_paid_operations(*k.paid_operations, count, now, generation) ||
+        (k.paid_operations->supported_sequence &&
+         (!k.survey_commissions || k.paid_operations->supported_sequence >=
+                                       k.survey_commissions->next_sequence)))
+      return std::unexpected{Error::invalid_paid_operations};
+  }
   if (k.derelicts) {
     const auto valid_craft = [&](const auto& record) {
       return !record || valid_sample_craft(w, record->craft);
