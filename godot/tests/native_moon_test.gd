@@ -198,6 +198,13 @@ func check_manual_moon_menu(view: Control, owner: Variant, output: String, label
 			check(landing.text == view.landing_button.text and landing.text == "Deploy gear · manual descent" and liftoff.text == view.liftoff_button.text and liftoff.text == "Release support · use up thrusters", "Paused Moon actions promise automatic landing/liftoff or differ from the actual HUD: " + label)
 			check("manual thrusters" in landing.tooltip_text and "does not land" in landing.tooltip_text and "apply up thrusters" in liftoff.tooltip_text and "no automatic" in liftoff.tooltip_text, "Paused Moon actions omit their manual-thrust instructions: " + label)
 			check(landing.disabled == live.surface.landed and liftoff.disabled == (not live.surface.landed) and menu.saved_assist_button.button_pressed == assisted, "Moon label refresh changed action admission or assistance: " + label)
+		menu.basics_button.pressed.emit()
+		if not check(menu.basics.visible and not menu.menu_margin.visible and view.paused and not view.player_input.enabled, "Moon Flight basics failed its paused entry: " + label): return
+		menu.basics.page = 8
+		menu.basics.refresh()
+		var lunar_guide: String = menu.basics.body.text
+		check("manual with flight assistance ON or OFF" in lunar_guide and "supplies no thrust" in lunar_guide and "Resume explicitly, then apply up thrusters" in lunar_guide and "fuel and available thrust" in lunar_guide, "Actual Moon landing guide promised assisted landing/liftoff or omitted manual limits: " + label)
+		check(menu.basics.binding(view.player_input, "rise") in lunar_guide, "Actual Moon guide omitted the current rise binding: " + label)
 		# Pure presentation fallback, not a claim of a flown planetary state.
 		# Reuse this same menu to detect stale Moon text/tooltips on its next owner.
 		var planetary := live.duplicate(true)
@@ -205,8 +212,12 @@ func check_manual_moon_menu(view: Control, owner: Variant, output: String, label
 		menu.sync_saved_state(planetary, false)
 		check(landing.text == ("Land with thrusters" if assisted else "Deploy gear · manual landing") and liftoff.text == "Liftoff with thrusters" and landing.tooltip_text.is_empty() and liftoff.tooltip_text.is_empty(), "Shared menu failed to restore its unchanged planetary action text/tooltips: " + label)
 		check(landing.disabled == live.surface.landed and liftoff.disabled == (not live.surface.landed), "Planetary presentation fallback changed existing action admission: " + label)
+		check("With assistance ON it requests a local thruster aid" in menu.basics.body.text and "Choose Liftoff with thrusters to rise clear" in menu.basics.body.text and "supplies no thrust" not in menu.basics.body.text, "Guide failed to restore unchanged planetary landing advice: " + label)
 		menu.sync_saved_state(live, false)
 		check(landing.text == "Deploy gear · manual descent" and liftoff.text == "Release support · use up thrusters" and not landing.tooltip_text.is_empty() and not liftoff.tooltip_text.is_empty(), "Moon action instructions were not restored after planetary presentation fallback: " + label)
+		check(menu.basics.body.text == lunar_guide, "Moon landing guide was not restored after planetary presentation fallback: " + label)
+		menu.basics.back_button.pressed.emit()
+		check(view.paused and not view.player_input.enabled and not menu.basics.visible and menu.menu_margin.visible and menu.basics_button.has_focus(), "Moon guide Back resumed flight or lost Controls focus: " + label)
 		check(view.paused and view.controls_menu.panel.visible and owner.get_freedom_flight_state() == live and save_bytes(owner, prefix + "-after.json") == frozen, "Reading shared Moon/planet menu changed the actual Moon state or complete Save: " + label)
 	menu.assistance_requested.emit(original.assistance)
 	check(owner.get_freedom_flight_state().assistance == original.assistance and save_bytes(owner, output.path_join(label + "-manual-menu-restored.json")) == original_bytes, "Moon menu checks failed to restore the genuine phase's original complete Save: " + label)
