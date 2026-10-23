@@ -104,4 +104,13 @@ enum class FreedomJumpRecoveryError : std::uint8_t {
     SimulationTick commit_tick, BodyTarget source, BodyTarget destination,
     std::uint64_t attempt, const FreedomDriveRecoveryState&)
     -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError>;
+// Policy8's owning family authenticates the star-parented minor and actual
+// entry planet/Origin. Retains the minor stamp kind and domain20 words; only
+// planet->minor within one system or minor->planet across systems is admitted.
+[[nodiscard]] auto freeze_freedom_foreign_minor_uncertainty(
+    Seed, StarterCraftId, CraftFrameRecipe,
+    const std::optional<FreedomCraftLineage>&, std::uint64_t source_checksum,
+    SimulationTick commit_tick, BodyTarget source, BodyTarget destination,
+    std::uint64_t attempt, const FreedomDriveRecoveryState&)
+    -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError>;
 } // namespace apsis_drift

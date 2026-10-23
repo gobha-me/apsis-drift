@@ -1,3 +1,4 @@
+#include "../native_foreign_minor_fixture.hpp"
 #include "../native_minor_route_fixture.hpp"
 
 #include <filesystem>
@@ -108,6 +109,9 @@ int main(int argc, char** argv) {
               << " near_ticks=" << close_ticks << '\n';
     std::cout << "reuse_capture_ticks=" << rendezvous_ticks + close_ticks
               << '\n';
+    // Independent real foreign outing and inspection clone. The original
+    // phases/report/near/captured bytes above remain untouched.
+    apsis_drift::test_fixture::run_foreign_minor_outing(2, output);
     std::cout
         << "Actual station-to-minor approach/withdraw/home fixture passed\n";
     return 0;

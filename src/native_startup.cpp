@@ -117,11 +117,15 @@ auto select_document(FreedomFlightSaveDocument document,
         "Freedom flight save rejected: " + hydrated.error().path + ": " +
         hydrated.error().detail};
   if (hydrated->moon || hydrated->minor) {
-    const auto home = find_local_system_planet(
-        hydrated->system, hydrated->moon && document.moon->version ==
-                                                kFreedomForeignMoonWorldVersion
-                              ? PlanetId{hydrated->moon->moon.parent.value}
-                              : document.origin.recipe.home_planet);
+    const auto reference =
+        hydrated->moon &&
+                document.moon->version == kFreedomForeignMoonWorldVersion
+            ? PlanetId{hydrated->moon->moon.parent.value}
+        : hydrated->minor &&
+                document.minor->version == kFreedomForeignMinorWorldVersion
+            ? hydrated->system.catalog.planets.front().descriptor.id
+            : document.origin.recipe.home_planet;
+    const auto home = find_local_system_planet(hydrated->system, reference);
     if (!home) return std::unexpected{"Moon history home owner is unavailable"};
     return NativeStartup{NativeStartup::Mode::freedom, std::move(document),
                          (*home)->descriptor, std::move(source_save)};

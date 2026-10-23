@@ -10,7 +10,8 @@ auto NativeFreedomFlightSession::prepare_composed_travel()
     -> std::expected<void, std::string> {
   const bool recovering = resources_ && resources_->drive;
   const bool foreign =
-      travel_ && travel_->version == kFreedomForeignMoonTravelStateVersion;
+      travel_ && (travel_->version == kFreedomForeignMoonTravelStateVersion ||
+                  travel_->version == kFreedomForeignMinorTravelStateVersion);
   if (!knowledge_ ||
       (!recovering && !foreign &&
        (!freedom_knowledge_has_planetary_chart(knowledge_->recipe.version) ||
@@ -24,7 +25,8 @@ auto NativeFreedomFlightSession::prepare_composed_travel()
           : kFreedomComposedTravelStateVersion;
   if (travel_) {
     if ((travel_->version != version &&
-         travel_->version != kFreedomForeignMoonTravelStateVersion) ||
+         travel_->version != kFreedomForeignMoonTravelStateVersion &&
+         travel_->version != kFreedomForeignMinorTravelStateVersion) ||
         !travel_->composed)
       return std::unexpected{
           "Historical travel cannot silently adopt a new policy"};
@@ -76,11 +78,13 @@ auto NativeFreedomFlightSession::planet_jump_selection_available(
   if (moon_ || minor_ || document_.moon || document_.minor)
     return std::unexpected{
         "Return to Origin home before selecting an ordinary planet"};
-  if (travel_ && ((travel_->version != kFreedomComposedTravelStateVersion &&
-                   travel_->version != kFreedomRecoveringTravelStateVersion &&
-                   travel_->version != kFreedomStrainedTravelStateVersion &&
-                   travel_->version != kFreedomForeignMoonTravelStateVersion) ||
-                  !travel_->composed))
+  if (travel_ &&
+      ((travel_->version != kFreedomComposedTravelStateVersion &&
+        travel_->version != kFreedomRecoveringTravelStateVersion &&
+        travel_->version != kFreedomStrainedTravelStateVersion &&
+        travel_->version != kFreedomForeignMoonTravelStateVersion &&
+        travel_->version != kFreedomForeignMinorTravelStateVersion) ||
+       !travel_->composed))
     return std::unexpected{
         "Historical travel cannot silently adopt a new policy"};
   if (!validate_freedom_resources(*resources_, document_) ||
@@ -202,15 +206,97 @@ auto NativeFreedomFlightSession::select_foreign_moon_jump(BodyTarget target)
        travel_->version != kFreedomComposedTravelStateVersion &&
        travel_->version != kFreedomRecoveringTravelStateVersion &&
        travel_->version != kFreedomStrainedTravelStateVersion &&
-       travel_->version != kFreedomForeignMoonTravelStateVersion))
+       travel_->version != kFreedomForeignMoonTravelStateVersion &&
+       travel_->version != kFreedomForeignMinorTravelStateVersion))
     return std::unexpected{
         "Retain the existing network route before selecting this Moon"};
   auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
   auto& travel = *candidate->travel_;
   if (!travel.composed) travel.composed.emplace();
-  travel.version = kFreedomForeignMoonTravelStateVersion;
-  travel.composed->version = kFreedomForeignMoonComposedRoutesVersion;
+  if (travel.version != kFreedomForeignMinorTravelStateVersion) {
+    travel.version = kFreedomForeignMoonTravelStateVersion;
+    travel.composed->version = kFreedomForeignMoonComposedRoutesVersion;
+  }
   travel.composed->active = FreedomComposedRouteKind::foreign_moon;
+  travel.composed->selected_body = target;
+  travel.selected.reset();
+  if (const auto preview = candidate->local_jump_preview(); !preview)
+    return std::unexpected{preview.error()};
+  if (const auto admitted = candidate->admit_composed_travel(); !admitted)
+    return admitted;
+  *this = std::move(*candidate);
+  return {};
+}
+auto NativeFreedomFlightSession::select_foreign_minor_jump(BodyTarget target)
+    -> std::expected<void, std::string> {
+  if (recovery_pending() ||
+      (travel_ && travel_->phase != FreedomJumpPhase::idle))
+    return std::unexpected{
+        "Select minor-body travel outside recovery or an active jump"};
+  if (!document_.origin.network || !knowledge_ || !resources_ ||
+      !freedom_knowledge_uses_network(knowledge_->recipe.version) ||
+      !starting_assembly_ || !boarding_ ||
+      boarding_->phase != FreedomBoardingPhase::seated || actor_ ||
+      surface_walker_ || moon_ || (docking_ && docking_->attached) ||
+      (surface_ && (surface_->landed || surface_->moon_landed)))
+    return std::unexpected{
+        "Minor-body travel requires an occupied free-flight network voyage"};
+  if (!validate_freedom_resources(*resources_, document_) ||
+      !validate_freedom_knowledge(*knowledge_, document_.flight.tick))
+    return std::unexpected{
+        "Current minor-body travel knowledge or resources are invalid"};
+  const auto origin =
+      generate_first_universe_route(document_.origin.recipe.universe_seed)
+          .origin;
+  if (system_.catalog.id == origin)
+    return std::unexpected{"Use the existing Origin companion routes"};
+  const auto catalog = generate_secondary_body_catalog(system_);
+  if (!catalog) return std::unexpected{"Actual minor-body catalog unavailable"};
+  const auto minor =
+      generate_physical_minor_descriptor(*catalog, catalog->bodies[1].node.id);
+  if (!minor) return std::unexpected{"Actual minor-body owner unavailable"};
+  const BodyTarget minor_target{system_.catalog.id, minor->body};
+  const BodyTarget home{origin, body_id(document_.origin.recipe.home_planet)};
+  if (minor_) {
+    if (!document_.minor ||
+        document_.minor->version != kFreedomForeignMinorWorldVersion ||
+        document_.minor->target != minor_target || target != home)
+      return std::unexpected{
+          "This minor body can return directly to charted Origin Home"};
+  } else {
+    const auto relative = relative_state();
+    // The first planet is this outing's entry reference. The minor's actual
+    // physical parent remains its star, never a PlanetId alias.
+    if (!relative || !relative->frame.planet ||
+        system_.catalog.planets.empty() ||
+        *relative->frame.planet !=
+            system_.catalog.planets.front().descriptor.id ||
+        target != minor_target)
+      return std::unexpected{
+          "Select this minor-body outing from the system's first planet"};
+  }
+  const auto home_reading = query_freedom_knowledge(
+      *knowledge_, {KnowledgeSubjectKind::system, origin, origin.value},
+      KnowledgeFact::location, document_.flight.tick);
+  if (!home_reading || !*home_reading ||
+      (**home_reading).provenance.level != NavigationKnowledgeLevel::resolved)
+    return std::unexpected{"Charted Origin Home is required for this outing"};
+  if (!travel_ || travel_->local || travel_->prior_moon ||
+      travel_->origin_routes ||
+      (travel_->version != kFreedomTravelStateVersion &&
+       travel_->version != kFreedomComposedTravelStateVersion &&
+       travel_->version != kFreedomRecoveringTravelStateVersion &&
+       travel_->version != kFreedomStrainedTravelStateVersion &&
+       travel_->version != kFreedomForeignMoonTravelStateVersion &&
+       travel_->version != kFreedomForeignMinorTravelStateVersion))
+    return std::unexpected{
+        "Retain the existing network route before selecting this minor body"};
+  auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
+  auto& travel = *candidate->travel_;
+  if (!travel.composed) travel.composed.emplace();
+  travel.version = kFreedomForeignMinorTravelStateVersion;
+  travel.composed->version = kFreedomForeignMinorComposedRoutesVersion;
+  travel.composed->active = FreedomComposedRouteKind::foreign_minor;
   travel.composed->selected_body = target;
   travel.selected.reset();
   if (const auto preview = candidate->local_jump_preview(); !preview)
@@ -367,7 +453,8 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
   auto& composed = *state.composed;
   const bool planetary = composed.active == FreedomComposedRouteKind::planet;
   const bool foreign =
-      composed.active == FreedomComposedRouteKind::foreign_moon;
+      composed.active == FreedomComposedRouteKind::foreign_moon ||
+      composed.active == FreedomComposedRouteKind::foreign_minor;
   if (state.phase == FreedomJumpPhase::spool) {
     const auto tick = candidate.advance_craft_tick(controls, step);
     if (!tick) return std::unexpected{tick.error()};
@@ -403,23 +490,27 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
           composed.planet_committed = *planet;
           composed.planet_commitment_resources = *candidate.resources_;
         } else {
-          auto& slot = composed.active == FreedomComposedRouteKind::moon
-                           ? composed.moon
-                       : composed.active == FreedomComposedRouteKind::minor
-                           ? composed.minor
-                           : composed.foreign_moon;
+          auto& slot =
+              composed.active == FreedomComposedRouteKind::moon ? composed.moon
+              : composed.active == FreedomComposedRouteKind::minor
+                  ? composed.minor
+              : composed.active == FreedomComposedRouteKind::foreign_moon
+                  ? composed.foreign_moon
+                  : composed.foreign_minor;
           slot.committed = *local;
           slot.commitment_resources = *candidate.resources_;
           if (!local->request.source.moon && !local->request.source.minor)
             slot.outbound = *local;
         }
         if (candidate.resources_->drive) {
-          const auto kind = planetary ? FreedomJumpRecoveryKind::planet
-                            : composed.active == FreedomComposedRouteKind::moon
-                                ? FreedomJumpRecoveryKind::moon
-                            : composed.active == FreedomComposedRouteKind::minor
-                                ? FreedomJumpRecoveryKind::minor
-                                : FreedomJumpRecoveryKind::moon;
+          const auto kind =
+              planetary ? FreedomJumpRecoveryKind::planet
+              : composed.active == FreedomComposedRouteKind::moon
+                  ? FreedomJumpRecoveryKind::moon
+              : (composed.active == FreedomComposedRouteKind::minor ||
+                 composed.active == FreedomComposedRouteKind::foreign_minor)
+                  ? FreedomJumpRecoveryKind::minor
+                  : FreedomJumpRecoveryKind::moon;
           const auto checksum =
               planetary ? planet->source_checksum : local->source_checksum;
           const auto next_drive = advance_freedom_drive_recovery(
@@ -439,11 +530,12 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
       }
     }
   } else {
-    const auto& slot = composed.active == FreedomComposedRouteKind::moon
-                           ? composed.moon
-                       : composed.active == FreedomComposedRouteKind::minor
-                           ? composed.minor
-                           : composed.foreign_moon;
+    const auto& slot =
+        composed.active == FreedomComposedRouteKind::moon    ? composed.moon
+        : composed.active == FreedomComposedRouteKind::minor ? composed.minor
+        : composed.active == FreedomComposedRouteKind::foreign_moon
+            ? composed.foreign_moon
+            : composed.foreign_minor;
     if ((planetary && !composed.planet_committed) ||
         (!planetary && !slot.committed))
       return std::unexpected{"Body transit has no frozen commitment"};
@@ -481,7 +573,7 @@ auto NativeFreedomFlightSession::advance_composed_body_jump(
       state.phase = FreedomJumpPhase::idle;
       state.spool_tick = 0;
       composed.selected_body.reset();
-      if (planetary || (foreign && !candidate.moon_)) {
+      if (planetary || (foreign && !candidate.moon_ && !candidate.minor_)) {
         if (const auto learned = candidate.refresh_knowledge(
                 LocalObservationEvent::system_arrival);
             !learned)

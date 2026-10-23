@@ -117,7 +117,8 @@ class NativeCiTest(unittest.TestCase):
                                files_sha256={"phase.json": SHA})
                     if family == "minor_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
-                            ("arrival", "approach", "withdraw", "home")}
+                            ("arrival", "approach", "withdraw", "home", "rendezvous-near", "reuse-captured",
+                     "foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw")}
                     if family == "derelict_saves":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("station", "approach", "contact", "near", "inspection", "recovered")}
@@ -383,6 +384,22 @@ class NativeCiTest(unittest.TestCase):
         for index, mutate in enumerate(mutations):
             with self.subTest(mutation=index):
                 self.change_report(args, 1, lambda r: (r.clear(), r.update(copy.deepcopy(original)), mutate(r)))
+                with self.assertRaises(ValueError):
+                    ci.check(args, self.repo)
+
+    def test_minor_roster_requires_old_six_and_foreign_five(self):
+        args = self.make_check()
+        original = ci.read_json(self.root / "work-4/native-contracts-unit/report.json")
+        row = next(r for r in original["setup"] if r.get("family") == "minor_voyage")
+        self.assertEqual(len(row["files_sha256"]), 11)
+        for name in row["files_sha256"]:
+            with self.subTest(missing=name):
+                def remove(r):
+                    r.clear()
+                    r.update(copy.deepcopy(original))
+                    minor = next(s for s in r["setup"] if s.get("family") == "minor_voyage")
+                    minor["files_sha256"].pop(name)
+                self.change_report(args, 4, remove)
                 with self.assertRaises(ValueError):
                     ci.check(args, self.repo)
 

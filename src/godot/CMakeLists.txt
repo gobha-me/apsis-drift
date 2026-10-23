@@ -6,7 +6,9 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   # Actual station-to-minor inspection voyage; opt-in, not a relocated start.
-  add_executable(apsis-drift-freedom-minor-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_minor_fixture.cpp")
+  add_executable(apsis-drift-freedom-minor-fixture
+    "${PROJECT_SOURCE_DIR}/test/godot/freedom_minor_fixture.cpp"
+    "${PROJECT_SOURCE_DIR}/test/native_foreign_minor_fixture.cpp")
   target_include_directories(apsis-drift-freedom-minor-fixture PRIVATE "${PROJECT_SOURCE_DIR}/src")
   target_link_libraries(apsis-drift-freedom-minor-fixture PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-minor-fixture PRIVATE

@@ -54,7 +54,8 @@ auto frozen_value(const Json& j)
       j["version"].is_number_unsigned() &&
       (j["version"] == kFreedomRecoveryLocalBodyJumpVersion ||
        j["version"] == kFreedomRecoveryMinorLocalBodyJumpVersion ||
-       j["version"] == kFreedomRecoveryForeignMoonJumpVersion);
+       j["version"] == kFreedomRecoveryForeignMoonJumpVersion ||
+       j["version"] == kFreedomRecoveryForeignMinorJumpVersion);
   auto shape = j;
   if (recovering) {
     if (!j.contains("recovery_input") || !j.contains("recovery"))
@@ -67,7 +68,8 @@ auto frozen_value(const Json& j)
       !uints(j, {"version", "attempt", "source_checksum", "arrival_tick"}) ||
       (j["version"] != kFreedomLocalBodyJumpVersion &&
        j["version"] != kFreedomMinorLocalBodyJumpVersion &&
-       j["version"] != kFreedomForeignMoonJumpVersion && !recovering))
+       j["version"] != kFreedomForeignMoonJumpVersion &&
+       j["version"] != kFreedomForeignMinorJumpVersion && !recovering))
     return std::unexpected{failure("Invalid closed local commitment")};
   auto source = decode_freedom_flight_document_json(j["source"].dump());
   auto arrival = decode_freedom_flight_document_json(j["arrival"].dump());
@@ -76,8 +78,11 @@ auto frozen_value(const Json& j)
     return std::unexpected{failure("Invalid local commitment owner")};
   auto home_model =
       (source->moon || source->minor) ? arrival->model : source->model;
-  if (!source->moon && (j["version"] == kFreedomForeignMoonJumpVersion ||
-                        j["version"] == kFreedomRecoveryForeignMoonJumpVersion))
+  if (!source->moon && !source->minor &&
+      (j["version"] == kFreedomForeignMoonJumpVersion ||
+       j["version"] == kFreedomRecoveryForeignMoonJumpVersion ||
+       j["version"] == kFreedomForeignMinorJumpVersion ||
+       j["version"] == kFreedomRecoveryForeignMinorJumpVersion))
     home_model.hold = OrbitHoldRequest{};
   FreedomLocalBodyJumpRequest request{
       j["version"].get<std::uint32_t>(), std::move(*source), *target,

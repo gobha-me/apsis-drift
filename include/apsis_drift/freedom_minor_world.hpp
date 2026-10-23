@@ -6,6 +6,8 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomMinorFlightSaveFormatVersion{46};
 inline constexpr std::uint32_t kFreedomNetworkMinorFlightSaveFormatVersion{55};
 inline constexpr std::uint32_t kFreedomMinorWorldVersion{1};
+inline constexpr std::uint32_t kFreedomForeignMinorWorldVersion{2};
+inline constexpr std::uint32_t kFreedomForeignMinorFlightSaveFormatVersion{64};
 struct FreedomMinorWorldSelection {
   std::uint32_t version{kFreedomMinorWorldVersion};
   BodyTarget target;

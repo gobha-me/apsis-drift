@@ -195,3 +195,8 @@ next arrival cycle, from45 seconds cooled to90 seconds maximum. Early jumps rema
 available for one charge. The cockpit displays cooling and the projected next
 cycle; waiting clears the extra strain. Existing saves keep their selected rules.
 See [the drive contract](FREEDOM_JUMP_RECOVERY.md) for persistence and clock behavior.
+
+The [generated minor-body outing](ASTEROID_INSPECTION.md#a-generated-minor-beyond-origin)
+uses the same three-charge budget for a close visit beyond Origin and direct
+Home return. Approach and withdrawal use the existing thrusters and stand-off
+limit; minor-body landing remains unavailable.

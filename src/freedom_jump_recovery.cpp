@@ -167,7 +167,7 @@ auto freeze_jump_uncertainty(Seed seed, StarterCraftId craft,
                              SimulationTick commit_tick, BodyTarget source,
                              BodyTarget destination, std::uint64_t attempt,
                              const FreedomDriveRecoveryState& state,
-                             bool foreign_moon)
+                             bool foreign_companion)
     -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
   if (const auto valid = validate_freedom_drive_recovery(
           state, seed, craft, frame, lineage, commit_tick);
@@ -200,10 +200,13 @@ auto freeze_jump_uncertainty(Seed seed, StarterCraftId craft,
                       destination.body.kind == BodyKind::minor) ||
                      (source.body.kind == BodyKind::minor &&
                       destination.body.kind == BodyKind::planet);
-  if (foreign_moon) {
+  if (foreign_companion) {
+    const auto companion = kind == FreedomJumpRecoveryKind::moon
+                               ? BodyKind::moon
+                               : BodyKind::minor;
     if (!((same_system && source.body.kind == BodyKind::planet &&
-           destination.body.kind == BodyKind::moon) ||
-          (!same_system && source.body.kind == BodyKind::moon &&
+           destination.body.kind == companion) ||
+          (!same_system && source.body.kind == companion &&
            destination.body.kind == BodyKind::planet)))
       return std::unexpected{Error::invalid_target};
   } else if ((kind == FreedomJumpRecoveryKind::system &&
@@ -284,6 +287,17 @@ auto freeze_freedom_foreign_moon_uncertainty(
     -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
   return freeze_jump_uncertainty(seed, craft, frame, lineage, source_checksum,
                                  FreedomJumpRecoveryKind::moon, commit_tick,
+                                 source, destination, attempt, state, true);
+}
+auto freeze_freedom_foreign_minor_uncertainty(
+    Seed seed, StarterCraftId craft, CraftFrameRecipe frame,
+    const std::optional<FreedomCraftLineage>& lineage,
+    std::uint64_t source_checksum, SimulationTick commit_tick,
+    BodyTarget source, BodyTarget destination, std::uint64_t attempt,
+    const FreedomDriveRecoveryState& state)
+    -> std::expected<FrozenFreedomJumpUncertainty, FreedomJumpRecoveryError> {
+  return freeze_jump_uncertainty(seed, craft, frame, lineage, source_checksum,
+                                 FreedomJumpRecoveryKind::minor, commit_tick,
                                  source, destination, attempt, state, true);
 }
 } // namespace apsis_drift

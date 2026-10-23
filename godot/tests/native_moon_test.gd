@@ -5,6 +5,7 @@ const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const MoonView = preload("res://scripts/native/native_moon_view.gd")
 const MoonState = preload("res://scripts/native/native_moon_state.gd")
 const MoonTerrain = preload("res://scripts/native/native_moon_terrain.gd")
+const Status = preload("res://scripts/native/native_status.gd")
 const CockpitDisplays = preload("res://scripts/native/native_cockpit_displays.gd")
 const Navigation = preload("res://scripts/native/home_navigation.gd")
 const MoonExposures = preload("res://tests/native_moon_exposures.gd")
@@ -144,6 +145,40 @@ func check_gear_clearance(view: Control, owner: Variant, output: String, label: 
 		view.update_view(0.0)
 		check(view.cockpit_displays.refresh(before, 0.0, true), "Quiet Moon clearance cockpit refresh failed: " + label)
 	check(view.paused and view.error.is_empty() and view.camera.transform == camera_before and view.look_offset == look_before and view.cockpit == cockpit_before and owner.get_freedom_flight_state() == before and save_bytes(owner, output.path_join(label + "-clearance-after.json")) == frozen, "Moon clearance projection/readouts changed pause, camera/look, clock, resources, physics or complete Save: " + label)
+
+func check_rated_rise(view: Control, owner: Variant, output: String, label: String) -> void:
+	var original: Dictionary = owner.get_freedom_flight_state()
+	var frozen := save_bytes(owner, output.path_join(label + "-rise-before.json"))
+	if not check(view.paused and view.controls_menu.panel.visible and not frozen.is_empty(), "Moon RISE reader lacks its genuine paused source: " + label): return
+	var outside: bool = not original.surface_walk.is_empty()
+	if outside:
+		check(not original.has("rated_rise_margin"), "On-foot Moon packet invented a ship RISE estimate")
+	else:
+		if not check(original.get("rated_rise_margin") is float and is_finite(original.rated_rise_margin), "Supported seated Moon packet omitted its finite rated RISE margin: " + label): return
+	var compact: String = view.primary_status.text
+	var menu: CanvasLayer = view.controls_menu
+	menu.show_settings()
+	view.rated_rise_button.pressed.emit()
+	check(menu.settings_view.visible and not menu.surface_reference_view.visible, "Moon RISE reader bypassed nested Settings")
+	menu.close_settings()
+	for repeat in 2:
+		await activate_marker(view, view.rated_rise_button)
+		await process_frame
+		var reader: Control = menu.surface_reference_view
+		if not check(view.paused and reader.visible and reader.back_button.has_focus(), "Moon RISE reader failed paused focus-safe entry: " + label): return
+		var text: String = reader.reference_text
+		if outside:
+			check("unavailable" in text and not "m/s²" in text, "On-foot Moon reader invented a numeric RISE result")
+		else:
+			check(Status.rated_rise_text(original) in text and "assumes fuel" in text and "excludes drag/contact" in text, "Moon RISE reader omitted the actual formatted margin/caveats: " + label)
+			if original.surface.landed: check("Prospective free flight" in text, "Landed Moon RISE reader implied supported thrust or liftoff clearance")
+		check("not a hover" in text and "escape certificate" in text and "Other thrust channels" in text, "Moon RISE reader lost its bounded estimate scope")
+		view.rated_rise_button.pressed.emit()
+		check(reader.visible and reader.reference_text == text, "Nested Moon RISE action replaced its existing snapshot")
+		check(owner.get_freedom_flight_state() == original and save_bytes(owner, output.path_join(label + "-rise-open.json")) == frozen, "Reading Moon RISE changed actual clock, physics, resources or complete Save: " + label)
+		reader.back_button.pressed.emit()
+		check(view.paused and not reader.visible and menu.menu_margin.visible and view.rated_rise_button.has_focus(), "Moon RISE Back resumed flight or lost its invoking control: " + label)
+	check(view.primary_status.text == compact and owner.get_freedom_flight_state() == original and save_bytes(owner, output.path_join(label + "-rise-after.json")) == frozen, "Moon expanded RISE reader changed compact HUD or complete source Save: " + label)
 
 func check_manual_moon_menu(view: Control, owner: Variant, output: String, label: String) -> void:
 	var original: Dictionary = owner.get_freedom_flight_state()
@@ -299,13 +334,14 @@ func check_home(shell: Control, owner: Variant, assets: String, output: String) 
 	view.select_home()
 	view.jump_requested()
 	if not check(owner.get_freedom_flight_state().jump.phase == "spool" and view.error.is_empty(), "Actual Moon home-selection UI did not start charged return"): return
+	check(not owner.get_freedom_flight_state().has("rated_rise_margin"), "Active Moon spool exposed a rated RISE estimate")
 	var neutral := PackedFloat64Array()
 	neutral.resize(12)
 	for tick in 600:
 		if not check(owner.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual Moon-to-home travel tick refused"): return
 		if tick == 360:
 			var transit: Dictionary = owner.get_freedom_flight_state()
-			check(MoonState.valid(transit) and transit.jump.phase == "transit" and transit.surface.gear_clearance == {"available": false}, "Actual committed Moon transit exposed a terrain gear-clearance witness")
+			check(MoonState.valid(transit) and transit.jump.phase == "transit" and transit.surface.gear_clearance == {"available": false} and not transit.has("rated_rise_margin"), "Actual committed Moon transit exposed a terrain gear-clearance or RISE witness")
 	var home: Dictionary = owner.get_freedom_flight_state()
 	if not check(home.get("body_kind") != "moon" and home.get("station_available", false) and home.jump.phase == "idle" and home.resources.jump_charges == charges - 1, "Charged return lost the real home planet/station/one-charge bill"): return
 	view._process(0.0)
@@ -726,6 +762,10 @@ func check_foreign_outing(phases: String, assets: String, output: String) -> voi
 
 func run() -> void:
 	CompanionLayoutChecks.check_inputs(check)
+	# Pure formatter boundaries only; actual bridge states below stay untouched.
+	check(Status.rated_rise_text({}).is_empty(), "Absent rated RISE invented a numeric readout")
+	for invalid in [NAN, INF, "1.0"]:
+		check(Status.rated_rise_text({"rated_rise_margin": invalid}) == "Rated RISE unavailable", "Invalid rated RISE formatter input invented a result")
 	if failures: quit(1); return
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -760,6 +800,7 @@ func run() -> void:
 	# Own the first stream batch before diagnostics drives a paused view tick;
 	# that tick can otherwise consume the batch through the terrain presenter.
 	await check_cover(view, owner)
+	await check_rated_rise(view, owner, output, "arrival-live")
 	await FrameDiagnosticsChecks.run(self, view, owner, output.path_join("arrival-native.json"), check)
 	check_assistance(view, owner, output)
 	await check_home(shell, owner, assets, output)
@@ -772,6 +813,8 @@ func run() -> void:
 		check(phase_shell.current_view is MoonView and MoonState.valid(restored.get_freedom_flight_state()) and save_bytes(restored, output.path_join(label + "-continued.json")) == originals[label], "Complete Moon phase Save/Continue changed: " + label)
 		check_gear_clearance(phase_shell.current_view, restored, output, label)
 		var phase_view: Control = phase_shell.current_view
+		if label in ["arrival", "landed", "outside"]:
+			await check_rated_rise(phase_view, restored, output, label + "-continued")
 		if label in ["arrival", "outside"]:
 			await CompanionLayoutChecks.run(self, phase_view, restored, output, "moon-" + label + "-companion", check)
 		if label in ["approach", "landed"]:

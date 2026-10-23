@@ -5,6 +5,7 @@ const NavigationSky = preload("res://scripts/world/navigation_sky.gd")
 var moon_jump_button: Button
 var moon_select_button: Button
 var companion_panel: PanelContainer
+var rated_rise_button: Button
 
 func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, handoff := false) -> bool:
 	if bridge != null or model == null or model.get_parent() != null or not (model.valid_current_pose() if handoff else model.valid_installed()):
@@ -513,7 +514,22 @@ func create_body_geometry(_pending: Dictionary) -> Node3D:
 	if not surface_landmarks.apply(state, [geometry.material]): geometry.error = "The lunar exposure packet is invalid"
 	return geometry
 
+func show_rated_rise() -> void:
+	# Snapshot the authoritative packet only when the paused reader opens.
+	# Reading never selects a maneuver, advances flight or resumes controls.
+	if not activated or mode_change_pending or not marker_controls_available(): return
+	var snapshot: Dictionary = bridge.get_freedom_flight_state()
+	var text := ""
+	if snapshot.get("body_kind") == "moon" and snapshot.get("surface_walk", {}).is_empty() and snapshot.get("jump", {}).get("phase", "idle") == "idle":
+		text = Status.rated_rise_text(snapshot)
+	if text.is_empty() or text == "Rated RISE unavailable":
+		text = "Full RISE − gravity unavailable.\nNo supported seated, idle lunar estimate is available."
+	text += "\n\nGravity-only free-flight estimate, not a hover, departure, safe-landing or escape certificate. Other thrust channels, drag and contact are excluded."
+	controls_menu.show_surface_reference(text, rated_rise_button, "FULL RISE − GRAVITY")
+
 func add_body_controls(column: Node) -> void:
+	rated_rise_button = controls_menu.add_button(column, "Full RISE − gravity", show_rated_rise)
+	rated_rise_button.tooltip_text = "Current-attitude free-flight estimate, including while landed. Assumes fuel; excludes drag, contact and other thrust channels. No hover or departure certificate."
 	controls_menu.add_button(column, "Select jump home", select_home)
 	controls_menu.add_button(column, "Begin / cancel local spool", jump_requested)
 	controls_menu.add_button(column, "Use Wayfarer hatch", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))

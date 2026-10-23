@@ -1188,6 +1188,7 @@ auto surface_marker_session(NativeFreedomFlightSession session,
 }
 
 struct SampleMarkerScenario {
+  std::unique_ptr<FreedomKnowledgeSaveDocument> landmark_source;
   std::unique_ptr<NativeFreedomFlightSession> inspected;
   SurfaceLandmarkId inspected_site;
   std::unique_ptr<NativeFreedomFlightSession> discarded;
@@ -1837,6 +1838,18 @@ auto surface_landmark_session(const FreedomKnowledgeSaveDocument& source,
         "coupling it to retired craft identity");
 }
 
+// Run this independent cloned scenario after the large legacy walking frame
+// returns, preserving its exact source and every landmark assertion/export.
+auto surface_landmark_scenario(const Fixture& f,
+                               const std::filesystem::path& directory,
+                               SampleMarkerScenario& scenario) -> void {
+  if (!scenario.landmark_source)
+    throw std::runtime_error(
+        "Actual landmark scenario source was not captured");
+  surface_landmark_session(*scenario.landmark_source, f, directory, &scenario);
+  scenario.landmark_source.reset();
+}
+
 auto surface_walk_session(const Fixture& f,
                           const std::filesystem::path& directory = {},
                           SampleMarkerScenario* marker_scenario = nullptr)
@@ -1865,7 +1878,12 @@ auto surface_walk_session(const Fixture& f,
       {NativeStartup::Mode::freedom, selected, f.planet, {}}));
   required(session.commit_touchdown(required(
       rigid_body_state_checksum(f.context, session.document().flight))));
-  surface_landmark_session(selected, f, directory, marker_scenario);
+  if (marker_scenario) {
+    marker_scenario->landmark_source =
+        std::make_unique<FreedomKnowledgeSaveDocument>(selected);
+  } else {
+    surface_landmark_session(selected, f, directory);
+  }
   const auto anchor = session.surface()->landed;
   const auto resources = session.resources();
   const auto initial_tick = session.document().flight.tick;
@@ -2733,6 +2751,7 @@ auto main(int argc, char** argv) -> int {
       persistence_and_session(f);
       surface_walking(f);
       surface_walk_session(f, {}, &marker_scenario);
+      surface_landmark_scenario(f, {}, marker_scenario);
       field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
       assisted_commands(f);
@@ -2749,6 +2768,7 @@ auto main(int argc, char** argv) -> int {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       surface_walk_session(f, directory, &marker_scenario);
+      surface_landmark_scenario(f, directory, marker_scenario);
       field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 2 && std::string_view{argv[1]} == "--resources") {
@@ -2762,6 +2782,7 @@ auto main(int argc, char** argv) -> int {
     } else if (argc == 2 && std::string_view{argv[1]} == "--walk") {
       surface_walking(f);
       surface_walk_session(f, {}, &marker_scenario);
+      surface_landmark_scenario(f, {}, marker_scenario);
       field_sample_scenario(f, marker_scenario);
       sample_marker_scenarios(f, marker_scenario);
     } else if (argc == 1) {

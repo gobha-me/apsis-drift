@@ -1423,12 +1423,17 @@ class FreedomBridge : public godot::RefCounted {
                     std::get<KnownIdentity>((*identity)->value).name.c_str()};
             }
           } else {
-            if (composed.active == FreedomComposedRouteKind::foreign_moon) {
-              jump["route_kind"] = "foreign_moon";
+            if (composed.active == FreedomComposedRouteKind::foreign_moon ||
+                composed.active == FreedomComposedRouteKind::foreign_minor) {
+              jump["route_kind"] =
+                  composed.active == FreedomComposedRouteKind::foreign_moon
+                      ? "foreign_moon"
+                      : "foreign_minor";
               if (composed.selected_body)
                 jump["destination_name"] =
-                    composed.selected_body->body.kind == BodyKind::moon
-                        ? "Moon"
+                    composed.selected_body->body.kind == BodyKind::moon ? "Moon"
+                    : composed.selected_body->body.kind == BodyKind::minor
+                        ? "Asteroid inspection"
                         : "Origin Home";
             }
             const auto& checkpoint =
@@ -1436,7 +1441,9 @@ class FreedomBridge : public godot::RefCounted {
                     ? composed.moon
                 : composed.active == FreedomComposedRouteKind::minor
                     ? composed.minor
-                    : composed.foreign_moon;
+                : composed.active == FreedomComposedRouteKind::foreign_moon
+                    ? composed.foreign_moon
+                    : composed.foreign_minor;
             if (checkpoint.committed)
               arrival = checkpoint.committed->arrival_tick;
           }
@@ -2073,6 +2080,8 @@ class FreedomBridge : public godot::RefCounted {
     result["air_density"] = 0.0;
     result["dynamic_pressure"] = 0.0;
     result["recovery_pending"] = session.recovery_pending();
+    if (const auto margin = rated_rise_margin(session, view))
+      result["rated_rise_margin"] = *margin;
 
     result["attached"] = false;
     result["target_port"] = std::int64_t{0};

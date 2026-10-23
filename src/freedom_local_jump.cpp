@@ -278,11 +278,13 @@ auto freeze_minor_local_body_jump_arrival(
 }
 } // namespace
 namespace {
-auto foreign_clearance(const PhysicalMoonDescriptor& owner, SimulationTick tick,
+template <class Owner>
+auto foreign_clearance(const Owner& owner, SimulationTick tick,
                        SystemPositionMetres point, double radius,
-                       AtmosphericFlightRecipe atmosphere)
+                       AtmosphericFlightRecipe atmosphere,
+                       bool minor_shell = false)
     -> std::expected<FreedomLocalBodyClearance, Error> {
-  auto result = clearance(owner, tick, point, radius);
+  auto result = clearance(owner, tick, point, radius, minor_shell);
   if (!result) return std::unexpected{result.error()};
   // Same conservative planet envelopes as ordinary-planet travel. A new
   // cross-system endpoint must not hide inside an atmosphere or dry relief.
@@ -544,10 +546,219 @@ auto freeze_foreign_moon_jump(const FreedomLocalBodyJumpRequest& request)
       request.version,   request, *checksum, tick, std::move(arrival), from, to,
       *departure_volume, volume,  recovery};
 }
+auto freeze_foreign_minor_jump(const FreedomLocalBodyJumpRequest& request)
+    -> std::expected<FrozenLocalBodyJumpArrival, Error> {
+  const bool recovering =
+      request.version == kFreedomRecoveryForeignMinorJumpVersion;
+  if (request.recovery.has_value() != recovering)
+    return std::unexpected{Error::unsupported_policy};
+  if (!request.attempt ||
+      request.attempt == std::numeric_limits<std::uint64_t>::max())
+    return std::unexpected{Error::invalid_attempt};
+  const auto& source = request.source;
+  if (source.flight.tick >
+      std::numeric_limits<SimulationTick>::max() - kJumpTransitTicks - 3)
+    return std::unexpected{Error::tick_overflow};
+  const auto hydrated = hydrate_freedom_flight_document(source);
+  const auto origin =
+      generate_physical_origin_system(source.origin.recipe.universe_seed, 2);
+  if (!hydrated || !origin || !source.origin.network || source.moon ||
+      hydrated->system.catalog.id == origin->catalog.id ||
+      source.flight.craft !=
+          CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion})
+    return std::unexpected{Error::invalid_source};
+  const auto network = generate_freedom_system_network(
+      source.origin.recipe.universe_seed, source.origin.network->version);
+  if (!network) return std::unexpected{Error::invalid_owner};
+  const auto actual =
+      resolve_freedom_network_system(*network, hydrated->system.catalog.id);
+  if (!actual || *actual != hydrated->system)
+    return std::unexpected{Error::invalid_owner};
+  const auto catalog = generate_secondary_body_catalog(*actual);
+  const auto origin_catalog = generate_secondary_body_catalog(*origin);
+  if (!catalog || !origin_catalog) return std::unexpected{Error::invalid_owner};
+  const auto minor =
+      generate_physical_minor_descriptor(*catalog, catalog->bodies[1].node.id);
+  const auto origin_minor = generate_physical_minor_descriptor(
+      *origin_catalog, origin_catalog->bodies[1].node.id);
+  if (!minor || !origin_minor) return std::unexpected{Error::invalid_owner};
+  const bool outbound = !source.minor;
+  if (request.home_model.hold.target)
+    return std::unexpected{Error::invalid_home_model};
+  const BodyTarget minor_target{actual->catalog.id, minor->body};
+  // The minor is star-parented. Its first ordinary planet is only this
+  // route's authenticated entry reference, never its physical parent.
+  const BodyTarget entry_target{
+      actual->catalog.id,
+      body_id(actual->catalog.planets.front().descriptor.id)};
+  const BodyTarget home_target{origin->catalog.id,
+                               body_id(source.origin.recipe.home_planet)};
+  if (request.destination != (outbound ? minor_target : home_target))
+    return std::unexpected{Error::invalid_destination};
+  const auto relative = relative_freedom_flight_state(source, *actual);
+  if (!relative ||
+      (outbound && (!source.world || !relative->frame.planet ||
+                    body_id(*relative->frame.planet) != entry_target.body)) ||
+      (!outbound &&
+       (source.minor->version != kFreedomForeignMinorWorldVersion ||
+        source.minor->target != minor_target)))
+    return std::unexpected{Error::invalid_source};
+  auto expedition = source.model;
+  expedition.hold = {};
+  if (outbound && request.home_model != expedition)
+    return std::unexpected{Error::invalid_home_model};
+  const auto context =
+      outbound ? RigidBodyWorldContext{*actual} : RigidBodyWorldContext{*minor};
+  const auto checksum = rigid_body_state_checksum(context, source.flight);
+  const auto departure = system_pose(source, *minor);
+  const auto craft = resolve_craft_frame(source.flight.craft);
+  if (!checksum || !departure || !craft)
+    return std::unexpected{Error::invalid_source};
+  const auto& p = craft->properties;
+  const double hull_radius =
+      norm({static_cast<double>(std::max(std::abs(p.hull_min_mm[0]),
+                                         std::abs(p.hull_max_mm[0]))) /
+                1000,
+            static_cast<double>(std::max(std::abs(p.hull_min_mm[1]),
+                                         std::abs(p.hull_max_mm[1]))) /
+                1000,
+            static_cast<double>(std::max(std::abs(p.hull_min_mm[2]),
+                                         std::abs(p.hull_max_mm[2]))) /
+                1000});
+  const SystemPositionMetres from{departure->position_metres.x,
+                                  departure->position_metres.y,
+                                  departure->position_metres.z};
+  const auto departure_volume =
+      foreign_clearance(*minor, source.flight.tick, from, hull_radius,
+                        request.home_model.atmosphere, true);
+  if (!departure_volume) return std::unexpected{departure_volume.error()};
+  if (!departure_volume->clear())
+    return std::unexpected{Error::unclear_departure};
+  const auto tick = source.flight.tick + kJumpTransitTicks;
+  auto arrival = source;
+  arrival.origin.state.tick = tick;
+  if (outbound) {
+    auto fixed = source.flight;
+    fixed.tick = tick;
+    fixed.frame = {
+        RigidFrameKind::body_fixed, actual->catalog.id, {}, {}, minor->body};
+    fixed.position_metres = {
+        0, minor->radius_metres + kFreedomLocalMinorArrivalClearanceMetres, 0};
+    fixed.orientation = {};
+    fixed.linear_velocity_metres_per_second = {};
+    fixed.angular_velocity_radians_per_second = {};
+    const auto pose =
+        reframe_rigid_body(RigidBodyWorldContext{*minor}, fixed,
+                           {{RigidFrameKind::body_relative_inertial,
+                             actual->catalog.id,
+                             {},
+                             {},
+                             minor->body},
+                            tick},
+                           *minor);
+    if (!pose) return std::unexpected{Error::invalid_geometry};
+    arrival.flight = *pose;
+    arrival.model = {};
+    arrival.model.physical_catalog = 2;
+    arrival.model.physical_ephemeris = 2;
+    arrival.model.assistance = source.model.assistance;
+    arrival.world.reset();
+    arrival.minor = FreedomMinorWorldSelection{kFreedomForeignMinorWorldVersion,
+                                               minor_target};
+  } else {
+    const auto station =
+        generate_origin_station(source.origin.recipe.universe_seed);
+    const auto geometry = origin_station_geometry(station);
+    if (!geometry) return std::unexpected{Error::invalid_geometry};
+    const auto port = resolve_origin_port_pose(*origin, station, *geometry,
+                                               {station.id, 1}, tick);
+    if (!port) return std::unexpected{Error::invalid_geometry};
+    auto pose = port->planet_relative;
+    pose.craft = source.flight.craft;
+    const auto outward = geometry->ports[0].outward_normal;
+    pose.position_metres.x += outward.x * kAssistedOriginArrivalStandoffMetres;
+    pose.position_metres.y += outward.y * kAssistedOriginArrivalStandoffMetres;
+    pose.position_metres.z += outward.z * kAssistedOriginArrivalStandoffMetres;
+    const auto canonical =
+        canonicalize_rigid_body_state(RigidBodyWorldContext{*origin}, pose);
+    if (!canonical) return std::unexpected{Error::invalid_geometry};
+    arrival.flight = *canonical;
+    arrival.model = request.home_model;
+    arrival.minor.reset();
+    arrival.world = FreedomActiveWorldSelection{
+        2, origin->catalog.id, source.origin.recipe.home_planet};
+  }
+  if (!hydrate_freedom_flight_document(arrival))
+    return std::unexpected{outbound ? Error::invalid_geometry
+                                    : Error::invalid_home_model};
+  const auto& destination_owner = outbound ? *minor : *origin_minor;
+  const auto destination_pose = system_pose(arrival, destination_owner);
+  if (!destination_pose) return std::unexpected{Error::invalid_geometry};
+  SystemPositionMetres to{destination_pose->position_metres.x,
+                          destination_pose->position_metres.y,
+                          destination_pose->position_metres.z};
+  const auto initial_volume =
+      foreign_clearance(destination_owner, tick, to, hull_radius,
+                        request.home_model.atmosphere, true);
+  if (!initial_volume) return std::unexpected{initial_volume.error()};
+  if (!initial_volume->clear()) return std::unexpected{Error::unclear_arrival};
+  auto volume = *initial_volume;
+  std::optional<FrozenFreedomJumpUncertainty> recovery;
+  if (recovering) {
+    const auto sample = freeze_freedom_foreign_minor_uncertainty(
+        source.origin.recipe.universe_seed, source.origin.state.craft,
+        source.flight.craft, source.origin.lineage, *checksum,
+        source.flight.tick, outbound ? entry_target : minor_target,
+        request.destination, request.attempt, *request.recovery);
+    if (!sample) return std::unexpected{Error::invalid_source};
+    const double spread =
+        static_cast<double>(sample->extra_radius_millimetres) / 1000;
+    const auto range =
+        foreign_leg(request, arrival.flight.frame.system, from, to, spread);
+    if (!range) return std::unexpected{range.error()};
+    const auto envelope =
+        foreign_clearance(destination_owner, tick, to, hull_radius + spread,
+                          request.home_model.atmosphere, true);
+    if (!envelope) return std::unexpected{envelope.error()};
+    if (!envelope->clear()) return std::unexpected{Error::unclear_arrival};
+    auto& point = arrival.flight.position_metres;
+    point.x += sample->offset_metres.x;
+    point.y += sample->offset_metres.y;
+    point.z += sample->offset_metres.z;
+    const auto destination_context = outbound ? RigidBodyWorldContext{*minor}
+                                              : RigidBodyWorldContext{*origin};
+    const auto canonical =
+        canonicalize_rigid_body_state(destination_context, arrival.flight);
+    if (!canonical) return std::unexpected{Error::invalid_geometry};
+    arrival.flight = *canonical;
+    if (!hydrate_freedom_flight_document(arrival))
+      return std::unexpected{Error::invalid_geometry};
+    const auto offset_pose = system_pose(arrival, destination_owner);
+    if (!offset_pose) return std::unexpected{Error::invalid_geometry};
+    to = {offset_pose->position_metres.x, offset_pose->position_metres.y,
+          offset_pose->position_metres.z};
+    const auto actual_volume =
+        foreign_clearance(destination_owner, tick, to, hull_radius,
+                          request.home_model.atmosphere, true);
+    if (!actual_volume) return std::unexpected{actual_volume.error()};
+    if (!actual_volume->clear()) return std::unexpected{Error::unclear_arrival};
+    volume = *envelope;
+    recovery = *sample;
+  }
+  const auto range =
+      foreign_leg(request, arrival.flight.frame.system, from, to);
+  if (!range) return std::unexpected{range.error()};
+  return FrozenLocalBodyJumpArrival{
+      request.version,   request, *checksum, tick, std::move(arrival), from, to,
+      *departure_volume, volume,  recovery};
+}
 } // namespace
 
 auto freeze_local_body_jump_arrival(const FreedomLocalBodyJumpRequest& request)
     -> std::expected<FrozenLocalBodyJumpArrival, FreedomLocalBodyJumpError> {
+  if (request.version == kFreedomForeignMinorJumpVersion ||
+      request.version == kFreedomRecoveryForeignMinorJumpVersion)
+    return freeze_foreign_minor_jump(request);
   if (request.version == kFreedomForeignMoonJumpVersion ||
       request.version == kFreedomRecoveryForeignMoonJumpVersion)
     return freeze_foreign_moon_jump(request);
