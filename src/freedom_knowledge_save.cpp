@@ -812,13 +812,18 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
          r["version"] != kFreedomUnchartedKnowledgeVersion) ||
         !fields(account, {"version", "started_tick", "billed_through_hours",
                           "spent_credits", "operating_tab", "recovery_due",
-                          "settled_paid_count", "supported_sequence", "charged_generation"}) ||
-        !unsigned_fields(account, {"version", "started_tick", "billed_through_hours",
-                                   "spent_credits", "operating_tab", "recovery_due",
-                                   "settled_paid_count", "supported_sequence", "charged_generation"}) ||
+                          "settled_paid_count", "supported_sequence",
+                          "charged_generation"}) ||
+        !unsigned_fields(account,
+                         {"version", "started_tick", "billed_through_hours",
+                          "spent_credits", "operating_tab", "recovery_due",
+                          "settled_paid_count", "supported_sequence",
+                          "charged_generation"}) ||
         account["version"] != kPaidOperationsVersion ||
-        account["settled_paid_count"] > std::numeric_limits<std::uint32_t>::max() ||
-        account["supported_sequence"] > std::numeric_limits<std::uint32_t>::max())
+        account["settled_paid_count"] >
+            std::numeric_limits<std::uint32_t>::max() ||
+        account["supported_sequence"] >
+            std::numeric_limits<std::uint32_t>::max())
       return std::unexpected{failure("invalid closed paid operating account")};
     k.paid_operations = PaidOperationsAccount{
         account["version"].get<std::uint32_t>(),

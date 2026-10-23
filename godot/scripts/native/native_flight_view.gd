@@ -38,6 +38,7 @@ var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
+const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 var commission_action_frame := -1
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const StarSearch = preload("res://scripts/native/native_star_search.gd")
@@ -727,6 +728,7 @@ func build_ui() -> void:
 	service_button.text = "Replenish flight fuel and jump charges · free"
 	service_button.focus_mode = Control.FOCUS_ALL
 	service_button.pressed.connect(func(): port_command("replenish_freedom_resources"))
+	refresh_paid_service_label()
 	column.add_child(service_button)
 	home_cue = hud_text()
 	column.add_child(home_cue)
@@ -1149,6 +1151,8 @@ func setup_controls() -> void:
 	var survey_column: Node = controls_menu.save_button.get_parent()
 	controls_menu.commissions_button = controls_menu.add_button(survey_column, "Survey commissions", open_survey_commissions)
 	controls_menu.commissions_view.action_requested.connect(survey_commission_command)
+	controls_menu.commissions_view.paid_open_requested.connect(open_paid_operations)
+	controls_menu.commissions_view.paid_action_requested.connect(paid_operations_command)
 	setup_frame_diagnostics(survey_column)
 	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
@@ -1585,6 +1589,8 @@ func commissions_open() -> bool:
 
 func open_survey_commissions() -> void:
 	if not marker_controls_available() or mode_change_pending or not controls_menu.menu_margin.visible: return
+	observe_neutral_controls()
+	if not controls_armed: return
 	var packet: Variant = bridge.get_freedom_survey_commissions()
 	if not SurveyCommissions.valid_packet(packet):
 		report_action_status("Survey commission terms are unavailable.")
@@ -1592,9 +1598,11 @@ func open_survey_commissions() -> void:
 	controls_menu.entry_focus_frames = 0
 	controls_menu.menu_margin.hide()
 	controls_menu.commissions_view.open(packet)
+	refresh_paid_operations()
 
 
 func survey_commission_command(action: String) -> void:
+	if commissions_open() and controls_menu.commissions_view.paid_open(): return
 	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or controls_menu == null or not controls_menu.panel.visible or controls_menu.commissions_view == null or not controls_menu.commissions_view.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return
 	if action not in ["accept", "submit", "abandon"] or commission_action_frame == Engine.get_process_frames(): return
 	observe_neutral_controls()
@@ -1617,11 +1625,70 @@ func survey_commission_command(action: String) -> void:
 		accepted = bridge.call("submit_freedom_survey_commission" if action == "submit" else "abandon_freedom_survey_commission", str(packet.sequence))
 	var updated: Variant = bridge.get_freedom_survey_commissions()
 	if SurveyCommissions.valid_packet(updated): reader.refresh(updated)
+	refresh_paid_operations()
 	if not accepted: report_action_status(str(bridge.get_last_error()))
 	else:
 		state = bridge.get_freedom_flight_state()
 		update_view(0.0)
 	reader.back.grab_focus()
+
+
+func refresh_paid_service_label() -> Dictionary:
+	var value: Variant = bridge.get_freedom_paid_operations() if bridge.has_method("get_freedom_paid_operations") else {}
+	var valid := PaidOperations.valid_packet(value)
+	if service_button != null:
+		service_button.text = "Fuel service · review paid quote" if valid and value.selected else "Replenish flight fuel and jump charges · free" if not bridge.has_method("get_freedom_paid_operations") or valid else "Fuel service · quote unavailable"
+	return value if valid else {}
+
+
+func refresh_paid_operations() -> void:
+	var value := refresh_paid_service_label()
+	controls_menu.commissions_view.refresh_paid(value if value.get("tick") == state.get("tick") else {})
+
+
+func paid_operations_controls_available() -> bool:
+	if not commissions_open() or not activated or not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not controls_menu.panel.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return false
+	observe_neutral_controls()
+	return controls_armed
+
+
+func open_paid_operations() -> void:
+	if not paid_operations_controls_available() or controls_menu.commissions_view.paid_open(): return
+	refresh_paid_operations()
+	if controls_menu.commissions_view.paid_packet.is_empty():
+		report_action_status("Paid operating terms are unavailable.")
+		return
+	controls_menu.commissions_view.open_paid(controls_menu.commissions_view.paid_packet)
+
+
+func paid_operations_command(action: String) -> void:
+	if not paid_operations_controls_available() or not controls_menu.commissions_view.paid_open() or commission_action_frame == Engine.get_process_frames(): return
+	if action not in ["enable", "purchase", "retainer"]: return
+	var office: Control = controls_menu.commissions_view
+	var reader: Control = office.paid_view
+	var button: Button = {"enable": reader.enable_button, "purchase": reader.purchase_button, "retainer": reader.retainer_button}[action]
+	if not button.visible or button.disabled: return
+	var reviewed: Dictionary = reader.packet
+	refresh_paid_operations()
+	var fresh: Dictionary = office.paid_packet
+	if fresh.is_empty() or fresh != reviewed:
+		reader.refresh(fresh)
+		reader.back.grab_focus()
+		report_action_status("Paid terms or fuel quote changed. Review the refreshed page before confirming.")
+		return
+	if not fresh.at_origin or not fresh.get({"enable": "can_enable", "purchase": "can_purchase", "retainer": "can_retainer"}[action], false): return
+	commission_action_frame = Engine.get_process_frames()
+	var command: String = {"enable": "enable_freedom_paid_operations", "purchase": "purchase_freedom_paid_fuel", "retainer": "request_freedom_paid_retainer"}[action]
+	var accepted: bool = bridge.call(command, reviewed.token)
+	var after: Variant = bridge.get_freedom_survey_commissions()
+	office.refresh(after if SurveyCommissions.valid_packet(after) else {})
+	refresh_paid_operations()
+	reader.refresh(office.paid_packet)
+	reader.back.grab_focus()
+	if accepted:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+	report_action_status("Paid operating action recorded. The journey remains paused." if accepted else "Paid operating action refused: " + str(bridge.get_last_error()))
 
 
 func orbital_survey_command(cancel := false) -> void:
@@ -2022,6 +2089,17 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
+	if command == "replenish_freedom_resources" and bridge.has_method("get_freedom_paid_operations"):
+		var paid := refresh_paid_service_label()
+		if paid.is_empty():
+			report_action_status("Fuel quote unavailable. Review paid operations in the commission office.")
+			return
+		if paid.selected:
+			if journey_dialog_open or recovery_notified or mode_change_pending or not player_input.waiting_action.is_empty(): return
+			if not paused: pause_controls("Paid fuel service requires reviewing the current quote while paused.")
+			if not commissions_open(): open_survey_commissions()
+			if commissions_open(): open_paid_operations()
+			return
 	if command in ["begin_freedom_port_docking", "begin_freedom_port_approach", "begin_freedom_port_rendezvous", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		observe_neutral_controls()
 		if not controls_armed:

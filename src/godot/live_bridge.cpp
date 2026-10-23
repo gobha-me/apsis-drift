@@ -464,9 +464,8 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
-    godot::ClassDB::bind_method(
-        godot::D_METHOD("get_freedom_paid_operations"),
-        &FreedomBridge::get_freedom_paid_operations);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_paid_operations"),
+                                &FreedomBridge::get_freedom_paid_operations);
     godot::ClassDB::bind_method(
         godot::D_METHOD("enable_freedom_paid_operations", "token"),
         &FreedomBridge::enable_freedom_paid_operations);
@@ -1742,7 +1741,8 @@ class FreedomBridge : public godot::RefCounted {
     if (text.length() < 1 || text.length() > 1024) return std::nullopt;
     const auto encoded = text.utf8();
     if (encoded.length() < 1 || encoded.length() > 1024) return std::nullopt;
-    const std::string token{encoded.get_data(), static_cast<std::size_t>(encoded.length())};
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
     if (token.find('\0') != std::string::npos) return std::nullopt;
     return token;
   }
@@ -2929,7 +2929,8 @@ class FreedomBridge : public godot::RefCounted {
     result["can_enable"] = view->can_enable;
     result["can_purchase"] = view->can_purchase;
     result["can_retainer"] = view->can_retainer;
-    result["missing_jump_charges"] = static_cast<std::int64_t>(view->missing_jump_charges);
+    result["missing_jump_charges"] =
+        static_cast<std::int64_t>(view->missing_jump_charges);
     result["tick"] = decimal(view->tick);
     result["started_tick"] = decimal(view->started_tick);
     result["berth_until_tick"] = decimal(view->berth_until_tick);

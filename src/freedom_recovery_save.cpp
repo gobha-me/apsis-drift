@@ -165,17 +165,17 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
                      (retained_ready ? 1U : 0U);
 }
 auto retains_paid_operations(const FreedomKnowledge& now,
-                              const FreedomKnowledge& old,
-                              SimulationTick loss_tick) -> bool {
+                             const FreedomKnowledge& old,
+                             SimulationTick loss_tick) -> bool {
   if (!now.paid_operations) return !old.paid_operations;
   if (!old.paid_operations)
     return now.paid_operations->started_tick >= loss_tick;
-  const auto new_generation = now.recipe.craft_lineage
-                                  ? now.recipe.craft_lineage->generation
-                                  : 0;
-  const auto prior_count = old.survey_commissions ? old.survey_commissions->paid_count : 0U;
+  const auto new_generation =
+      now.recipe.craft_lineage ? now.recipe.craft_lineage->generation : 0;
+  const auto prior_count =
+      old.survey_commissions ? old.survey_commissions->paid_count : 0U;
   const auto charged = charge_paid_recovery(*old.paid_operations, prior_count,
-                                           loss_tick, new_generation);
+                                            loss_tick, new_generation);
   if (!charged) return false;
   const auto& current = *now.paid_operations;
   const auto& required = *charged;
@@ -191,17 +191,20 @@ auto retains_paid_operations(const FreedomKnowledge& now,
   // necessary conservation and income-priority bounds rather than inventing
   // an unbounded transaction history or requiring the immediate result forever.
   // Counts are validated u32 values; their difference times100 fits in u64.
-  const auto income = static_cast<std::uint64_t>(
-                          current.settled_paid_count - required.settled_paid_count) *
+  const auto income = static_cast<std::uint64_t>(current.settled_paid_count -
+                                                 required.settled_paid_count) *
                       kPaidSurveyRewardCredits;
   const auto insurance = std::min(required.recovery_due, income);
-  const auto tab_payment = std::min(required.operating_tab, (income - insurance) / 2);
+  const auto tab_payment =
+      std::min(required.operating_tab, (income - insurance) / 2);
   if (current.recovery_due != required.recovery_due - insurance ||
       current.operating_tab < required.operating_tab - tab_payment)
     return false;
-  const auto debt_reduction = required.recovery_due - current.recovery_due +
+  const auto debt_reduction =
+      required.recovery_due - current.recovery_due +
       (current.operating_tab < required.operating_tab
-           ? required.operating_tab - current.operating_tab : 0);
+           ? required.operating_tab - current.operating_tab
+           : 0);
   return current.spent_credits - required.spent_credits >=
          std::max(insurance + tab_payment, debt_reduction);
 }
@@ -654,7 +657,9 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   }
   knowledge.recipe.craft_lineage = replacement.origin.lineage;
   if (knowledge.paid_operations) {
-    const auto count = knowledge.survey_commissions ? knowledge.survey_commissions->paid_count : 0U;
+    const auto count = knowledge.survey_commissions
+                           ? knowledge.survey_commissions->paid_count
+                           : 0U;
     const auto charged = charge_paid_recovery(
         *knowledge.paid_operations, count, replacement.flight.tick,
         replacement.origin.lineage->generation);

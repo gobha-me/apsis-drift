@@ -15,8 +15,8 @@ auto budget(std::uint32_t paid_count) -> std::uint64_t {
   return kPaidOpeningCredits +
          static_cast<std::uint64_t>(paid_count) * kPaidSurveyRewardCredits;
 }
-auto coverage_fits(const PaidOperationsAccount& account,
-                  std::uint64_t hours) -> bool {
+auto coverage_fits(const PaidOperationsAccount& account, std::uint64_t hours)
+    -> bool {
   return hours <= (maximum - account.started_tick) / kPaidHourTicks;
 }
 auto berth_cost(std::uint64_t hours)
@@ -61,7 +61,8 @@ auto validate_paid_operations(const PaidOperationsAccount& account,
   if (now == maximum || account.started_tick > now || generation == maximum ||
       account.charged_generation != generation ||
       !coverage_fits(account, account.billed_through_hours))
-    return std::unexpected{"Paid account clock, coverage or generation differs"};
+    return std::unexpected{
+        "Paid account clock, coverage or generation differs"};
   const auto elapsed_hours = (now - account.started_tick) / kPaidHourTicks;
   // At most the current partial hour and four reserved hours can be prepaid.
   // Tick/hour bounds make this fixed +5 safe even at the last global tick.
@@ -76,7 +77,8 @@ auto make_paid_operations(std::uint32_t paid_count, SimulationTick now,
   account.started_tick = now;
   account.settled_paid_count = paid_count;
   account.charged_generation = generation;
-  if (auto valid = validate_paid_operations(account, paid_count, now, generation);
+  if (auto valid =
+          validate_paid_operations(account, paid_count, now, generation);
       !valid)
     return std::unexpected{valid.error()};
   return account;
@@ -85,11 +87,11 @@ auto reconcile_paid_berth(const PaidOperationsAccount& account,
                           std::uint32_t paid_count, SimulationTick now,
                           std::uint64_t generation)
     -> std::expected<PaidOperationsAccount, std::string> {
-  if (auto valid = validate_paid_operations(account, paid_count, now, generation);
+  if (auto valid =
+          validate_paid_operations(account, paid_count, now, generation);
       !valid)
     return std::unexpected{valid.error()};
-  const auto due_through =
-      (now - account.started_tick) / kPaidHourTicks + 1;
+  const auto due_through = (now - account.started_tick) / kPaidHourTicks + 1;
   if (due_through <= account.billed_through_hours) return account;
   if (!coverage_fits(account, due_through))
     return std::unexpected{"New berth coverage would overflow the game clock"};
@@ -119,8 +121,8 @@ auto paid_fuel_price(std::uint64_t missing_flight_quanta,
     }
   }
   if (remainder) ++flight;
-  return flight +
-         static_cast<std::uint64_t>(missing_jump_charges) * kPaidJumpChargeCredits;
+  return flight + static_cast<std::uint64_t>(missing_jump_charges) *
+                      kPaidJumpChargeCredits;
 }
 auto purchase_paid_service(const PaidOperationsAccount& account,
                            std::uint32_t paid_count, SimulationTick now,
@@ -154,8 +156,8 @@ auto fund_paid_retainer(const PaidOperationsAccount& account,
       service_credits > maximum_service_cost)
     return std::unexpected{"Fresh unexpired commission support terms required"};
   const auto duration = commission_deadline - reconciled->started_tick;
-  const auto through = duration / kPaidHourTicks +
-                       (duration % kPaidHourTicks ? 1U : 0U);
+  const auto through =
+      duration / kPaidHourTicks + (duration % kPaidHourTicks ? 1U : 0U);
   if (!coverage_fits(*reconciled, through))
     return std::unexpected{"Retainer berth coverage would overflow"};
   const auto extra = through > reconciled->billed_through_hours
@@ -169,7 +171,8 @@ auto fund_paid_retainer(const PaidOperationsAccount& account,
   const auto cash = paid_operations_cash(*reconciled, paid_count);
   if (!cash) return std::unexpected{cash.error()};
   if (!total || *cash >= total)
-    return std::unexpected{"Use ordinary cash service for this affordable quote"};
+    return std::unexpected{
+        "Use ordinary cash service for this affordable quote"};
   auto outcome = apply_operating_cost(*reconciled, paid_count, total);
   outcome.account.billed_through_hours =
       std::max(outcome.account.billed_through_hours, through);
@@ -179,19 +182,17 @@ auto fund_paid_retainer(const PaidOperationsAccount& account,
   return outcome;
 }
 auto settle_paid_survey_income(const PaidOperationsAccount& account,
-                              std::uint32_t new_paid_count,
-                              SimulationTick now, std::uint64_t generation)
+                               std::uint32_t new_paid_count, SimulationTick now,
+                               std::uint64_t generation)
     -> std::expected<PaidOperationsAccount, std::string> {
-  if (account.settled_paid_count ==
-          std::numeric_limits<std::uint32_t>::max() ||
+  if (account.settled_paid_count == std::numeric_limits<std::uint32_t>::max() ||
       new_paid_count != account.settled_paid_count + 1)
     return std::unexpected{"Exactly one new survey payment must be settled"};
   auto next = reconcile_paid_berth(account, account.settled_paid_count, now,
-                                  generation);
+                                   generation);
   if (!next) return std::unexpected{next.error()};
   next->settled_paid_count = new_paid_count;
-  const auto insurance =
-      std::min(next->recovery_due, kPaidSurveyRewardCredits);
+  const auto insurance = std::min(next->recovery_due, kPaidSurveyRewardCredits);
   const auto remaining = kPaidSurveyRewardCredits - insurance;
   const auto tab_payment = std::min(next->operating_tab, remaining / 2);
   next->recovery_due -= insurance;
@@ -210,9 +211,10 @@ auto charge_paid_recovery(const PaidOperationsAccount& account,
   if (replacement_generation == account.charged_generation) return account;
   if (replacement_generation == maximum ||
       replacement_generation != account.charged_generation + 1)
-    return std::unexpected{"Recovery fee needs one successive actual generation"};
+    return std::unexpected{
+        "Recovery fee needs one successive actual generation"};
   auto next = reconcile_paid_berth(account, paid_count, now,
-                                  account.charged_generation);
+                                   account.charged_generation);
   if (!next) return std::unexpected{next.error()};
   const auto cash = paid_operations_cash(*next, paid_count);
   if (!cash) return std::unexpected{cash.error()};

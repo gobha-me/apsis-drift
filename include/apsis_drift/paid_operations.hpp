@@ -24,7 +24,8 @@ struct PaidOperationsAccount {
   // Covers [start, start + billed_through_hours * hour). Initially prepaid.
   // Posting can be deferred; effective views derive all newly due periods.
   std::uint64_t billed_through_hours{kPaidInitialBerthHours};
-  std::uint64_t spent_credits{kPaidInitialBerthHours * kPaidBerthCreditsPerHour};
+  std::uint64_t spent_credits{kPaidInitialBerthHours *
+                              kPaidBerthCreditsPerHour};
   std::uint64_t operating_tab{}, recovery_due{};
   std::uint32_t settled_paid_count{}, supported_sequence{};
   std::uint64_t charged_generation{};
@@ -68,18 +69,15 @@ struct PaidRetainerOutcome {
                                          std::uint64_t generation,
                                          std::uint64_t service_credits)
     -> std::expected<PaidOperationsAccount, std::string>;
-[[nodiscard]] auto fund_paid_retainer(const PaidOperationsAccount&,
-                                      std::uint32_t paid_count,
-                                      SimulationTick now,
-                                      std::uint64_t generation,
-                                      std::uint32_t commission_sequence,
-                                      SimulationTick commission_deadline,
-                                      std::uint64_t service_credits)
+[[nodiscard]] auto fund_paid_retainer(
+    const PaidOperationsAccount&, std::uint32_t paid_count, SimulationTick now,
+    std::uint64_t generation, std::uint32_t commission_sequence,
+    SimulationTick commission_deadline, std::uint64_t service_credits)
     -> std::expected<PaidRetainerOutcome, std::string>;
 [[nodiscard]] auto settle_paid_survey_income(const PaidOperationsAccount&,
-                                            std::uint32_t new_paid_count,
-                                            SimulationTick now,
-                                            std::uint64_t generation)
+                                             std::uint32_t new_paid_count,
+                                             SimulationTick now,
+                                             std::uint64_t generation)
     -> std::expected<PaidOperationsAccount, std::string>;
 // Matching generation is an unchanged idempotent replay. Only one successive
 // actual replacement is chargeable; no retrospective fees on enrollment.

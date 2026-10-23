@@ -422,8 +422,10 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/system-release-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/paid-operations/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/commissions/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/paid-operations/*.json
           if-no-files-found: warn
           retention-days: 7
 

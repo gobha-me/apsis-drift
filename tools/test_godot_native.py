@@ -848,8 +848,15 @@ def main(argv=None):
         if any(not (phases / (name + ".json")).is_file() for name in required):
             print(f"FAIL incomplete orbital survey/commission fixtures: {log}", flush=True)
             return 1
+        paid_required = (*required[3:], "paid-selected", "paid-fuel-station",
+                         "paid-fuel-bought", "paid-retainer-station", "paid-retainer-funded")
+        if any(not (phases / "paid-operations" / (name + ".json")).is_file()
+               for name in paid_required):
+            print(f"FAIL incomplete paid operating fixtures: {log}", flush=True)
+            return 1
         report["setup"][-1]["files_sha256"] = {
-            path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
+            path.relative_to(phases).as_posix(): sha256(path)
+            for path in sorted(phases.rglob("*.json"))}
         save()
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         phases = work / "derelict-voyage"

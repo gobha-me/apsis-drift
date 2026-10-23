@@ -29,7 +29,8 @@ auto capped() -> PaidOperationsAccount {
   auto account = poor();
   for (std::uint32_t sequence = 1; sequence <= 3; ++sequence)
     account = need(fund_paid_retainer(account, 0, 0, 0, sequence,
-                                      4 * kPaidHourTicks, 85)).account;
+                                      4 * kPaidHourTicks, 85))
+                  .account;
   return account;
 }
 auto prices_and_atomic_purchase() -> void {
@@ -78,10 +79,10 @@ auto billing_and_validation() -> void {
         "Enrollment carries past earned gross, prepays20 once and charges "
         "no historical replacement fee");
   const auto initial = need(make_paid_operations(0, 100, 0));
-  check(need(reconcile_paid_berth(initial, 0, 100 + 4 * hour - 1, 0)) == initial,
+  check(need(reconcile_paid_berth(initial, 0, 100 + 4 * hour - 1, 0)) ==
+            initial,
         "Initial four-hour coverage is exclusive at its final endpoint");
-  const auto edge =
-      need(reconcile_paid_berth(initial, 0, 100 + 4 * hour, 0));
+  const auto edge = need(reconcile_paid_berth(initial, 0, 100 + 4 * hour, 0));
   check(edge.billed_through_hours == 5 && cash(edge) == 175 &&
             need(reconcile_paid_berth(edge, 0, 100 + 4 * hour, 0)) == edge,
         "Equality posts exactly the next lodging-and-parking bill once");
@@ -104,8 +105,9 @@ auto billing_and_validation() -> void {
   check(long_wait.billed_through_hours == 1'000'000'001 &&
             cash(long_wait) == 0 && long_wait.spent_credits == 200 &&
             long_wait.operating_tab == 200 && long_wait.recovery_due == 0 &&
-            need(reconcile_paid_berth(long_wait, 0,
-                100 + SimulationTick{1'000'000'000} * hour, 0)) == long_wait,
+            need(reconcile_paid_berth(
+                long_wait, 0, 100 + SimulationTick{1'000'000'000} * hour, 0)) ==
+                long_wait,
         "Very late bills consume finite cash, cap operating debt, waive "
         "the rest and never create insurance or repeated charges");
   for (unsigned fault = 0; fault < 9; ++fault) {
@@ -136,7 +138,7 @@ auto billing_and_validation() -> void {
             !make_paid_operations(0, maximum - 4 * hour + 1, 0) &&
             make_paid_operations(0, maximum - 4 * hour, 0).has_value() &&
             !reconcile_paid_berth(need(make_paid_operations(0, 0, 0)), 0,
-                                   maximum - 1, 0),
+                                  maximum - 1, 0),
         "Count/generation joins, rewind, final ticks and unrepresentable "
         "coverage refuse instead of wrapping money or clocks");
 }
@@ -147,43 +149,44 @@ auto operating_support() -> void {
             !fund_paid_retainer(account, 0, 0, 0, 1, 4 * kPaidHourTicks, 0) &&
             !fund_paid_retainer(account, 0, 0, 0, 0, 4 * kPaidHourTicks, 85) &&
             !fund_paid_retainer(account, 0, 0, 0, 1, 0, 85) &&
-            !fund_paid_retainer(account, 0, 0, 0, 1, 4 * kPaidHourTicks + 1, 85) &&
+            !fund_paid_retainer(account, 0, 0, 0, 1, 4 * kPaidHourTicks + 1,
+                                85) &&
             !fund_paid_retainer(account, 0, 0, 0, 1, 4 * kPaidHourTicks, 86),
         "Retainer refuses affordable/empty quotes, zero sequence, expiry, "
         "oversized reservation and service bounds");
-  const auto first = need(fund_paid_retainer(account, 0, 0, 0, 1,
-                                             4 * kPaidHourTicks, 85));
+  const auto first =
+      need(fund_paid_retainer(account, 0, 0, 0, 1, 4 * kPaidHourTicks, 85));
   check(first.service_credits == 85 && first.berth_credits == 0 &&
             first.cash_debit == 10 && first.tab_added == 75 &&
             first.subsidized_credits == 0 && cash(first.account) == 0 &&
             first.account.operating_tab == 75 &&
             first.account.supported_sequence == 1 &&
-            !fund_paid_retainer(first.account, 0, 0, 0, 1,
-                                 4 * kPaidHourTicks, 85),
+            !fund_paid_retainer(first.account, 0, 0, 0, 1, 4 * kPaidHourTicks,
+                                85),
         "Fresh work spends remaining cash then books only the actual "
         "noncash operating deficit, once per sequence");
   account = first.account;
-  const auto second = need(fund_paid_retainer(account, 0, 0, 0, 2,
-                                              4 * kPaidHourTicks, 85));
-  const auto third = need(fund_paid_retainer(second.account, 0, 0, 0, 3,
-                                             4 * kPaidHourTicks, 85));
-  const auto fourth = need(fund_paid_retainer(third.account, 0, 0, 0, 4,
-                                              4 * kPaidHourTicks, 85));
-  check(second.account.operating_tab == 160 && third.account.operating_tab == 200 &&
-            third.tab_added == 40 && third.subsidized_credits == 45 &&
-            fourth.tab_added == 0 && fourth.subsidized_credits == 85 &&
+  const auto second =
+      need(fund_paid_retainer(account, 0, 0, 0, 2, 4 * kPaidHourTicks, 85));
+  const auto third = need(
+      fund_paid_retainer(second.account, 0, 0, 0, 3, 4 * kPaidHourTicks, 85));
+  const auto fourth = need(
+      fund_paid_retainer(third.account, 0, 0, 0, 4, 4 * kPaidHourTicks, 85));
+  check(second.account.operating_tab == 160 &&
+            third.account.operating_tab == 200 && third.tab_added == 40 &&
+            third.subsidized_credits == 45 && fourth.tab_added == 0 &&
+            fourth.subsidized_credits == 85 &&
             fourth.account.operating_tab == 200 && cash(fourth.account) == 0,
         "Repeated funded failures reach the cap then explicit subsidy "
         "without giving cash or blocking the next supported attempt");
-  const auto fractional = need(fund_paid_retainer(
-      poor(), 0, kPaidHourTicks / 2, 0, 1,
-      kPaidHourTicks / 2 + 4 * kPaidHourTicks, 85));
+  const auto fractional =
+      need(fund_paid_retainer(poor(), 0, kPaidHourTicks / 2, 0, 1,
+                              kPaidHourTicks / 2 + 4 * kPaidHourTicks, 85));
   check(fractional.account.billed_through_hours == 5 &&
             fractional.berth_credits == 5 && fractional.tab_added == 80,
         "Retainer prepays the ceiling hour through its actual deadline");
   const auto with_due = need(fund_paid_retainer(
-      poor(), 0, 4 * kPaidHourTicks + 1, 0, 1,
-      8 * kPaidHourTicks + 1, 85));
+      poor(), 0, 4 * kPaidHourTicks + 1, 0, 1, 8 * kPaidHourTicks + 1, 85));
   check(with_due.account.billed_through_hours == 9 &&
             with_due.berth_credits == 20 && with_due.cash_debit == 5 &&
             with_due.tab_added == 100 && with_due.account.spent_credits == 200,
@@ -206,10 +209,12 @@ auto income_and_replacement() -> void {
   priority.operating_tab = 200;
   priority.recovery_due = 1;
   const auto odd = need(settle_paid_survey_income(priority, 1, 0, 0));
-  check(odd.operating_tab == 151 && cash(odd) == 50,
-        "Half-of-remainder repayment rounds down rather than taking extra cash");
+  check(
+      odd.operating_tab == 151 && cash(odd) == 50,
+      "Half-of-remainder repayment rounds down rather than taking extra cash");
   const auto opening = need(make_paid_operations(0, 0, 0));
-  check(need(charge_paid_recovery(opening, 0, 10 * kPaidHourTicks, 0)) == opening,
+  check(need(charge_paid_recovery(opening, 0, 10 * kPaidHourTicks, 0)) ==
+            opening,
         "Matching generation is unchanged even when later berth bills are due");
   const auto charged =
       need(charge_paid_recovery(opening, 0, 10 * kPaidHourTicks, 1));
@@ -217,7 +222,8 @@ auto income_and_replacement() -> void {
             charged.charged_generation == 1 && cash(charged) == 45 &&
             !charge_paid_recovery(opening, 0, 10 * kPaidHourTicks, 2) &&
             !charge_paid_recovery(charged, 0, 10 * kPaidHourTicks, 0) &&
-            need(charge_paid_recovery(charged, 0, 20 * kPaidHourTicks, 1)) == charged,
+            need(charge_paid_recovery(charged, 0, 20 * kPaidHourTicks, 1)) ==
+                charged,
         "Only a successive replacement reconciles old-generation bills and "
         "charges one cash-first excess; replay/skip/rewind cannot add fees");
   const auto split = need(charge_paid_recovery(poor(), 0, 0, 1));
@@ -235,13 +241,14 @@ auto income_and_replacement() -> void {
               account.operating_tab == 200,
           "Successive-generation fee with empty cash creates excess outside "
           "the already capped operating tab");
-    const auto funded = need(fund_paid_retainer(account, count - 1, 0, count,
-                                                count + 3, 4 * kPaidHourTicks, 85));
+    const auto funded = need(fund_paid_retainer(
+        account, count - 1, 0, count, count + 3, 4 * kPaidHourTicks, 85));
     check(funded.subsidized_credits == 85 && funded.account.recovery_due == 100,
           "Operating hardship never pays or subsidizes insurance excess");
     account = need(settle_paid_survey_income(funded.account, count, 0, count));
     check(cash(account) == 0 && account.recovery_due == 0 &&
-              account.operating_tab == 200 && account.settled_paid_count == count,
+              account.operating_tab == 200 &&
+              account.settled_paid_count == count,
           "Repeated replacement plus recovered100report produces no new cash "
           "even with hardship already at its cap");
   }

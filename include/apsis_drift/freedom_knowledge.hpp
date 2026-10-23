@@ -3,8 +3,8 @@
 #include "apsis_drift/freedom_derelict.hpp"
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
-#include "apsis_drift/planet_ambient.hpp"
 #include "apsis_drift/paid_operations.hpp"
+#include "apsis_drift/planet_ambient.hpp"
 #include "apsis_drift/surface_landmarks.hpp"
 #include "apsis_drift/survey_commissions.hpp"
 

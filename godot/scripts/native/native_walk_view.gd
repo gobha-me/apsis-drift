@@ -26,6 +26,7 @@ const StationCrew = preload("res://scripts/native/native_station_crew.gd")
 const ExplorationNotes = preload("res://scripts/native/exploration_notes.gd")
 const CrewConversation = preload("res://scripts/native/station_crew_conversation.gd")
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
+const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 var commissions_view: Control
 var commissions_button: Button
 var commission_action_frame := -1
@@ -442,6 +443,8 @@ func build_ui() -> void:
 	column.add_child(commissions_button)
 	commissions_view = SurveyCommissions.new()
 	commissions_view.action_requested.connect(survey_commission_command)
+	commissions_view.paid_open_requested.connect(open_paid_operations)
+	commissions_view.paid_action_requested.connect(paid_operations_command)
 	commissions_view.back_requested.connect(close_survey_commissions)
 	add_child(commissions_view)
 	crew_reader = CrewConversation.new()
@@ -668,9 +671,11 @@ func open_survey_commissions() -> void:
 		return
 	pause_controls("Survey commissions are optional. Reading does not accept work or move time.")
 	commissions_view.open(packet)
+	refresh_paid_operations()
 	refresh_hud()
 
 func survey_commission_command(action: String) -> void:
+	if commissions_open() and commissions_view.paid_open(): return
 	if not commissions_open() or not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or commission_action_frame == Engine.get_process_frames(): return
 	if action not in ["accept", "submit", "abandon"]: return
 	var button: Button = {"accept": commissions_view.accept_button, "submit": commissions_view.submit_button, "abandon": commissions_view.abandon_button}[action]
@@ -693,11 +698,56 @@ func survey_commission_command(action: String) -> void:
 	else: accepted = bridge.abandon_freedom_survey_commission(str(fresh.sequence))
 	var after: Variant = bridge.get_freedom_survey_commissions()
 	commissions_view.refresh(after if SurveyCommissions.valid_packet(after) else {})
+	refresh_paid_operations()
 	commissions_view.back.grab_focus()
 	save_status.text = "Commission action recorded. The journey remains paused." if accepted else "Commission action refused: " + str(bridge.get_last_error())
 
+func refresh_paid_operations() -> void:
+	var value: Variant = bridge.get_freedom_paid_operations() if bridge.has_method("get_freedom_paid_operations") else {}
+	commissions_view.refresh_paid(value if PaidOperations.valid_packet(value) and value.tick == state.tick else {})
+
+func paid_operations_controls_available() -> bool:
+	return commissions_open() and activated and paused and focused and not journey_dialog_open and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not boarding_transition() and preferences_provider != null and preferences_provider.waiting_action.is_empty() and current_controls_neutral()
+
+func open_paid_operations() -> void:
+	if not paid_operations_controls_available() or commissions_view.paid_open(): return
+	refresh_paid_operations()
+	if commissions_view.paid_packet.is_empty():
+		save_status.text = "Paid operating terms are unavailable."
+		return
+	commissions_view.open_paid(commissions_view.paid_packet)
+
+func paid_operations_command(action: String) -> void:
+	if not paid_operations_controls_available() or not commissions_view.paid_open() or commission_action_frame == Engine.get_process_frames(): return
+	if action not in ["enable", "purchase", "retainer"]: return
+	var reader: Control = commissions_view.paid_view
+	var button: Button = {"enable": reader.enable_button, "purchase": reader.purchase_button, "retainer": reader.retainer_button}[action]
+	if not button.visible or button.disabled: return
+	var reviewed: Dictionary = reader.packet
+	refresh_paid_operations()
+	var fresh: Dictionary = commissions_view.paid_packet
+	if fresh.is_empty() or fresh != reviewed:
+		reader.refresh(fresh)
+		reader.back.grab_focus()
+		save_status.text = "Paid terms or fuel quote changed. Review the refreshed page before confirming."
+		return
+	if not fresh.at_origin or not fresh.get({"enable": "can_enable", "purchase": "can_purchase", "retainer": "can_retainer"}[action], false): return
+	commission_action_frame = Engine.get_process_frames()
+	var command: String = {"enable": "enable_freedom_paid_operations", "purchase": "purchase_freedom_paid_fuel", "retainer": "request_freedom_paid_retainer"}[action]
+	var accepted: bool = bridge.call(command, reviewed.token)
+	var after: Variant = bridge.get_freedom_survey_commissions()
+	commissions_view.refresh(after if SurveyCommissions.valid_packet(after) else {})
+	refresh_paid_operations()
+	reader.refresh(commissions_view.paid_packet)
+	reader.back.grab_focus()
+	if accepted: update_view(0.0)
+	save_status.text = "Paid operating action recorded. The journey remains paused." if accepted else "Paid operating action refused: " + str(bridge.get_last_error())
+
 func close_survey_commissions() -> void:
 	if not commissions_open() or not focused or journey_dialog_open or save_dialog == null or save_dialog.visible: return
+	if commissions_view.paid_open():
+		commissions_view.close_paid()
+		return
 	commissions_view.hide()
 	pause_controls("Commission office closed. Release controls, then Resume explicitly.")
 	commissions_button.grab_focus()

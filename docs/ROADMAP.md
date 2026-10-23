@@ -127,8 +127,14 @@ On 2026-10-23 the owner selected **recurring survey commissions**. The first
 ([#685](https://github.com/gobha-me/apsis-drift/issues/685)) adds explicit Origin
 acceptance, a fresh remote orbital reference measurement and retained prototype
 credits on submission. Existing free-service Freedom journeys remain unchanged.
-Rent, paid fuel, spending and insolvency remain the separate #293 design work;
-the provisional reward is not evidence of a balanced paid operating loop.
+The provisional reward is not evidence of a balanced paid operating loop.
+
+On 2026-10-23 the owner selected retaining completed survey reports with a
+disclosed recovery excess. The separately opt-in [paid operating prototype](PAID_OPERATIONS.md)
+adds provisional fuel and berth prices, bounded operating support and
+insurance-first income. Existing technical journeys remain free until explicit
+enrollment. Full economy profitability and procedural-start viability remain
+[#293](https://github.com/gobha-me/apsis-drift/issues/293) work.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.

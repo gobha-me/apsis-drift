@@ -20,23 +20,23 @@ auto NativeFreedomFlightSession::paid_operations_origin_available() const
     -> bool {
   if (!knowledge_ || !resources_ ||
       !freedom_knowledge_has_planetary_chart(knowledge_->recipe.version) ||
-      recovery_pending() || !docking_ || !docking_->attached || moon_ || minor_ ||
+      recovery_pending() || !docking_ || !docking_->attached || moon_ ||
+      minor_ ||
       document_.flight.craft != CraftFrameRecipe{kWayfarerFrameId, 1} ||
       (boarding_ && boarding_->phase != FreedomBoardingPhase::station &&
        boarding_->phase != FreedomBoardingPhase::seated))
     return false;
-  return system_.catalog.id ==
-         generate_first_intersystem_identities(
-             document_.origin.recipe.universe_seed)
-             .origin_system;
+  return system_.catalog.id == generate_first_intersystem_identities(
+                                   document_.origin.recipe.universe_seed)
+                                   .origin_system;
 }
 auto NativeFreedomFlightSession::effective_paid_operations_account() const
     -> std::expected<PaidOperationsAccount, std::string> {
   if (!knowledge_ || !knowledge_->paid_operations)
     return std::unexpected{"Paid operations are not selected"};
   return reconcile_paid_berth(*knowledge_->paid_operations, survey_paid_count(),
-                               document_.flight.tick,
-                               paid_operations_generation());
+                              document_.flight.tick,
+                              paid_operations_generation());
 }
 auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
   if (!knowledge_ || !resources_) return {};
@@ -45,13 +45,12 @@ auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
     token += ':';
     token += std::to_string(value);
   };
-  for (const auto value :
-       {document_.origin.recipe.universe_seed.value,
-        document_.origin.state.craft.value, document_.flight.tick,
-        resources_->flight_quanta,
-        static_cast<std::uint64_t>(resources_->jump_charges),
-        static_cast<std::uint64_t>(survey_paid_count()),
-        paid_operations_generation()})
+  for (const auto value : {document_.origin.recipe.universe_seed.value,
+                           document_.origin.state.craft.value,
+                           document_.flight.tick, resources_->flight_quanta,
+                           static_cast<std::uint64_t>(resources_->jump_charges),
+                           static_cast<std::uint64_t>(survey_paid_count()),
+                           paid_operations_generation()})
     word(value);
   word(knowledge_->paid_operations.has_value());
   if (knowledge_->paid_operations) {
@@ -64,7 +63,8 @@ auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
           account.charged_generation})
       word(value);
   }
-  if (knowledge_->survey_commissions && knowledge_->survey_commissions->active) {
+  if (knowledge_->survey_commissions &&
+      knowledge_->survey_commissions->active) {
     const auto& work = *knowledge_->survey_commissions->active;
     word(work.sequence);
     word(work.deadline_tick);
@@ -91,7 +91,8 @@ auto NativeFreedomFlightSession::paid_operations_view() const
       "support is hardship subsidy. Half of report income remaining after "
       "insurance repays the tab. No cash advances, interest or seizure of "
       "your only ship. Enrollment stays selected in this saved journey; "
-      "loading an older save rewinds the whole account. Prices are provisional.";
+      "loading an older save rewinds the whole account. Prices are "
+      "provisional.";
   view.note = "Paid operations require a planetary-chart Wayfarer journey.";
   if (!knowledge_ || !resources_ ||
       !freedom_knowledge_has_planetary_chart(knowledge_->recipe.version) ||
@@ -106,10 +107,10 @@ auto NativeFreedomFlightSession::paid_operations_view() const
     return std::unexpected{"Current starter stores are invalid"};
   view.missing_flight_quanta = view.capacity_quanta - resources_->flight_quanta;
   view.missing_jump_charges = kFreedomJumpCapacity - resources_->jump_charges;
-  const auto flight = paid_fuel_price(view.missing_flight_quanta,
-                                      view.capacity_quanta, 0);
-  const auto jumps = paid_fuel_price(0, view.capacity_quanta,
-                                     view.missing_jump_charges);
+  const auto flight =
+      paid_fuel_price(view.missing_flight_quanta, view.capacity_quanta, 0);
+  const auto jumps =
+      paid_fuel_price(0, view.capacity_quanta, view.missing_jump_charges);
   if (!flight || !jumps)
     return std::unexpected{"Current fuel quote is unavailable"};
   view.flight_credits = *flight;
@@ -149,7 +150,7 @@ auto NativeFreedomFlightSession::paid_operations_view() const
   view.can_purchase =
       view.at_origin && view.service_credits != 0 &&
       purchase_paid_service(*knowledge_->paid_operations, count, view.tick,
-                             generation, view.service_credits)
+                            generation, view.service_credits)
           .has_value();
   if (view.at_origin && knowledge_->survey_commissions &&
       knowledge_->survey_commissions->active) {
