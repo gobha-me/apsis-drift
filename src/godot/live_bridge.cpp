@@ -3092,8 +3092,14 @@ class FreedomBridge : public godot::RefCounted {
                            : 0U;
     result["acquired_ticks"] = static_cast<std::int64_t>(count);
     result["completed"] = count == kSurveyCommissionMeasurementTicks;
-    result["expired"] = account.active && session.document().flight.tick >=
-                                              account.active->deadline_tick;
+    // Admitted reservations bound this guarded difference to four hours.
+    const auto tick = session.document().flight.tick;
+    const auto remaining =
+        account.active && tick < account.active->deadline_tick
+            ? account.active->deadline_tick - tick
+            : 0;
+    result["remaining_ticks"] = static_cast<std::int64_t>(remaining);
+    result["expired"] = account.active && remaining == 0;
     result["earnings"] = godot::String{
         std::to_string(survey_commission_earnings(account)).c_str()};
     result["active"] = account.active.has_value();

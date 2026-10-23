@@ -11,7 +11,10 @@ a stable bound orbit above its atmosphere, within two planet radii of its
 centre. The prototype target is the first planet in **Nearby system**; select
 that system in Navigation chart to arrive at the commissioned planet. Thirty seconds of new qualifying flight acquires the measurement.
 The scanner does not steer or establish an orbit. Partial progress holds when
-conditions become unsuitable; the flight HUD shows the counter.
+conditions become unsuitable. During flight, the HUD shows progress in seconds
+and the actual submission time remaining, including when the report is ready.
+Pausing freezes the countdown with the simulation; the display runs no separate
+clock.
 
 Return to Origin, attach to a port and explicitly **Submit report** in the same
 page. Submission pays **100 prototype credits** once. Another commission needs

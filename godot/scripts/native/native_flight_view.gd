@@ -225,13 +225,23 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_commission_progress(value: Variant) -> bool:
-	if not value is Dictionary or value.size() != 5: return false
+	if not value is Dictionary or value.size() != 6: return false
 	if not value.get("acquired_ticks") is int or value.acquired_ticks < 0 or value.acquired_ticks > 3600: return false
 	for key in ["active", "completed", "expired"]:
 		if not value.get(key) is bool: return false
 	if not NativeEnvironment.decimal(value.get("earnings")) or SurveyCommissions.decimal_before("429496729500", value.earnings): return false
 	if int(value.earnings) % 100 != 0 or value.completed != (value.acquired_ticks == 3600): return false
-	return value.active or (value.acquired_ticks == 0 and not value.completed and not value.expired)
+	if not value.get("remaining_ticks") is int or value.remaining_ticks < 0 or value.remaining_ticks > 1728000: return false
+	if value.expired != (value.active and value.remaining_ticks == 0): return false
+	return value.active or (value.acquired_ticks == 0 and not value.completed and not value.expired and value.remaining_ticks == 0)
+
+
+static func commission_progress_text(value: Variant) -> String:
+	if not valid_commission_progress(value) or not value.active: return ""
+	if value.expired: return "Commission · deadline passed"
+	var work := "report ready" if value.completed else "%.1f / 30 s" % (floorf(float(value.acquired_ticks) / 12.0) / 10.0)
+	var remaining := "less than 1 s" if value.remaining_ticks < 120 else SurveyCommissions.seconds_text(floori(float(value.remaining_ticks) / 120.0))
+	return "Commission · %s · %s left" % [work, remaining]
 
 
 static func valid_state(value: Dictionary) -> bool:
@@ -1014,9 +1024,11 @@ func update_compact_hud() -> void:
 		primary_status.text = "\n".join(lines)
 	if state.has("survey_commission") and state.survey_commission.active:
 		var work: Dictionary = state.survey_commission
-		var commission_text := "Commission · " + ("deadline passed" if work.expired else "report ready · return and submit" if work.completed else "measurement %d/3600 ticks" % work.acquired_ticks)
+		var commission_text := commission_progress_text(work)
 		primary_status.text += "\n" + commission_text
 		primary_status.tooltip_text += "\n" + commission_text
+		if work.completed and not work.expired:
+			primary_status.tooltip_text += "\nReturn to Origin and submit before the deadline."
 	var survey_text := OrbitalSurvey.text(state.get("orbital_survey"))
 	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
 		# The completed survey already names the retained result and Records.
