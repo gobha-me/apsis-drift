@@ -6,7 +6,9 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 namespace {
@@ -103,6 +105,96 @@ auto continued(const NativeFreedomFlightSession& live,
       "Continue preserves the exact current voyage and evidence");
   return resumed;
 }
+auto crew_log_topic(const NativeFreedomFlightSession& live, bool inspected)
+    -> void {
+  const auto original =
+      need(encode_native_save_document_json(need(live.save_document())));
+  check(live.walker().has_value() && live.knowledge()->derelicts &&
+            live.knowledge()->derelicts->contact &&
+            live.knowledge()->derelicts->inspection.has_value() == inspected,
+        "Contact conversation fixture retains actual earned log at station");
+  const auto baseline = need(origin_station_crew(
+      generate_origin_station(live.document().origin.recipe.universe_seed),
+      *live.walker(), live.document().flight.tick));
+  for (unsigned repeat = 0; repeat < 3; ++repeat) {
+    const auto crew = need(live.station_crew());
+    check(crew.topic_count == 4 && crew.topic_count == crew.topics.size() &&
+              crew.available == baseline.available &&
+              crew.reason == baseline.reason &&
+              crew.station == baseline.station &&
+              crew.foot_position_metres == baseline.foot_position_metres &&
+              crew.heading_radians == baseline.heading_radians &&
+              crew.height_metres == baseline.height_metres,
+          "Earned contact adds one topic without changing actual crew "
+          "eligibility or placement");
+    for (std::size_t i = 0; i < baseline.topic_count; ++i)
+      check(crew.topics[i].id == baseline.topics[i].id &&
+                crew.topics[i].title == baseline.topics[i].title &&
+                crew.topics[i].text == baseline.topics[i].text,
+            "Contact discussion retains all three original topic IDs and text");
+    const auto& lead = crew.topics[3];
+    check(lead.id == 4 && lead.title == "Can you look at my contact log?" &&
+              lead.text.find_first_of("0123456789") == std::string_view::npos,
+          "Fourth topic explicitly shares the player's log without coordinates "
+          "or tuning numbers");
+    if (inspected) {
+      check(lead.text.find("no active power or thrust") !=
+                    std::string_view::npos &&
+                lead.text.find("unreadable registry plate") !=
+                    std::string_view::npos &&
+                lead.text.find(
+                    "Ownership and whether anyone is aboard remain unknown") !=
+                    std::string_view::npos,
+            "Inspected discussion acknowledges only recorded findings and "
+            "leaves ownership and occupancy unknown");
+    } else {
+      check(lead.text.find("Your log records a contact") !=
+                    std::string_view::npos &&
+                lead.text.find("Inspect derelict exterior") !=
+                    std::string_view::npos &&
+                lead.text.find("unreadable") == std::string_view::npos &&
+                lead.text.find("no active power") == std::string_view::npos,
+            "Contact-only advice offers the existing inspection without unseen "
+            "exterior findings");
+    }
+    check(need(encode_native_save_document_json(need(live.save_document()))) ==
+              original,
+          "Repeated contact conversation reads preserve complete Save, "
+          "knowledge, clock and resources");
+  }
+}
+auto contact_recovery(const NativeFreedomFlightSession& source,
+                      const std::filesystem::path& output) -> void {
+  const auto original =
+      need(encode_native_save_document_json(need(source.save_document())));
+  // An independent classified-loss clone, not exhaustion, rescue or a flown
+  // return. The main actual contact/approach/inspection journey stays intact.
+  auto recovered = std::make_unique<NativeFreedomFlightSession>(source);
+  const auto records = recovered->knowledge()->derelicts;
+  check(records && records->contact && !records->inspection,
+        "Recovery clone starts from the actual contact before exterior "
+        "inspection");
+  need(recovered->record_loss(
+      FreedomLossCause::recoverable_destruction,
+      recovered->document().origin.state.craft,
+      recovered->document().flight.tick,
+      need(rigid_body_state_checksum(RigidBodyWorldContext{recovered->system()},
+                                     recovered->document().flight))));
+  need(recovered->complete_recovery());
+  check(recovered->walker().has_value() &&
+            recovered->knowledge()->derelicts == records &&
+            !recovered->derelict_view().local,
+        "Real standard recovery retains the contact-only log at station "
+        "without a remote pose");
+  crew_log_topic(*recovered, false);
+  auto restored = std::make_unique<NativeFreedomFlightSession>(
+      continued(*recovered, output / "contact-recovered.json"));
+  crew_log_topic(*restored, false);
+  check(need(encode_native_save_document_json(need(source.save_document()))) ==
+            original,
+        "Independent contact recovery and conversation preserve the main "
+        "actual journey");
+}
 auto exercise(const std::filesystem::path& output) -> void {
   std::filesystem::create_directories(output);
   auto station = need(NativeFreedomFlightSession::open(
@@ -110,6 +202,14 @@ auto exercise(const std::filesystem::path& output) -> void {
   check(station.derelict_view().selected && !station.derelict_view().known &&
             !station.scan_derelict() && !station.inspect_derelict(),
         "New selected station journey hides hull and refuses space actions");
+  const auto unknown =
+      need(encode_native_save_document_json(need(station.save_document())));
+  check(need(station.station_crew()).topic_count == 3 &&
+            need(station.station_crew()).topics[3].id == 0 &&
+            need(encode_native_save_document_json(
+                need(station.save_document()))) == unknown,
+        "Unknown selected contact exposes only the original three crew topics "
+        "without changing Save");
   station = continued(station, output / "station.json");
   auto old =
       need(NativeFreedomFlightSession::open(need(native_new_game({42}))));
@@ -134,6 +234,7 @@ auto exercise(const std::filesystem::path& output) -> void {
             live.knowledge()->entries == facts,
         "Earned contact and out-of-range refusal spend no time/fuel or facts");
   auto resumed = continued(live, output / "contact.json");
+  contact_recovery(live, output);
   // Both independent peers coast through real committed physics ticks from
   // the labeled approach fixture. No position assignment closes the distance.
   for (unsigned tick = 0; tick < 1200; ++tick) {
@@ -171,6 +272,7 @@ auto exercise(const std::filesystem::path& output) -> void {
         "Actual station replacement retains the historical exterior note "
         "without a moving remote pose");
   resumed = continued(resumed, output / "recovered.json");
+  crew_log_topic(resumed, true);
 }
 } // namespace
 

@@ -303,7 +303,7 @@ def main(argv=None):
     if "orbital_survey" in selected:
         if not survey_fixture.is_file() or not os.access(survey_fixture, os.X_OK):
             parser.error(f"missing C++ orbital survey fixture: {survey_fixture}")
-    if "native_derelict" in selected:
+    if any(name in selected for name in ("native_derelict", "native_station_crew")):
         if not derelict_fixture.is_file() or not os.access(derelict_fixture, os.X_OK):
             parser.error(f"missing C++ derelict fixture: {derelict_fixture}")
     def prepare_physical_fixtures():
@@ -407,7 +407,7 @@ def main(argv=None):
         shutil.copy2(survey_fixture, work / survey_fixture.name)
         survey_fixture = work / survey_fixture.name
         staged_executables.append(survey_fixture)
-    if "native_derelict" in selected:
+    if any(name in selected for name in ("native_derelict", "native_station_crew")):
         shutil.copy2(derelict_fixture, work / derelict_fixture.name)
         derelict_fixture = work / derelict_fixture.name
         staged_executables.append(derelict_fixture)
@@ -844,7 +844,7 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
         save()
-    if "native_derelict" in selected:
+    if any(name in selected for name in ("native_derelict", "native_station_crew")):
         phases = work / "derelict-voyage"
         log = work / "derelict-voyage-fixture.log"
         code, timed_out, elapsed = run_logged(
@@ -854,7 +854,7 @@ def main(argv=None):
                   "fixture_sha256": sha256(derelict_fixture)}
         report["setup"].append(record)
         save()
-        names = ("station", "approach", "contact", "near", "inspection", "recovered")
+        names = ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered")
         if code != 0 or timed_out or not all(
                 (phases / (name + ".json")).is_file() and
                 0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
@@ -1144,7 +1144,7 @@ def main(argv=None):
         if name == "native_walk":
             arguments = [str(work / path) for path in ("journey.json", "journey-trace.json", "native-assets")]
         if name == "native_station_crew":
-            arguments = [str(work / path) for path in ("journey.json", "native-assets", "station-crew-native")]
+            arguments = [str(work / path) for path in ("journey.json", "native-assets", "station-crew-native", "derelict-voyage")]
         if name == "native_minor":
             arguments = [str(work / path) for path in
                          ("minor-voyage", "native-assets", "minor-native")]

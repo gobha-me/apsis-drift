@@ -348,7 +348,7 @@ def layout(selected, runner):
                        ("native_system_release", "system_release"), ("orbital_survey", "orbital_survey")):
         if name in selected:
             add(role + "_saves", role)
-    if "native_derelict" in selected:
+    if any(name in selected for name in ("native_derelict", "native_station_crew")):
         add("derelict_saves", "derelict")
     for name in runner.SURFACE_TESTS:
         if name in selected:
@@ -443,7 +443,7 @@ def validate_report(report, path, metadata, selected, m, runner):
                     "Incomplete actual minor phases")
             if family == "derelict_saves":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
-                    ("station", "approach", "contact", "near", "inspection", "recovered")},
+                    ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered")},
                     "Incomplete actual derelict phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in

@@ -203,6 +203,26 @@ func run() -> void:
 		controls.settings = original_keys
 		var ports := Basics.saved_page_text(4, controls, wayfarer)
 		check(("Target D1 / D2" in ports) == wayfarer and ("no supported Wayfarer" in ports) == not wayfarer, "Historical profile manufactured port support")
+		var planetary_landing := Basics.saved_page_text(8, controls, wayfarer)
+		check(Basics.saved_page_text(8, controls, wayfarer, false) == planetary_landing, "Explicit planetary guide changed the default landing instructions")
+		var old_rise: Dictionary = controls.bindings.rise.key.duplicate(true)
+		check(controls.rebind("rise", "key", {"kind": "key", "code": KEY_9}), "Lunar guide rise-remap fixture failed")
+		menu.basics.page = 8
+		for assisted in [false, true]:
+			var lunar_context := snapshot.duplicate(true)
+			lunar_context.body_kind = "moon"
+			lunar_context.assistance = assisted
+			menu.sync_saved_state(lunar_context, false)
+			var lunar_text: String = menu.basics.body.text
+			if wayfarer:
+				check("manual with flight assistance ON or OFF" in lunar_text and "supplies no thrust" in lunar_text and "Resume explicitly, then apply up thrusters" in lunar_text and "fuel and available thrust" in lunar_text, "Lunar guide promised assisted landing/liftoff or omitted its manual limits")
+				check(Basics.binding(controls, "rise") in lunar_text and controls.binding_label("rise", "key") == "9", "Lunar guide lost the actual remapped rise binding")
+			else:
+				check(lunar_text == planetary_landing and "no supported Wayfarer landing actions" in lunar_text, "Moon context manufactured landing support for a historical craft")
+			menu.sync_saved_state(snapshot, false)
+			check(menu.basics.body.text == planetary_landing, "Guide retained lunar instructions after planetary context was restored")
+			check(snapshot == original and not controls.enabled and menu.basics.visible, "Lunar guide mutated observations or resumed controls")
+		check(controls.rebind("rise", "key", old_rise), "Lunar guide rise binding restore failed")
 		controls.waiting_action = "forward"
 		menu.close_basics()
 		menu.show_basics()

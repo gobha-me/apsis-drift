@@ -2713,8 +2713,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::Dictionary result;
     if (!saved_flight) return result;
     const auto crew = saved_flight->session.station_crew();
-    if (!crew) return result;
-    result["version"] = 1;
+    if (!crew || crew->topic_count < 3 ||
+        crew->topic_count > crew->topics.size())
+      return result;
+    result["version"] = 2;
     result["station_id"] =
         godot::String{std::to_string(crew->station.value).c_str()};
     result["tick"] = godot::String{
@@ -2732,7 +2734,8 @@ class FreedomBridge : public godot::RefCounted {
     result["available"] = crew->available;
     result["reason"] = godot::String{crew->reason.c_str()};
     godot::Array topics;
-    for (const auto& topic : crew->topics) {
+    for (std::size_t i = 0; i < crew->topic_count; ++i) {
+      const auto& topic = crew->topics[i];
       godot::Dictionary item;
       item["id"] = static_cast<std::int64_t>(topic.id);
       item["title"] = godot::String{topic.title.data()};

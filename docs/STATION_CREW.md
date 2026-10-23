@@ -22,6 +22,16 @@ simulation, navigation, schedule or dialogue progression. Conversation display
 and chatter cooldown are transient; no new save format or generated-world
 recipe is introduced.
 
+The original three advice topics remain available. After you record a derelict
+contact, you can choose **Can you look at my contact log?** to share that record.
+Before inspection, the attendant points you toward the existing exterior
+inspection action. After inspection, the response acknowledges the recorded
+power, thrust and registry observations while leaving ownership and occupancy
+unknown. This uses your retained notes, including after recovery and Continue;
+the attendant supplies no unseen contacts, coordinates or extra discovery facts.
+Reading either response leaves the save unchanged. There is no rumor timer,
+reward, new relationship state or requirement to return before exploring further.
+
 The decorative bubble cooldown currently uses Godot's signed integer clock
 conversion. Extreme unsigned save clocks can suppress chatter; C++ conversation
 eligibility, saved time and the journey remain independent of that display limit.

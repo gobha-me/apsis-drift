@@ -31,7 +31,11 @@ auto run() -> void {
           "Crew is bound to the actual station and reachable from its hub");
     check(crew.foot_position_metres.x - .32 > kOriginWalkMaximumXMetres,
           "Crew body stays beyond all permitted player standing reservations");
-    for (std::size_t i = 0; i < crew.topics.size(); ++i)
+    check(crew.topic_count == 3 && crew.topic_count < crew.topics.size() &&
+              crew.topics[3].id == 0 && crew.topics[3].title.empty() &&
+              crew.topics[3].text.empty(),
+          "Pure station fixture exposes only the three original topics");
+    for (std::size_t i = 0; i < crew.topic_count; ++i)
       check(crew.topics[i].id == i + 1 && !crew.topics[i].title.empty() &&
                 !crew.topics[i].text.empty(),
             "Small authored topic set is stable and complete");
@@ -87,12 +91,17 @@ auto run() -> void {
   need(live.advance_walk({0, 0, -std::numbers::pi / 2}));
   const auto before = bytes(live);
   for (unsigned i = 0; i < 8; ++i)
-    check(need(live.station_crew()).available && bytes(live) == before,
+    check(need(live.station_crew()).available &&
+              need(live.station_crew()).topic_count == 3 &&
+              need(live.station_crew()).topics[3].id == 0 &&
+              bytes(live) == before,
           "Actual conversation query preserves complete Save, clock and "
           "resources");
   auto continued = need(NativeFreedomFlightSession::open(
       need(native_select_save_document(need(live.save_document())))));
-  check(bytes(continued) == before && need(continued.station_crew()).available,
+  check(bytes(continued) == before &&
+            need(continued.station_crew()).available &&
+            need(continued.station_crew()).topic_count == 3,
         "Continue preserves the real actor and crew eligibility without "
         "migration");
 }
