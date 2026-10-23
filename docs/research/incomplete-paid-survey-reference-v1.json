@@ -1,0 +1,74 @@
+{
+  "schema": "apsis.incomplete-paid-survey-reference/1",
+  "seed": 42,
+  "factory": "native_planetary_network_new_game",
+  "profile": "assisted",
+  "drive": "standard",
+  "charted_arrivals": {
+    "version": 1
+  },
+  "target": {
+    "system": "system-28630482e6b15573",
+    "planet": "11663323411267002299"
+  },
+  "outcome": {
+    "commission_paid": false,
+    "failure_kind": "incomplete_measurement",
+    "expired": false,
+    "destination_acquired_ticks": 0,
+    "returned_acquired_ticks": 0,
+    "submission_refused_save_neutral": true,
+    "next_sequence": 2,
+    "next_acquired_ticks": 0,
+    "next_fresh_work_available": true
+  },
+  "time": {
+    "ticks_per_second": 120,
+    "elapsed_ticks": 90609,
+    "committed_flight_ticks": 84649,
+    "committed_walk_ticks": 5960,
+    "accepted_tick": 0,
+    "deadline_tick": 1728000,
+    "arrival_tick": 29660,
+    "next_accepted_tick": 89049,
+    "next_deadline_tick": 1817049
+  },
+  "fuel": {
+    "capacity_quanta": 3032640000000000,
+    "spent_quanta": 119994160705365,
+    "before_restoration_quanta": 2912645839294635,
+    "jump_charge_sequence": [
+      3,
+      2,
+      1
+    ],
+    "restored_quanta": 3032640000000000,
+    "restored_jump_charges": 3
+  },
+  "credits": {
+    "opening_budget": 200,
+    "initial_four_hour_berth": 20,
+    "enrolled_cash": 180,
+    "actual_report_payment": 0,
+    "flight_restoration": 2,
+    "jump_restoration": 30,
+    "new_berth_bill": 0,
+    "final_cash": 148,
+    "operating_tab": 0,
+    "recovery_due": 0
+  },
+  "evidence": {
+    "fixture": "test/godot/freedom_planetary_fixture.cpp",
+    "fixture_sha256": "d6dc4ad0f5106d199137be78de0a310fd2e3c03daede8285c2aa3768fe5fbd3d",
+    "checkpoint_count": 23,
+    "gcc_clang_equal_route_artifacts": 50,
+    "command_stream_sha256": "1d2909522bbce2260ebf40411bde247e06597079e4c276b0c84dd7d2016966e4",
+    "final_save_sha256": "1e4f40cd7eb644d4328fbf9a7b52017703a8215d652d8502cf73b6e4621ba3c8"
+  },
+  "scope": [
+    "One actual seed42 New Game; the test pilot skips orbital insertion/acquisition and returns through actual flight and moving-station capture. No intermediate pose, velocity, clock, knowledge, fuel or financial initialization.",
+    "The incomplete report is refused without changing the complete Save. Explicit abandonment pays nothing; actual purchase restores full stores before a fresh job is accepted with no reused measurement or new opening grant.",
+    "This is an unexpired incomplete-work reference, not a simulated missed deadline, player failure, typical/sparse seed distribution, optimal route, later affordability or general price balance. #293 remains open.",
+    "Both compiler runs matched all route artifacts locally, including C++ Continue/uninterrupted-peer checkpoints. This is separate from Godot UI replay, manual/GPU qualification and cross-host math-library issue #255."
+  ]
+}

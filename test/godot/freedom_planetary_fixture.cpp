@@ -73,6 +73,12 @@ auto check(bool value, std::string_view why) -> void {
 auto coordinates(V v) -> Json {
   return Json::array({v.x, v.y, v.z});
 }
+auto complete_save_bytes(const NativeFreedomFlightSession& session)
+    -> std::string {
+  return need(encode_native_save_document_json(
+                  need(session.save_document(), "Complete Save refused")),
+              "Complete Save encoding refused");
+}
 
 struct Commands {
   std::ofstream stream;
@@ -237,6 +243,13 @@ struct Trace {
                                            args.at(1).get<std::uint32_t>()));
       else if (op == "commission_submit")
         need(live.submit_survey_commission(args.at(0).get<std::uint32_t>()));
+      else if (op == "commission_submit_refused") {
+        const auto before = complete_save_bytes(live);
+        check(!live.submit_survey_commission(args.at(0).get<std::uint32_t>()) &&
+                  complete_save_bytes(live) == before,
+              "Uninterrupted incomplete submission changed the complete Save");
+      } else if (op == "commission_abandon")
+        need(live.abandon_survey_commission(args.at(0).get<std::uint32_t>()));
       else if (op == "paid_purchase")
         need(live.purchase_paid_fuel(args.at(0).get<std::string>()));
       else if (op == "commission_jump_select")
@@ -1198,8 +1211,8 @@ auto neighbor_start(const std::optional<std::filesystem::path>& source,
 auto run_neighbor(const std::filesystem::path& output, bool record_commands,
                   bool pilot, std::optional<IntersystemArrivalQuality> grade,
                   const std::optional<std::filesystem::path>& continue_from,
-                  bool commission = false, bool charted_arrivals = false)
-    -> void {
+                  bool commission = false, bool charted_arrivals = false,
+                  bool incomplete_commission = false) -> void {
   const auto source_bytes =
       continue_from ? checkpoint_bytes(*continue_from) : std::string{};
   Trace trace{neighbor_start(continue_from, commission), output,
@@ -1212,6 +1225,7 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
   auto destination = ids.target_system;
   std::uint32_t commission_sequence{};
   Json commission_report = Json::object();
+  std::optional<FreedomKnowledge> incomplete_return_knowledge;
   std::string commission_phase{"station-start"};
   std::optional<Commands> commands;
   const auto commission_progress = [&](std::string_view reason) {
@@ -1565,7 +1579,7 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
     check(!session.replenish_resources(),
           "Neighbor granted phantom free service");
     trace.checkpoint("neighbor-observed");
-    if (commission) {
+    if (commission && !incomplete_commission) {
       commission_phase = "destination-orbit";
       const auto job =
           need(session.survey_commission_view(), "Destination job refused");
@@ -1707,6 +1721,23 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
       check(completed,
             "Candidate destination insertion exceeded its bounded7200seconds");
       trace.checkpoint("commission-complete");
+    } else if (incomplete_commission) {
+      commission_phase = "destination-incomplete";
+      const auto work = need(session.survey_commission_view(),
+                             "Incomplete destination job refused");
+      check(!work.completed && !work.expired &&
+                work.acquired_ticks < kSurveyCommissionMeasurementTicks &&
+                work.sequence == commission_sequence,
+            "Skipped insertion unexpectedly completed or expired the job");
+      commission_report["insertion_skipped"] = true;
+      commission_report["destination_acquired_ticks"] = work.acquired_ticks;
+      commission_report["arrival_tick"] =
+          std::to_string(session.document().flight.tick);
+      commission_report["arrival_radius_metres"] =
+          length(need(session.relative_state(),
+                      "Incomplete destination relative state refused")
+                     .position_metres);
+      trace.checkpoint("commission-incomplete");
     }
     commission_phase = "return";
     jump(commission ? home_system : ids.origin_system, "return");
@@ -1829,9 +1860,16 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
           need(session.paid_operations_view(), "Return paid quote refused");
       const auto ready =
           need(session.survey_commission_view(), "Returned commission refused");
-      check(ready.can_submit && ready.completed &&
-                ready.sequence == commission_sequence,
-            "Actual returned commission is not submit-ready");
+      if (incomplete_commission)
+        check(ready.at_origin && !ready.can_submit && !ready.completed &&
+                  !ready.expired && ready.can_abandon &&
+                  ready.sequence == commission_sequence &&
+                  ready.acquired_ticks < kSurveyCommissionMeasurementTicks,
+              "Returned incomplete job is not an unexpired failed-work case");
+      else
+        check(ready.can_submit && ready.completed &&
+                  ready.sequence == commission_sequence,
+              "Actual returned commission is not submit-ready");
       commission_report["pre_submit_cash"] = std::to_string(before.cash);
       commission_report["capture_flight_credits"] =
           std::to_string(before.flight_credits);
@@ -1851,12 +1889,41 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
           std::to_string(session.resources()->flight_quanta);
       commission_report["capture_jump_charges"] =
           session.resources()->jump_charges;
-      need(session.submit_survey_commission(commission_sequence));
-      trace.action("commission_submit", Json::array({commission_sequence}));
-      trace.checkpoint("commission-paid");
+      if (incomplete_commission) {
+        incomplete_return_knowledge = *session.knowledge();
+        const auto original = complete_save_bytes(session);
+        check(!session.submit_survey_commission(commission_sequence) &&
+                  complete_save_bytes(session) == original,
+              "Incomplete submission paid or changed the complete voyage");
+        trace.action("commission_submit_refused",
+                     Json::array({commission_sequence}));
+        trace.checkpoint("commission-submit-refused");
+        check(session.knowledge()->survey_commissions->paid_count == 0 &&
+                  !session.knowledge()->survey_commissions->latest_paid,
+              "Uncompleted work granted income or a payment receipt");
+        commission_report["submission_refused_save_neutral"] = true;
+        commission_report["acquired_ticks"] = ready.acquired_ticks;
+        commission_report["post_refused_submit_cash"] = std::to_string(
+            need(session.paid_operations_view(), "Refused cash unavailable")
+                .cash);
+        need(session.abandon_survey_commission(commission_sequence));
+        trace.action("commission_abandon", Json::array({commission_sequence}));
+        trace.checkpoint("commission-abandoned");
+        check(!session.knowledge()->survey_commissions->active &&
+                  session.knowledge()->survey_commissions->paid_count == 0 &&
+                  need(session.paid_operations_view(), "Abandoned cash refused")
+                          .cash == before.cash,
+              "Explicit abandonment granted money or retained unfinished work");
+        commission_report["post_abandon_cash"] = std::to_string(before.cash);
+      } else {
+        need(session.submit_survey_commission(commission_sequence));
+        trace.action("commission_submit", Json::array({commission_sequence}));
+        trace.checkpoint("commission-paid");
+      }
       const auto quote = need(session.paid_operations_view(),
                               "Paid restoration quote refused");
-      commission_report["post_submit_cash"] = std::to_string(quote.cash);
+      if (!incomplete_commission)
+        commission_report["post_submit_cash"] = std::to_string(quote.cash);
       check(quote.can_purchase,
             "Actual returned pilot cannot afford restoration");
       need(session.purchase_paid_fuel(quote.token));
@@ -1864,6 +1931,14 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
       commission_report["post_purchase_cash"] = std::to_string(
           need(session.paid_operations_view(), "Purchased balance refused")
               .cash);
+      if (incomplete_commission) {
+        const auto restored = need(session.paid_operations_view(),
+                                   "Incomplete restoration balance refused");
+        check(quote.cash >= quote.service_credits &&
+                  restored.cash == quote.cash - quote.service_credits &&
+                  session.knowledge()->paid_operations->settled_paid_count == 0,
+              "Failed-work restoration reset the budget or misbilled stores");
+      }
     } else {
       need(session.replenish_resources());
       trace.action("replenish");
@@ -1872,6 +1947,52 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
               session.resources()->jump_charges == 3,
           "Attached station service did not replenish both pools");
     trace.checkpoint("replenished");
+    if (incomplete_commission) {
+      const auto before =
+          need(session.paid_operations_view(), "Next-work balance refused");
+      const auto offer = need(session.survey_commission_view(),
+                              "Next fresh-work offer refused");
+      check(offer.can_accept && offer.offer_sequence > commission_sequence,
+            "Returned failed worker has no next fresh commission");
+      need(session.accept_survey_commission(offer.offer_until,
+                                            offer.offer_sequence));
+      trace.action("commission_accept",
+                   Json::array({offer.offer_until, offer.offer_sequence}));
+      const auto next = need(session.survey_commission_view(),
+                             "Next accepted commission refused");
+      const auto after =
+          need(session.paid_operations_view(), "Next accepted balance refused");
+      auto expected = *incomplete_return_knowledge;
+      expected.survey_commissions = session.knowledge()->survey_commissions;
+      expected.paid_operations = session.knowledge()->paid_operations;
+      check(
+          *session.knowledge() == expected &&
+              next.sequence == offer.offer_sequence && !next.completed &&
+              !next.expired && next.acquired_ticks == 0 &&
+              !session.knowledge()->survey_commissions->active->measurement &&
+              session.knowledge()->survey_commissions->paid_count == 0 &&
+              !session.knowledge()->survey_commissions->latest_paid &&
+              after.cash == before.cash &&
+              session.knowledge()->paid_operations->started_tick ==
+                  incomplete_return_knowledge->paid_operations->started_tick &&
+              session.knowledge()->paid_operations->charged_generation ==
+                  incomplete_return_knowledge->paid_operations
+                      ->charged_generation &&
+              session.resources()->flight_quanta ==
+                  kFreedomFlightCapacityQuanta &&
+              session.resources()->jump_charges == 3,
+          "Next job erased observations, reused work, granted money or lost "
+          "stores");
+      commission_report["next_sequence"] = next.sequence;
+      commission_report["next_acquired_ticks"] = next.acquired_ticks;
+      commission_report["next_accepted_tick"] =
+          std::to_string(next.accepted_tick);
+      commission_report["next_deadline_tick"] =
+          std::to_string(next.deadline_tick);
+      commission_report["next_cash"] = std::to_string(after.cash);
+      commission_report["next_fresh_work_available"] = true;
+      trace.checkpoint("commission-next");
+    }
     need(session.begin_disembarking());
     trace.action("unboard");
     for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
@@ -1947,6 +2068,19 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
       report["residual_flight_quanta"] =
           std::to_string(session.resources()->flight_quanta);
       report["residual_jump_charges"] = session.resources()->jump_charges;
+      if (incomplete_commission) {
+        report["route"] = "ordinary-incomplete-paid-survey-candidate";
+        report["commission_paid"] = false;
+        report["failure_kind"] = "incomplete_measurement";
+        report["expired"] = false;
+        report["next_job_acquired_ticks"] =
+            need(session.survey_commission_view(), "Final next job refused")
+                .acquired_ticks;
+        check(report["next_job_acquired_ticks"] == 0 &&
+                  session.knowledge()->survey_commissions->paid_count == 0 &&
+                  !session.knowledge()->survey_commissions->latest_paid,
+              "Final failed-work state invented acquisition or payment");
+      }
     }
     std::ofstream stream(output / "trace.json");
     stream << report.dump(2) << '\n';
@@ -2132,13 +2266,15 @@ int main(int argc, char** argv) {
           "Expected one absolute empty output "
           "directory and optional "
           "--commands/--endurance/--neighbor/--commission/--charted-arrivals/"
+          "--incomplete-commission/"
           "--pilot/"
           "--aligned/--offset/--surface-loop [--system-frame] or distinct "
           "--terrain-feature; --flight-profile=assisted|advanced requires "
           "--surface-loop --system-frame; --continue-from=/absolute/save "
           "requires --neighbor --commands");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
-        feature{}, system_frame{}, commission{}, charted_arrivals{};
+        feature{}, system_frame{}, commission{}, charted_arrivals{},
+        incomplete_commission{};
     std::optional<IntersystemArrivalQuality> grade;
     std::optional<PhysicalFlightProfile> profile;
     std::optional<std::filesystem::path> continue_from;
@@ -2166,6 +2302,8 @@ int main(int argc, char** argv) {
         commission = true;
       else if (option == "--charted-arrivals" && !charted_arrivals)
         charted_arrivals = true;
+      else if (option == "--incomplete-commission" && !incomplete_commission)
+        incomplete_commission = true;
       else if (option == "--pilot" && !pilot)
         pilot = true;
       else if (option == "--aligned" && !grade)
@@ -2214,11 +2352,14 @@ int main(int argc, char** argv) {
     if (charted_arrivals && !commission)
       throw std::invalid_argument(
           "--charted-arrivals requires --neighbor --commands --commission");
+    if (incomplete_commission && !commission)
+      throw std::invalid_argument("--incomplete-commission requires --neighbor "
+                                  "--commands --commission");
     if (feature)
       terrain_feature(output);
     else if (neighbor)
       run_neighbor(output, commands, pilot, grade, continue_from, commission,
-                   charted_arrivals);
+                   charted_arrivals, incomplete_commission);
     else
       run(output, commands, endurance, surface_loop, system_frame, profile);
     return 0;

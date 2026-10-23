@@ -62,3 +62,13 @@ now measures one fully flown seed 42 trip: cash of 180 after enrollment becomes
 This single candidate does not settle pricing, failed work, sparse starts or
 player pacing; those remain part of
 [#293](https://github.com/gobha-me/apsis-drift/issues/293).
+
+The optional [closer-arrival reference](CHARTED_ARRIVALS.md#measured-paid-survey-reference)
+finishes that candidate with 244 credits after replenishment. A separate
+[incomplete-survey reference](research/incomplete-paid-survey-reference-v1.json)
+skips orbital acquisition and returns without a payable report. That actual
+trip takes 12.585 game minutes and costs 32 credits to restore both fuel pools,
+leaving 148 credits, full stores and a newly accepted job with no reused work.
+Submission refuses without changing the Save; explicit abandonment grants no
+payment. This measures one unexpired unsuccessful attempt, not deadline expiry
+or general starting viability. Previous reference data remains unchanged.
