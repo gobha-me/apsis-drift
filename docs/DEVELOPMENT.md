@@ -117,7 +117,9 @@ dependencies, matching provenance, full case coverage and the software sky
 checks. A missing, failed, skipped or cancelled group prevents success. Raw group
 reports and saved proofs remain available in the runtime artifacts. Keep the
 surface-loop/first-flight-continuation and planetary/voyage pairs together when
-changing the groups; local subset commands above remain available.
+changing the groups. Keep station crew with derelict inspection to share their
+saved-phase producer; case selection and per-process deadlines stay unchanged.
+Local subset commands above remain available.
 
 The selected-frame nineteen-phase surface route is an explicit opt-in contract:
 
