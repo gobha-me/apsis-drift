@@ -8,6 +8,10 @@
 #include "apsis_drift/secondary_bodies.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <expected>
+#include <string>
 
 namespace apsis_drift::godot_spike {
 // Presentation projection only. The saved nonrotating state stays untouched.
@@ -167,6 +171,12 @@ inline auto validate_saved_projection(const NativeFreedomFlightSession& session)
     (void)project_saved_flight(session);
 }
 
+struct QuietTravelView {
+  bool available{};
+  std::uint32_t multiplier{1};
+  std::string note;
+};
+
 struct SavedFlightWorld {
   NativeFreedomFlightSession session;
   FixedStepClock clock;
@@ -175,6 +185,31 @@ struct SavedFlightWorld {
   // Presentation memoization only: one actual selected body, no save/catalog.
   mutable std::optional<PlanetOpticsField> optical_field{};
   mutable std::optional<SecondaryBodyCatalog> secondary_catalog{};
+  // Transient request only. Append after historical aggregate fields; never
+  // serialize it or turn unexecuted bonus work into clock debt.
+  std::uint32_t quiet_travel_multiplier{1};
+
+  [[nodiscard]] auto quiet_travel_view() const -> QuietTravelView {
+    const auto* refusal = quiet_travel_refusal(session);
+    return {refusal == nullptr, quiet_travel_multiplier,
+            refusal ? refusal
+                    : "Quiet travel available. Assistance, fuel and deadlines "
+                      "continue normally."};
+  }
+
+  [[nodiscard]] auto set_quiet_travel_multiplier(std::uint32_t multiplier)
+      -> std::expected<void, std::string> {
+    if (multiplier != 1 && multiplier != 2 && multiplier != 4)
+      return std::unexpected{"Quiet travel supports only 1, 2 or 4."};
+    if (multiplier != 1) {
+      if (const auto* refusal = quiet_travel_refusal(session))
+        return std::unexpected{std::string{refusal}};
+    }
+    quiet_travel_multiplier = multiplier;
+    return {};
+  }
+
+  auto reset_quiet_travel() noexcept -> void { quiet_travel_multiplier = 1; }
 
   auto advance(double elapsed, std::span<const double> fractions, bool paused)
       -> void {
@@ -194,19 +229,49 @@ struct SavedFlightWorld {
     auto candidate = session;
     auto candidate_clock = clock;
     auto actuation = last_step;
+    auto multiplier = quiet_travel_multiplier;
+    if (std::ranges::any_of(fractions,
+                            [](double value) { return value != 0; }) ||
+        (multiplier != 1 && quiet_travel_refusal(candidate)))
+      multiplier = 1;
     const auto scheduled =
         require(candidate_clock.advance(SimulationSeconds{elapsed}));
     auto dropped = scheduled.dropped;
-    for (int i = 0; i < scheduled.steps; ++i) {
+    // Ordinary ticks have first claim on the existing15-tick budget. Bonus
+    // ticks use this same clock's already scheduled opportunities, never a
+    // scaled delta or a second accumulator.
+    int bonus_budget = kMaxCatchUpSteps - scheduled.steps;
+    const auto advance_tick = [&](int remaining_ordinary) {
       actuation = require(candidate.advance(controls));
       if (candidate.recovery_pending()) {
-        // The actual loss owns its final tick. Retire the unsimulated frame
-        // tail, including any fractional time, before explicit recovery.
-        dropped += kSimulationStep * (scheduled.steps - i - 1) +
+        multiplier = 1;
+        // Only unsimulated ordinary time and the real fractional accumulator
+        // are retired. Unexecuted bonus ticks were never time debt.
+        dropped += kSimulationStep * remaining_ordinary +
                    candidate_clock.accumulator();
         candidate_clock.reset();
-        break;
+        return false;
       }
+      if (multiplier != 1 && quiet_travel_refusal(candidate)) multiplier = 1;
+      return true;
+    };
+    for (int i = 0; i < scheduled.steps; ++i) {
+      const int remaining = scheduled.steps - i - 1;
+      if (!advance_tick(remaining)) break;
+      bool running = true;
+      for (std::uint32_t bonus = 1; bonus < multiplier && bonus_budget > 0;
+           ++bonus) {
+        if (quiet_travel_refusal(candidate)) {
+          multiplier = 1;
+          break;
+        }
+        --bonus_budget;
+        if (!advance_tick(remaining)) {
+          running = false;
+          break;
+        }
+      }
+      if (!running) break;
     }
     // Qualify the projected selected owner before committing this whole batch.
     // Rendering never supplies pose, rotation or a substitute world recipe.
@@ -215,6 +280,71 @@ struct SavedFlightWorld {
     clock = candidate_clock;
     last_step = actuation;
     dropped_seconds += dropped.count();
+    quiet_travel_multiplier = multiplier;
+  }
+
+ private:
+  // Fixed reasons stay bounded and reveal no unobserved world facts. These
+  // are scheduling guards, not new flight laws or all-body collision safety.
+  static auto quiet_travel_refusal(const NativeFreedomFlightSession& selected)
+      -> const char* {
+    if (selected.recovery_pending())
+      return "Quiet travel held: recovery pending.";
+    if (selected.moon() || selected.minor() || selected.document().moon ||
+        selected.document().minor)
+      return "Quiet travel supports primary-planet flight only.";
+    if (selected.walker() || selected.surface_walker())
+      return "Quiet travel requires a seated pilot.";
+    if (selected.boarding() &&
+        selected.boarding()->phase != FreedomBoardingPhase::seated)
+      return "Quiet travel held during boarding or disembarking.";
+    if ((selected.docking() && selected.docking()->attached) ||
+        (selected.surface() && selected.surface()->landed))
+      return "Quiet travel requires unattached free flight.";
+    if (selected.travel() && selected.travel()->phase != FreedomJumpPhase::idle)
+      return "Quiet travel held during jump spool or transit.";
+    if (selected.origin_assistance()) {
+      const auto* sortie =
+          std::get_if<OriginServiceSortie>(&*selected.origin_assistance());
+      if (sortie && sortie->phase != OriginServiceSortiePhase::completed &&
+          sortie->phase != OriginServiceSortiePhase::canceled)
+        return "Quiet travel held while Origin fuel service is active.";
+    }
+    if (selected.surface_maneuver().kind != NativeSurfaceManeuverKind::off ||
+        selected.port_approach().active || selected.port_docking().active ||
+        selected.port_rendezvous().active)
+      return "Quiet travel held while a flight maneuver is active.";
+    const auto body = selected.relative_state();
+    const auto observation = selected.observe();
+    if (!body || body->frame.kind != RigidFrameKind::planet_relative_inertial ||
+        !body->frame.planet || !observation)
+      return "Quiet travel flight reference is unavailable.";
+    const auto& air = observation->atmosphere;
+    if (!std::isfinite(air.altitude_metres) ||
+        !std::isfinite(air.space_boundary_altitude_metres) ||
+        air.altitude_metres < air.space_boundary_altitude_metres + 100000.0)
+      return "Quiet travel requires space with a 100 km atmosphere buffer.";
+    const auto seed = selected.document().origin.recipe.universe_seed;
+    if (selected.system().catalog.id ==
+        generate_first_intersystem_identities(seed).origin_system) {
+      const auto station = generate_origin_station(seed);
+      const auto port = resolve_origin_station_ephemeris(
+          selected.system(), station, {body->tick, 0});
+      const auto planet = resolve_planet_ephemeris(
+          selected.system(), *body->frame.planet, {body->tick, 0});
+      if (!port || !planet)
+        return "Quiet travel station reference is unavailable.";
+      const double distance = std::hypot(
+          planet->position.x + body->position_metres.x - port->position.x,
+          planet->position.y + body->position_metres.y - port->position.y,
+          planet->position.z + body->position_metres.z - port->position.z);
+      if (!std::isfinite(distance) || distance <= 10000.0)
+        return "Quiet travel requires more than 10 km from Origin station.";
+    }
+    // Paid port purchase is instantaneous and attached. The separate live NPC
+    // sortie is excluded above; home/terminal/history records remain allowed.
+    // Passive assistance/hold and fuel quantity do not gate.
+    return nullptr;
   }
 };
 } // namespace apsis_drift::godot_spike

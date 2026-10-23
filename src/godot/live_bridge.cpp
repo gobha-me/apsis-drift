@@ -469,6 +469,11 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_charted_arrivals", "enabled"),
         &FreedomBridge::set_freedom_charted_arrivals);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_quiet_travel"),
+                                &FreedomBridge::get_freedom_quiet_travel);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_freedom_quiet_travel", "multiplier"),
+        &FreedomBridge::set_freedom_quiet_travel);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_specimen_sale"),
                                 &FreedomBridge::get_freedom_specimen_sale);
     godot::ClassDB::bind_method(
@@ -1263,6 +1268,7 @@ class FreedomBridge : public godot::RefCounted {
               : native_save_freedom(native_start->selected,
                                     std::filesystem::path{bytes});
       if (!saved) throw std::runtime_error(saved.error());
+      if (saved_flight) saved_flight->reset_quiet_travel();
       last_error = godot::String{};
       return true;
     } catch (const std::exception& error) {
@@ -1367,6 +1373,7 @@ class FreedomBridge : public godot::RefCounted {
       last_error = godot::String{accepted.error().c_str()};
       return false;
     }
+    saved_flight->reset_quiet_travel();
     last_error = godot::String{};
     return true;
   }
@@ -1381,6 +1388,7 @@ class FreedomBridge : public godot::RefCounted {
       last_error = godot::String{accepted.error().c_str()};
       return false;
     }
+    saved_flight->reset_quiet_travel();
     last_error = godot::String{};
     return true;
   }
@@ -1396,6 +1404,7 @@ class FreedomBridge : public godot::RefCounted {
       last_error = godot::String{accepted.error().c_str()};
       return false;
     }
+    saved_flight->reset_quiet_travel();
     last_error = godot::String{};
     return true;
   }
@@ -1411,6 +1420,7 @@ class FreedomBridge : public godot::RefCounted {
       if (!changed) throw std::runtime_error(changed.error());
       validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
+      saved_flight->reset_quiet_travel();
       if (reset_actuation) saved_flight->last_step.reset();
       last_error = godot::String{};
       return true;
@@ -2114,6 +2124,7 @@ class FreedomBridge : public godot::RefCounted {
         actuation = require(candidate.advance_surface_walk(demand));
       validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
+      saved_flight->reset_quiet_travel();
       saved_flight->clock = clock;
       saved_flight->last_step = std::move(actuation);
       saved_flight->dropped_seconds += scheduled.dropped.count();
@@ -2788,6 +2799,7 @@ class FreedomBridge : public godot::RefCounted {
                         : require(candidate.advance(NativeFlightControls{}));
       validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
+      saved_flight->reset_quiet_travel();
       saved_flight->clock = clock;
       saved_flight->last_step = std::move(actuation);
       saved_flight->dropped_seconds += scheduled.dropped.count();
@@ -2955,6 +2967,49 @@ class FreedomBridge : public godot::RefCounted {
     result["source"] = godot::String{view->source.data()};
     result["note"] = godot::String{view->note.data()};
     return result;
+  }
+
+  static auto project_quiet_travel(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    const auto view = selected.quiet_travel_view();
+    if ((view.multiplier != 1 && view.multiplier != 2 &&
+         view.multiplier != 4) ||
+        view.note.empty() || view.note.size() > 1024 ||
+        view.note.find('\0') != std::string::npos)
+      return {};
+    godot::Dictionary result;
+    result["version"] = std::int64_t{1};
+    result["multiplier"] = static_cast<std::int64_t>(view.multiplier);
+    result["available"] = view.available;
+    result["note"] = godot::String{view.note.c_str()};
+    return result;
+  }
+  auto get_freedom_quiet_travel() const -> godot::Dictionary {
+    return saved_flight ? project_quiet_travel(*saved_flight)
+                        : godot::Dictionary{};
+  }
+  auto set_freedom_quiet_travel(const godot::Variant& value) -> bool {
+    if (value.get_type() != godot::Variant::INT) {
+      last_error = "Quiet travel requires an integer: 1, 2 or 4";
+      return false;
+    }
+    const auto multiplier = static_cast<std::int64_t>(value);
+    if (multiplier != 1 && multiplier != 2 && multiplier != 4) {
+      last_error = "Quiet travel requires an integer: 1, 2 or 4";
+      return false;
+    }
+    if (!saved_flight) {
+      last_error = "Continue a physical flight save first";
+      return false;
+    }
+    const auto changed = saved_flight->set_quiet_travel_multiplier(
+        static_cast<std::uint32_t>(multiplier));
+    if (!changed) {
+      last_error = godot::String{changed.error().c_str()};
+      return false;
+    }
+    last_error = godot::String{};
+    return true;
   }
 
   auto get_freedom_charted_arrivals() const -> godot::Dictionary {
@@ -4150,6 +4205,9 @@ class FreedomBridge : public godot::RefCounted {
     auto result = project_player_flight_state(selected);
     if (result.is_empty()) return result;
     try {
+      const auto quiet = project_quiet_travel(selected);
+      if (quiet.is_empty()) return {};
+      result["quiet_travel"] = quiet;
       result["derelict"] = project_derelict(selected.session);
       if (selected.session.origin_assistance()) {
         auto status = project_origin_service_status(selected.session);

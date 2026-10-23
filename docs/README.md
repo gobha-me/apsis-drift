@@ -69,6 +69,7 @@ player's station-to-flight journey.
 - [Origin fuel service](ORIGIN_FUEL_SERVICE.md): one actual finite-supply home-Moon responder, real departure/delivery/return and shared Save/Continue.
 - [Freedom jump targeting](FREEDOM_JUMP_TARGETING.md): actual endpoint geometry, provisional in-range envelope and frozen arrival point.
 - [Closer charted arrivals](CHARTED_ARRIVALS.md): explicit near-planet placement for known primary planets, retaining momentum and earlier journeys.
+- [Quiet travel](QUIET_TRAVEL.md): optional bounded time acceleration using ordinary simulation ticks and normal operating costs.
 - [Measured Freedom endurance contract](FREEDOM_ENDURANCE.md)
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)
 - [Boarding body](ORIGIN_BOARDING_BODY.md), [support](ORIGIN_BOARDING_SUPPORT.md)
