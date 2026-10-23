@@ -155,6 +155,19 @@ struct NativeSurveyCommissionView {
   std::string body_name, note, last_payment;
 };
 
+struct NativePaidOperationsView {
+  bool supported{}, selected{}, at_origin{}, can_enable{}, can_purchase{},
+      can_retainer{};
+  SimulationTick tick{}, started_tick{}, berth_until_tick{};
+  std::uint64_t cash{}, opening_cash{}, operating_tab{}, recovery_due{};
+  std::uint64_t missing_flight_quanta{}, capacity_quanta{}, flight_credits{},
+      jump_credits{}, service_credits{};
+  std::uint32_t missing_jump_charges{};
+  std::uint64_t retainer_cash{}, retainer_tab{}, retainer_subsidy{},
+      retainer_berth{}, retainer_total{};
+  std::string token, terms, note;
+};
+
 struct NativeStarSearchView {
   bool selected{}, active{}, can_begin{};
   std::uint32_t acquired_ticks{};
@@ -257,6 +270,16 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto jump_available() const -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto paid_operations_view() const
+      -> std::expected<NativePaidOperationsView, std::string>;
+  [[nodiscard]] auto effective_paid_operations_account() const
+      -> std::expected<PaidOperationsAccount, std::string>;
+  [[nodiscard]] auto enable_paid_operations(std::string_view token)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto purchase_paid_fuel(std::string_view token)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto request_paid_retainer(std::string_view token)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto survey_commission_view() const
       -> std::expected<NativeSurveyCommissionView, std::string>;
@@ -488,6 +511,10 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_survey_commission_tick()
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto paid_operations_origin_available() const -> bool;
+  [[nodiscard]] auto paid_operations_token() const -> std::string;
+  [[nodiscard]] auto paid_operations_generation() const -> std::uint64_t;
+  [[nodiscard]] auto survey_paid_count() const -> std::uint32_t;
   [[nodiscard]] auto commit_survey_commission_account(SurveyCommissionAccount)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const

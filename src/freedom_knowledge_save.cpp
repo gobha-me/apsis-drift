@@ -404,6 +404,19 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
          account.active ? commission_json(*account.active) : Json(nullptr)},
         {"latest_paid", std::move(latest)}};
   }
+  if (k.paid_operations) {
+    const auto& account = *k.paid_operations;
+    root["paid_operations"] = {
+        {"version", account.version},
+        {"started_tick", account.started_tick},
+        {"billed_through_hours", account.billed_through_hours},
+        {"spent_credits", account.spent_credits},
+        {"operating_tab", account.operating_tab},
+        {"recovery_due", account.recovery_due},
+        {"settled_paid_count", account.settled_paid_count},
+        {"supported_sequence", account.supported_sequence},
+        {"charged_generation", account.charged_generation}};
+  }
   if (k.station_stellar_lead) {
     const auto& lead = *k.station_stellar_lead;
     root["station_stellar_lead"] = {{"version", lead.version},
@@ -448,6 +461,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("star_search");
   const bool commissions_selected =
       root->is_object() && root->contains("survey_commissions");
+  const bool paid_selected =
+      root->is_object() && root->contains("paid_operations");
   const bool lead_selected =
       root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
@@ -462,6 +477,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (derelicts_selected) root_shape.erase("derelicts");
   if (lead_selected) root_shape.erase("station_stellar_lead");
   if (commissions_selected) root_shape.erase("survey_commissions");
+  if (paid_selected) root_shape.erase("paid_operations");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -788,6 +804,32 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
           *commission, receipt["submitted_tick"].get<SimulationTick>()};
     }
     k.survey_commissions = state;
+  }
+  if (paid_selected) {
+    const auto& account = (*root)["paid_operations"];
+    if (!network ||
+        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
+         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+        !fields(account, {"version", "started_tick", "billed_through_hours",
+                          "spent_credits", "operating_tab", "recovery_due",
+                          "settled_paid_count", "supported_sequence", "charged_generation"}) ||
+        !unsigned_fields(account, {"version", "started_tick", "billed_through_hours",
+                                   "spent_credits", "operating_tab", "recovery_due",
+                                   "settled_paid_count", "supported_sequence", "charged_generation"}) ||
+        account["version"] != kPaidOperationsVersion ||
+        account["settled_paid_count"] > std::numeric_limits<std::uint32_t>::max() ||
+        account["supported_sequence"] > std::numeric_limits<std::uint32_t>::max())
+      return std::unexpected{failure("invalid closed paid operating account")};
+    k.paid_operations = PaidOperationsAccount{
+        account["version"].get<std::uint32_t>(),
+        account["started_tick"].get<SimulationTick>(),
+        account["billed_through_hours"].get<std::uint64_t>(),
+        account["spent_credits"].get<std::uint64_t>(),
+        account["operating_tab"].get<std::uint64_t>(),
+        account["recovery_due"].get<std::uint64_t>(),
+        account["settled_paid_count"].get<std::uint32_t>(),
+        account["supported_sequence"].get<std::uint32_t>(),
+        account["charged_generation"].get<std::uint64_t>()};
   }
   if (lead_selected) {
     const auto& lead = (*root)["station_stellar_lead"];

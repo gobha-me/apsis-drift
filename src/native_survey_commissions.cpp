@@ -107,6 +107,17 @@ auto NativeFreedomFlightSession::commit_survey_commission_account(
     SurveyCommissionAccount account) -> std::expected<void, std::string> {
   auto candidate = *this;
   candidate.knowledge_->survey_commissions = account;
+  if (knowledge_->paid_operations) {
+    const auto paid = account.paid_count != survey_paid_count()
+                          ? settle_paid_survey_income(
+                                *knowledge_->paid_operations, account.paid_count,
+                                document_.flight.tick, paid_operations_generation())
+                          : reconcile_paid_berth(
+                                *knowledge_->paid_operations, account.paid_count,
+                                document_.flight.tick, paid_operations_generation());
+    if (!paid) return std::unexpected{paid.error()};
+    candidate.knowledge_->paid_operations = *paid;
+  }
   const auto saved = candidate.save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (auto encoded = encode_native_save_document_json(*saved); !encoded)

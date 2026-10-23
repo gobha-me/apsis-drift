@@ -4,6 +4,7 @@
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/planet_ambient.hpp"
+#include "apsis_drift/paid_operations.hpp"
 #include "apsis_drift/surface_landmarks.hpp"
 #include "apsis_drift/survey_commissions.hpp"
 
@@ -298,6 +299,8 @@ struct FreedomKnowledge {
   std::optional<FreedomDerelictState> derelicts{};
   std::optional<FreedomStationStellarLead> station_stellar_lead{};
   std::optional<SurveyCommissionAccount> survey_commissions{};
+  // Explicit personal operating profile; absence preserves historical saves.
+  std::optional<PaidOperationsAccount> paid_operations{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -322,7 +325,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_star_search,
   invalid_derelicts,
   invalid_station_stellar_lead,
-  invalid_survey_commissions
+  invalid_survey_commissions,
+  invalid_paid_operations
 };
 
 struct KnownIdentity {
