@@ -113,6 +113,51 @@ auto bounded_nesting(std::string_view text) -> bool {
   }
   return !depth && !quoted;
 }
+auto commission_json(const SurveyCommission& commission) -> Json {
+  Json measurement = nullptr;
+  if (commission.measurement) {
+    const auto& value = *commission.measurement;
+    measurement = {{"craft", value.craft.value},
+                   {"started_tick", value.started_tick},
+                   {"last_tick", value.last_tick},
+                   {"acquired_ticks", value.acquired_ticks}};
+  }
+  return {{"sequence", commission.sequence},
+          {"system", commission.system.value},
+          {"planet", commission.planet.value},
+          {"accepted_tick", commission.accepted_tick},
+          {"deadline_tick", commission.deadline_tick},
+          {"measurement", std::move(measurement)}};
+}
+auto commission_value(const Json& j)
+    -> std::expected<SurveyCommission, SaveSchemaError> {
+  if (!fields(j, {"sequence", "system", "planet", "accepted_tick",
+                  "deadline_tick", "measurement"}) ||
+      !unsigned_fields(j, {"sequence", "system", "planet", "accepted_tick",
+                           "deadline_tick"}) ||
+      j["sequence"] > std::numeric_limits<std::uint32_t>::max())
+    return std::unexpected{failure("invalid closed survey commission")};
+  SurveyCommission commission{j["sequence"].get<std::uint32_t>(),
+                              {j["system"].get<std::uint64_t>()},
+                              {j["planet"].get<std::uint64_t>()},
+                              j["accepted_tick"].get<SimulationTick>(),
+                              j["deadline_tick"].get<SimulationTick>(),
+                              {}};
+  if (!j["measurement"].is_null()) {
+    const auto& m = j["measurement"];
+    if (!fields(m, {"craft", "started_tick", "last_tick", "acquired_ticks"}) ||
+        !unsigned_fields(
+            m, {"craft", "started_tick", "last_tick", "acquired_ticks"}) ||
+        m["acquired_ticks"] > kSurveyCommissionMeasurementTicks)
+      return std::unexpected{failure("invalid commission measurement")};
+    commission.measurement =
+        SurveyCommissionMeasurement{{m["craft"].get<std::uint64_t>()},
+                                    m["started_tick"].get<SimulationTick>(),
+                                    m["last_tick"].get<SimulationTick>(),
+                                    m["acquired_ticks"].get<std::uint32_t>()};
+  }
+  return commission;
+}
 auto derelict_record_json(const FreedomDerelictObservation& r) -> Json {
   return {
       {"craft", r.craft.value},
@@ -344,6 +389,21 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                            {"active", std::move(active)},
                            {"completed", std::move(completed)}};
   }
+  if (k.survey_commissions) {
+    const auto& account = *k.survey_commissions;
+    Json latest = nullptr;
+    if (account.latest_paid)
+      latest = {
+          {"commission", commission_json(account.latest_paid->commission)},
+          {"submitted_tick", account.latest_paid->submitted_tick}};
+    root["survey_commissions"] = {
+        {"version", account.version},
+        {"next_sequence", account.next_sequence},
+        {"paid_count", account.paid_count},
+        {"active",
+         account.active ? commission_json(*account.active) : Json(nullptr)},
+        {"latest_paid", std::move(latest)}};
+  }
   if (k.station_stellar_lead) {
     const auto& lead = *k.station_stellar_lead;
     root["station_stellar_lead"] = {{"version", lead.version},
@@ -386,6 +446,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("field_samples");
   const bool search_selected =
       root->is_object() && root->contains("star_search");
+  const bool commissions_selected =
+      root->is_object() && root->contains("survey_commissions");
   const bool lead_selected =
       root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
@@ -399,6 +461,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (search_selected) root_shape.erase("star_search");
   if (derelicts_selected) root_shape.erase("derelicts");
   if (lead_selected) root_shape.erase("station_stellar_lead");
+  if (commissions_selected) root_shape.erase("survey_commissions");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -694,6 +757,38 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     }
     k.star_search = std::move(state);
   }
+  if (commissions_selected) {
+    const auto& account = (*root)["survey_commissions"];
+    if (!network ||
+        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
+         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+        !fields(account, {"version", "next_sequence", "paid_count", "active",
+                          "latest_paid"}) ||
+        !unsigned_fields(account, {"version", "next_sequence", "paid_count"}) ||
+        account["version"] != kSurveyCommissionVersion ||
+        account["next_sequence"] > std::numeric_limits<std::uint32_t>::max() ||
+        account["paid_count"] > std::numeric_limits<std::uint32_t>::max())
+      return std::unexpected{failure("invalid survey commission account")};
+    SurveyCommissionAccount state;
+    state.next_sequence = account["next_sequence"].get<std::uint32_t>();
+    state.paid_count = account["paid_count"].get<std::uint32_t>();
+    if (!account["active"].is_null()) {
+      auto active = commission_value(account["active"]);
+      if (!active) return std::unexpected{active.error()};
+      state.active = *active;
+    }
+    if (!account["latest_paid"].is_null()) {
+      const auto& receipt = account["latest_paid"];
+      if (!fields(receipt, {"commission", "submitted_tick"}) ||
+          !unsigned_fields(receipt, {"submitted_tick"}))
+        return std::unexpected{failure("invalid commission settlement")};
+      auto commission = commission_value(receipt["commission"]);
+      if (!commission) return std::unexpected{commission.error()};
+      state.latest_paid = SurveyCommissionReceipt{
+          *commission, receipt["submitted_tick"].get<SimulationTick>()};
+    }
+    k.survey_commissions = state;
+  }
   if (lead_selected) {
     const auto& lead = (*root)["station_stellar_lead"];
     if (!uncharted ||
@@ -811,6 +906,15 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
         flight.minor || active.system != system || !planet ||
         active.planet != *planet)
       return std::unexpected{failure("active orbital survey owner mismatch")};
+  }
+  if (d.knowledge.survey_commissions &&
+      d.knowledge.survey_commissions->active &&
+      d.knowledge.survey_commissions->active->measurement) {
+    const auto& measurement =
+        *d.knowledge.survey_commissions->active->measurement;
+    if (measurement.acquired_ticks < kSurveyCommissionMeasurementTicks &&
+        measurement.craft != flight.origin.state.craft)
+      return std::unexpected{failure("unfinished commission craft mismatch")};
   }
   if (d.knowledge.star_search && d.knowledge.star_search->active) {
     const auto& active = *d.knowledge.star_search->active;

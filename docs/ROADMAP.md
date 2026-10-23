@@ -122,6 +122,14 @@ salvage trading and the wider economy remain later work; older saves retain
 their explicit selection. This is an engineering default under the continuing
 development loop, not another quoted owner preference.
 
+On 2026-10-23 the owner selected **recurring survey commissions**. The first
+[earning-only increment](SURVEY_COMMISSIONS.md)
+([#685](https://github.com/gobha-me/apsis-drift/issues/685)) adds explicit Origin
+acceptance, a fresh remote orbital reference measurement and retained prototype
+credits on submission. Existing free-service Freedom journeys remain unchanged.
+Rent, paid fuel, spending and insolvency remain the separate #293 design work;
+the provisional reward is not evidence of a balanced paid operating loop.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

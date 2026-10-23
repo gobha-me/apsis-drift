@@ -106,9 +106,67 @@ auto retains(const std::vector<T>& now, const std::vector<T>& old) -> bool {
   return old.size() <= now.size() &&
          std::equal(old.begin(), old.end(), now.begin());
 }
+auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
+                         const std::optional<SurveyCommissionAccount>& old,
+                         StarterCraftId craft, SimulationTick loss_tick,
+                         SimulationTick now_tick) -> bool {
+  if (!now) return !old;
+  if (now_tick < loss_tick ||
+      (old && (now->version != old->version ||
+               now->next_sequence < old->next_sequence ||
+               now->paid_count < old->paid_count)))
+    return false;
+  const auto prior_next = old ? old->next_sequence : 1U;
+  const auto prior_paid = old ? old->paid_count : 0U;
+  const auto same_terms = [](const SurveyCommission& a,
+                             const SurveyCommission& b) {
+    return a.sequence == b.sequence && a.system == b.system &&
+           a.planet == b.planet && a.accepted_tick == b.accepted_tick &&
+           a.deadline_tick == b.deadline_tick;
+  };
+  const auto admitted = [&](const SurveyCommission& commission) {
+    if (old && old->active && commission.sequence == old->active->sequence) {
+      if (!same_terms(commission, *old->active)) return false;
+      if (old->active->measurement &&
+          old->active->measurement->acquired_ticks ==
+              kSurveyCommissionMeasurementTicks)
+        return commission.measurement == old->active->measurement;
+    } else if (commission.sequence < prior_next ||
+               commission.accepted_tick < loss_tick) {
+      return false;
+    }
+    // Replacement discards unfinished work. Any later acquisition belongs to
+    // its own craft and begins after the retired source's loss boundary.
+    return !commission.measurement ||
+           (commission.measurement->craft == craft &&
+            commission.measurement->started_tick > loss_tick);
+  };
+  if (now->active && !admitted(*now->active)) return false;
+  if (now->paid_count == prior_paid)
+    return now->latest_paid == (old ? old->latest_paid : std::nullopt);
+  if (!now->latest_paid || now->latest_paid->submitted_tick < loss_tick ||
+      !admitted(now->latest_paid->commission) ||
+      (old && old->latest_paid &&
+       now->latest_paid->commission.sequence <=
+           old->latest_paid->commission.sequence))
+    return false;
+  const auto paid = static_cast<std::uint64_t>(now->paid_count - prior_paid);
+  const auto new_acceptances =
+      static_cast<std::uint64_t>(now->next_sequence - prior_next);
+  if (paid > new_acceptances + (old && old->active ? 1U : 0U)) return false;
+  const bool retained_ready = old && old->active && old->active->measurement &&
+                              old->active->measurement->acquired_ticks ==
+                                  kSurveyCommissionMeasurementTicks &&
+                              loss_tick < old->active->deadline_tick;
+  // Only one already-complete report can pay immediately after replacement;
+  // every additional payment needs 3600 fresh committed intervals. This bounds
+  // cumulative earnings without introducing an unbounded receipt history.
+  return paid <= (now_tick - loss_tick) / kSurveyCommissionMeasurementTicks +
+                     (retained_ready ? 1U : 0U);
+}
 auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
-                       StarterCraftId current, SimulationTick loss_tick)
-    -> bool {
+                       StarterCraftId current, SimulationTick loss_tick,
+                       SimulationTick now_tick) -> bool {
   auto recipe = old.recipe;
   // The only approved expansion is the existing neighboring-world domain.
   if (recipe.version == kFreedomObservedKnowledgeVersion &&
@@ -118,6 +176,9 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
   }
   recipe.craft_lineage = now.recipe.craft_lineage;
   if (now.recipe != recipe) return false;
+  if (!retains_commissions(now.survey_commissions, old.survey_commissions,
+                           current, loss_tick, now_tick))
+    return false;
   if (old.station_stellar_lead) {
     if (now.station_stellar_lead != old.station_stellar_lead) return false;
   } else if (now.station_stellar_lead &&
@@ -426,7 +487,8 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
                  retired.origin.state.world_deltas) ||
         !retains_knowledge(recovery_knowledge(d.voyage).knowledge,
                            recovery_knowledge(loss.retired).knowledge,
-                           current.origin.state.craft, retired.flight.tick))
+                           current.origin.state.craft, retired.flight.tick,
+                           current.flight.tick))
       return std::unexpected{
           failure("replacement lineage or retained universe/history differs")};
   }
@@ -535,6 +597,11 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
   auto knowledge = recovery_knowledge(d.voyage).knowledge;
   if (knowledge.orbital_surveys) knowledge.orbital_surveys->active.reset();
   if (knowledge.star_search) knowledge.star_search->active.reset();
+  if (knowledge.survey_commissions && knowledge.survey_commissions->active &&
+      knowledge.survey_commissions->active->measurement &&
+      knowledge.survey_commissions->active->measurement->acquired_ticks <
+          kSurveyCommissionMeasurementTicks)
+    knowledge.survey_commissions->active->measurement.reset();
   if (knowledge.field_samples) {
     knowledge.field_samples->carried.clear();
     knowledge.field_samples->carrier = *identity;

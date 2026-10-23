@@ -144,6 +144,17 @@ struct NativeOrbitalSurveyView {
   std::optional<KnownLanding> result;
 };
 
+struct NativeSurveyCommissionView {
+  bool supported{}, selected{}, at_origin{}, can_accept{}, can_submit{},
+      can_abandon{}, completed{}, expired{};
+  std::uint32_t sequence{}, offer_sequence{}, acquired_ticks{};
+  std::uint64_t earnings{};
+  SimulationTick tick{}, offer_until{}, accepted_tick{}, deadline_tick{};
+  SystemId system;
+  PlanetId planet;
+  std::string body_name, note, last_payment;
+};
+
 struct NativeStarSearchView {
   bool selected{}, active{}, can_begin{};
   std::uint32_t acquired_ticks{};
@@ -246,6 +257,15 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto jump_available() const -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto survey_commission_view() const
+      -> std::expected<NativeSurveyCommissionView, std::string>;
+  [[nodiscard]] auto accept_survey_commission(SimulationTick offer_until,
+                                              std::uint32_t sequence)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto submit_survey_commission(std::uint32_t sequence)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto abandon_survey_commission(std::uint32_t sequence)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto begin_orbital_survey() -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_orbital_survey()
@@ -463,6 +483,12 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto star_search_conditions() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto advance_star_search_tick()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto orbital_measurement_conditions() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_survey_commission_tick()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto commit_survey_commission_account(SurveyCommissionAccount)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const
       -> std::expected<void, std::string>;

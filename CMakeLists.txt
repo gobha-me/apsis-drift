@@ -234,6 +234,8 @@ add_library(apsis_drift_core STATIC
   src/native_port_approach.cpp
   src/native_port_docking.cpp
   src/native_orbital_survey.cpp
+  src/native_survey_commissions.cpp
+  src/survey_commissions.cpp
   src/native_star_search.cpp
   src/freedom_derelict.cpp
   src/native_derelict.cpp

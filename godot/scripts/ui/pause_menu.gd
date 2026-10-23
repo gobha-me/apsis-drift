@@ -54,6 +54,8 @@ var exploration_notes_query: Callable
 var exploration_marker_command: Callable
 var observations_view: Control
 var observations_button: Button
+var commissions_view: Control
+var commissions_button: Button
 var surface_reference_view: Control
 var surface_reference_invoker: WeakRef
 var entry_focus_frames := 0
@@ -285,6 +287,9 @@ func _ready() -> void:
 		settings_view.controls = controls
 		panel.add_child(settings_view)
 		settings_view.back_requested.connect(close_settings)
+		commissions_view = preload("res://scripts/native/survey_commissions.gd").new()
+		panel.add_child(commissions_view)
+		commissions_view.back_requested.connect(close_commissions)
 		surface_reference_view = preload("res://scripts/native/surface_reference.gd").new()
 		surface_reference_view.controls = controls
 		panel.add_child(surface_reference_view)
@@ -474,6 +479,9 @@ func back_from_nested() -> bool:
 	if is_instance_valid(settings_view) and settings_view.visible:
 		settings_view.cancel()
 		return true
+	if is_instance_valid(commissions_view) and commissions_view.visible:
+		close_commissions()
+		return true
 	if is_instance_valid(observations_view) and observations_view.visible:
 		close_observations()
 		return true
@@ -484,6 +492,15 @@ func back_from_nested() -> bool:
 		close_basics()
 		return true
 	return false
+
+func close_commissions() -> void:
+	if not is_instance_valid(commissions_view): return
+	commissions_view.hide()
+	menu_margin.show()
+	if panel.visible and is_instance_valid(commissions_button):
+		commissions_button.grab_focus()
+		left_scroll.ensure_control_visible(commissions_button)
+		ensure_entry_focus_visible()
 
 func show_observations() -> void:
 	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(observations_view): return
@@ -563,6 +580,9 @@ func show_menu(reason := "") -> void:
 		if not reason.is_empty(): controls.status = reason
 		settings_view.refresh_status()
 		return
+	if is_instance_valid(commissions_view) and commissions_view.visible:
+		if not reason.is_empty(): controls.status = reason
+		return
 	if is_instance_valid(observations_view) and observations_view.visible:
 		if not reason.is_empty(): controls.status = reason
 		return
@@ -587,6 +607,7 @@ func ensure_entry_focus_visible() -> void:
 
 func hide_menu() -> void:
 	entry_focus_frames = 0
+	if is_instance_valid(commissions_view): commissions_view.hide()
 	if is_instance_valid(observations_view): observations_view.hide()
 	if is_instance_valid(surface_reference_view): surface_reference_view.hide()
 	surface_reference_invoker = null
@@ -616,7 +637,18 @@ func _process(_delta: float) -> void:
 			message.text += "\n" + audio_preferences.status
 		refresh_bindings()
 
-func _input(_event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
+	if is_instance_valid(commissions_view) and commissions_view.visible and panel.visible:
+		var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if not controls.focused or (pad and event.device != controls.device) or (event is InputEventKey and event.echo):
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
+			commissions_view.navigate(-1 if event.is_action_pressed("ui_up") else 1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_accept"):
+			commissions_view.accept()
+			get_viewport().set_input_as_handled()
 	# Stop queued GUI accepts/navigation while the window safety pause owns focus.
 	if panel.visible and not controls.focused:
 		get_viewport().set_input_as_handled()

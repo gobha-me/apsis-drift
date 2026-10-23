@@ -62,3 +62,7 @@ recovery history. The native `orbital_survey` check exercises the real paused
 controls, a completing bridge tick, full-save parity and retained reader
 provenance. These checks do not establish final scanner pacing, manual orbital
 handling or GPU appearance/performance.
+
+[Survey commissions](SURVEY_COMMISSIONS.md) reuse the same physical orbital
+eligibility for separately accepted fresh reference measurements. They never
+reset these completed terrain surveys or turn their facts into repeatable sales.
