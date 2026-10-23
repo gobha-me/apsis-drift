@@ -716,6 +716,14 @@ def main(argv=None):
         phases.mkdir()
         # CLI refusals precede constructing any actual world or artifacts.
         for index, invalid in enumerate(([str(phases), "--pilot"],
+                [str(phases), "--commission"],
+                [str(phases), "--neighbor", "--commission"],
+                [str(phases), "--commands", "--commission"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--commission"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--pilot"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--endurance"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--surface-loop"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--terrain-feature"],
                 [str(phases), "--neighbor", "--neighbor"],
                 [str(phases), "--neighbor", "--commands", "--commands"],
                 [str(phases), "--neighbor", "--aligned"],

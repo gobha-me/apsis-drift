@@ -78,6 +78,8 @@ claim of uninterrupted manual ascent, orbital handling or docking.
 
 Native checks use the actual paused office in station and flight, retained
 complete-save comparisons and Continue. Automated checks do not establish
-manual handling, final scanner pacing, profitable paid operation or typical
-procedural-start viability. Those require subsequent measured scenarios and
-player review.
+manual handling, final scanner pacing or typical procedural-start viability.
+The separate [ordinary paid-survey reference](FREEDOM_ENDURANCE.md#ordinary-paid-survey-reference)
+measures a fully flown seed 42 paid trip with a positive operating cash
+change after restoration. It is a C++ test-pilot reference; broader balance,
+failed/delayed work and player review remain open.

@@ -154,7 +154,7 @@ class NativeCiTest(unittest.TestCase):
             cli += [f"surface-loop-refusal-{i}.log" for i in range(11)]
         for name in self.runner.ROUNDTRIP_TESTS:
             if name in selected:
-                cli += [f"{name}-refusal-{i}.log" for i in range(9)]
+                cli += [f"{name}-refusal-{i}.log" for i in range(17)]
         for name in cli:
             self.log(directory, name, "argument refused\n")
         ci.write_json(directory / "report.json", r)
@@ -337,7 +337,7 @@ class NativeCiTest(unittest.TestCase):
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
         self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 81, "launch_cases": 25,
-                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 60})
+                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 100})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
         relocated = self.root.parent / (self.root.name + "-relocated")
@@ -495,6 +495,25 @@ class NativeCiTest(unittest.TestCase):
             ci.check(args, self.repo)
         log.unlink()
         with self.assertRaises(ValueError):
+            ci.check(args, self.repo)
+
+    def test_last_roundtrip_cli_refusal_cannot_be_hidden(self):
+        args = self.make_check()
+        name = "native_roundtrip-refusal-16.log"
+        for inv_path in args.invocation:
+            invocation = ci.read_json(inv_path)
+            row = invocation["reports"][0]
+            if name not in row["logs"]:
+                continue
+            (self.root / row["path"]).parent.joinpath(name).unlink()
+            del row["logs"][name]
+            ci.write_json(inv_path, invocation)
+            break
+        else:
+            self.fail("Roundtrip CLI refusal fixture missing")
+        # The remaining inventory and hashes are self-consistent. Admission
+        # must still require every old and new CLI refusal, not just a prefix.
+        with self.assertRaisesRegex(ValueError, "Missing CLI refusal evidence"):
             ci.check(args, self.repo)
 
     def test_sky_failure_missing_invalid_proof_source_or_raster_refused(self):
