@@ -121,7 +121,7 @@ class NativeCiTest(unittest.TestCase):
                      "foreign-entry", "foreign-arrival", "foreign-home", "foreign-approach", "foreign-withdraw")}
                     if family == "derelict_saves":
                         row["files_sha256"] = {n + ".json": SHA for n in
-                            ("station", "approach", "contact", "near", "inspection", "recovered")}
+                            ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
@@ -335,7 +335,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 81, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 82, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 60})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -402,6 +402,33 @@ class NativeCiTest(unittest.TestCase):
                 self.change_report(args, 4, remove)
                 with self.assertRaises(ValueError):
                     ci.check(args, self.repo)
+
+    def test_crew_reuses_one_derelict_producer(self):
+        for selected in (["native_station_crew"], ["native_derelict"],
+                         ["native_station_crew", "native_derelict"]):
+            with self.subTest(selected=selected):
+                rows, binaries = ci.layout(selected, self.runner)
+                self.assertEqual(rows.count("derelict_saves"), 1)
+                self.assertEqual(binaries.count(ci.FIXTURES["derelict"]), 1)
+
+    def test_derelict_roster_requires_contact_recovery_in_both_cohorts(self):
+        args = self.make_check()
+        for group in (2, 4):
+            original = ci.read_json(self.root / f"work-{group}/native-contracts-unit/report.json")
+            row = next(r for r in original["setup"] if r.get("family") == "derelict_saves")
+            self.assertEqual(len(row["files_sha256"]), 7)
+            self.assertIn("contact-recovered.json", row["files_sha256"])
+            for name in row["files_sha256"]:
+                with self.subTest(group=group, missing=name):
+                    def remove(r):
+                        r.clear()
+                        r.update(copy.deepcopy(original))
+                        phases = next(s for s in r["setup"] if s.get("family") == "derelict_saves")
+                        phases["files_sha256"].pop(name)
+                    self.change_report(args, group, remove)
+                    with self.assertRaises(ValueError):
+                        ci.check(args, self.repo)
+            self.change_report(args, group, lambda r: (r.clear(), r.update(copy.deepcopy(original))))
 
     def test_bad_status_timeout_setup_helper_and_nonfinite_refused(self):
         args = self.make_check()

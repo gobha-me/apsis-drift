@@ -36,11 +36,12 @@ func pad(view: Control, device: int, code: int, pressed: bool) -> void:
 	view._input(event)
 
 func packet_refusals(packet: Dictionary, walking: Dictionary) -> void:
-	for damage in ["version", "version_type", "station", "tick", "ordinal", "short", "nan", "heading", "height", "available", "topics", "duplicate", "topic_text", "extra"]:
+	for damage in ["version", "version_type", "future_version", "station", "tick", "ordinal", "short", "nan", "heading", "height", "available", "topics", "two_topics", "five_topics", "duplicate", "topic_id", "topic_text", "extra"]:
 		var bad := packet.duplicate(true)
 		match damage:
-			"version": bad.version = 2
-			"version_type": bad.version = 1.0
+			"version": bad.version = 1
+			"version_type": bad.version = 2.0
+			"future_version": bad.version = 3
 			"station": bad.station_id = "0"
 			"tick": bad.tick = str(int(packet.tick) + 1)
 			"ordinal": bad.ordinal = 2
@@ -50,7 +51,11 @@ func packet_refusals(packet: Dictionary, walking: Dictionary) -> void:
 			"height": bad.height_metres = 2.0
 			"available": bad.available = 1
 			"topics": bad.topics = []
+			"two_topics": bad.topics.resize(2)
+			"five_topics":
+				while bad.topics.size() < 5: bad.topics.append({"id": bad.topics.size() + 1, "title": "Extra", "text": "Out of scope"})
 			"duplicate": bad.topics[1].id = bad.topics[0].id
+			"topic_id": bad.topics[0].id = 1.0
 			"topic_text": bad.topics[0].text = 0
 			"extra": bad.extra = true
 		check(not Crew.valid_packet(bad, walking), "Malformed crew packet accepted: " + damage)
@@ -100,18 +105,24 @@ func idle_views(view: Control, packet: Dictionary) -> void:
 	check(actor.card.texture.get_width() == 1536 and actor.card.texture.get_height() == 1024, "Crew adapter replaced the selected unchanged sheet")
 	view.refresh_crew()
 
-func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, output: String) -> void:
+func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, output: String, label: String = "") -> void:
 	var old_size := root.size
-	for dimensions in [Vector2i(640, 480), Vector2i(1280, 720)]:
+	for dimensions in [Vector2i(640, 450), Vector2i(1280, 720)]:
 		root.size = dimensions
 		await process_frame
 		await process_frame
 		check(view.crew_open() and view.paused and view.crew_reader.readable_theme.default_font_size >= 20, "Crew reader resize lost paused readable modal")
 		for button in view.crew_reader.topics + [view.crew_reader.back]:
-			check(button.custom_minimum_size.y >= 44 and button.get_global_rect().size.x > 0 and button.get_global_rect().end.x <= view.size.x + 1.0, "Crew reader controls escaped resized viewport")
+			if not button.visible: continue
+			button.grab_focus()
+			await process_frame
+			await process_frame
+			var clip: Rect2 = view.crew_reader.scroll.get_global_rect()
+			var rect: Rect2 = button.get_global_rect()
+			check(button.has_focus() and button.custom_minimum_size.y >= 44 and rect.size.x > 0 and rect.position.x >= clip.position.x - 1.0 and rect.end.x <= clip.end.x + 1.0 and rect.position.y >= clip.position.y - 1.0 and rect.end.y <= clip.end.y + 1.0 and clip.position.x >= 0 and clip.position.y >= 0 and clip.end.x <= view.size.x + 1.0 and clip.end.y <= view.size.y + 1.0, "Focused crew reader control escaped scroll/viewport bounds")
 	root.size = old_size
 	await process_frame
-	check(save(owner, output.path_join("reader-resized.json")) == baseline, "Crew reader resize changed complete journey")
+	check(save(owner, output.path_join(label + "reader-resized.json")) == baseline, "Crew reader resize changed complete journey")
 
 func stop_talk_regressions(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
 	# Start from real Continue each time, then move with physical input. These
@@ -183,13 +194,138 @@ func stop_talk_regressions(shell: Control, owner: Variant, source: String, asset
 			save(owner, path)
 	print("Station stop-talk regressions: 7 scenarios checked")
 
+func mouse_topic(button: Button) -> void:
+	button.grab_focus()
+	await process_frame
+	await process_frame
+	for down in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.position = button.get_global_rect().get_center()
+		event.global_position = event.position
+		event.pressed = down
+		# Button rectangles use logical viewport coordinates; Input's global
+		# parser expects physical window coordinates under canvas_items stretch.
+		root.push_input(event, true)
+		await process_frame
+
+func earned_contact_topics(shell: Control, owner: Variant, phases: String, assets: String, output: String, original_topics: Array) -> void:
+	# These are genuine earned-record + classified-recovery producer saves.
+	# Only real mouse look and ordinary neutral walking ticks face the worker.
+	var rows: Array = []
+	var responses: Array[String] = []
+	for label in ["contact-recovered", "recovered"]:
+		var source := phases.path_join(label + ".json")
+		var source_hash := FileAccess.get_sha256(source)
+		var source_bytes := FileAccess.get_file_as_bytes(source)
+		var prefix := output.path_join("earned-" + label)
+		# Keep one player shell, as in normal play. A second live shell would
+		# retain device callbacks and steal GUI focus on controller connection.
+		if not check(not source_bytes.is_empty() and shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Earned crew recovery Continue failed: " + label):
+			return
+		var view: Control = shell.current_view
+		view.set_process(false)
+		view.set_process_input(false)
+		view.preferences_provider.persist = false
+		if not check(view.paused and save(owner, prefix + "-source.json") == source_bytes, "Earned crew Continue changed complete source Save: " + label):
+			return
+		var record: Dictionary = owner.get_freedom_flight_state().derelict
+		check(record.known and record.inspected == (label == "recovered"), "Crew fixture lacks the actual retained contact/inspection distinction: " + label)
+		var walking: Dictionary = owner.get_freedom_walk_state()
+		var packet: Dictionary = owner.get_freedom_station_crew()
+		if not check(Crew.valid_packet(packet, walking) and packet.topics.size() == 4 and packet.topics[3].id == 4 and packet.topics[3].title == "Can you look at my contact log?", "Earned contact omitted the explicit fourth topic: " + label):
+			return
+		packet_refusals(packet, walking)
+		var response: String = packet.topics[3].text
+		if record.inspected:
+			check("no active power or thrust" in response and "unreadable registry plate" in response and "Ownership and whether anyone is aboard remain unknown" in response, "Inspected crew response lost recorded findings or invented ownership")
+		else:
+			check("Your log records a contact" in response and "Inspect derelict exterior" in response and not "no active power or thrust" in response, "Contact-only crew response invented inspection findings or omitted the manual next action")
+		for index in 3: check(packet.topics[index] == original_topics[index], "Earned contact changed an original crew topic: " + str(index))
+		var delta: Vector2 = Vector2(packet.foot_position_metres[0] - walking.foot_position_metres[0], packet.foot_position_metres[2] - walking.foot_position_metres[2])
+		var heading := atan2(-delta.x, -delta.y)
+		view.resume_requested()
+		var motion := InputEventMouseMotion.new()
+		var sensitivity := 0.003 * float(view.preferences_provider.settings.look_speed) / 1.6
+		motion.relative = Vector2(wrapf(float(walking.heading_radians) - heading, -PI, PI) / sensitivity, 0)
+		view._input(motion)
+		view._process(0.1)
+		var faced: Dictionary = owner.get_freedom_walk_state()
+		packet = owner.get_freedom_station_crew()
+		if not check(not view.paused and packet.available and faced.foot_position_metres == walking.foot_position_metres and int(faced.tick) == int(walking.tick) + 12, "Actual neutral walking/mouse look did not make recovered attendant eligible: " + label):
+			return
+		var frozen := save(owner, prefix + "-before.json")
+		var before: Dictionary = owner.get_freedom_flight_state()
+		key(view, KEY_E, true)
+		key(view, KEY_E, false)
+		if not check(view.crew_open() and view.paused, "Real recovered crew input failed to open paused reader: " + label):
+			return
+		if label == "contact-recovered":
+			for index in 3:
+				key(view, KEY_DOWN, true)
+				key(view, KEY_DOWN, false)
+			key(view, KEY_ENTER, true)
+			key(view, KEY_ENTER, false)
+		else:
+			Input.joy_connection_changed.emit(0, true)
+			# Continue retains the selected controller. Select only if needed;
+			# Start on an already selected pad normally closes this reader.
+			if view.selected_pad != 0:
+				pad(view, 0, JOY_BUTTON_START, true)
+				pad(view, 0, JOY_BUTTON_START, false)
+			check(view.selected_pad == 0 and view.crew_open(), "Controller selection stole the earned reader's focus or closed it")
+			for index in 3:
+				pad(view, 0, JOY_BUTTON_DPAD_DOWN, true)
+				pad(view, 0, JOY_BUTTON_DPAD_DOWN, false)
+			pad(view, 0, JOY_BUTTON_A, true)
+			pad(view, 0, JOY_BUTTON_A, false)
+		check(view.crew_open() and view.crew_reader.text.text == packet.topics[3].text, "Keyboard/selected controller did not select actual fourth response: " + label)
+		responses.append(packet.topics[3].text)
+		# Exercise the actual fourth GUI button with mouse input as well.
+		view.select_crew_topic(1)
+		await mouse_topic(view.crew_reader.topics[3])
+		check(view.crew_reader.text.text == packet.topics[3].text, "Mouse did not choose the earned fourth topic: " + label)
+		await reader_layout(view, owner, frozen, output, "earned-" + label + "-")
+		var barrier_text: String = view.crew_reader.text.text
+		view.journey_dialog_open = true
+		view.select_crew_topic(1)
+		check(view.crew_reader.text.text == barrier_text, "Journey modal accepted an earned topic change")
+		view.journey_dialog_open = false
+		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		view.select_crew_topic(1)
+		view.crew_reader.back.pressed.emit()
+		check(view.crew_open() and view.crew_reader.text.text == barrier_text, "Unfocused earned reader accepted a topic or close")
+		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+		key(view, KEY_ESCAPE, true)
+		key(view, KEY_ESCAPE, false)
+		check(not view.crew_open() and view.paused and not view.controls_armed and owner.get_freedom_flight_state() == before and save(owner, prefix + "-after.json") == frozen, "Earned conversation changed complete Save or auto-resumed: " + label)
+		if label == "recovered": Input.joy_connection_changed.emit(0, false)
+		if check(shell.select_start(owner, {"mode": "continue", "value": prefix + "-after.json", "assets": assets}), "Earned talk Save Continue refused: " + label):
+			view = shell.current_view
+			view.set_process(false)
+			view.set_process_input(false)
+			check(view.paused and not view.crew_open() and owner.get_freedom_station_crew() == packet and save(owner, prefix + "-continued.json") == frozen, "Earned crew Continue lost retained records or invented dialogue progress: " + label)
+		rows.append({"source": source, "source_sha256": source_hash, "topic_count": packet.topics.size(), "topic_id": packet.topics[3].id, "inspection_recorded": record.inspected, "tick": packet.tick, "read_save_sha256": FileAccess.get_sha256(prefix + "-after.json")})
+		check(FileAccess.get_sha256(source) == source_hash, "Earned crew read rewrote the C++ source fixture: " + label)
+		await process_frame
+	check(responses.size() == 2 and responses[0] != responses[1], "Contact-only and inspected retained logs received the same response")
+	var file := FileAccess.open(output.path_join("earned-contact-report.json"), FileAccess.WRITE)
+	if check(file != null, "Earned contact report unavailable"):
+		file.store_string(JSON.stringify({"schema": "apsis.crew-earned-contact-native/1", "completed": failures == 0, "rows": rows, "scope": "Actual earned contact/inspection retained by classified recovery, real facing ticks and paused input/read/Continue; no new facts, NPC memory or manual-controller acceptance"}, "\t") + "\n")
+		file.close()
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 3: quit(1); return
+	if args.size() != 4: quit(1); return
 	var source := args[0]
 	var assets := args[1]
 	var output := args[2]
+	var derelict_phases := args[3]
 	if not check(DirAccess.make_dir_recursive_absolute(output) == OK, "Crew output directory unavailable"): quit(1); return
+	# Headless defaults to 64x64. Exercise GUI clicks at the ordinary supported
+	# window size; reader_layout restores this after its smaller-window check.
+	root.size = Vector2i(1280, 720)
+	await process_frame
 	var source_bytes := FileAccess.get_file_as_bytes(source)
 	if not ClassDB.class_exists("FreedomBridge"): GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	if not check(ClassDB.class_exists("FreedomBridge"), "Crew native bridge unavailable"): quit(1); return
@@ -205,6 +341,7 @@ func run() -> void:
 	view.preferences_provider.persist = false
 	var packet: Dictionary = owner.get_freedom_station_crew()
 	if not check(Crew.valid_packet(packet, view.state) and view.paused and packet.name == "Bay attendant" and packet.foot_position_metres == PackedFloat64Array([1.3, 0, 0]), "Actual station crew binding unavailable"): shell.free(); quit(1); return
+	check(packet.version == 2 and packet.topics.size() == 3, "Unacquired contact exposed an extra crew topic")
 	packet_refusals(packet, view.state)
 	asset_refusals(assets, output)
 	idle_views(view, packet)
@@ -265,6 +402,9 @@ func run() -> void:
 		view.select_crew_topic(topic.id)
 		check(view.crew_reader.text.text == topic.text, "Crew reader did not present the actual selected C++ topic")
 	var text: String = view.crew_reader.text.text
+	check(not view.crew_reader.topics[3].visible and view.crew_reader.topics[3].disabled, "Unknown-contact reader retained a hidden fourth action")
+	view.select_crew_topic(4)
+	check(view.crew_reader.text.text == text, "Stale contact topic fabricated a response without earned knowledge")
 	view.select_crew_topic(999)
 	check(view.crew_reader.text.text == text, "Unknown topic changed accepted dialogue")
 	view.resume_requested()
@@ -325,6 +465,7 @@ func run() -> void:
 	# Keep the original nine proof saves/report unchanged; additional desk-input
 	# regressions run independently before the existing original-route reset.
 	stop_talk_regressions(shell, owner, source, assets, output)
+	await earned_contact_topics(shell, owner, derelict_phases, assets, output, packet.topics)
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Original station route reset refused"): shell.free(); quit(1); return
 	view = shell.current_view
 	view.set_process(false)

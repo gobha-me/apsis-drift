@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <expected>
 #include <string>
 #include <string_view>
@@ -23,7 +24,8 @@ struct OriginCrewView {
   double heading_radians{}, height_metres{1.85};
   bool available{};
   std::string reason;
-  std::array<OriginCrewTopic, 3> topics;
+  std::array<OriginCrewTopic, 4> topics{};
+  std::size_t topic_count{3};
   std::string_view remark;
 };
 [[nodiscard]] auto origin_station_crew(const OriginStationDescriptor&,

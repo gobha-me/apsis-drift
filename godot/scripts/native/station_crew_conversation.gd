@@ -8,6 +8,7 @@ var topics: Array[Button] = []
 var back: Button
 var panel: PanelContainer
 var readable_theme: Theme
+var scroll: ScrollContainer
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -23,7 +24,7 @@ func _ready() -> void:
 	margin.add_child(panel)
 	readable_theme = Theme.new()
 	panel.theme = readable_theme
-	var scroll := ScrollContainer.new()
+	scroll = ScrollContainer.new()
 	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	panel.add_child(scroll)
@@ -37,7 +38,7 @@ func _ready() -> void:
 	text = Label.new()
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(text)
-	for index in 3:
+	for index in 4:
 		var button := Button.new()
 		button.pressed.connect(func(): topic_requested.emit(int(button.get_meta("topic_id", 0))))
 		column.add_child(button)
@@ -60,8 +61,12 @@ func layout_reader() -> void:
 func open(packet: Dictionary) -> void:
 	title.text = packet.name
 	text.text = "Optional conversation. Choose a topic, or return to paused controls."
+	scroll.scroll_vertical = 0
 	for index in topics.size():
 		topics[index].visible = index < packet.topics.size()
+		topics[index].disabled = not topics[index].visible
+		topics[index].text = ""
+		topics[index].set_meta("topic_id", 0)
 		if topics[index].visible:
 			topics[index].text = packet.topics[index].title
 			topics[index].set_meta("topic_id", packet.topics[index].id)

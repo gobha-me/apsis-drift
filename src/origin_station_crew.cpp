@@ -65,8 +65,25 @@ auto NativeFreedomFlightSession::station_crew() const
   if (!actor_ || !docking_ || !docking_->attached || recovery_pending() ||
       (boarding_ && boarding_->phase != FreedomBoardingPhase::station))
     return std::unexpected("Station crew is available while walking on Origin");
-  return origin_station_crew(
+  auto crew = origin_station_crew(
       generate_origin_station(document_.origin.recipe.universe_seed), *actor_,
       document_.flight.tick);
+  if (!crew) return crew;
+  // The player explicitly shares an earned log. The attendant contributes no
+  // independent catalog, signal, remote position or remembered encounter.
+  if (knowledge_ && knowledge_->derelicts && knowledge_->derelicts->contact) {
+    crew->topics[3] = {
+        4, "Can you look at my contact log?",
+        knowledge_->derelicts->inspection
+            ? "Your exterior log records no active power or thrust and an "
+              "unreadable registry plate. Ownership and whether anyone is "
+              "aboard remain unknown. That's a report, not a solved mystery."
+            : "Your log records a contact, not an explanation. The hull "
+              "hasn't filled out the paperwork. If you go back, use the "
+              "local bearing and Inspect derelict exterior. It is an "
+              "exterior look, not permission to board."};
+    crew->topic_count = 4;
+  }
+  return crew;
 }
 } // namespace apsis_drift
