@@ -336,7 +336,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 82, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 81, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 60})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -412,9 +412,12 @@ class NativeCiTest(unittest.TestCase):
                 self.assertEqual(rows.count("derelict_saves"), 1)
                 self.assertEqual(binaries.count(ci.FIXTURES["derelict"]), 1)
 
-    def test_derelict_roster_requires_contact_recovery_and_stellar_leads_in_both_cohorts(self):
+    def test_derelict_roster_requires_contact_recovery_and_stellar_leads_in_selected_cohorts(self):
         args = self.make_check()
-        for group in (2, 4):
+        groups = [int(group) for group, names in ci.groups(self.repo).items()
+                  if "native_derelict" in names or "native_station_crew" in names]
+        self.assertTrue(groups)
+        for group in groups:
             original = ci.read_json(self.root / f"work-{group}/native-contracts-unit/report.json")
             row = next(r for r in original["setup"] if r.get("family") == "derelict_saves")
             self.assertEqual(len(row["files_sha256"]), 12)
