@@ -283,7 +283,7 @@ horizontally and differs by about 0.07 m in local height. The actual 1280×720
 Compatibility cockpit image still looks subdued. This establishes a concrete
 sampling/projection baseline, not recognizable-relief acceptance or evidence
 that the renderer erased the feature. Wider composition, transition and weather
-work remains open under #212.
+work remains open under #217, which retains visual acceptance after #212.
 
 ## Remaining limits
 
