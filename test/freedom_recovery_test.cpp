@@ -1024,6 +1024,94 @@ auto star_search_recovery() -> void {
   rejects_valid_knowledge(onward, "An otherwise valid added search cannot "
                                   "begin before the replacement loss");
 }
+auto station_lead_recovery() -> void {
+  const Seed seed{42};
+  auto selected = need(native_uncharted_network_new_game(seed));
+  FreedomRecoverySaveDocument source{
+      std::get<FreedomKnowledgeSaveDocument>(std::move(selected.document)), {}};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(source.voyage);
+  const auto craft = recovery_flight(source.voyage).origin.state.craft;
+  // Pure personal-note persistence fixture: no claim of an enacted dialogue
+  // or flown loss. Keep the genuine station constraint at its labelled clock.
+  voyage.knowledge = need(receive_freedom_station_stellar_lead(
+      voyage.knowledge,
+      need(offer_freedom_station_stellar_lead(voyage.knowledge, craft, 0)), 0));
+  constexpr SimulationTick loss_tick{10};
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  auto& flight = assembly.journey.voyage.flight;
+  const auto owner = need(generate_physical_origin_system(seed, 2));
+  const auto station = generate_origin_station(seed);
+  const auto geometry = need(origin_station_geometry(station));
+  flight.flight = need(release_origin_port(
+      owner, station, geometry,
+      {geometry.version, assembly.journey.voyage.docking.target,
+       flight.flight.craft, loss_tick}));
+  flight.origin.state.tick = loss_tick;
+  voyage.voyage.resources.tick = loss_tick;
+  const auto pending = need(record_freedom_loss(
+      source, FreedomLossCause::irrecoverable_destruction, craft, loss_tick,
+      need(freedom_recovery_source_checksum(source.voyage))));
+  const auto completed = need(complete_freedom_recovery(pending));
+  const auto& retained = recovery_knowledge(completed.voyage).knowledge;
+  const auto current = recovery_flight(completed.voyage).origin.state.craft;
+  check(
+      retained.station_stellar_lead == voyage.knowledge.station_stellar_lead &&
+          retained.station_stellar_lead->craft == craft && current != craft &&
+          recovery_knowledge(completed.recovery.latest->retired)
+                  .knowledge.station_stellar_lead ==
+              voyage.knowledge.station_stellar_lead &&
+          need(freedom_station_stellar_lead_status(retained, loss_tick)) ==
+              FreedomStationStellarLeadStatus::unverified &&
+          need(decode_freedom_recovery_document_json(need(
+              encode_freedom_recovery_document_json(completed)))) == completed,
+      "Replacement and Continue retain the immutable personal lead with "
+      "the original craft and exact retired receipt");
+  for (unsigned fault = 0; fault < 3; ++fault) {
+    auto rewritten = completed;
+    auto& knowledge =
+        std::get<FreedomKnowledgeSaveDocument>(rewritten.voyage).knowledge;
+    if (fault == 0)
+      knowledge.station_stellar_lead.reset();
+    else if (fault == 1)
+      knowledge.station_stellar_lead->craft = current;
+    else
+      ++knowledge.station_stellar_lead->received_tick;
+    need(validate_freedom_knowledge_document(
+        std::get<FreedomKnowledgeSaveDocument>(rewritten.voyage)));
+    check(!validate_freedom_recovery_document(rewritten),
+          "Individually valid replacement knowledge cannot erase, rebind or "
+          "redate a retained lead");
+  }
+  auto absent = source;
+  std::get<FreedomKnowledgeSaveDocument>(absent.voyage)
+      .knowledge.station_stellar_lead.reset();
+  auto onward = need(complete_freedom_recovery(need(record_freedom_loss(
+      absent, FreedomLossCause::irrecoverable_destruction, craft, loss_tick,
+      need(freedom_recovery_source_checksum(absent.voyage))))));
+  auto& next = std::get<FreedomKnowledgeSaveDocument>(onward.voyage).knowledge;
+  check(!next.station_stellar_lead,
+        "Recovery does not silently receive a previously absent lead");
+  next = need(receive_freedom_station_stellar_lead(
+      next, need(offer_freedom_station_stellar_lead(next, current, loss_tick)),
+      loss_tick));
+  check(need(decode_freedom_recovery_document_json(
+            need(encode_freedom_recovery_document_json(onward)))) == onward,
+        "A replacement craft may explicitly receive and Continue its own "
+        "new post-loss lead");
+  --next.station_stellar_lead->received_tick;
+  need(validate_freedom_knowledge_document(
+      std::get<FreedomKnowledgeSaveDocument>(onward.voyage)));
+  check(!validate_freedom_recovery_document(onward),
+        "A newly added note cannot predate the replacement loss boundary");
+  next.station_stellar_lead->received_tick = loss_tick;
+  next.station_stellar_lead->craft = craft;
+  need(validate_freedom_knowledge_document(
+      std::get<FreedomKnowledgeSaveDocument>(onward.voyage)));
+  check(!validate_freedom_recovery_document(onward),
+        "Admitted historical craft IDs cannot forge a newly received "
+        "replacement-era note");
+}
 // These independent metadata scenarios must release their large save carriers
 // before the session scenario exercises the full nested Continue decoder.
 // Keep that call-depth boundary even when optimized test builds inline helpers.
@@ -1031,6 +1119,7 @@ auto star_search_recovery() -> void {
     const std::filesystem::path& path) -> void {
   network_recovery(path);
   star_search_recovery();
+  station_lead_recovery();
 }
 } // namespace
 auto main() -> int {

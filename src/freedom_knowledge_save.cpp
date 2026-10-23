@@ -344,6 +344,15 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                            {"active", std::move(active)},
                            {"completed", std::move(completed)}};
   }
+  if (k.station_stellar_lead) {
+    const auto& lead = *k.station_stellar_lead;
+    root["station_stellar_lead"] = {{"version", lead.version},
+                                    {"station", lead.station.value},
+                                    {"attendant", lead.attendant},
+                                    {"craft", lead.craft.value},
+                                    {"received_tick", lead.received_tick},
+                                    {"target", lead.target.value}};
+  }
   if (k.derelicts)
     root["derelicts"] = {
         {"version", k.derelicts->version},
@@ -377,6 +386,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("field_samples");
   const bool search_selected =
       root->is_object() && root->contains("star_search");
+  const bool lead_selected =
+      root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
       root->is_object() && root->contains("derelicts");
   auto root_shape = *root;
@@ -387,6 +398,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (samples_selected) root_shape.erase("field_samples");
   if (search_selected) root_shape.erase("star_search");
   if (derelicts_selected) root_shape.erase("derelicts");
+  if (lead_selected) root_shape.erase("station_stellar_lead");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -681,6 +693,24 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                                  item["completed_tick"].get<SimulationTick>()});
     }
     k.star_search = std::move(state);
+  }
+  if (lead_selected) {
+    const auto& lead = (*root)["station_stellar_lead"];
+    if (!uncharted ||
+        !fields(lead, {"version", "station", "attendant", "craft",
+                       "received_tick", "target"}) ||
+        !unsigned_fields(lead, {"version", "station", "attendant", "craft",
+                                "received_tick", "target"}) ||
+        lead["version"] != kFreedomStationStellarLeadVersion ||
+        lead["attendant"] != 1U)
+      return std::unexpected{failure("invalid station stellar lead")};
+    k.station_stellar_lead =
+        FreedomStationStellarLead{kFreedomStationStellarLeadVersion,
+                                  {lead["station"].get<std::uint64_t>()},
+                                  1,
+                                  {lead["craft"].get<std::uint64_t>()},
+                                  lead["received_tick"].get<SimulationTick>(),
+                                  {lead["target"].get<std::uint64_t>()}};
   }
   if (derelicts_selected) {
     const auto& selected = (*root)["derelicts"];

@@ -1431,6 +1431,212 @@ auto network_knowledge() -> void {
   check(!resolve_freedom_knowledge_chart(k, network.nodes[2].system, fuel),
         "Four-system chart requires its explicit authenticated origin owner");
 }
+auto station_stellar_lead() -> void {
+  const Seed seed{42};
+  const auto craft = need(derive_freedom_craft_identity(seed, 0));
+  const auto network = need(generate_freedom_system_network(seed, 2));
+  const auto source = network.nodes.front().system;
+  const auto initial = need(make_freedom_starting_knowledge(seed, 6));
+  constexpr SimulationTick receipt_tick{7};
+  const auto offer =
+      need(offer_freedom_station_stellar_lead(initial, craft, receipt_tick));
+  check(offer.station == generate_origin_station(seed).id &&
+            offer.attendant == 1 && offer.craft == craft &&
+            offer.received_tick == receipt_tick &&
+            need(offer_freedom_station_stellar_lead(initial, craft,
+                                                    receipt_tick)) == offer &&
+            !initial.station_stellar_lead &&
+            need(freedom_station_stellar_lead_status(initial, receipt_tick)) ==
+                FreedomStationStellarLeadStatus::absent,
+        "Canonical Origin offer is deterministic and neither receives a note "
+        "nor grants facts");
+  const auto received =
+      need(receive_freedom_station_stellar_lead(initial, offer, receipt_tick));
+  const auto encoded =
+      need(encode_freedom_knowledge_json(received, receipt_tick));
+  check(
+      received.station_stellar_lead == offer &&
+          received.entries == initial.entries &&
+          received.recipe == initial.recipe &&
+          received.star_search == initial.star_search &&
+          need(known_freedom_subjects(received, receipt_tick)) ==
+              need(known_freedom_subjects(initial, receipt_tick)) &&
+          !need(query_freedom_knowledge(
+              received,
+              {KnowledgeSubjectKind::system, offer.target, offer.target.value},
+              KnowledgeFact::location, receipt_tick)) &&
+          need(freedom_station_stellar_lead_status(received, receipt_tick)) ==
+              FreedomStationStellarLeadStatus::unverified &&
+          need(decode_freedom_knowledge_json(encoded, receipt_tick)) ==
+              received &&
+          need(encode_freedom_knowledge_json(
+              need(decode_freedom_knowledge_json(encoded, receipt_tick)),
+              receipt_tick)) == encoded,
+      "One explicit note roundtrips without chart, search or visit grants");
+  check(
+      !receive_freedom_station_stellar_lead(initial, offer, receipt_tick + 1) &&
+          !receive_freedom_station_stellar_lead(initial, offer,
+                                                receipt_tick - 1) &&
+          !receive_freedom_station_stellar_lead(received, offer,
+                                                receipt_tick) &&
+          !offer_freedom_station_stellar_lead(received, craft, receipt_tick) &&
+          !offer_freedom_station_stellar_lead(initial, {}, receipt_tick) &&
+          !offer_freedom_station_stellar_lead(initial, craft, UINT64_MAX) &&
+          need(encode_freedom_knowledge_json(received, receipt_tick)) ==
+              encoded,
+      "Stale, duplicate, wrong-craft and terminal-clock operations refuse "
+      "without changing accepted note bytes");
+  for (unsigned fault = 0; fault < 6; ++fault) {
+    auto forged = offer;
+    switch (fault) {
+      case 0: forged.version = 2; break;
+      case 1: forged.station.value ^= 1; break;
+      case 2: forged.attendant = 2; break;
+      case 3: forged.craft = {}; break;
+      case 4: forged.received_tick = receipt_tick + 1; break;
+      case 5: forged.target = source; break;
+      default: break;
+    }
+    auto malformed = initial;
+    malformed.station_stellar_lead = forged;
+    check(
+        !receive_freedom_station_stellar_lead(initial, forged, receipt_tick) &&
+            !validate_freedom_knowledge(malformed, receipt_tick) &&
+            !freedom_station_stellar_lead_status(malformed, receipt_tick),
+        "Malformed source, target, version and clock refuse pure admission");
+  }
+  for (unsigned fault = 0; fault < 15; ++fault) {
+    auto malformed = Json::parse(encoded);
+    auto& lead = malformed["station_stellar_lead"];
+    switch (fault) {
+      case 0: lead = nullptr; break;
+      case 1: lead["version"] = 2U; break;
+      case 2: lead["version"] = UINT64_MAX; break;
+      case 3: lead["attendant"] = UINT64_MAX; break;
+      case 4: lead["attendant"] = 0U; break;
+      case 5: lead["station"] = 0U; break;
+      case 6: lead["craft"] = "1"; break;
+      case 7: lead["received_tick"] = 7.0; break;
+      case 8: lead["received_tick"] = -1; break;
+      case 9: lead["received_tick"] = receipt_tick + 1; break;
+      case 10: lead["target"] = source.value; break;
+      case 11: lead["extra"] = 0; break;
+      case 12: lead.erase("target"); break;
+      case 13: lead["target"] = 1e100; break;
+      case 14: lead["target"] = nullptr; break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(malformed.dump(), receipt_tick),
+          "Closed optional lead decoder refuses malformed, nonfinite, wide "
+          "and nonunsigned fields before narrowing");
+  }
+  auto duplicate = encoded;
+  duplicate.insert(duplicate.find("\"station_stellar_lead\":"),
+                   "\"station_stellar_lead\": null, ");
+  check(!decode_freedom_knowledge_json(duplicate, receipt_tick),
+        "Lead uses existing duplicate-key refusal");
+  for (std::uint32_t version = 1; version <= 6; ++version) {
+    auto legacy = need(make_freedom_starting_knowledge(seed, version));
+    const auto before =
+        need(encode_freedom_knowledge_json(legacy, receipt_tick));
+    check(!Json::parse(before).contains("station_stellar_lead") &&
+              need(freedom_station_stellar_lead_status(legacy, receipt_tick)) ==
+                  FreedomStationStellarLeadStatus::absent &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(before, receipt_tick)),
+                  receipt_tick)) == before,
+          "Every absent historical recipe retains exact bytes and absent "
+          "status without selecting a lead");
+    if (version == 6) continue;
+    check(!offer_freedom_station_stellar_lead(legacy, craft, receipt_tick),
+          "Only already-selected uncharted-region journeys receive leads");
+    auto wrong_recipe = Json::parse(before);
+    wrong_recipe["station_stellar_lead"] =
+        Json::parse(encoded)["station_stellar_lead"];
+    legacy.station_stellar_lead = offer;
+    check(!validate_freedom_knowledge(legacy, receipt_tick) &&
+              !decode_freedom_knowledge_json(wrong_recipe.dump(), receipt_tick),
+          "Optional lead cannot opt old chart recipes into hidden systems");
+  }
+  auto searching =
+      need(begin_freedom_star_search(received, source, craft, receipt_tick));
+  const auto without_lead =
+      need(begin_freedom_star_search(initial, source, craft, receipt_tick));
+  check(searching.star_search == without_lead.star_search &&
+            searching.star_search->active->target == offer.target,
+        "Keeping the lead preserves the existing scanner's first target");
+  for (std::size_t i = 0; i < kFreedomSystemNetworkSize; ++i) {
+    const auto from = network.nodes[i].system;
+    check(need(begin_freedom_star_search(received, from, craft, receipt_tick))
+                  .star_search == need(begin_freedom_star_search(
+                                           initial, from, craft, receipt_tick))
+                                      .star_search,
+          "The note cannot override the independently ordered candidate "
+          "when searching from another known system");
+  }
+  SimulationTick now = receipt_tick;
+  for (unsigned i = 0; i < kFreedomStarSearchTicks; ++i) {
+    ++now;
+    searching =
+        need(advance_freedom_star_search(searching, source, craft, now, true));
+  }
+  check(searching.station_stellar_lead == received.station_stellar_lead &&
+            need(freedom_station_stellar_lead_status(searching, now)) ==
+                FreedomStationStellarLeadStatus::sensor_fix_acquired &&
+            !need(query_freedom_knowledge(searching,
+                                          {KnowledgeSubjectKind::system,
+                                           offer.target, offer.target.value},
+                                          KnowledgeFact::presence, now)),
+        "Exactly 1200 actual pure search ticks confirm the note without "
+        "inventing a visit or rewriting its receipt");
+  auto rewritten = searching;
+  rewritten.station_stellar_lead->received_tick = now;
+  check(!validate_freedom_knowledge(rewritten, now),
+        "Receipt-time candidate reconstruction excludes already-acquired "
+        "targets while allowing later ledger facts");
+  auto late_note = searching;
+  late_note.station_stellar_lead.reset();
+  const auto other_offer =
+      need(offer_freedom_station_stellar_lead(late_note, craft, now));
+  late_note =
+      need(receive_freedom_station_stellar_lead(late_note, other_offer, now));
+  check(need(freedom_station_stellar_lead_status(late_note, now)) ==
+            FreedomStationStellarLeadStatus::unverified,
+        "A genuine fix for another star cannot confirm the newly kept lead");
+  searching = need(begin_freedom_star_search(searching, source, craft, now));
+  check(searching.star_search->active->target == other_offer.target &&
+            other_offer.target != offer.target &&
+            (other_offer.target == network.nodes[4].system ||
+             other_offer.target == network.nodes[5].system),
+        "The second genuine generated candidate remains independently "
+        "available in the original order");
+  for (unsigned i = 0; i < kFreedomStarSearchTicks; ++i) {
+    ++now;
+    searching =
+        need(advance_freedom_star_search(searching, source, craft, now, true));
+  }
+  auto exhausted = searching;
+  exhausted.station_stellar_lead.reset();
+  check(!offer_freedom_station_stellar_lead(exhausted, craft, now) &&
+            searching.station_stellar_lead == received.station_stellar_lead &&
+            need(decode_freedom_knowledge_json(
+                need(encode_freedom_knowledge_json(searching, now)), now)) ==
+                searching,
+        "Both completed candidates leave no offer and preserve the first "
+        "receipt through later acquisition and Continue bytes");
+  ++now;
+  const auto visited = need(apply_freedom_knowledge(
+      searching,
+      event(seed,
+            {KnowledgeSubjectKind::system, offer.target, offer.target.value},
+            KnowledgeFact::presence, NavigationKnowledgeLevel::visited, now),
+      now));
+  check(need(freedom_station_stellar_lead_status(visited, now)) ==
+                FreedomStationStellarLeadStatus::visited &&
+            visited.station_stellar_lead == received.station_stellar_lead,
+        "Only separately admitted physical system-presence evidence yields "
+        "Visited; sensor confirmation and note remain distinct");
+}
 } // namespace
 
 auto main() -> int {
@@ -1445,6 +1651,7 @@ auto main() -> int {
       fixture(seed);
     network_knowledge();
     planetary_knowledge();
+    station_stellar_lead();
     invalid_inputs();
     surface_marker_metadata();
     moon_surface_marker_metadata();

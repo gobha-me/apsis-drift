@@ -263,6 +263,25 @@ struct FreedomStarSearchState {
   friend auto operator==(const FreedomStarSearchState&,
                          const FreedomStarSearchState&) -> bool = default;
 };
+inline constexpr std::uint32_t kFreedomStationStellarLeadVersion{1};
+// One immutable personal note. The private target is not a navigation fact or
+// part of the public attendant offer; search/presence evidence owns its status.
+struct FreedomStationStellarLead {
+  std::uint32_t version{kFreedomStationStellarLeadVersion};
+  OriginStationId station;
+  std::uint32_t attendant{1};
+  StarterCraftId craft;
+  SimulationTick received_tick{};
+  SystemId target;
+  friend auto operator==(const FreedomStationStellarLead&,
+                         const FreedomStationStellarLead&) -> bool = default;
+};
+enum class FreedomStationStellarLeadStatus : std::uint8_t {
+  absent,
+  unverified,
+  sensor_fix_acquired,
+  visited
+};
 struct FreedomKnowledge {
   FreedomKnowledgeRecipe recipe;
   std::vector<KnowledgeEntry> entries;
@@ -276,6 +295,7 @@ struct FreedomKnowledge {
   std::optional<FreedomFieldSampleState> field_samples{};
   std::optional<FreedomStarSearchState> star_search{};
   std::optional<FreedomDerelictState> derelicts{};
+  std::optional<FreedomStationStellarLead> station_stellar_lead{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -298,7 +318,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_orbital_surveys,
   invalid_field_samples,
   invalid_star_search,
-  invalid_derelicts
+  invalid_derelicts,
+  invalid_station_stellar_lead
 };
 
 struct KnownIdentity {
@@ -389,6 +410,18 @@ struct FreedomKnownPlanetRow {
                                            const KnowledgeEvidence&,
                                            SimulationTick now)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
+// Preview is read-only. Receive requires the exact freshly generated offer;
+// native admission additionally owns the actual Origin attendant interaction.
+[[nodiscard]] auto offer_freedom_station_stellar_lead(const FreedomKnowledge&,
+                                                      StarterCraftId,
+                                                      SimulationTick)
+    -> std::expected<FreedomStationStellarLead, FreedomKnowledgeError>;
+[[nodiscard]] auto receive_freedom_station_stellar_lead(
+    const FreedomKnowledge&, const FreedomStationStellarLead&, SimulationTick)
+    -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
+[[nodiscard]] auto freedom_station_stellar_lead_status(const FreedomKnowledge&,
+                                                       SimulationTick)
+    -> std::expected<FreedomStationStellarLeadStatus, FreedomKnowledgeError>;
 [[nodiscard]] auto begin_freedom_star_search(const FreedomKnowledge&, SystemId,
                                              StarterCraftId, SimulationTick)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;

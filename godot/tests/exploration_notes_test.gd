@@ -22,6 +22,17 @@ class Bridge:
 		result["derelict"] = derelict_packet
 		return result
 
+class LeadBridge:
+	extends Bridge
+	var lead_queries := 0
+	var lead_packet: Dictionary
+	func get_freedom_station_stellar_lead() -> Dictionary:
+		lead_queries += 1
+		return lead_packet
+
+static func lead(kept: bool = false) -> Dictionary:
+	return {"version": 1, "selected": true, "kept": kept, "can_keep": not kept, "offer_tick": "0" if not kept else "", "received_tick": "0" if kept else "", "status": "unverified" if kept else "unrecorded", "source": "Origin bay attendant", "note": "An unverified stellar report. Use Search nearby stars; this grants no navigation fix."}
+
 static func row(site: String = "3") -> Dictionary:
 	return {"system_id": "1", "body_kind": "moon", "body_id": "2", "site_id": site, "craft_id": "4", "tick": "0", "kind": 0, "label": "Pale specimen", "source_name": "Moon"}
 
@@ -169,5 +180,54 @@ static func run() -> int:
 	for bad in [{}, {"system_id": "1", "body_kind": "moon", "body_id": "2", "site_id": "03"}, {"system_id": "1", "body_kind": 1, "body_id": "2", "site_id": "3"}]:
 		failures += check(not Notes.mark_bridge(bridge, bad, false).ok and bridge.commands.is_empty(), "Malformed site command reached provider")
 	failures += check(Notes.mark_bridge(bridge, target, true).ok and bridge.commands == [["1", "moon", "2", "3", true]], "Explicit replace command changed typed identity or replacement intent")
+	var offered := lead()
+	var retained := lead(true)
+	for value in [offered, retained]:
+		failures += check(Notes.station_lead_valid(value), "Valid initial/retained station lead refused")
+	var lead_root := {"samples": packet.samples, "derelict": packet.derelict, "station_lead": offered}
+	failures += check(Notes.pages(lead_root).size() == 3, "Merely available report invented a retained note")
+	lead_root.station_lead = retained
+	var frozen_lead := lead_root.duplicate(true)
+	for status in ["unverified", "sensor_fix_acquired", "visited"]:
+		lead_root.station_lead.status = status
+		var lead_pages := Notes.pages(lead_root)
+		failures += check(lead_pages.size() == 4 and lead_pages[3].title == "STATION LEAD" and "Origin bay attendant" in lead_pages[3].text and "ship time 0.0 s" in lead_pages[3].text and {"unverified": "Unverified report", "sensor_fix_acquired": "Sensor fix acquired", "visited": "Visited"}[status] in lead_pages[3].text, "Retained note omitted authoritative status/provenance")
+	lead_root.station_lead.status = "unverified"
+	failures += check(lead_root == frozen_lead, "Station lead archive mutated its source")
+	for field in retained:
+		var bad := retained.duplicate(true)
+		bad.erase(field)
+		failures += check(not Notes.station_lead_valid(bad), "Missing station lead field accepted: " + field)
+	for change in [{"extra": 1}, {"version": 2}, {"version": 1.0}, {"selected": 1}, {"kept": 1}, {"can_keep": 1}, {"selected": false}, {"can_keep": true}, {"offer_tick": "0"}, {"received_tick": ""}, {"received_tick": "00"}, {"received_tick": "18446744073709551615"}, {"received_tick": NAN}, {"status": "unrecorded"}, {"status": "resolved"}, {"source": "Other worker"}, {"note": ""}, {"note": "x".repeat(2049)}, {"note": INF}]:
+		var bad := retained.duplicate(true)
+		bad.merge(change, true)
+		failures += check(not Notes.station_lead_valid(bad), "Malformed retained lead accepted: " + str(change))
+		lead_root.station_lead = bad
+		var lead_pages := Notes.pages(lead_root)
+		failures += check(lead_pages.size() == 4 and "unavailable" in lead_pages[3].text and contact.history in lead_pages[2].text, "Bad lead erased other valid note families")
+	for tick in ["0", "18446744073709551614"]:
+		var boundary := offered.duplicate(true)
+		boundary.offer_tick = tick
+		failures += check(Notes.station_lead_valid(boundary), "Valid offer clock boundary refused")
+	for change in [{"offer_tick": ""}, {"offer_tick": "01"}, {"offer_tick": "18446744073709551615"}, {"offer_tick": 0}, {"offer_tick": INF}, {"received_tick": "0"}, {"status": "unverified"}, {"source": ""}]:
+		var bad := offered.duplicate(true)
+		bad.merge(change, true)
+		failures += check(not Notes.station_lead_valid(bad), "Malformed offer accepted")
+	var unavailable_lead := offered.duplicate(true)
+	unavailable_lead.can_keep = false
+	unavailable_lead.offer_tick = ""
+	unavailable_lead.source = ""
+	failures += check(Notes.station_lead_valid(unavailable_lead), "Selected unavailable report refused")
+	unavailable_lead.selected = false
+	unavailable_lead.status = "unselected"
+	failures += check(Notes.station_lead_valid(unavailable_lead), "Legacy unselected report refused")
+	var lead_bridge := LeadBridge.new()
+	lead_bridge.sample_packet = packet.samples
+	lead_bridge.derelict_packet = contact
+	lead_bridge.lead_packet = retained
+	var projected := Notes.read_bridge(lead_bridge)
+	Notes.pages(projected)
+	Notes.pages(projected)
+	failures += check(lead_bridge.lead_queries == 1 and lead_bridge.sample_queries == 1 and lead_bridge.flight_queries == 1 and lead_bridge.commands.is_empty() and lead_bridge.saved == "unchanged complete voyage" and projected.station_lead == retained, "Archive repeatedly queried/operated the lead owner")
 	print("Exploration notes checks: %d failures" % failures)
 	return failures

@@ -1,11 +1,14 @@
 extends Control
 ## A paused reader. Topics are supplied and revalidated by the C++ owner.
 signal topic_requested(id: int)
+signal keep_requested
 signal back_requested
 var title: Label
 var text: Label
 var topics: Array[Button] = []
 var back: Button
+var keep: Button
+var offer_tick := ""
 var panel: PanelContainer
 var readable_theme: Theme
 var scroll: ScrollContainer
@@ -38,11 +41,16 @@ func _ready() -> void:
 	text = Label.new()
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(text)
-	for index in 4:
+	for index in 5:
 		var button := Button.new()
 		button.pressed.connect(func(): topic_requested.emit(int(button.get_meta("topic_id", 0))))
 		column.add_child(button)
 		topics.append(button)
+	keep = Button.new()
+	keep.text = "Keep this lead"
+	keep.pressed.connect(func(): keep_requested.emit())
+	column.add_child(keep)
+	clear_lead()
 	back = Button.new()
 	back.text = "Back · remain paused"
 	back.pressed.connect(func(): back_requested.emit())
@@ -56,9 +64,10 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in topics + [back]: button.custom_minimum_size.y = ceili(44 * scale)
+	for button in topics + [keep, back]: button.custom_minimum_size.y = ceili(44 * scale)
 
 func open(packet: Dictionary) -> void:
+	clear_lead()
 	title.text = packet.name
 	text.text = "Optional conversation. Choose a topic, or return to paused controls."
 	scroll.scroll_vertical = 0
@@ -74,14 +83,33 @@ func open(packet: Dictionary) -> void:
 	layout_reader()
 	topics[0].grab_focus()
 
+func clear_lead() -> void:
+	offer_tick = ""
+	keep.hide()
+	keep.disabled = true
+
+func show_lead(packet: Dictionary, dialogue: String = "") -> void:
+	var details: String = packet.note
+	if packet.kept:
+		var status: String = {"unverified": "Unverified report", "sensor_fix_acquired": "Sensor fix acquired", "visited": "Visited"}[packet.status]
+		details = "%s\nSource: %s\nReceived · ship time %.1f s\n\n%s" % [status, packet.source, float(packet.received_tick) / 120.0, details]
+	elif packet.can_keep:
+		details += "\n\nSource: " + packet.source
+	text.text = dialogue + "\n\n" + details if not dialogue.is_empty() and dialogue != packet.note else details
+	offer_tick = packet.offer_tick
+	keep.visible = packet.can_keep
+	keep.disabled = not packet.can_keep
+	if keep.has_focus() and keep.disabled: back.grab_focus()
+
 func navigate(direction: int) -> void:
 	var buttons: Array[Button] = []
 	for button in topics:
 		if button.visible and not button.disabled: buttons.append(button)
+	if keep.visible and not keep.disabled: buttons.append(keep)
 	buttons.append(back)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
 
 func accept() -> void:
 	var target := get_viewport().gui_get_focus_owner()
-	if target in topics + [back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in topics + [keep, back] and target.visible and not target.disabled: target.pressed.emit()
