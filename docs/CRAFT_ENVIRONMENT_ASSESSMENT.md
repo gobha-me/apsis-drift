@@ -46,7 +46,8 @@ Orbital operation checks the registered operation bit without applying
 surface climate. Entry, surface flight and ascent evaluate conservative
 surface temperature, radiation, electricity, pressure, gust and propulsion
 references. Touchdown also evaluates ground acceleration and support loading.
-Actual entry heating, orientation, velocity, slopes, material, pad geometry,+hull clearance and fuel remain with their existing providers. A SAFE reference
+Actual entry heating, orientation, velocity, slopes, material, pad geometry,
+hull clearance and fuel remain with their existing providers. A SAFE reference
 query does not certify a present landing site or an achievable flight trace.
 
 ## Knowledge and state ownership
@@ -81,12 +82,20 @@ old saves must not acquire new operation restrictions through a load.
 
 ## Remaining #102 acceptance
 
-This is the shared query and native warning foundation. #102 remains open for
-explicit saved policy selection, composed Assisted commitment refusal,
-instantaneous flight/terrain assessment and the actual safe reference flight.
+This is the shared query and native warning foundation. The ordinary seed42
+station–surface–station reference route now exists in
+`test/godot/freedom_planetary_fixture.cpp --surface-loop --commands` and
+`godot/tests/native_surface_loop_test.gd`. It covers departure, actual descent
+and landing, walking, ascent, station capture and return, with complete-save
+parity through Continue. This is one bounded automated route; it does not
+certify environmental endurance, other body conditions or manual handling.
+
+#102 remains open for explicit saved commitment policy, instantaneous
+flight/terrain assessment and the wider override/consequence contract.
 Advanced overrides need a complete deterministic consequence before admission.
 Declared-loss recovery alone does not authorize inventing damage or fatality
-rules. Suit capability/endurance and surface locomotion remain #199.
+rules. [Suited surface walking](FREEDOM_SURFACE_WALK.md) is implemented under the
+closed #199; suit capability and oxygen/endurance policy remain separate work.
 
 `craft-environment-contract` checks owned and reference environments, missing
 and resolved knowledge, invalid inputs and clock limits, independent axes,

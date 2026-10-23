@@ -574,6 +574,38 @@ func observe_neutral() -> bool:
 		needs_neutral = false
 	return neutral
 
+# Flight intent only: camera modifiers/look remain presentation. Individual
+# actions retain opposing held inputs even when their resolved axes cancel.
+func pilot_actions() -> Array:
+	var actions := ["forward", "backward", "pitch_up", "pitch_down", "roll_left", "roll_right", "strafe_left", "strafe_right"]
+	var camera_look := looking or strength("look_hold") > 0.35 or look_axes_needs_neutral
+	if not camera_look:
+		actions.append_array(["turn_left", "turn_right", "rise", "fall"])
+	return actions
+
+func pilot_controls_neutral() -> bool:
+	for action in pilot_actions():
+		if strength(action) > float(settings.deadzone): return false
+		if Input.is_physical_key_pressed(int(bindings[action].key.code)): return false
+		if device >= 0 and available_pads.get(device, false):
+			var binding: Dictionary = bindings[action].pad
+			if binding.kind == "axis" and Input.get_joy_axis(device, int(binding.code)) * float(binding.sign) > float(settings.deadzone): return false
+			if binding.kind == "button" and Input.is_joy_button_pressed(device, int(binding.code)): return false
+	return true
+
+func pilot_event(event: InputEvent) -> bool:
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if device < 0 or event.device != device or not available_pads.get(device, false): return false
+	for action in pilot_actions():
+		var binding: Dictionary = bindings[action].pad
+		if event is InputEventKey:
+			if event.pressed and (event.physical_keycode == int(bindings[action].key.code) or (event.physical_keycode == 0 and event.keycode == int(bindings[action].key.code))): return true
+		elif event is InputEventJoypadButton:
+			if event.pressed and binding.kind == "button" and event.button_index == int(binding.code): return true
+		elif event is InputEventJoypadMotion:
+			if binding.kind == "axis" and event.axis == int(binding.code) and event.axis_value * float(binding.sign) > float(settings.deadzone): return true
+	return false
+
 func sample() -> Dictionary:
 	var raw: Array[float] = []
 	for pair in [["backward", "forward"], ["turn_left", "turn_right"], ["strafe_left", "strafe_right"], ["fall", "rise"], ["look_left", "look_right"], ["look_up", "look_down"]]:

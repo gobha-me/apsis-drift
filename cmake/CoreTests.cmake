@@ -1,4 +1,15 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-native-quiet-travel-tests
+    test/native_quiet_travel_test.cpp)
+  target_include_directories(apsis-drift-native-quiet-travel-tests PRIVATE src)
+  target_link_libraries(apsis-drift-native-quiet-travel-tests PRIVATE
+    apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-native-quiet-travel-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME native-quiet-travel-contract
+    COMMAND apsis-drift-native-quiet-travel-tests)
+  set_tests_properties(native-quiet-travel-contract PROPERTIES TIMEOUT 120)
+
   add_executable(apsis-drift-charted-arrival-targeting-tests
     test/charted_arrival_targeting_test.cpp)
   target_link_libraries(apsis-drift-charted-arrival-targeting-tests PRIVATE

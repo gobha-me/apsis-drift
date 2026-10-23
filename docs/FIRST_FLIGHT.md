@@ -148,6 +148,32 @@ not still be carried. In flight or surface controls, enable **Show personal
 marker** to display its bearing. Neither the marker nor the note certifies a
 safe route or landing.
 
+## Optional quiet travel
+
+For a long clear-space coast, pause seated flight, open **Flight instruments &
+navigation**, and select **Normal**, **Up to 2×**, or **Up to 4×**. Release pilot
+controls and Resume. Assistance and orbit hold still operate and can spend fuel;
+surveys, recovery and deadlines follow the actual simulation ticks. Thrust or
+steering restores Normal. Pause entry, focus loss, Save and Continue also return
+to Normal; a selection made while already paused survives Resume. Lower frame
+rates may deliver less acceleration. See [quiet travel](QUIET_TRAVEL.md) for the
+current clearance limits and unsupported contexts.
+
+## Optional work and operating costs
+
+At Origin, **Survey commissions** offers a reserved, paid survey of a known
+planet. Accept explicitly, acquire fresh qualifying orbital measurements, then
+return and submit before its deadline. The flight HUD shows measurement progress
+and remaining submission time. A finished report still needs submission;
+reading, returning or docking alone does not pay. See [survey work](SURVEY_COMMISSIONS.md).
+
+The same reader offers **Sell carried specimens** when attached at Origin.
+Review the quote and confirm to sell the physical pouch contents; field notes
+remain. See the [specimen buyer](SPECIMEN_SALES.md). Neither income source
+requires [paid-operation enrollment](PAID_OPERATIONS.md). That separate choice
+adds fuel and jump-charge prices, berth bills, operating support and replacement
+excess. The initial flight route remains available without enrolling.
+
 ## Save and report problems
 
 [Save / Save As, Load and Continue](NATIVE_PROFILES.md) persist the actor, craft,
@@ -168,7 +194,8 @@ hatch transfer animation and exposure/oxygen policy remain unfinished. Terrain
 transitions, broader planetary presentation, jump stress and impact consequences
 have open work. Scripted journey checks and software renders do not establish
 physical controller feel, GPU appearance, audio-device behavior or frame pacing.
-Missions, paid economy and populated stations are outside this first route.
+The first route requires no missions or economy enrollment. Station crew and
+optional paid work are available; larger populated hubs remain later work.
 
 ## Optional asteroid inspection trip
 

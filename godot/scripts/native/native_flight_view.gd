@@ -41,6 +41,11 @@ const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
 const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
+const QuietTravel = preload("res://scripts/native/quiet_travel.gd")
+var quiet_travel_select: OptionButton
+var quiet_travel_status: RichTextLabel
+var quiet_travel_packet: Dictionary = {}
+var quiet_travel_action_frame := -1
 var commission_action_frame := -1
 var charted_arrival_action_frame := -1
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
@@ -245,6 +250,7 @@ static func commission_progress_text(value: Variant) -> String:
 
 
 static func valid_state(value: Dictionary) -> bool:
+	if value.has("quiet_travel") and not QuietTravel.valid_packet(value.quiet_travel): return false
 	if value.has("orbital_survey") and not OrbitalSurvey.valid(value.orbital_survey): return false
 	if value.has("survey_commission") and not valid_commission_progress(value.survey_commission): return false
 	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
@@ -721,6 +727,17 @@ func build_ui() -> void:
 	impact_status = hud_text()
 	impact_status.visible = false
 	column.add_child(impact_status)
+	quiet_travel_select = OptionButton.new()
+	quiet_travel_select.focus_mode = Control.FOCUS_ALL
+	quiet_travel_select.add_item("Normal", 1)
+	quiet_travel_select.add_item("Up to 2×", 2)
+	quiet_travel_select.add_item("Up to 4×", 4)
+	quiet_travel_select.tooltip_text = "Quiet pilot controls only. Assistance, hold, fuel and deadlines continue normally. Actual acceleration depends on frame rate; thrust or steering returns to Normal."
+	quiet_travel_select.item_selected.connect(func(index: int): quiet_travel_command(quiet_travel_select.get_item_id(index)))
+	quiet_travel_select.get_popup().window_input.connect(quiet_travel_popup_input)
+	column.add_child(quiet_travel_select)
+	quiet_travel_status = hud_text()
+	column.add_child(quiet_travel_status)
 	chart_button = CheckButton.new()
 	chart_button.text = "Starting chart"
 	chart_button.focus_mode = Control.FOCUS_ALL
@@ -988,6 +1005,7 @@ func show_instruments() -> void:
 	instruments_open = true
 	layout_hud()
 	refresh_charted_arrivals()
+	refresh_quiet_travel()
 	instruments_button.grab_focus()
 
 
@@ -1029,6 +1047,10 @@ func update_compact_hud() -> void:
 		primary_status.tooltip_text += "\n" + commission_text
 		if work.completed and not work.expired:
 			primary_status.tooltip_text += "\nReturn to Origin and submit before the deadline."
+	var quiet_text := QuietTravel.text(state.get("quiet_travel"))
+	if not quiet_text.is_empty():
+		primary_status.text += "\n" + quiet_text
+		primary_status.tooltip_text += "\n" + quiet_text + " · Assistance, hold, fuel and deadlines continue normally. Actual acceleration depends on frame rate."
 	var survey_text := OrbitalSurvey.text(state.get("orbital_survey"))
 	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
 		# The completed survey already names the retained result and Records.
@@ -1217,8 +1239,11 @@ func setup_controls() -> void:
 		surface_walk_menu_button = controls_menu.add_button(menu_column, "Leave Wayfarer · suit", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
 		suit_lamp_button = controls_menu.add_button(menu_column, "Suit lamp: On", toggle_suit_lamp)
 	player_input.pause_requested.connect(toggle_pause)
-	player_input.safety_pause.connect(pause_controls)
+	player_input.safety_pause.connect(func(reason: String):
+		reset_quiet_travel()
+		pause_controls(reason))
 	player_input.bindings_changed.connect(func():
+		reset_quiet_travel()
 		pause_controls("Controls changed. Release mapped controls before resuming."))
 	player_input.assist_requested.connect(request_assistance)
 	player_input.camera_requested.connect(change_camera)
@@ -1227,7 +1252,9 @@ func setup_controls() -> void:
 	controls_menu.resumed.connect(toggle_pause)
 	controls_menu.save_requested.connect(open_save_dialog)
 	controls_menu.catalog_save_requested.connect(func(save_as: bool):
-		if paused and focused and not journey_dialog_open and not save_dialog.visible: catalog_save_requested.emit(save_as))
+		if paused and focused and not journey_dialog_open and not save_dialog.visible:
+			reset_quiet_travel()
+			catalog_save_requested.emit(save_as))
 	controls_menu.load_requested.connect(func():
 		if paused and focused and not journey_dialog_open and not save_dialog.visible: load_requested.emit())
 	controls_menu.title_requested.connect(func():
@@ -2027,12 +2054,14 @@ func request_hold(enabled: bool) -> void:
 
 func open_save_dialog() -> void:
 	if commissions_open(): return
+	reset_quiet_travel()
 	pause_controls("Save As preserves the last committed state.", false)
 	controls_menu.hide_menu()
 	save_dialog.popup_centered_ratio(0.75)
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	if not paused: reset_quiet_travel()
 	clear_cockpit_control()
 	clear_flight_mouse()
 	mouse_look.set_active(false)
@@ -2148,6 +2177,75 @@ func select_jump_destination(ordinal: int) -> void:
 	state = bridge.get_freedom_flight_state()
 	refresh_charted_arrivals()
 	update_view(0.0)
+
+
+func quiet_travel_controls_available() -> bool:
+	if not activated or not paused or not focused or not instruments_open or surface_walking(): return false
+	if hud_scroll == null or not hud_scroll.visible or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty(): return false
+	if save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty() or controls_menu == null or controls_menu.panel.visible: return false
+	if controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible: return false
+	if controls_menu.observations_view != null and controls_menu.observations_view.visible: return false
+	if controls_menu.commissions_view != null and controls_menu.commissions_view.visible: return false
+	return true
+
+
+func sync_quiet_travel_ui() -> void:
+	if quiet_travel_select == null: return
+	var valid := QuietTravel.valid_packet(quiet_travel_packet)
+	var shown := paused and instruments_open and not surface_walking()
+	quiet_travel_select.visible = shown
+	quiet_travel_status.visible = shown
+	quiet_travel_select.disabled = not valid or not quiet_travel_controls_available()
+	for index in quiet_travel_select.item_count:
+		var multiplier := quiet_travel_select.get_item_id(index)
+		quiet_travel_select.set_item_disabled(index, multiplier != 1 and (not valid or not quiet_travel_packet.available))
+	if valid: quiet_travel_select.select(quiet_travel_select.get_item_index(quiet_travel_packet.multiplier))
+	quiet_travel_status.text = str(quiet_travel_packet.note) if valid else "Quiet travel unavailable."
+	quiet_travel_status.tooltip_text = quiet_travel_select.tooltip_text
+
+
+func refresh_quiet_travel() -> Dictionary:
+	var value: Variant = bridge.get_freedom_quiet_travel() if bridge != null and is_instance_valid(bridge) and bridge.has_method("get_freedom_quiet_travel") else {}
+	quiet_travel_packet = value.duplicate(true) if QuietTravel.valid_packet(value) else {}
+	sync_quiet_travel_ui()
+	return quiet_travel_packet.duplicate(true)
+
+
+func reset_quiet_travel(refresh: bool = true) -> void:
+	if bridge == null or not is_instance_valid(bridge) or not bridge.has_method("set_freedom_quiet_travel"): return
+	bridge.set_freedom_quiet_travel(1)
+	if not refresh: return
+	var value := refresh_quiet_travel()
+	if QuietTravel.valid_packet(value): state["quiet_travel"] = value
+
+
+func quiet_travel_popup_input(event: InputEvent) -> void:
+	var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
+	if not focused or (pad and (player_input == null or event.device != player_input.device or not player_input.available_pads.get(event.device, false))) or (event is InputEventKey and event.echo):
+		quiet_travel_select.get_popup().set_input_as_handled()
+
+
+func quiet_travel_command(multiplier: int) -> void:
+	if multiplier not in [1, 2, 4] or not quiet_travel_controls_available() or quiet_travel_action_frame == Engine.get_process_frames():
+		sync_quiet_travel_ui()
+		return
+	var displayed := quiet_travel_packet.duplicate(true)
+	var fresh := refresh_quiet_travel()
+	if not QuietTravel.valid_packet(displayed) or fresh != displayed:
+		report_action_status("Quiet travel changed. Review the current selection.")
+		return
+	observe_neutral_controls()
+	if not controls_armed:
+		sync_quiet_travel_ui()
+		report_action_status("Release flight controls before changing quiet travel.")
+		return
+	quiet_travel_action_frame = Engine.get_process_frames()
+	var accepted: bool = bridge.set_freedom_quiet_travel(multiplier)
+	var refusal := str(bridge.get_last_error()) if not accepted else ""
+	state = bridge.get_freedom_flight_state()
+	refresh_quiet_travel()
+	update_view(0.0)
+	report_action_status(str(quiet_travel_packet.get("note", "Quiet travel unavailable.")) if accepted else refusal)
 
 
 func charted_arrivals_controls_available() -> bool:
@@ -2400,6 +2498,7 @@ func sync_mouse_look() -> void:
 
 
 func _exit_tree() -> void:
+	reset_quiet_travel(false)
 	clear_cockpit_control()
 	clear_flight_mouse()
 	mouse_look.set_active(false)
@@ -2413,6 +2512,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
+	if player_input != null and player_input.pilot_event(event): reset_quiet_travel(false)
 	if player_input != null and event.device == player_input.device:
 		if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > float(player_input.settings.deadzone)):
 			clear_flight_mouse()
@@ -2435,11 +2535,13 @@ func _input(event: InputEvent) -> void:
 			look_offset.y = clampf(look_offset.y, -1.3 if surface_walking() else -0.8 if cockpit else -1.2, 1.3 if surface_walking() else 0.8 if cockpit else 1.2)
 		elif mouse_steering_available():
 			flight_mouse.motion(event.relative, size, player_input.settings)
+			if flight_mouse.demands(player_input.settings) != Vector2.ZERO: reset_quiet_travel(false)
 			get_viewport().set_input_as_handled()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		reset_quiet_travel()
 		focused = false
 		if player_input != null:
 			player_input.focused = false
@@ -2499,6 +2601,7 @@ func _process(delta: float) -> void:
 		hide_exhaust()
 		return
 	if not bridge.get_freedom_walk_state().is_empty():
+		reset_quiet_travel()
 		hide_exhaust()
 		if not mode_change_pending:
 			mode_change_pending = true
@@ -2507,6 +2610,8 @@ func _process(delta: float) -> void:
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
 	var demand := flight_demand(resolved.thrust_axes)
+	if not paused and not player_input.pilot_controls_neutral():
+		reset_quiet_travel(false)
 	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
 	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
@@ -2515,6 +2620,7 @@ func _process(delta: float) -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	if state.get("body_kind") in ["moon", "minor"]:
+		reset_quiet_travel()
 		hide_exhaust()
 		if not mode_change_pending:
 			mode_change_pending = true
@@ -2524,6 +2630,7 @@ func _process(delta: float) -> void:
 		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
 		return
 	if state.get("impact", {}).get("pending_loss", false):
+		reset_quiet_travel()
 		# The successful C++ batch already committed the actual loss. Stop
 		# here before another tick can refuse or terrain can obscure recovery.
 		recovery_notified = true
@@ -2765,6 +2872,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	var jump: Dictionary = state.get("jump", {})
 	var phase: String = jump.get("phase", "idle")
 	sync_charted_arrivals_ui()
+	quiet_travel_packet = state.get("quiet_travel", {}).duplicate(true) if QuietTravel.valid_packet(state.get("quiet_travel")) else {}
+	sync_quiet_travel_ui()
 	assist_button.disabled = phase != "idle" or surface_walking()
 	var rows: Array = chart.get("rows", [])
 	for i in jump_destinations.size():

@@ -23,9 +23,9 @@ before choosing the missions, economy or story that give those actions purpose.
   understandable consequences. Default loss permits recovery, not permadeath.
 - Two fuels: one shared by sub-light and surface flight, one special to jumps.
 - Planet-specific physical rotation and star lighting share authoritative
-  simulation time. Optional time acceleration is deferred and must advance the
-  whole simulation, not an independent fast lighting clock. Preserve legacy
-  rotation/lighting recipes explicitly until versioned native integration.
+  simulation time. The bounded [quiet-travel prototype](QUIET_TRAVEL.md) advances
+  the whole simulation through ordinary ticks. Preserve legacy rotation/lighting
+  recipes explicitly until versioned native integration.
 - New native universes also use physically scaled planetary orbital periods,
   derived from orbital distance and an explicitly versioned stellar mass
   parameter. Keep existing worlds/demo catalogs on their original recipes;
@@ -147,6 +147,13 @@ navigation choice for known primary planets after measuring a long survey
 approach. Existing journeys retain wide arrivals until selection. Source
 velocity and manual orbital handling remain; time acceleration, price balance
 and the broader hazard policies stay separate.
+
+The following engineering prototype scopes [quiet travel](QUIET_TRAVEL.md)
+([#696](https://github.com/gobha-me/apsis-drift/issues/696)) as optional requested
+time acceleration within the existing frame work bound. Ordinary simulation
+ticks still own all movement and costs; manual flight and constrained phases
+return to Normal. This is a provisional engineering direction, not a quoted
+owner priority selection or hardware throughput qualification.
 
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
