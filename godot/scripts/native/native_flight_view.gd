@@ -40,7 +40,9 @@ const Status = preload("res://scripts/native/native_status.gd")
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
+const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
 var commission_action_frame := -1
+var charted_arrival_action_frame := -1
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const StarSearch = preload("res://scripts/native/native_star_search.gd")
 const DerelictView = preload("res://scripts/native/native_derelict_view.gd")
@@ -153,6 +155,9 @@ var jump_button: Button
 var jump_destinations: Array[Button] = []
 var rendered_world := ""
 var chart_button: CheckButton
+var charted_arrival_button: CheckButton
+var charted_arrival_status: RichTextLabel
+var charted_arrival_packet: Dictionary = {}
 var service_button: Button
 var release_button: Button
 var error := ""
@@ -668,6 +673,7 @@ func build_ui() -> void:
 	orbital_forecast.add_theme_stylebox_override("normal", backing)
 	add_child(orbital_forecast)
 	hud_scroll = ScrollContainer.new()
+	hud_scroll.follow_focus = true
 	hud_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	hud_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
 	hud_scroll.add_theme_stylebox_override("panel", backing)
@@ -708,11 +714,21 @@ func build_ui() -> void:
 	chart_button = CheckButton.new()
 	chart_button.text = "Starting chart"
 	chart_button.focus_mode = Control.FOCUS_ALL
-	chart_button.toggled.connect(func(shown: bool): chart_status.visible = shown)
+	chart_button.toggled.connect(func(shown: bool):
+		chart_status.visible = shown
+		refresh_charted_arrivals())
 	column.add_child(chart_button)
 	chart_status = hud_text()
 	chart_status.visible = false
 	column.add_child(chart_status)
+	charted_arrival_button = CheckButton.new()
+	charted_arrival_button.text = "Closer charted arrivals"
+	charted_arrival_button.focus_mode = Control.FOCUS_ALL
+	charted_arrival_button.tooltip_text = "Choose a closer arrival when the primary planet is charted. Arrival keeps your velocity; orbit and landing remain manual."
+	charted_arrival_button.toggled.connect(set_charted_arrivals)
+	column.add_child(charted_arrival_button)
+	charted_arrival_status = hud_text()
+	column.add_child(charted_arrival_status)
 	for ordinal in 6:
 		var destination := Button.new()
 		destination.focus_mode = Control.FOCUS_ALL
@@ -961,6 +977,7 @@ func show_instruments() -> void:
 	if controls_menu != null: controls_menu.hide_menu()
 	instruments_open = true
 	layout_hud()
+	refresh_charted_arrivals()
 	instruments_button.grab_focus()
 
 
@@ -2117,7 +2134,58 @@ func select_jump_destination(ordinal: int) -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	refresh_charted_arrivals()
 	update_view(0.0)
+
+
+func charted_arrivals_controls_available() -> bool:
+	if not activated or not paused or not focused or not instruments_open or surface_walking(): return false
+	if hud_scroll == null or not hud_scroll.visible or chart_button == null or not chart_button.button_pressed: return false
+	if journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible: return false
+	if player_input == null or not player_input.waiting_action.is_empty() or controls_menu == null or controls_menu.panel.visible: return false
+	if controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible: return false
+	if controls_menu.observations_view != null and controls_menu.observations_view.visible: return false
+	if controls_menu.commissions_view != null and controls_menu.commissions_view.visible: return false
+	return state.get("jump", {}).get("phase", "idle") == "idle" and not state.get("impact", {}).get("pending_loss", false)
+
+
+func sync_charted_arrivals_ui() -> void:
+	if charted_arrival_button == null or charted_arrival_status == null: return
+	var valid := ChartedArrivals.valid_packet(charted_arrival_packet)
+	var shown := paused and instruments_open and chart_button.visible and chart_button.button_pressed and not surface_walking()
+	charted_arrival_button.visible = shown
+	charted_arrival_status.visible = shown
+	charted_arrival_button.set_pressed_no_signal(valid and charted_arrival_packet.enabled)
+	charted_arrival_button.disabled = not valid or not charted_arrival_packet.supported or not charted_arrivals_controls_available()
+	charted_arrival_status.text = str(charted_arrival_packet.note) if valid else "Arrival option unavailable."
+
+
+func refresh_charted_arrivals() -> void:
+	if charted_arrival_button == null: return
+	var value: Variant = bridge.get_freedom_charted_arrivals() if bridge.has_method("get_freedom_charted_arrivals") else {}
+	charted_arrival_packet = value.duplicate(true) if ChartedArrivals.valid_packet(value) else {}
+	sync_charted_arrivals_ui()
+
+
+func set_charted_arrivals(enabled: bool) -> void:
+	if not charted_arrivals_controls_available() or charted_arrival_action_frame == Engine.get_process_frames() or not ChartedArrivals.valid_packet(charted_arrival_packet) or not charted_arrival_packet.supported:
+		sync_charted_arrivals_ui()
+		return
+	observe_neutral_controls()
+	if not controls_armed:
+		sync_charted_arrivals_ui()
+		report_action_status("Release flight controls before changing arrival selection.")
+		return
+	charted_arrival_action_frame = Engine.get_process_frames()
+	var accepted: bool = bridge.set_freedom_charted_arrivals(enabled)
+	var refusal: String = str(bridge.get_last_error()) if not accepted else ""
+	state = bridge.get_freedom_flight_state()
+	refresh_charted_arrivals()
+	update_view(0.0)
+	if accepted:
+		report_action_status("Closer charted arrivals selected. " + str(charted_arrival_packet.get("note", "")) if enabled else "Wide arrivals selected.")
+	else:
+		report_action_status(refusal)
 
 
 func jump_requested() -> void:
@@ -2327,6 +2395,11 @@ func _exit_tree() -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed: cockpit_mouse_held = false
+	if paused and instruments_open and not journey_dialog_open and save_dialog != null and not save_dialog.visible and player_input != null:
+		var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if not focused or (pad and event.device != player_input.device) or (event is InputEventKey and event.echo):
+			get_viewport().set_input_as_handled()
+			return
 	if not focused or paused or journey_dialog_open or recovery_notified or not error.is_empty() or save_dialog == null or save_dialog.visible: return
 	if player_input != null and event.device == player_input.device:
 		if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > float(player_input.settings.deadzone)):
@@ -2679,6 +2752,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		chart_status.visible = false
 	var jump: Dictionary = state.get("jump", {})
 	var phase: String = jump.get("phase", "idle")
+	sync_charted_arrivals_ui()
 	assist_button.disabled = phase != "idle" or surface_walking()
 	var rows: Array = chart.get("rows", [])
 	for i in jump_destinations.size():

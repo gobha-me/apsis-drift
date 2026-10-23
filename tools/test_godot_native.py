@@ -731,7 +731,10 @@ def main(argv=None):
                 [str(phases), "--continue-from=" + str(work / "missing-continuation.json")],
                 [str(phases), "--neighbor", "--commands", "--continue-from=relative"],
                 [str(phases), "--neighbor", "--commands", "--continue-from="],
-                [str(phases), "--neighbor", "--commands", "--continue-from=" + str(work / "missing-continuation.json")])):
+                [str(phases), "--neighbor", "--commands", "--continue-from=" + str(work / "missing-continuation.json")],
+                [str(phases), "--charted-arrivals"],
+                [str(phases), "--neighbor", "--commands", "--charted-arrivals"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--charted-arrivals", "--charted-arrivals"])):
             refusal_log = work / f"{name}-refusal-{index}.log"
             code, timed_out, _ = run_logged(
                 [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
@@ -869,6 +872,16 @@ def main(argv=None):
         if any(not (phases / "specimen-sales" / (name + ".json")).is_file()
                for name in sale_required):
             print(f"FAIL incomplete specimen buyer fixtures: {log}", flush=True)
+            return 1
+        arrival_required = ("station-off", "station-on", "seated-off", "seated-on",
+                            "released", "outbound-spool", "outbound-committed",
+                            "outbound-arrived", "origin-selected",
+                            "preference-off-history", "preference-on-history",
+                            "unknown-before-search", "unknown-search-near",
+                            "unknown-primary-selected", "manifest")
+        if any(not (phases / "charted-arrivals" / (name + ".json")).is_file()
+               for name in arrival_required):
+            print(f"FAIL incomplete charted arrival fixtures: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
             path.relative_to(phases).as_posix(): sha256(path)

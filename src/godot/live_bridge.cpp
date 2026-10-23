@@ -464,6 +464,11 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_charted_arrivals"),
+                                &FreedomBridge::get_freedom_charted_arrivals);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_freedom_charted_arrivals", "enabled"),
+        &FreedomBridge::set_freedom_charted_arrivals);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_specimen_sale"),
                                 &FreedomBridge::get_freedom_specimen_sale);
     godot::ClassDB::bind_method(
@@ -1739,6 +1744,16 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto set_freedom_charted_arrivals(const godot::Variant& value) -> bool {
+    if (value.get_type() != godot::Variant::BOOL) {
+      last_error = "Charted arrival selection requires a boolean";
+      return false;
+    }
+    const auto enabled = static_cast<bool>(value);
+    return change_freedom_port([enabled](NativeFreedomFlightSession& session) {
+      return session.set_charted_arrivals(enabled);
+    });
+  }
   auto sell_freedom_specimens(const godot::Variant& value) -> bool {
     if (value.get_type() != godot::Variant::STRING) {
       last_error = "Specimen sale requires a bounded quote token string";
@@ -2942,6 +2957,20 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  auto get_freedom_charted_arrivals() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.charted_arrival_view();
+    if (!view || view->note.size() > 1024 ||
+        view->note.find('\0') != std::string::npos)
+      return result;
+    result["version"] = 1;
+    result["supported"] = view->supported;
+    result["enabled"] = view->enabled;
+    result["eligible"] = view->eligible;
+    result["note"] = godot::String{view->note.c_str()};
+    return result;
+  }
   auto get_freedom_specimen_sale() const -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;

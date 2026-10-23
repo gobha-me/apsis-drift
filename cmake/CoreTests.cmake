@@ -1,4 +1,24 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-charted-arrival-targeting-tests
+    test/charted_arrival_targeting_test.cpp)
+  target_link_libraries(apsis-drift-charted-arrival-targeting-tests PRIVATE
+    apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-charted-arrival-targeting-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME charted-arrival-targeting-contract
+    COMMAND apsis-drift-charted-arrival-targeting-tests)
+  set_tests_properties(charted-arrival-targeting-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-charted-arrival-save-tests
+    test/charted_arrival_save_test.cpp)
+  target_include_directories(apsis-drift-charted-arrival-save-tests PRIVATE src)
+  target_link_libraries(apsis-drift-charted-arrival-save-tests PRIVATE
+    apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-charted-arrival-save-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME charted-arrival-save-contract
+    COMMAND apsis-drift-charted-arrival-save-tests)
+  set_tests_properties(charted-arrival-save-contract PROPERTIES TIMEOUT 120)
+
   foreach(service_case IN ITEMS origin-service-craft origin-service-save origin-service-sortie-save freedom-assistance-save native-origin-assistance)
     string(REPLACE "-" "_" service_source "${service_case}")
     add_executable(apsis-drift-${service_case}-tests test/${service_source}_test.cpp)
@@ -989,7 +1009,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME freedom-knowledge-contract COMMAND apsis-drift-freedom-knowledge-tests)
   set_tests_properties(freedom-knowledge-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-native-orbital-survey-tests test/native_orbital_survey_test.cpp test/native_survey_commission_scenario.cpp test/native_specimen_sale_scenario.cpp)
+  add_executable(apsis-drift-native-orbital-survey-tests test/native_orbital_survey_test.cpp test/native_survey_commission_scenario.cpp test/native_specimen_sale_scenario.cpp test/native_charted_arrivals_scenario.cpp)
   target_link_libraries(apsis-drift-native-orbital-survey-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_include_directories(apsis-drift-native-orbital-survey-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_options(apsis-drift-native-orbital-survey-tests PRIVATE

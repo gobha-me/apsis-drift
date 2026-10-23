@@ -230,6 +230,8 @@ struct Trace {
         need(live.replenish_resources());
       else if (op == "paid_enable")
         need(live.enable_paid_operations(args.at(0).get<std::string>()));
+      else if (op == "charted_arrivals")
+        need(live.set_charted_arrivals(args.at(0).get<bool>()));
       else if (op == "commission_accept")
         need(live.accept_survey_commission(args.at(0).get<SimulationTick>(),
                                            args.at(1).get<std::uint32_t>()));
@@ -1196,7 +1198,8 @@ auto neighbor_start(const std::optional<std::filesystem::path>& source,
 auto run_neighbor(const std::filesystem::path& output, bool record_commands,
                   bool pilot, std::optional<IntersystemArrivalQuality> grade,
                   const std::optional<std::filesystem::path>& continue_from,
-                  bool commission = false) -> void {
+                  bool commission = false, bool charted_arrivals = false)
+    -> void {
   const auto source_bytes =
       continue_from ? checkpoint_bytes(*continue_from) : std::string{};
   Trace trace{neighbor_start(continue_from, commission), output,
@@ -1331,6 +1334,12 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
                 180,
             "Actual enrollment changed the opening budget");
       commission_progress("Candidate not complete");
+    }
+    if (charted_arrivals) {
+      need(session.set_charted_arrivals(true));
+      trace.action("charted_arrivals", Json::array({true}));
+      commission_report["charted_arrivals"] = true;
+      commission_progress("Closer charted arrivals explicitly selected");
     }
     if (continue_from) {
       trace.checkpoint("surface-ascent");
@@ -2122,13 +2131,14 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "Expected one absolute empty output "
           "directory and optional "
-          "--commands/--endurance/--neighbor/--commission/--pilot/"
+          "--commands/--endurance/--neighbor/--commission/--charted-arrivals/"
+          "--pilot/"
           "--aligned/--offset/--surface-loop [--system-frame] or distinct "
           "--terrain-feature; --flight-profile=assisted|advanced requires "
           "--surface-loop --system-frame; --continue-from=/absolute/save "
           "requires --neighbor --commands");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
-        feature{}, system_frame{}, commission{};
+        feature{}, system_frame{}, commission{}, charted_arrivals{};
     std::optional<IntersystemArrivalQuality> grade;
     std::optional<PhysicalFlightProfile> profile;
     std::optional<std::filesystem::path> continue_from;
@@ -2154,6 +2164,8 @@ int main(int argc, char** argv) {
         neighbor = true;
       else if (option == "--commission" && !commission)
         commission = true;
+      else if (option == "--charted-arrivals" && !charted_arrivals)
+        charted_arrivals = true;
       else if (option == "--pilot" && !pilot)
         pilot = true;
       else if (option == "--aligned" && !grade)
@@ -2199,10 +2211,14 @@ int main(int argc, char** argv) {
          surface_loop || system_frame || profile || endurance))
       throw std::invalid_argument("--commission requires --neighbor --commands "
                                   "and no other route/profile flags");
+    if (charted_arrivals && !commission)
+      throw std::invalid_argument(
+          "--charted-arrivals requires --neighbor --commands --commission");
     if (feature)
       terrain_feature(output);
     else if (neighbor)
-      run_neighbor(output, commands, pilot, grade, continue_from, commission);
+      run_neighbor(output, commands, pilot, grade, continue_from, commission,
+                   charted_arrivals);
     else
       run(output, commands, endurance, surface_loop, system_frame, profile);
     return 0;

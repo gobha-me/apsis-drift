@@ -440,6 +440,10 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     return std::unexpected{Error::oversized_ledger};
   if (auto v = validate_star_search(k, w, now); !v) return v;
   if (auto v = validate_station_stellar_lead(k, w, now); !v) return v;
+  if (k.charted_arrivals &&
+      (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
+       k.charted_arrivals->version != kFreedomChartedArrivalVersion))
+    return std::unexpected{Error::invalid_charted_arrivals};
   if (k.survey_commissions) {
     if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
         !w.neighbor || w.neighbor->catalog.planets.empty() ||
@@ -981,6 +985,34 @@ auto advance_freedom_star_search(const FreedomKnowledge& k, SystemId source,
   if (!validate(next, *w, now))
     return std::unexpected{Error::invalid_star_search};
   return next;
+}
+auto freedom_charted_arrival_known_at(const FreedomKnowledge& knowledge,
+                                      SystemId system, PlanetId planet,
+                                      SimulationTick source_tick,
+                                      SimulationTick now)
+    -> std::expected<bool, FreedomKnowledgeError> {
+  if (const auto valid = validate_freedom_knowledge(knowledge, now); !valid)
+    return std::unexpected{valid.error()};
+  if (source_tick > now) return std::unexpected{Error::invalid_tick};
+  if (!freedom_knowledge_has_planetary_chart(knowledge.recipe.version))
+    return false;
+  const KnowledgeSubject subject{KnowledgeSubjectKind::planet, system,
+                                 planet.value};
+  for (const auto fact :
+       {KnowledgeFact::identity_type, KnowledgeFact::location}) {
+    const auto known =
+        std::ranges::any_of(knowledge.entries, [&](const auto& entry) {
+          return entry.subject == subject && entry.fact == fact &&
+                 std::ranges::any_of(
+                     entry.transitions, [&](const auto& evidence) {
+                       return evidence.level >=
+                                  NavigationKnowledgeLevel::resolved &&
+                              evidence.tick <= source_tick;
+                     });
+        });
+    if (!known) return false;
+  }
+  return true;
 }
 auto query_freedom_knowledge(const FreedomKnowledge& k,
                              KnowledgeSubject subject, KnowledgeFact fact,

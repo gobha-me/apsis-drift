@@ -1,0 +1,89 @@
+{
+  "schema": "apsis.charted-paid-survey-reference/1",
+  "seed": 42,
+  "factory": "native_planetary_network_new_game",
+  "profile": "assisted",
+  "drive": "standard",
+  "recipes": {
+    "physical_catalog": 2,
+    "physical_ephemeris": 2,
+    "terrain_policy": 3,
+    "knowledge": 5,
+    "resources": 1,
+    "paid_operations": 1,
+    "survey_commissions": 1,
+    "system_request": 4
+  },
+  "target": {
+    "system": "system-28630482e6b15573",
+    "planet": "11663323411267002299"
+  },
+  "time": {
+    "ticks_per_second": 120,
+    "elapsed_ticks": 202243,
+    "committed_flight_ticks": 196283,
+    "committed_walk_ticks": 5960,
+    "accepted_tick": 0,
+    "deadline_tick": 1728000,
+    "measurement_owner_started_tick": 4401,
+    "first_qualifying_tick": 51528,
+    "last_qualifying_tick": 55127,
+    "acquired_ticks": 3600
+  },
+  "fuel": {
+    "capacity_quanta": 3032640000000000,
+    "spent_quanta": 395632369507471,
+    "before_restoration_quanta": 2637007630492529,
+    "jump_charge_sequence": [
+      3,
+      2,
+      1
+    ],
+    "restored_quanta": 3032640000000000,
+    "restored_jump_charges": 3
+  },
+  "credits": {
+    "opening_budget": 200,
+    "initial_four_hour_berth": 20,
+    "enrolled_cash": 180,
+    "actual_report_payment": 100,
+    "flight_restoration": 6,
+    "jump_restoration": 30,
+    "new_berth_bill": 0,
+    "post_report_cash": 280,
+    "final_cash": 244,
+    "operating_tab": 0,
+    "recovery_due": 0
+  },
+  "candidate_controller": {
+    "target_radius_multiple": 1.5,
+    "radial_speed_cap_metres_per_second": 30000,
+    "radial_braking_metres_per_second_squared": 6,
+    "velocity_gain": 0.1,
+    "maximum_destination_ticks": 864000,
+    "scope": "Candidate test pilot, physically saturated by existing frame actuators; no pose or velocity writes and no automatic gameplay insertion."
+  },
+  "evidence": {
+    "fixture": "test/godot/freedom_planetary_fixture.cpp",
+    "fixture_sha256": "49bf864aa6cea89cdd5b55dec8c070eca26224d9dc8720560558865665c57fc7",
+    "checkpoint_count": 21,
+    "gcc_clang_equal_route_artifacts": 46,
+    "command_stream_sha256": "baa90e4f81ac39db525c9c31ee85c4adc7407a677a44abef40780448d3d3adde",
+    "final_save_sha256": "56674be6e75640df8c91a5937a90b26c71f168c597a752a402a425abd35e4cb6"
+  },
+  "scope": [
+    "One actual New Game and candidate test pilot; all movement and transactions use public commands, without initializing intermediate flight poses, velocities, clocks, resources or finances.",
+    "Both compiler runs matched all route artifacts on the qualification host; this does not resolve cross-host math-library replay issue #255.",
+    "Checkpoint/Continue and C++ uninterrupted peer comparisons are distinct from Godot UI replay, manual piloting or GPU acceptance.",
+    "This candidate is not an optimal route or evidence of typical/sparse starting viability, failed/delayed work, later berth affordability or player pacing. Prices remain provisional under #293."
+  ],
+  "charted_arrivals": {
+    "version": 1
+  },
+  "comparison": {
+    "wide_reference": "paid-survey-reference-v1.json",
+    "wide_elapsed_ticks": 742012,
+    "charted_elapsed_ticks": 202243,
+    "scope": "Two recorded candidate references with the same seed, factory, target and controller; not optimal routing, causal performance or general balancing evidence."
+  }
+}

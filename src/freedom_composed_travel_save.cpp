@@ -477,10 +477,18 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     const auto& f = *s.committed;
     const auto& r = f.preview.request;
     const auto& bill = *s.commitment_resources;
+    const bool charted = r.version == kFreedomChartedJumpTargetingVersion;
+    const auto charted_known =
+        charted ? freedom_charted_arrival_known_at(
+                      d.voyage.knowledge, r.destination,
+                      f.preview.reference_planet, r.source.tick, now)
+                : std::expected<bool, FreedomKnowledgeError>{true};
     if (!system_known_at(r.destination, r.source.tick) ||
-        !validate_frozen_freedom_jump_arrival(f) ||
-        r.version != (recovering ? kFreedomRecoveryJumpTargetingVersion
-                                 : kFreedomNetworkJumpTargetingVersion) ||
+        !validate_frozen_freedom_jump_arrival(f) || !charted_known ||
+        !*charted_known ||
+        (!charted &&
+         r.version != (recovering ? kFreedomRecoveryJumpTargetingVersion
+                                  : kFreedomNetworkJumpTargetingVersion)) ||
         !f.preview.volume || !f.preview.volume->clear() ||
         !f.point_assessment.clear() ||
         r.universe_seed != flight.origin.recipe.universe_seed ||

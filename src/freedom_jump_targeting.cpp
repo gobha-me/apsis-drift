@@ -1,7 +1,9 @@
 #include "apsis_drift/freedom_jump_targeting.hpp"
 
+#include "apsis_drift/atmospheric_flight.hpp"
 #include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
+#include "apsis_drift/terrain_impact.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -120,6 +122,37 @@ auto recovery_for(const FreedomJumpRequest& request,
   if (!result) return std::unexpected{Error::invalid_source};
   return *result;
 }
+auto charted_radius(const PlanetDescriptor& planet, CraftFrameRecipe recipe)
+    -> std::expected<double, Error> {
+  const auto atmosphere = resolve_atmospheric_flight_profile(planet);
+  const auto craft = resolve_craft_frame(recipe);
+  if (!atmosphere || !craft) return std::unexpected{Error::invalid_geometry};
+  const auto& properties = craft->properties;
+  V extent;
+  double* axes[]{&extent.x, &extent.y, &extent.z};
+  for (std::size_t axis = 0; axis < 3; ++axis) {
+    const double com = properties.center_of_mass_mm[axis];
+    *axes[axis] = std::max(std::abs(properties.hull_min_mm[axis] - com),
+                           std::abs(properties.hull_max_mm[axis] - com)) /
+                  1000.0;
+  }
+  // Bound the full rated envelope before exact endpoint alignment is known:
+  // opposed100 * rated2000m, plus recovery's maximum2000m. The separate100km
+  // shell margin is retained even at the nearest point of that envelope.
+  constexpr double maximum_scatter =
+      200'000.0 + kFreedomJumpRecoveryMaximumRadiusMillimetres / 1000.0;
+  constexpr double shell_margin = 100'000.0;
+  const double radius = planet.radius.value * 1000.0;
+  const double result = std::max(
+      1.5 * radius, radius +
+                        std::max(atmosphere->space_boundary_altitude_metres,
+                                 kTerrainMaximumElevationMetres) +
+                        norm(extent) + shell_margin + maximum_scatter);
+  if (!std::isfinite(result) || result <= radius ||
+      result > kRigidBodyMaximumPositionMetres)
+    return std::unexpected{Error::invalid_geometry};
+  return result;
+}
 } // namespace
 auto assess_freedom_jump_distance(double metres,
                                   IntersystemArrivalQuality quality)
@@ -173,11 +206,19 @@ auto assess_freedom_arrival_volume(const PhysicalLocalSystem& system,
 }
 auto preview_freedom_jump(const FreedomJumpRequest& r)
     -> std::expected<FreedomJumpPreview, FreedomJumpTargetingError> {
-  if (r.version == kFreedomRecoveryJumpTargetingVersion) {
+  const bool charted = r.version == kFreedomChartedJumpTargetingVersion;
+  if (charted ? (!r.charted_arrival ||
+                 r.charted_arrival->version != kFreedomChartedArrivalVersion ||
+                 !r.network)
+              : r.charted_arrival.has_value())
+    return std::unexpected{Error::unsupported_policy};
+  if (r.version == kFreedomRecoveryJumpTargetingVersion ||
+      (charted && r.recovery)) {
     if (!r.recovery) return std::unexpected{Error::unsupported_policy};
     auto baseline = r;
-    baseline.version = r.network ? kFreedomNetworkJumpTargetingVersion
-                                 : kFreedomJumpTargetingVersion;
+    baseline.version = charted     ? kFreedomChartedJumpTargetingVersion
+                       : r.network ? kFreedomNetworkJumpTargetingVersion
+                                   : kFreedomJumpTargetingVersion;
     baseline.recovery.reset();
     auto preview = preview_freedom_jump(baseline);
     if (!preview) return std::unexpected{preview.error()};
@@ -196,13 +237,15 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
           *preview->distance.envelope_radius_metres);
       if (!volume) return std::unexpected{volume.error()};
       preview->volume = std::move(*volume);
+      if (charted && !preview->volume->clear())
+        return std::unexpected{Error::invalid_geometry};
     }
     return preview;
   }
   if (r.recovery) return std::unexpected{Error::unsupported_policy};
   if ((r.version != kFreedomJumpTargetingVersion &&
-       r.version != kFreedomNetworkJumpTargetingVersion) ||
-      (r.version == kFreedomNetworkJumpTargetingVersion) !=
+       r.version != kFreedomNetworkJumpTargetingVersion && !charted) ||
+      (r.version == kFreedomNetworkJumpTargetingVersion || charted) !=
           r.network.has_value() ||
       (r.network &&
        !freedom_system_network_version_supported(r.network->version)))
@@ -219,6 +262,8 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
   if (!identity || r.craft != *identity)
     return std::unexpected{Error::invalid_owner};
   const auto route = generate_first_universe_route(r.universe_seed);
+  if (charted && r.destination == route.origin)
+    return std::unexpected{Error::invalid_destination};
   const auto current = r.source.frame.system;
   std::optional<FreedomSystemNetworkRoute> network_route;
   if (r.network) {
@@ -280,8 +325,14 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
     if (!ephemeris) return std::unexpected{Error::invalid_geometry};
     p.reference_planet = body.descriptor.id;
     p.nominal_arrival = ephemeris->position;
-    p.nominal_arrival.z += body.descriptor.radius.value * 1000.0 *
-                           kAssistedTargetArrivalStandoffRadii;
+    if (charted) {
+      const auto radius = charted_radius(body.descriptor, r.source.craft);
+      if (!radius) return std::unexpected{radius.error()};
+      p.nominal_arrival.z += *radius;
+    } else {
+      p.nominal_arrival.z += body.descriptor.radius.value * 1000.0 *
+                             kAssistedTargetArrivalStandoffRadii;
+    }
     p.arrival_velocity = {
         ephemeris->velocity.x + r.source.linear_velocity_metres_per_second.x,
         ephemeris->velocity.y + r.source.linear_velocity_metres_per_second.y,
@@ -328,12 +379,15 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
                                       *p.distance.envelope_radius_metres);
     if (!volume) return std::unexpected{volume.error()};
     p.volume = std::move(*volume);
+    if (charted && !p.volume->clear())
+      return std::unexpected{Error::invalid_geometry};
   }
   return p;
 }
 auto freeze_freedom_jump_arrival(const FreedomJumpRequest& r)
     -> std::expected<FrozenFreedomJumpArrival, FreedomJumpTargetingError> {
-  if (r.version == kFreedomRecoveryJumpTargetingVersion) {
+  if (r.version == kFreedomRecoveryJumpTargetingVersion ||
+      (r.version == kFreedomChartedJumpTargetingVersion && r.recovery)) {
     auto preview = preview_freedom_jump(r);
     if (!preview) return std::unexpected{preview.error()};
     if (!preview->distance.envelope_radius_metres)
@@ -341,8 +395,10 @@ auto freeze_freedom_jump_arrival(const FreedomJumpRequest& r)
     if (!preview->volume || !preview->volume->clear())
       return std::unexpected{Error::invalid_geometry};
     auto baseline = r;
-    baseline.version = r.network ? kFreedomNetworkJumpTargetingVersion
-                                 : kFreedomJumpTargetingVersion;
+    baseline.version = r.version == kFreedomChartedJumpTargetingVersion
+                           ? kFreedomChartedJumpTargetingVersion
+                       : r.network ? kFreedomNetworkJumpTargetingVersion
+                                   : kFreedomJumpTargetingVersion;
     baseline.recovery.reset();
     auto frozen = freeze_freedom_jump_arrival(baseline);
     if (!frozen) return std::unexpected{frozen.error()};

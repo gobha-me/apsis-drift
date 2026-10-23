@@ -174,6 +174,9 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
     result["request"]["network"] = {{"version", r.network->version}};
   if (r.recovery)
     result["request"]["recovery"] = detail::drive_json(*r.recovery);
+  if (r.charted_arrival)
+    result["request"]["charted_arrival"] = {
+        {"version", r.charted_arrival->version}};
   if (f.recovery) result["recovery"] = detail::uncertainty_json(*f.recovery);
   if (r.lineage)
     result["request"]["craft_lineage"] = {
@@ -183,11 +186,17 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
 }
 auto frozen_value(const Json& f)
     -> std::expected<FrozenFreedomJumpArrival, SaveSchemaError> {
+  const bool request_version = f.is_object() && f.contains("request") &&
+                               f["request"].is_object() &&
+                               f["request"].contains("version") &&
+                               f["request"]["version"].is_number_unsigned();
+  const bool charted =
+      request_version &&
+      f["request"]["version"] == kFreedomChartedJumpTargetingVersion;
   const bool recovering =
-      f.is_object() && f.contains("request") && f["request"].is_object() &&
-      f["request"].contains("version") &&
-      f["request"]["version"].is_number_unsigned() &&
-      f["request"]["version"] == kFreedomRecoveryJumpTargetingVersion;
+      request_version &&
+      (f["request"]["version"] == kFreedomRecoveryJumpTargetingVersion ||
+       (charted && f["request"].contains("recovery")));
   auto frozen_shape = f;
   if (recovering) {
     if (!f.contains("recovery"))
@@ -202,6 +211,7 @@ auto frozen_value(const Json& f)
   auto shape = r;
   shape.erase("craft_lineage");
   shape.erase("network");
+  if (charted) shape.erase("charted_arrival");
   if (recovering) {
     if (!r.contains("recovery"))
       return std::unexpected{failure("missing frozen recovery input")};
@@ -212,15 +222,27 @@ auto frozen_value(const Json& f)
       !uints(r, {"version", "universe_seed", "craft", "source_system",
                  "destination", "profile", "attempt"}) ||
       (r["version"] != kFreedomJumpTargetingVersion &&
-       r["version"] != kFreedomNetworkJumpTargetingVersion && !recovering) ||
+       r["version"] != kFreedomNetworkJumpTargetingVersion && !recovering &&
+       !charted) ||
       r["profile"] > static_cast<unsigned>(IntersystemRuleProfile::pilot))
     return std::unexpected{failure("unsupported frozen request")};
   FreedomJumpRequest request;
   request.version = r["version"].get<std::uint32_t>();
-  if (!recovering && (request.version == kFreedomNetworkJumpTargetingVersion) !=
-                         r.contains("network"))
+  if ((charted && !r.contains("network")) ||
+      (!recovering &&
+       ((request.version == kFreedomNetworkJumpTargetingVersion || charted) !=
+        r.contains("network"))))
     return std::unexpected{
         failure("frozen request network selection differs from policy")};
+  if (charted) {
+    if (!r.contains("charted_arrival") ||
+        !fields(r["charted_arrival"], {"version"}) ||
+        !uints(r["charted_arrival"], {"version"}) ||
+        r["charted_arrival"]["version"] != kFreedomChartedArrivalVersion)
+      return std::unexpected{
+          failure("invalid closed frozen charted arrival selection")};
+    request.charted_arrival = FreedomChartedArrivalSelection{};
+  }
   if (r.contains("network")) {
     const auto& network = r["network"];
     if (!fields(network, {"version"}) || !uints(network, {"version"}) ||
@@ -431,7 +453,8 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
     const auto& r = f.preview.request;
     const auto& before = *s.commitment_resources;
     if (!validate_frozen_freedom_jump_arrival(f) || !f.preview.volume ||
-        r.version == kFreedomRecoveryJumpTargetingVersion || r.recovery ||
+        r.version == kFreedomRecoveryJumpTargetingVersion ||
+        r.version == kFreedomChartedJumpTargetingVersion || r.recovery ||
         f.recovery || !f.preview.volume->clear() ||
         !f.point_assessment.clear() ||
         f.preview.arrival_tick >=

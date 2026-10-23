@@ -18,13 +18,6 @@ using Triangle = godot_spike::ContactTriangle;
 constexpr double kClearInflation = kTerrainImpactClearMarginMetres;
 constexpr double kMaximumTranslationMetres = 64.0;
 constexpr double kMaximumRotationChord = 0.018;
-// Version1 noise is a convex interpolation of signed16 values. Its weighted
-// field and sea threshold are each in [-32768,32767]; largest amplitude8500
-// gives <17000m elevation. Recipe2 continuously interpolates those unchanged
-// vertices and adds at most48+16+5=69m. 17070m includes binary64 rounding
-// slack. Both selected contact recipes use convex top triangles of these
-// vertices.
-constexpr double kTerrainMaximumElevationMetres = 17'070.0;
 
 struct Part {
   V center, half;

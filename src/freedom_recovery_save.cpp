@@ -686,6 +686,8 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
     knowledge.recipe.version = kFreedomTravelKnowledgeVersion;
     knowledge.recipe.world_domain = 1;
   }
+  // Personal arrival preference is copied with knowledge, including absence.
+  // Later explicit toggles are not immutable sensor facts of the retired craft.
   knowledge.recipe.craft_lineage = replacement.origin.lineage;
   if (knowledge.paid_operations) {
     const PaidIncomeCounts counts{

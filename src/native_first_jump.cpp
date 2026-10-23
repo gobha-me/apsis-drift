@@ -269,6 +269,14 @@ auto NativeFreedomFlightSession::jump_preview() const
     request.version = kFreedomRecoveryJumpTargetingVersion;
     request.recovery = resources_->drive;
   }
+  if (knowledge_->charted_arrivals) {
+    const auto charted = charted_arrival_view();
+    if (!charted) return std::unexpected{charted.error()};
+    if (charted->eligible) {
+      request.version = kFreedomChartedJumpTargetingVersion;
+      request.charted_arrival = knowledge_->charted_arrivals;
+    }
+  }
   request.source = document_.flight;
   request.destination = *travel_->selected;
   request.attempt = travel_->next_attempt;

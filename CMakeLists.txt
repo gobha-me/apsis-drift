@@ -236,6 +236,7 @@ add_library(apsis_drift_core STATIC
   src/native_orbital_survey.cpp
   src/native_survey_commissions.cpp
   src/native_paid_operations.cpp
+  src/native_charted_arrivals.cpp
   src/native_specimen_sales.cpp
   src/paid_operations.cpp
   src/survey_commissions.cpp
