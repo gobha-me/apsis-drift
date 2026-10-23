@@ -440,6 +440,24 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
     return std::unexpected{Error::oversized_ledger};
   if (auto v = validate_star_search(k, w, now); !v) return v;
   if (auto v = validate_station_stellar_lead(k, w, now); !v) return v;
+  if (k.survey_commissions) {
+    if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
+        !w.neighbor || w.neighbor->catalog.planets.empty() ||
+        !validate_survey_commissions(*k.survey_commissions, now))
+      return std::unexpected{Error::invalid_survey_commissions};
+    const auto valid_commission = [&](const SurveyCommission& commission) {
+      return commission.system == w.neighbor->catalog.id &&
+             commission.planet ==
+                 w.neighbor->catalog.planets.front().descriptor.id &&
+             (!commission.measurement ||
+              valid_sample_craft(w, commission.measurement->craft));
+    };
+    const auto& account = *k.survey_commissions;
+    if ((account.active && !valid_commission(*account.active)) ||
+        (account.latest_paid &&
+         !valid_commission(account.latest_paid->commission)))
+      return std::unexpected{Error::invalid_survey_commissions};
+  }
   if (k.derelicts) {
     const auto valid_craft = [&](const auto& record) {
       return !record || valid_sample_craft(w, record->craft);

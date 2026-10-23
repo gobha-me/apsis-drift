@@ -20,7 +20,7 @@ auto known_name(const FreedomKnowledge& knowledge, KnowledgeSubject target,
 }
 } // namespace
 
-auto NativeFreedomFlightSession::orbital_survey_conditions() const
+auto NativeFreedomFlightSession::orbital_measurement_conditions() const
     -> std::expected<void, std::string> {
   if (!knowledge_ ||
       (knowledge_->recipe.version != kFreedomObservedKnowledgeVersion &&
@@ -36,16 +36,6 @@ auto NativeFreedomFlightSession::orbital_survey_conditions() const
       (travel_ && travel_->phase != FreedomJumpPhase::idle))
     return std::unexpected{"Survey held: resume free flight aboard Wayfarer"};
   const auto planet = rotation_.rotation.planet;
-  if (knowledge_->orbital_surveys && knowledge_->orbital_surveys->active) {
-    const auto& active = *knowledge_->orbital_surveys->active;
-    if (active.system != system_.catalog.id || active.planet != planet ||
-        active.craft != document_.origin.state.craft)
-      return std::unexpected{"Survey held: target or source craft differs"};
-  } else if (known_name(*knowledge_, subject(system_.catalog.id, planet),
-                        document_.flight.tick)
-                 .empty()) {
-    return std::unexpected{"Identify the current planet before surveying it"};
-  }
   const auto physical =
       std::ranges::find_if(system_.catalog.planets, [&](const auto& p) {
         return p.descriptor.id == planet;
@@ -64,6 +54,23 @@ auto NativeFreedomFlightSession::orbital_survey_conditions() const
       distance <= radius + observed->atmosphere.space_boundary_altitude_metres)
     return std::unexpected{
         "Survey held: establish a bound orbit above the atmosphere"};
+  return {};
+}
+
+auto NativeFreedomFlightSession::orbital_survey_conditions() const
+    -> std::expected<void, std::string> {
+  if (auto ready = orbital_measurement_conditions(); !ready) return ready;
+  const auto planet = rotation_.rotation.planet;
+  if (knowledge_->orbital_surveys && knowledge_->orbital_surveys->active) {
+    const auto& active = *knowledge_->orbital_surveys->active;
+    if (active.system != system_.catalog.id || active.planet != planet ||
+        active.craft != document_.origin.state.craft)
+      return std::unexpected{"Survey held: target or source craft differs"};
+  } else if (known_name(*knowledge_, subject(system_.catalog.id, planet),
+                        document_.flight.tick)
+                 .empty()) {
+    return std::unexpected{"Identify the current planet before surveying it"};
+  }
   return {};
 }
 
@@ -209,7 +216,16 @@ auto NativeFreedomFlightSession::advance_player(
                       knowledge_->orbital_surveys->active;
   const bool stars =
       knowledge_ && knowledge_->star_search && knowledge_->star_search->active;
-  if (!survey && !stars) return advance_flight(controls, step);
+  const auto* commission = knowledge_ && knowledge_->survey_commissions &&
+                                   knowledge_->survey_commissions->active
+                               ? &*knowledge_->survey_commissions->active
+                               : nullptr;
+  const bool acquiring_commission =
+      commission && document_.flight.tick < commission->deadline_tick &&
+      (!commission->measurement || commission->measurement->acquired_ticks <
+                                       kSurveyCommissionMeasurementTicks);
+  if (!survey && !stars && !acquiring_commission)
+    return advance_flight(controls, step);
   // Only this outer transaction counts a committed flight interval. Recursive
   // frame/impact/aid integration cannot count twice, and a refused acquisition
   // cannot commit a partial physical step.
@@ -220,6 +236,12 @@ auto NativeFreedomFlightSession::advance_player(
     return std::unexpected{acquired.error()};
   if (auto acquired = candidate.advance_star_search_tick(); !acquired)
     return std::unexpected{acquired.error()};
+  // A frozen jump arrival installs a pose; its transit interval is not an
+  // ordinary orbital measurement interval. Acquisition can resume next tick.
+  if (!result->jump_arrived) {
+    if (auto acquired = candidate.advance_survey_commission_tick(); !acquired)
+      return std::unexpected{acquired.error()};
+  }
   *this = std::move(candidate);
   return result;
 }

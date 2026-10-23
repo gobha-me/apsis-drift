@@ -53,9 +53,16 @@ auto rotate(RigidOrientation q, V a) -> V {
           (1 - s * (q.x * q.x + q.y * q.y)) * a.z};
 }
 struct Fixtures {
-  NativeFreedomFlightSession station =
-      need(NativeFreedomFlightSession::open(need(native_new_game({42}))));
-  Fixtures() {
+  NativeFreedomFlightSession station;
+  explicit Fixtures(bool commission = false)
+      : station(need(NativeFreedomFlightSession::open(
+            commission ? need(native_planetary_network_new_game({42}))
+                       : need(native_new_game({42}))))) {
+    if (commission) {
+      const auto offer = need(station.survey_commission_view());
+      need(station.accept_survey_commission(offer.offer_until,
+                                            offer.offer_sequence));
+    }
     for (unsigned tick = 0; tick < 2960; ++tick)
       need(station.advance_walk({0, -1, 0}));
     need(station.begin_boarding());
@@ -344,6 +351,28 @@ auto run(const std::filesystem::path& output) -> void {
             bytes(resume(loss)) == bytes(loss),
         "Replacement station walking retains shared condition clock");
   need(loss.save_as(output / "recovered.json"));
+
+  // An actual catastrophic flight tick freezes its retired voyage before the
+  // outer acquisition hooks run. No held commission interval may mutate that
+  // pending-loss snapshot after it has been authenticated.
+  const Fixtures commissioned{true};
+  auto commissioned_loss = hit(commissioned.airborne(80, false));
+  check(commissioned_loss.recovery_pending() &&
+            commissioned_loss.knowledge()->survey_commissions &&
+            !commissioned_loss.knowledge()
+                 ->survey_commissions->active->measurement,
+        "Impact loss acquired work after freezing its retired voyage");
+  auto commissioned_pending = resume(commissioned_loss);
+  check(bytes(commissioned_pending) == bytes(commissioned_loss),
+        "Commission impact loss cannot preserve complete Save/Continue");
+  need(commissioned_loss.complete_recovery());
+  need(commissioned_pending.complete_recovery());
+  check(bytes(commissioned_loss) == bytes(commissioned_pending) &&
+            commissioned_loss.knowledge()->survey_commissions->paid_count ==
+                0 &&
+            !commissioned_loss.knowledge()
+                 ->survey_commissions->active->measurement,
+        "Commission impact recovery grants work, money or divergent state");
 }
 } // namespace
 

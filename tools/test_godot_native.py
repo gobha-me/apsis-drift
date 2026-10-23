@@ -841,6 +841,13 @@ def main(argv=None):
         if code != 0 or timed_out:
             print(f"FAIL authoritative orbital survey fixture: {log}", flush=True)
             return 1
+        required = ("survey-start", "survey-near", "survey-complete",
+                    "commission-station", "commission-accepted", "commission-near",
+                    "commission-complete", "commission-returned", "commission-paid",
+                    "commission-repeat", "commission-expired")
+        if any(not (phases / (name + ".json")).is_file() for name in required):
+            print(f"FAIL incomplete orbital survey/commission fixtures: {log}", flush=True)
+            return 1
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
         save()

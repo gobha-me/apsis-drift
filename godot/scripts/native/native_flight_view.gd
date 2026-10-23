@@ -37,6 +37,8 @@ const SurfaceLandmarks = preload("res://scripts/native/native_surface_landmarks.
 var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
+const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
+var commission_action_frame := -1
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const StarSearch = preload("res://scripts/native/native_star_search.gd")
 const DerelictView = preload("res://scripts/native/native_derelict_view.gd")
@@ -215,8 +217,19 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 	return Vector2(maxf(0.05, far_clip / 500000.0), far_clip)
 
 
+static func valid_commission_progress(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 5: return false
+	if not value.get("acquired_ticks") is int or value.acquired_ticks < 0 or value.acquired_ticks > 3600: return false
+	for key in ["active", "completed", "expired"]:
+		if not value.get(key) is bool: return false
+	if not NativeEnvironment.decimal(value.get("earnings")) or SurveyCommissions.decimal_before("429496729500", value.earnings): return false
+	if int(value.earnings) % 100 != 0 or value.completed != (value.acquired_ticks == 3600): return false
+	return value.active or (value.acquired_ticks == 0 and not value.completed and not value.expired)
+
+
 static func valid_state(value: Dictionary) -> bool:
 	if value.has("orbital_survey") and not OrbitalSurvey.valid(value.orbital_survey): return false
+	if value.has("survey_commission") and not valid_commission_progress(value.survey_commission): return false
 	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
 	if value.has("derelict") and not DerelictView.valid_packet(value.derelict): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
@@ -939,6 +952,7 @@ func layout_hud() -> void:
 
 
 func show_instruments() -> void:
+	if commissions_open(): return
 	pause_controls("Flight instruments and navigation.", false)
 	update_view(0.0)
 	if controls_menu != null: controls_menu.hide_menu()
@@ -978,6 +992,11 @@ func update_compact_hud() -> void:
 		var lines := primary_status.text.split("\n")
 		lines.insert(1, save_status.text.left(180) + ("…" if save_status.text.length() > 180 else ""))
 		primary_status.text = "\n".join(lines)
+	if state.has("survey_commission") and state.survey_commission.active:
+		var work: Dictionary = state.survey_commission
+		var commission_text := "Commission · " + ("deadline passed" if work.expired else "report ready · return and submit" if work.completed else "measurement %d/3600 ticks" % work.acquired_ticks)
+		primary_status.text += "\n" + commission_text
+		primary_status.tooltip_text += "\n" + commission_text
 	var survey_text := OrbitalSurvey.text(state.get("orbital_survey"))
 	if error.is_empty() and not surface_walking() and not observation_cue.text().is_empty():
 		# The completed survey already names the retained result and Records.
@@ -1128,6 +1147,8 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
+	controls_menu.commissions_button = controls_menu.add_button(survey_column, "Survey commissions", open_survey_commissions)
+	controls_menu.commissions_view.action_requested.connect(survey_commission_command)
 	setup_frame_diagnostics(survey_column)
 	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
@@ -1217,6 +1238,7 @@ func surface_conditions_text() -> String:
 
 
 func show_surface_conditions() -> void:
+	if commissions_open(): return
 	# This action is only in the paused controls menu; querying cannot advance
 	# the C++ clock, cancel an aid, or implicitly resume the flight.
 	if not paused or not focused: return
@@ -1554,7 +1576,52 @@ func sample_frame_diagnostics(delta: float) -> void:
 
 
 func marker_controls_available() -> bool:
-	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible)
+	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible) and (controls_menu.commissions_view == null or not controls_menu.commissions_view.visible)
+
+
+func commissions_open() -> bool:
+	return controls_menu != null and is_instance_valid(controls_menu.commissions_view) and controls_menu.commissions_view.visible
+
+
+func open_survey_commissions() -> void:
+	if not marker_controls_available() or mode_change_pending or not controls_menu.menu_margin.visible: return
+	var packet: Variant = bridge.get_freedom_survey_commissions()
+	if not SurveyCommissions.valid_packet(packet):
+		report_action_status("Survey commission terms are unavailable.")
+		return
+	controls_menu.entry_focus_frames = 0
+	controls_menu.menu_margin.hide()
+	controls_menu.commissions_view.open(packet)
+
+
+func survey_commission_command(action: String) -> void:
+	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or controls_menu == null or not controls_menu.panel.visible or controls_menu.commissions_view == null or not controls_menu.commissions_view.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return
+	if action not in ["accept", "submit", "abandon"] or commission_action_frame == Engine.get_process_frames(): return
+	observe_neutral_controls()
+	if not controls_armed: return
+	var reader: Control = controls_menu.commissions_view
+	var packet: Variant = bridge.get_freedom_survey_commissions()
+	if not SurveyCommissions.valid_packet(packet): return
+	for key in ["tick", "offer_until", "offer_sequence", "sequence", "system_id", "planet_id", "accepted_tick", "deadline_tick"]:
+		if packet[key] != reader.packet.get(key):
+			reader.refresh(packet)
+			return
+	var action_button: Button = {"accept": reader.accept_button, "submit": reader.submit_button, "abandon": reader.abandon_button}[action]
+	if not action_button.visible or action_button.disabled: return
+	if not packet.at_origin or not packet.get("can_" + action, false): return
+	commission_action_frame = Engine.get_process_frames()
+	var accepted: bool
+	if action == "accept":
+		accepted = bridge.accept_freedom_survey_commission(packet.offer_until, str(packet.offer_sequence))
+	else:
+		accepted = bridge.call("submit_freedom_survey_commission" if action == "submit" else "abandon_freedom_survey_commission", str(packet.sequence))
+	var updated: Variant = bridge.get_freedom_survey_commissions()
+	if SurveyCommissions.valid_packet(updated): reader.refresh(updated)
+	if not accepted: report_action_status(str(bridge.get_last_error()))
+	else:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+	reader.back.grab_focus()
 
 
 func orbital_survey_command(cancel := false) -> void:
@@ -1769,6 +1836,7 @@ func refresh_control_hint() -> void:
 
 
 func request_assistance(enabled: bool) -> void:
+	if commissions_open(): return
 	if surface_walking():
 		assist_button.set_pressed_no_signal(state.assistance)
 		save_status.text = "Return to the pilot seat to change flight assistance."
@@ -1798,6 +1866,7 @@ func report_action_status(message: String) -> void:
 
 
 func request_hold(enabled: bool) -> void:
+	if commissions_open(): return
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible or mode_change_pending:
 		return
 	if not bridge.set_freedom_hold(enabled):
@@ -1809,6 +1878,7 @@ func request_hold(enabled: bool) -> void:
 
 
 func open_save_dialog() -> void:
+	if commissions_open(): return
 	pause_controls("Save As preserves the last committed state.", false)
 	controls_menu.hide_menu()
 	save_dialog.popup_centered_ratio(0.75)
@@ -1874,6 +1944,7 @@ func recenter_camera() -> void:
 
 
 func unboard_requested() -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible or player_input == null: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -1889,6 +1960,7 @@ func unboard_requested() -> void:
 
 
 func select_moon_jump() -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -1903,6 +1975,7 @@ func select_moon_jump() -> void:
 
 
 func select_minor_jump() -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -1917,6 +1990,7 @@ func select_minor_jump() -> void:
 
 
 func select_jump_destination(ordinal: int) -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	var rows: Array = state.get("chart", {}).get("rows", [])
 	if ordinal < 0 or ordinal >= rows.size(): return
@@ -1928,6 +2002,7 @@ func select_jump_destination(ordinal: int) -> void:
 
 
 func jump_requested() -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -1943,6 +2018,7 @@ func jump_requested() -> void:
 
 
 func port_command(command: String, ordinal: int = 0) -> void:
+	if commissions_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
@@ -1991,6 +2067,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 
 
 func enable_impacts() -> void:
+	if commissions_open(): return
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible:
 		return
 	if not bridge.enable_freedom_impact_consequences():
@@ -2453,6 +2530,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	else:
 		resource_status.text = "Historical save · resource recipe unselected"
 		service_button.visible = false
+	if state.has("survey_commission"):
+		resource_status.text += "\nSurvey earnings: %s prototype credits" % state.survey_commission.earnings
 	var chart: Dictionary = state.get("chart", {})
 	var acquired_chart: bool = state.get("star_search", {}).get("selected", false)
 	chart_button.text = "Navigation chart" if acquired_chart else "Starting chart"

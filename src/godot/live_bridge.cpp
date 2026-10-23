@@ -464,6 +464,19 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("return_from_freedom_surface_walk"),
         &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_survey_commissions"),
+        &FreedomBridge::get_freedom_survey_commissions);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("accept_freedom_survey_commission", "offer_until",
+                        "sequence"),
+        &FreedomBridge::accept_freedom_survey_commission);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("submit_freedom_survey_commission", "sequence"),
+        &FreedomBridge::submit_freedom_survey_commission);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("abandon_freedom_survey_commission", "sequence"),
+        &FreedomBridge::abandon_freedom_survey_commission);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_orbital_survey"),
                                 &FreedomBridge::begin_freedom_orbital_survey);
     godot::ClassDB::bind_method(
@@ -1710,6 +1723,53 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  static auto commission_sequence(const godot::Variant& value)
+      -> std::optional<std::uint32_t> {
+    if (value.get_type() != godot::Variant::STRING) return std::nullopt;
+    const auto word = identity_word(static_cast<godot::String>(value));
+    if (!word || !*word || *word > std::numeric_limits<std::uint32_t>::max())
+      return std::nullopt;
+    return static_cast<std::uint32_t>(*word);
+  }
+  auto accept_freedom_survey_commission(const godot::Variant& until,
+                                        const godot::Variant& sequence)
+      -> bool {
+    const auto number = commission_sequence(sequence);
+    if (until.get_type() != godot::Variant::STRING) {
+      last_error = "Commission terms require canonical decimal strings";
+      return false;
+    }
+    const auto tick = identity_word(static_cast<godot::String>(until));
+    if (!number || !tick) {
+      last_error = "Commission terms require canonical decimal strings";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.accept_survey_commission(*tick, *number);
+    });
+  }
+  auto submit_freedom_survey_commission(const godot::Variant& sequence)
+      -> bool {
+    const auto number = commission_sequence(sequence);
+    if (!number) {
+      last_error = "Commission sequence requires a canonical decimal string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.submit_survey_commission(*number);
+    });
+  }
+  auto abandon_freedom_survey_commission(const godot::Variant& sequence)
+      -> bool {
+    const auto number = commission_sequence(sequence);
+    if (!number) {
+      last_error = "Commission sequence requires a canonical decimal string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.abandon_survey_commission(*number);
+    });
+  }
   auto begin_freedom_orbital_survey() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.begin_orbital_survey();
@@ -2131,6 +2191,10 @@ class FreedomBridge : public godot::RefCounted {
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = project_moon_surface_walk_actor(selected);
     result["orbital_survey"] = project_orbital_survey(selected.session);
+    if (selected.session.knowledge() &&
+        selected.session.knowledge()->survey_commissions)
+      result["survey_commission"] =
+          project_commission_progress(selected.session);
     result["star_search"] = project_star_search(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
@@ -2301,6 +2365,10 @@ class FreedomBridge : public godot::RefCounted {
     result["boarding"] = project_boarding_state(selected);
     result["surface_walk"] = godot::Dictionary{};
     result["orbital_survey"] = project_orbital_survey(selected.session);
+    if (selected.session.knowledge() &&
+        selected.session.knowledge()->survey_commissions)
+      result["survey_commission"] =
+          project_commission_progress(selected.session);
     result["star_search"] = project_star_search(selected.session);
     result["surface_marker"] =
         project_surface_marker(selected, view.system_axes);
@@ -2791,6 +2859,60 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
+  auto get_freedom_survey_commissions() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.survey_commission_view();
+    if (!view) return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = 1;
+    result["supported"] = view->supported;
+    result["selected"] = view->selected;
+    result["at_origin"] = view->at_origin;
+    result["can_accept"] = view->can_accept;
+    result["can_submit"] = view->can_submit;
+    result["can_abandon"] = view->can_abandon;
+    result["completed"] = view->completed;
+    result["expired"] = view->expired;
+    result["sequence"] = static_cast<std::int64_t>(view->sequence);
+    result["offer_sequence"] = static_cast<std::int64_t>(view->offer_sequence);
+    result["acquired_ticks"] = static_cast<std::int64_t>(view->acquired_ticks);
+    result["required_ticks"] =
+        static_cast<std::int64_t>(kSurveyCommissionMeasurementTicks);
+    result["reward_credits"] =
+        static_cast<std::int64_t>(kSurveyCommissionRewardCredits);
+    result["tick"] = decimal(view->tick);
+    result["offer_until"] = decimal(view->offer_until);
+    result["accepted_tick"] = decimal(view->accepted_tick);
+    result["deadline_tick"] = decimal(view->deadline_tick);
+    result["earnings"] = decimal(view->earnings);
+    result["system_id"] = decimal(view->system.value);
+    result["planet_id"] = decimal(view->planet.value);
+    result["body_name"] = godot::String{view->body_name.c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    result["last_payment"] = godot::String{view->last_payment.c_str()};
+    return result;
+  }
+  static auto project_commission_progress(
+      const NativeFreedomFlightSession& session) -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!session.knowledge() || !session.knowledge()->survey_commissions)
+      return result;
+    const auto& account = *session.knowledge()->survey_commissions;
+    const auto count = account.active && account.active->measurement
+                           ? account.active->measurement->acquired_ticks
+                           : 0U;
+    result["acquired_ticks"] = static_cast<std::int64_t>(count);
+    result["completed"] = count == kSurveyCommissionMeasurementTicks;
+    result["expired"] = account.active && session.document().flight.tick >=
+                                              account.active->deadline_tick;
+    result["earnings"] = godot::String{
+        std::to_string(survey_commission_earnings(account)).c_str()};
+    result["active"] = account.active.has_value();
+    return result;
+  }
   static auto project_star_search(const NativeFreedomFlightSession& session)
       -> godot::Dictionary {
     const auto view = session.star_search_view();
@@ -3141,6 +3263,10 @@ class FreedomBridge : public godot::RefCounted {
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
       result["orbital_survey"] = project_orbital_survey(selected.session);
+      if (selected.session.knowledge() &&
+          selected.session.knowledge()->survey_commissions)
+        result["survey_commission"] =
+            project_commission_progress(selected.session);
       result["star_search"] = project_star_search(selected.session);
       result["surface_marker"] =
           project_surface_marker(selected, view.system_axes);

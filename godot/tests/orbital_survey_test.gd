@@ -219,5 +219,7 @@ func run() -> void:
 	shell.free()
 	owner = null
 	await process_frame
+	var commissions := preload("res://tests/survey_commissions_test.gd").new()
+	failures += await commissions.run(self, args[0], args[1], output.path_join("commissions"))
 	print("Orbital survey checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

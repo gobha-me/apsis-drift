@@ -5,6 +5,11 @@
 #include <iostream>
 #include <limits>
 
+namespace apsis_drift {
+auto run_native_survey_commission_scenario(
+    const std::optional<std::filesystem::path>& output) -> void;
+}
+
 namespace {
 using namespace apsis_drift;
 unsigned checks{};
@@ -212,6 +217,7 @@ int main(int argc, char** argv) {
       throw std::runtime_error("Expected --fixtures DIRECTORY or no arguments");
     }
     core(output);
+    apsis_drift::run_native_survey_commission_scenario(output);
     std::cout << "Orbital survey: " << checks << " checks, 0 failures\n";
     return 0;
   } catch (const std::exception& error) {
