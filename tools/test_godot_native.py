@@ -854,6 +854,14 @@ def main(argv=None):
                for name in paid_required):
             print(f"FAIL incomplete paid operating fixtures: {log}", flush=True)
             return 1
+        sale_required = ("sale-origin-one", "sale-earning-one", "sale-enrolled",
+                         "sale-origin-paid", "sale-paid-one", "sale-origin-four",
+                         "sale-paid-four", "sale-remote", "sale-recovered",
+                         "sale-service-source", "sale-service-paid")
+        if any(not (phases / "specimen-sales" / (name + ".json")).is_file()
+               for name in sale_required):
+            print(f"FAIL incomplete specimen buyer fixtures: {log}", flush=True)
+            return 1
         report["setup"][-1]["files_sha256"] = {
             path.relative_to(phases).as_posix(): sha256(path)
             for path in sorted(phases.rglob("*.json"))}

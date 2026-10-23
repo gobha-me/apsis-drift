@@ -39,6 +39,7 @@ const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
+const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
 var commission_action_frame := -1
 const OrbitalSurvey = preload("res://scripts/native/native_orbital_survey.gd")
 const StarSearch = preload("res://scripts/native/native_star_search.gd")
@@ -1153,6 +1154,8 @@ func setup_controls() -> void:
 	controls_menu.commissions_view.action_requested.connect(survey_commission_command)
 	controls_menu.commissions_view.paid_open_requested.connect(open_paid_operations)
 	controls_menu.commissions_view.paid_action_requested.connect(paid_operations_command)
+	controls_menu.commissions_view.sale_open_requested.connect(open_specimen_sale)
+	controls_menu.commissions_view.sale_action_requested.connect(specimen_sale_command)
 	setup_frame_diagnostics(survey_column)
 	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
@@ -1459,7 +1462,12 @@ func show_field_samples() -> void:
 	text += "\nFIELD NOTES · %d sites\n" % journal.size()
 	for index in journal.size():
 		text += "%d. %s · %s\n" % [index + 1, journal[index].label, journal[index].source_name]
-	text += "\nInspect an exposure, then collect within 8 metres on supported ground. Discard from controls to free a slot. Collection notes survive discarded or lost specimens. Specimens have no sale value or material analysis in this slice."
+	text += "\nInspect an exposure, then collect within 8 metres on supported ground. Discard from controls to free a slot. First collection notes survive discarded, sold or lost specimens."
+	var buyer: Variant = bridge.get_freedom_specimen_sale() if bridge.has_method("get_freedom_specimen_sale") else {}
+	if SpecimenSale.valid_packet(buyer) and buyer.supported:
+		text += " At Origin, the paused Survey commissions office offers a provisional buyer for actual carried specimens; notes alone cannot be sold. No material analysis is provided."
+	else:
+		text += " Specimens have no sale value or material analysis in this journey."
 	controls_menu.show_surface_reference(text, sample_pouch_button, "FIELD SAMPLES")
 
 
@@ -1599,10 +1607,11 @@ func open_survey_commissions() -> void:
 	controls_menu.menu_margin.hide()
 	controls_menu.commissions_view.open(packet)
 	refresh_paid_operations()
+	refresh_specimen_sale()
 
 
 func survey_commission_command(action: String) -> void:
-	if commissions_open() and controls_menu.commissions_view.paid_open(): return
+	if commissions_open() and controls_menu.commissions_view.service_child_open(): return
 	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or controls_menu == null or not controls_menu.panel.visible or controls_menu.commissions_view == null or not controls_menu.commissions_view.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return
 	if action not in ["accept", "submit", "abandon"] or commission_action_frame == Engine.get_process_frames(): return
 	observe_neutral_controls()
@@ -1626,6 +1635,7 @@ func survey_commission_command(action: String) -> void:
 	var updated: Variant = bridge.get_freedom_survey_commissions()
 	if SurveyCommissions.valid_packet(updated): reader.refresh(updated)
 	refresh_paid_operations()
+	refresh_specimen_sale()
 	if not accepted: report_action_status(str(bridge.get_last_error()))
 	else:
 		state = bridge.get_freedom_flight_state()
@@ -1653,7 +1663,7 @@ func paid_operations_controls_available() -> bool:
 
 
 func open_paid_operations() -> void:
-	if not paid_operations_controls_available() or controls_menu.commissions_view.paid_open(): return
+	if not paid_operations_controls_available() or controls_menu.commissions_view.service_child_open(): return
 	refresh_paid_operations()
 	if controls_menu.commissions_view.paid_packet.is_empty():
 		report_action_status("Paid operating terms are unavailable.")
@@ -1662,7 +1672,7 @@ func open_paid_operations() -> void:
 
 
 func paid_operations_command(action: String) -> void:
-	if not paid_operations_controls_available() or not controls_menu.commissions_view.paid_open() or commission_action_frame == Engine.get_process_frames(): return
+	if not paid_operations_controls_available() or not controls_menu.commissions_view.paid_open() or controls_menu.commissions_view.sale_open() or commission_action_frame == Engine.get_process_frames(): return
 	if action not in ["enable", "purchase", "retainer"]: return
 	var office: Control = controls_menu.commissions_view
 	var reader: Control = office.paid_view
@@ -1683,12 +1693,54 @@ func paid_operations_command(action: String) -> void:
 	var after: Variant = bridge.get_freedom_survey_commissions()
 	office.refresh(after if SurveyCommissions.valid_packet(after) else {})
 	refresh_paid_operations()
+	refresh_specimen_sale()
 	reader.refresh(office.paid_packet)
 	reader.back.grab_focus()
 	if accepted:
 		state = bridge.get_freedom_flight_state()
 		update_view(0.0)
 	report_action_status("Paid operating action recorded. The journey remains paused." if accepted else "Paid operating action refused: " + str(bridge.get_last_error()))
+
+
+func refresh_specimen_sale() -> void:
+	var value: Variant = bridge.get_freedom_specimen_sale() if bridge.has_method("get_freedom_specimen_sale") else {}
+	controls_menu.commissions_view.refresh_sale(value if SpecimenSale.valid_packet(value) and value.tick == state.get("tick") else {})
+
+
+func open_specimen_sale() -> void:
+	if not paid_operations_controls_available() or controls_menu.commissions_view.service_child_open(): return
+	refresh_specimen_sale()
+	if controls_menu.commissions_view.sale_packet.is_empty():
+		report_action_status("Specimen buyer terms are unavailable.")
+		return
+	controls_menu.commissions_view.open_sale(controls_menu.commissions_view.sale_packet)
+
+
+func specimen_sale_command(action: String = "sell") -> void:
+	if action != "sell" or not paid_operations_controls_available() or not controls_menu.commissions_view.sale_open() or controls_menu.commissions_view.paid_open() or commission_action_frame == Engine.get_process_frames(): return
+	var office: Control = controls_menu.commissions_view
+	var reader: Control = office.sale_view
+	if not reader.sell_button.visible or reader.sell_button.disabled: return
+	var reviewed: Dictionary = reader.packet
+	refresh_specimen_sale()
+	var fresh: Dictionary = office.sale_packet
+	if fresh.is_empty() or fresh != reviewed:
+		reader.refresh(fresh)
+		reader.back.grab_focus()
+		report_action_status("Specimen quote changed. Review the refreshed page before confirming.")
+		return
+	if not fresh.at_origin or not fresh.can_sell: return
+	commission_action_frame = Engine.get_process_frames()
+	var accepted: bool = bridge.sell_freedom_specimens(reviewed.token)
+	refresh_paid_operations()
+	refresh_specimen_sale()
+	reader.refresh(office.sale_packet)
+	reader.back.grab_focus()
+	if accepted:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+		refresh_field_samples()
+	report_action_status("Specimens sold; first field notes retained. The journey remains paused." if accepted else "Specimen sale refused: " + str(bridge.get_last_error()))
 
 
 func orbital_survey_command(cancel := false) -> void:

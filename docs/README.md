@@ -33,6 +33,7 @@ player's station-to-flight journey.
 - [Station crew](STATION_CREW.md): optional conversations, nearby remarks and selected pixel art.
 - [Survey commissions](SURVEY_COMMISSIONS.md): optional fresh measurements and retained earnings.
 - [Paid operations](PAID_OPERATIONS.md): separately selected fuel quotes, berth bills, operating support and replacement excess.
+- [Origin specimen buyer](SPECIMEN_SALES.md): sell physical pouch contents, retain notes and settle income explicitly.
 - [Saved flight](SAVED_NATIVE_FLIGHT.md), [in-game Load](NATIVE_LOAD.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
 - [System-frame flight import](SYSTEM_FLIGHT_IMPORT.md): explicit owner validation and same-tick conversion into native flight.
 - [Release-selected system flight](RIGID_FRAME_HANDOFF.md#explicit-release-selected-system-flight): explicit canonical system storage through actual undocking, controlled ticks, full saves and capture.

@@ -155,6 +155,14 @@ struct NativeSurveyCommissionView {
   std::string body_name, note, last_payment;
 };
 
+struct NativeSpecimenSaleView {
+  bool supported{}, at_origin{}, paid_selected{}, can_sell{};
+  std::uint32_t carried_count{}, capacity{4};
+  std::uint64_t unit_credits{40}, gross_credits{}, earned_credits{},
+      insurance_credits{}, tab_credits{}, net_credits{}, cash_after{};
+  SimulationTick tick{};
+  std::string token, note, contents;
+};
 struct NativePaidOperationsView {
   bool supported{}, selected{}, at_origin{}, can_enable{}, can_purchase{},
       can_retainer{};
@@ -270,6 +278,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto jump_available() const -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto specimen_sale_view() const
+      -> std::expected<NativeSpecimenSaleView, std::string>;
+  [[nodiscard]] auto sell_specimens(std::string_view token)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto paid_operations_view() const
       -> std::expected<NativePaidOperationsView, std::string>;
@@ -515,6 +527,8 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto paid_operations_token() const -> std::string;
   [[nodiscard]] auto paid_operations_generation() const -> std::uint64_t;
   [[nodiscard]] auto survey_paid_count() const -> std::uint32_t;
+  [[nodiscard]] auto paid_income_counts() const -> PaidIncomeCounts;
+  [[nodiscard]] auto specimen_sale_token() const -> std::string;
   [[nodiscard]] auto commit_survey_commission_account(SurveyCommissionAccount)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const
