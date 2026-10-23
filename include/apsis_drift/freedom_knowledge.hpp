@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/freedom_charted_arrival.hpp"
 #include "apsis_drift/freedom_derelict.hpp"
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
@@ -320,6 +321,7 @@ struct FreedomKnowledge {
   // Explicit personal operating profile; absence preserves historical saves.
   std::optional<PaidOperationsAccount> paid_operations{};
   std::optional<FreedomSpecimenSalesAccount> specimen_sales{};
+  std::optional<FreedomChartedArrivalSelection> charted_arrivals{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -346,7 +348,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_station_stellar_lead,
   invalid_survey_commissions,
   invalid_paid_operations,
-  invalid_specimen_sales
+  invalid_specimen_sales,
+  invalid_charted_arrivals
 };
 
 struct KnownIdentity {
@@ -431,6 +434,13 @@ struct FreedomKnownPlanetRow {
 [[nodiscard]] auto validate_freedom_knowledge(const FreedomKnowledge&,
                                               SimulationTick now)
     -> std::expected<void, FreedomKnowledgeError>;
+// Authenticate the complete ledger at now, then inspect retained evidence at
+// the immutable request source tick. Query(now=source_tick) is not historical.
+[[nodiscard]] auto freedom_charted_arrival_known_at(const FreedomKnowledge&,
+                                                    SystemId, PlanetId,
+                                                    SimulationTick source_tick,
+                                                    SimulationTick now)
+    -> std::expected<bool, FreedomKnowledgeError>;
 // Local application observations only. #189 owns actual equipment/scan and
 // arrival triggers. Presentation has no writer; no probe/mission sources yet.
 [[nodiscard]] auto apply_freedom_knowledge(const FreedomKnowledge&,

@@ -225,5 +225,7 @@ func run() -> void:
 	failures += await paid.run(self, args[0], args[1], output.path_join("paid-operations"))
 	var buyer := preload("res://tests/specimen_sale_test.gd").new()
 	failures += await buyer.run(self, args[0], args[1], output.path_join("specimen-sales"))
+	var charted := preload("res://tests/charted_arrivals_test.gd").new()
+	failures += await charted.run(self, args[0], args[1], output.path_join("charted-arrivals"))
 	print("Orbital survey checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

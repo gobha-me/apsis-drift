@@ -155,6 +155,11 @@ struct NativeSurveyCommissionView {
   std::string body_name, note, last_payment;
 };
 
+struct NativeChartedArrivalView {
+  bool supported{}, enabled{}, eligible{};
+  std::string note;
+};
+
 struct NativeSpecimenSaleView {
   bool supported{}, at_origin{}, paid_selected{}, can_sell{};
   std::uint32_t carried_count{}, capacity{4};
@@ -278,6 +283,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto jump_available() const -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto charted_arrival_view() const
+      -> std::expected<NativeChartedArrivalView, std::string>;
+  [[nodiscard]] auto set_charted_arrivals(bool enabled)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto specimen_sale_view() const
       -> std::expected<NativeSpecimenSaleView, std::string>;

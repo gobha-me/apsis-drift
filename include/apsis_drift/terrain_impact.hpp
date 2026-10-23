@@ -9,6 +9,14 @@ inline constexpr std::uint32_t kTerrainImpactColliderVersion{1};
 inline constexpr std::uint32_t kTerrainImpactMaximumCells{128};
 inline constexpr double kTerrainImpactClearMarginMetres{0.05};
 inline constexpr double kTerrainImpactResponseRetreatMetres{0.002};
+// Terrain1 noise is a convex interpolation of signed16 values. Its weighted
+// field and sea threshold each lie in [-32768,32767]; maximum amplitude8500
+// gives <17000m elevation. Terrain2 adds at most48+16+5=69m to continuous
+// interpolation of unchanged vertices. 17070m includes binary64 rounding
+// slack. Supported contact top triangles are convex combinations of these
+// vertices. Shared conservative ceiling for terrain/contact policies1–3;
+// this is not a lower bound, atmosphere boundary or secondary-body guarantee.
+inline constexpr double kTerrainMaximumElevationMetres{17'070.0};
 
 enum class CraftImpactRegion : std::uint8_t {
   forebody = 1,

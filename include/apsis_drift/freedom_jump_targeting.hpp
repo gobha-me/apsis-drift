@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "apsis_drift/freedom_charted_arrival.hpp"
 #include "apsis_drift/freedom_jump_recovery.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/rigid_body.hpp"
@@ -14,6 +15,7 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomJumpTargetingVersion{1};
 inline constexpr std::uint32_t kFreedomNetworkJumpTargetingVersion{2};
 inline constexpr std::uint32_t kFreedomRecoveryJumpTargetingVersion{3};
+inline constexpr std::uint32_t kFreedomChartedJumpTargetingVersion{4};
 inline constexpr std::uint64_t kFreedomJumpRatedLightSeconds{360'000};
 inline constexpr std::uint64_t kFreedomJumpRatedMetres{
     kFreedomJumpRatedLightSeconds * kMetresPerLightSecond};
@@ -50,6 +52,7 @@ struct FreedomJumpRequest {
   std::optional<FreedomCraftLineage> lineage{};
   std::optional<FreedomNetworkSelection> network{};
   std::optional<FreedomDriveRecoveryState> recovery{};
+  std::optional<FreedomChartedArrivalSelection> charted_arrival{};
   friend auto operator==(const FreedomJumpRequest&, const FreedomJumpRequest&)
       -> bool = default;
 };

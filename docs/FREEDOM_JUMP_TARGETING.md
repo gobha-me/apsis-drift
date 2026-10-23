@@ -6,6 +6,10 @@ from [the starting chart](FREEDOM_TOPOLOGY.md). The [native travel consumer](FRE
 in-range jumps in Godot. Existing jump-version-4 contracts, missions and saved games retain
 their previous behavior.
 
+The separately selected [closer charted arrival](CHARTED_ARRIVALS.md) policy
+adds request version 4 for known non-Origin primary planets. The original
+geometry below remains the wide-arrival baseline for earlier requests.
+
 The native runtime Flight assistance setting selects this request's compensation
 profile: on selects Assisted, off selects Advanced. It remains a runtime setting,
 separate from the retained terminal career choice in

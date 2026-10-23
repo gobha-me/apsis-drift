@@ -436,6 +436,8 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
           {"sold_tick", sales.latest.sold_tick},
           {"specimens", std::move(specimens)}}}};
   }
+  if (k.charted_arrivals)
+    root["charted_arrivals"] = {{"version", k.charted_arrivals->version}};
   if (k.station_stellar_lead) {
     const auto& lead = *k.station_stellar_lead;
     root["station_stellar_lead"] = {{"version", lead.version},
@@ -484,6 +486,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("paid_operations");
   const bool sales_selected =
       root->is_object() && root->contains("specimen_sales");
+  const bool charted_selected =
+      root->is_object() && root->contains("charted_arrivals");
   const bool lead_selected =
       root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
@@ -500,6 +504,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (commissions_selected) root_shape.erase("survey_commissions");
   if (paid_selected) root_shape.erase("paid_operations");
   if (sales_selected) root_shape.erase("specimen_sales");
+  if (charted_selected) root_shape.erase("charted_arrivals");
   if (!fields(root_shape, {"recipe", "entries"}) ||
       !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
@@ -903,6 +908,18 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     k.specimen_sales = FreedomSpecimenSalesAccount{
         sales["version"].get<std::uint32_t>(),
         sales["sold_count"].get<std::uint32_t>(), std::move(receipt)};
+  }
+  if (charted_selected) {
+    const auto& selected = (*root)["charted_arrivals"];
+    if (!network ||
+        !freedom_knowledge_has_planetary_chart(
+            r["version"].get<std::uint32_t>()) ||
+        !fields(selected, {"version"}) ||
+        !unsigned_fields(selected, {"version"}) ||
+        selected["version"] != kFreedomChartedArrivalVersion)
+      return std::unexpected{
+          failure("invalid closed charted arrival selection")};
+    k.charted_arrivals = FreedomChartedArrivalSelection{};
   }
   if (lead_selected) {
     const auto& lead = (*root)["station_stellar_lead"];

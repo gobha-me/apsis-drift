@@ -485,7 +485,7 @@ def validate_report(report, path, metadata, selected, m, runner):
         cli_logs += [f"surface-loop-refusal-{i}.log" for i in range(11)]
     for name in runner.ROUNDTRIP_TESTS:
         if name in selected:
-            cli_logs += [f"{name}-refusal-{i}.log" for i in range(17)]
+            cli_logs += [f"{name}-refusal-{i}.log" for i in range(20)]
     require(all(name in logs for name in cli_logs), "Missing CLI refusal evidence")
     if "native_first_flight_continuation" in selected:
         source = next(r for r in report["setup"] if r.get("family") == "native_first_flight_continuation")["continuation_source"]

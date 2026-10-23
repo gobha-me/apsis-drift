@@ -141,6 +141,13 @@ insurance-first income. Existing technical journeys remain free until explicit
 enrollment. Full economy profitability and procedural-start viability remain
 [#293](https://github.com/gobha-me/apsis-drift/issues/293) work.
 
+2026-10-23 engineering follow-through: [closer charted arrivals](CHARTED_ARRIVALS.md)
+([#692](https://github.com/gobha-me/apsis-drift/issues/692)) adds an explicit
+navigation choice for known primary planets after measuring a long survey
+approach. Existing journeys retain wide arrivals until selection. Source
+velocity and manual orbital handling remain; time acceleration, price balance
+and the broader hazard policies stay separate.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the
