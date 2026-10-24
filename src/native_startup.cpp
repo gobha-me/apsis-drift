@@ -421,6 +421,24 @@ auto native_origin_assistance_new_game(Seed seed, std::uint32_t chart_kind,
   return native_select_save_document(std::move(*assistance));
 }
 
+auto native_derelict_recovery_new_game(Seed seed, std::uint32_t drive_kind,
+                                       bool origin_service)
+    -> std::expected<NativeStartup, std::string> {
+  if (drive_kind > 2) return std::unexpected{"Unsupported drive choice"};
+  auto selected = drive_kind == 2   ? native_jump_strain_new_game(seed, 3)
+                  : drive_kind == 1 ? native_jump_recovery_new_game(seed, 3)
+                                    : native_uncharted_network_new_game(seed);
+  if (!selected) return std::unexpected{selected.error()};
+  auto* voyage = std::get_if<FreedomKnowledgeSaveDocument>(&selected->document);
+  if (!voyage) return std::unexpected{"Unsupported initial recovery voyage"};
+  voyage->knowledge.derelict_recovery.emplace();
+  if (!origin_service)
+    return native_select_save_document(std::move(selected->document));
+  auto assistance = make_freedom_assistance_document(std::move(*voyage));
+  if (!assistance) return std::unexpected{assistance.error().detail};
+  return native_select_save_document(std::move(*assistance));
+}
+
 auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);

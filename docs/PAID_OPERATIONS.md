@@ -72,3 +72,13 @@ leaving 148 credits, full stores and a newly accepted job with no reused work.
 Submission refuses without changing the Save; explicit abandonment grants no
 payment. This measures one unexpired unsuccessful attempt, not deadline expiry
 or general starting viability. Previous reference data remains unchanged.
+
+## Optional recovered-canister income
+
+The separately selected [derelict recovery prototype](DERELICT_RECOVERY.md)
+adds one finite canister sale at Origin for a provisional 100 credits. Actual
+sale or explicit enrollment with earlier canister income selects paid-v3;
+reading, selection and Continue do not. Paid-v3 adds its settled canister counter
+and retains the specimen counter, including zero. Earlier v1/v2 accounts keep
+their original shapes and meanings. Existing insurance-first/tab settlement,
+opening credit, fuel/berth prices and recovery excess are unchanged.

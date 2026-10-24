@@ -1,4 +1,15 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  foreach(recovery_case IN ITEMS freedom-derelict-recovery paid-canister-income derelict-recovery-save derelict-recovery-loss native-derelict-recovery)
+    string(REPLACE "-" "_" recovery_source "${recovery_case}")
+    add_executable(apsis-drift-${recovery_case}-tests test/${recovery_source}_test.cpp)
+    target_include_directories(apsis-drift-${recovery_case}-tests PRIVATE src)
+    target_link_libraries(apsis-drift-${recovery_case}-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+    target_compile_options(apsis-drift-${recovery_case}-tests PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+    add_test(NAME ${recovery_case}-contract COMMAND apsis-drift-${recovery_case}-tests)
+    set_tests_properties(${recovery_case}-contract PROPERTIES TIMEOUT 120)
+  endforeach()
+
   add_executable(apsis-drift-native-quiet-travel-tests
     test/native_quiet_travel_test.cpp)
   target_include_directories(apsis-drift-native-quiet-travel-tests PRIVATE src)

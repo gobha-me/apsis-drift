@@ -180,8 +180,10 @@ speed; fly there manually. **Inspect derelict exterior** becomes available at
 actions add no elapsed time, fuel or navigation facts. Resume explicitly to fly.
 
 The short exterior condition note persists through Save/Continue and ordinary
-craft recovery. This is a prototype exterior inspection: the hull has no
-collision response, boarding route, repair, towing, loot or sale value. Observe
+craft recovery. The hull has no collision response, boarding route, repair,
+towing or ship sale. The separately selected [recovery prototype](DERELICT_RECOVERY.md)
+can retrieve one service canister; ordinary inspection and older journeys have
+no cargo or sale interaction. Observe
 the indicated stand-off. The admitted Wayfarer model has retracted gear and no
 pilot or exhaust; its pose comes from C++ at the committed tick. Retained notes
 do not expose a moving remote pose when visiting another body.

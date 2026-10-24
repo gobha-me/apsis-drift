@@ -33,6 +33,7 @@ var reference: Control
 var chooser: FileDialog
 var theme_owner: Theme
 var origin_service_choice: CheckButton
+var derelict_recovery_choice: CheckButton
 var busy := false
 var focused := true
 var readable_scale := -1.0
@@ -113,6 +114,14 @@ func _ready() -> void:
 	origin_service_choice.text = "Origin fuel service · prototype"
 	origin_service_choice.tooltip_text = "One service Wayfarer, with finite fuel and jump charges. Request fuel while seated in a supported ship on the home moon. D2 is reserved for it. Existing saves keep their current rules."
 	column.add_child(origin_service_choice)
+	derelict_recovery_choice = CheckButton.new()
+	derelict_recovery_choice.text = "Derelict recovery · prototype"
+	derelict_recovery_choice.tooltip_text = "For four charted + two uncharted systems only. After exterior inspection, hold 100–150 m at matched speed for 30 seconds to recover one canister. No retrieval animation. Sell it explicitly at Origin; loss or sale leaves the source depleted."
+	derelict_recovery_choice.disabled = true
+	column.add_child(derelict_recovery_choice)
+	network_choice.item_selected.connect(func(index: int):
+		derelict_recovery_choice.disabled = index != 3
+		if index != 3: derelict_recovery_choice.button_pressed = false)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -175,7 +184,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed, "derelict_recovery": network_choice.selected == 3 and derelict_recovery_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return
@@ -241,7 +250,7 @@ func layout_title() -> void:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
-	for button in [seed, network_choice, recovery_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
+	for button in [seed, network_choice, recovery_choice, origin_service_choice, derelict_recovery_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
 	if chooser.visible: chooser.popup_centered_ratio(0.75)
 

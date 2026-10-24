@@ -5,6 +5,7 @@ const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Derelict = preload("res://scripts/native/native_derelict_view.gd")
 const ViewChecks = preload("res://tests/native_derelict_view_test.gd")
+const RecoveryChecks = preload("res://tests/derelict_recovery_test.gd")
 var failures := 0
 
 func check(value: bool, message: String) -> bool:
@@ -57,7 +58,7 @@ func check_archive(view: Control, owner: Variant, history: String, source: Strin
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 3: quit(1); return
+	if args.size() != 3 and args.size() != 5: quit(1); return
 	var phases: String = args[0]
 	var assets: String = args[1]
 	var output: String = args[2]
@@ -157,6 +158,9 @@ func run() -> void:
 		check_archive(view, owner, inspected.derelict.history, recovered, output.path_join("recovered-archive.json"))
 	for source in original_hashes:
 		check(FileAccess.get_sha256(source) == original_hashes[source], "Godot rewrote a C++ source phase")
+	if args.size() == 5:
+		var recovery_checks := RecoveryChecks.new()
+		failures += await recovery_checks.run_shared(self, shell, owner, args[3], assets, args[4], phases.path_join("station.json"))
 	shell.free()
 	print("Native derelict: %d failures; labelled saved-space approach, actual scan/coast/inspection/Continue; no GPU or manual-route acceptance" % failures)
 	quit(1 if failures else 0)

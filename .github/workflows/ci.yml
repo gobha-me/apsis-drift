@@ -329,6 +329,7 @@ jobs:
           apsis-drift-native-system-release-tests
           apsis-drift-native-orbital-survey-tests
           apsis-drift-native-derelict-tests
+          apsis-drift-native-derelict-recovery-tests
 
       - name: Package the verified engine and native executables
         run: >-
@@ -412,6 +413,8 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-voyage/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/derelict-voyage/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/derelict-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/derelict-recovery-voyage/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/derelict-recovery-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-native/route-reuse/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/minor-native/rendezvous-ui/*.json

@@ -2,6 +2,7 @@
 
 #include "apsis_drift/freedom_charted_arrival.hpp"
 #include "apsis_drift/freedom_derelict.hpp"
+#include "apsis_drift/freedom_derelict_recovery.hpp"
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/paid_operations.hpp"
@@ -322,6 +323,8 @@ struct FreedomKnowledge {
   std::optional<PaidOperationsAccount> paid_operations{};
   std::optional<FreedomSpecimenSalesAccount> specimen_sales{};
   std::optional<FreedomChartedArrivalSelection> charted_arrivals{};
+  // Explicit one-item retrieval policy and its finite per-voyage cargo state.
+  std::optional<FreedomDerelictRecoveryState> derelict_recovery{};
   friend auto operator==(const FreedomKnowledge&, const FreedomKnowledge&)
       -> bool = default;
 };
@@ -349,7 +352,8 @@ enum class FreedomKnowledgeError : std::uint8_t {
   invalid_survey_commissions,
   invalid_paid_operations,
   invalid_specimen_sales,
-  invalid_charted_arrivals
+  invalid_charted_arrivals,
+  invalid_derelict_recovery
 };
 
 struct KnownIdentity {

@@ -465,7 +465,12 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
   if (k.paid_operations) {
     const PaidIncomeCounts counts{
         k.survey_commissions ? k.survey_commissions->paid_count : 0U,
-        k.specimen_sales ? k.specimen_sales->sold_count : 0U};
+        k.specimen_sales ? k.specimen_sales->sold_count : 0U,
+        k.derelict_recovery && k.derelict_recovery->canister &&
+                k.derelict_recovery->canister->disposition ==
+                    FreedomCanisterDisposition::sold
+            ? 1U
+            : 0U};
     const auto generation =
         k.recipe.craft_lineage ? k.recipe.craft_lineage->generation : 0;
     if (!freedom_knowledge_has_planetary_chart(k.recipe.version) ||
@@ -486,6 +491,25 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
         !valid_craft(k.derelicts->contact) ||
         !valid_craft(k.derelicts->inspection))
       return std::unexpected{Error::invalid_derelicts};
+  }
+  if (k.derelict_recovery) {
+    if (k.recipe.version != kFreedomUnchartedKnowledgeVersion || !k.derelicts ||
+        !validate_freedom_derelict_recovery(
+            k.recipe.universe_seed, *k.derelict_recovery, *k.derelicts, now))
+      return std::unexpected{Error::invalid_derelict_recovery};
+    const auto current = derive_freedom_craft_identity(
+        k.recipe.universe_seed,
+        k.recipe.craft_lineage ? k.recipe.craft_lineage->generation : 0);
+    if (!current || (k.derelict_recovery->active &&
+                     k.derelict_recovery->active->observer.craft != *current))
+      return std::unexpected{Error::invalid_derelict_recovery};
+    if (k.derelict_recovery->canister) {
+      const auto& claim = *k.derelict_recovery->canister;
+      if (!valid_sample_craft(w, claim.completed.craft) ||
+          (claim.disposition == FreedomCanisterDisposition::carried &&
+           claim.completed.craft != *current))
+        return std::unexpected{Error::invalid_derelict_recovery};
+    }
   }
   if (k.orbital_surveys) {
     const auto& surveys = *k.orbital_surveys;

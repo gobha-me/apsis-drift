@@ -9,11 +9,13 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kPaidOperationsVersion{1};
 inline constexpr std::uint32_t kPaidSpecimenOperationsVersion{2};
+inline constexpr std::uint32_t kPaidDerelictOperationsVersion{3};
+inline constexpr std::uint64_t kPaidCanisterCredits{100};
 inline constexpr std::uint64_t kPaidSpecimenCredits{40};
 inline constexpr std::uint32_t kPaidSpecimenBatchLimit{4};
 
 struct PaidIncomeCounts {
-  std::uint32_t survey_paid{}, specimen_sold{};
+  std::uint32_t survey_paid{}, specimen_sold{}, canister_sold{};
   friend auto operator==(const PaidIncomeCounts&, const PaidIncomeCounts&)
       -> bool = default;
 };
@@ -38,8 +40,10 @@ struct PaidOperationsAccount {
   std::uint64_t operating_tab{}, recovery_due{};
   std::uint32_t settled_paid_count{}, supported_sequence{};
   std::uint64_t charged_generation{};
-  // Version2 only. Legacy version1 persists exactly its original nine keys.
+  // Versions2/3. Legacy version1 persists exactly its original nine keys.
   std::uint32_t settled_specimen_count{};
+  // Version3 only: the single derelict source can be sold at most once.
+  std::uint32_t settled_canister_count{};
   friend auto operator==(const PaidOperationsAccount&,
                          const PaidOperationsAccount&) -> bool = default;
 };
@@ -97,7 +101,7 @@ struct PaidRetainerOutcome {
                                         SimulationTick now,
                                         std::uint64_t replacement_generation)
     -> std::expected<PaidOperationsAccount, std::string>;
-// Two concrete earning sources. Legacy overloads above preserve survey-only
+// Concrete earning sources. Legacy overloads above preserve survey-only
 // version1 semantics; v2 is selected only by an actual specimen sale or
 // explicit enrollment with prior specimen earnings, never by reading/loading.
 [[nodiscard]] auto validate_paid_operations(const PaidOperationsAccount&,
@@ -136,6 +140,11 @@ struct PaidRetainerOutcome {
                                                SimulationTick,
                                                std::uint64_t generation,
                                                std::uint32_t sold_units)
+    -> std::expected<PaidOperationsAccount, std::string>;
+[[nodiscard]] auto settle_paid_canister_income(const PaidOperationsAccount&,
+                                               PaidIncomeCounts new_counts,
+                                               SimulationTick,
+                                               std::uint64_t generation)
     -> std::expected<PaidOperationsAccount, std::string>;
 [[nodiscard]] auto charge_paid_recovery(const PaidOperationsAccount&,
                                         PaidIncomeCounts, SimulationTick,

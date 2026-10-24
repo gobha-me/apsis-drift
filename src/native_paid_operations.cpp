@@ -14,9 +14,16 @@ auto NativeFreedomFlightSession::survey_paid_count() const -> std::uint32_t {
 }
 auto NativeFreedomFlightSession::paid_income_counts() const
     -> PaidIncomeCounts {
-  return {survey_paid_count(), knowledge_ && knowledge_->specimen_sales
-                                   ? knowledge_->specimen_sales->sold_count
-                                   : 0};
+  return {survey_paid_count(),
+          knowledge_ && knowledge_->specimen_sales
+              ? knowledge_->specimen_sales->sold_count
+              : 0,
+          knowledge_ && knowledge_->derelict_recovery &&
+                  knowledge_->derelict_recovery->canister &&
+                  knowledge_->derelict_recovery->canister->disposition ==
+                      FreedomCanisterDisposition::sold
+              ? 1U
+              : 0U};
 }
 auto NativeFreedomFlightSession::paid_operations_generation() const
     -> std::uint64_t {
@@ -72,6 +79,16 @@ auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
           static_cast<std::uint64_t>(account.supported_sequence),
           account.charged_generation})
       word(value);
+  }
+  // Preserve historical quote bytes until this third income source exists.
+  if (paid_income_counts().canister_sold ||
+      (knowledge_->paid_operations && knowledge_->paid_operations->version ==
+                                          kPaidDerelictOperationsVersion)) {
+    token += ":canister1";
+    word(paid_income_counts().canister_sold);
+    word(knowledge_->paid_operations
+             ? knowledge_->paid_operations->settled_canister_count
+             : 0);
   }
   if (knowledge_->survey_commissions &&
       knowledge_->survey_commissions->active) {

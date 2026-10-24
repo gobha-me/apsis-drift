@@ -22,6 +22,10 @@ import time
 
 # Explicit opt-in list: GPU reviews, private assets, audible captures and cadence
 # diagnostics are deliberately not mistaken for headless acceptance tests.
+DERELICT_RECOVERY_PHASES = tuple("""station-selected ready started half near complete
+cancelled interrupted origin-carried origin-paid sold paid-sold prior-sale-enrolled
+lost-cargo unfinished-loss origin-debt debt-sold""".split())
+
 TESTS = {
     "native_status": "none",
     "validate": "snapshot",
@@ -270,6 +274,7 @@ def main(argv=None):
     system_release_fixture = args.build_dir.resolve() / "apsis-drift-native-system-release-tests"
     survey_fixture = args.build_dir.resolve() / "apsis-drift-native-orbital-survey-tests"
     derelict_fixture = args.build_dir.resolve() / "apsis-drift-native-derelict-tests"
+    derelict_recovery_fixture = args.build_dir.resolve() / "apsis-drift-native-derelict-recovery-tests"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
@@ -306,6 +311,9 @@ def main(argv=None):
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         if not derelict_fixture.is_file() or not os.access(derelict_fixture, os.X_OK):
             parser.error(f"missing C++ derelict fixture: {derelict_fixture}")
+    if "native_derelict" in selected:
+        if not derelict_recovery_fixture.is_file() or not os.access(derelict_recovery_fixture, os.X_OK):
+            parser.error(f"missing C++ derelict recovery fixture: {derelict_recovery_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -411,6 +419,10 @@ def main(argv=None):
         shutil.copy2(derelict_fixture, work / derelict_fixture.name)
         derelict_fixture = work / derelict_fixture.name
         staged_executables.append(derelict_fixture)
+    if "native_derelict" in selected:
+        shutil.copy2(derelict_recovery_fixture, work / derelict_recovery_fixture.name)
+        derelict_recovery_fixture = work / derelict_recovery_fixture.name
+        staged_executables.append(derelict_recovery_fixture)
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -911,6 +923,38 @@ def main(argv=None):
         record["files_sha256"] = {
             name + ".json": sha256(phases / (name + ".json")) for name in names}
         save()
+    if "native_derelict" in selected:
+        # Refusals precede world construction and may not create output artifacts.
+        refused_output = work / "derelict-recovery-refused-output"
+        invalid_arguments = (("--export",), ("--unknown", str(refused_output)),
+                             ("--export", ""), ("--export", "relative-output"),
+                             ("--export", str(refused_output), "extra"))
+        for index, invalid in enumerate(invalid_arguments):
+            refusal_log = work / f"derelict-recovery-refusal-{index}.log"
+            code, timed_out, _ = run_logged(
+                [str(derelict_recovery_fixture), *invalid], refusal_log, env, args.timeout)
+            if code == 0 or timed_out or refused_output.exists():
+                print(f"FAIL derelict recovery argument refusal: {refusal_log}", flush=True)
+                return 1
+        phases = work / "derelict-recovery-voyage"
+        log = work / "derelict-recovery-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(derelict_recovery_fixture), "--export", str(phases)], log, env, args.timeout)
+        record = {"family": "derelict_recovery_saves", "returncode": code,
+                  "timed_out": timed_out, "seconds": elapsed,
+                  "fixture_sha256": sha256(derelict_recovery_fixture)}
+        report["setup"].append(record)
+        save()
+        if code != 0 or timed_out or any(
+                not (phases / (name + ".json")).is_file() or
+                not 0 < (phases / (name + ".json")).stat().st_size <= 1 << 20
+                for name in (*DERELICT_RECOVERY_PHASES, "manifest")):
+            print(f"FAIL authoritative derelict recovery fixture: {log}", flush=True)
+            return 1
+        record["files_sha256"] = {
+            name + ".json": sha256(phases / (name + ".json"))
+            for name in (*DERELICT_RECOVERY_PHASES, "manifest")}
+        save()
     for name, (stem, fixture_flag, terrain_policy) in SURFACE_TESTS.items():
         if name not in selected:
             continue
@@ -1197,7 +1241,8 @@ def main(argv=None):
                          ("minor-voyage", "native-assets", "minor-native")]
         if name == "native_derelict":
             arguments = [str(work / path) for path in
-                         ("derelict-voyage", "native-assets", "derelict-native")]
+                         ("derelict-voyage", "native-assets", "derelict-native",
+                          "derelict-recovery-voyage", "derelict-recovery-native")]
         if name == "native_moon":
             arguments = [str(work / path) for path in
                          ("moon-voyage", "native-assets", "moon-native")]

@@ -191,6 +191,81 @@ auto derelict_record_value(const Json& j)
       {p[0].get<double>(), p[1].get<double>(), p[2].get<double>()},
       {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()}};
 }
+auto derelict_recovery_json(const FreedomDerelictRecoveryState& state) -> Json {
+  Json active = nullptr, canister = nullptr;
+  if (state.active) {
+    const auto& value = *state.active;
+    active = {{"started_tick", value.started_tick},
+              {"last_tick", value.last_tick},
+              {"acquired_ticks", value.acquired_ticks},
+              {"observer", derelict_record_json(value.observer)}};
+  }
+  if (state.canister) {
+    const auto& value = *state.canister;
+    const auto disposition =
+        value.disposition == FreedomCanisterDisposition::carried ? "carried"
+        : value.disposition == FreedomCanisterDisposition::lost  ? "lost"
+                                                                 : "sold";
+    canister = {{"started_tick", value.started_tick},
+                {"completed", derelict_record_json(value.completed)},
+                {"disposition", disposition},
+                {"sold_tick",
+                 value.sold_tick ? Json(*value.sold_tick) : Json(nullptr)}};
+  }
+  return {
+      {"version", state.version}, {"active", active}, {"canister", canister}};
+}
+auto derelict_recovery_value(const Json& j)
+    -> std::expected<FreedomDerelictRecoveryState, SaveSchemaError> {
+  if (!fields(j, {"version", "active", "canister"}) ||
+      !unsigned_fields(j, {"version"}) ||
+      j["version"] != kFreedomDerelictRecoveryVersion)
+    return std::unexpected{
+        failure("invalid closed derelict recovery selection")};
+  FreedomDerelictRecoveryState state;
+  if (!j["active"].is_null()) {
+    const auto& value = j["active"];
+    if (!fields(value,
+                {"started_tick", "last_tick", "acquired_ticks", "observer"}) ||
+        !unsigned_fields(value,
+                         {"started_tick", "last_tick", "acquired_ticks"}) ||
+        value["acquired_ticks"] >= kFreedomDerelictRetrievalTicks)
+      return std::unexpected{failure("invalid closed retrieval progress")};
+    const auto observer = derelict_record_value(value["observer"]);
+    if (!observer) return std::unexpected{observer.error()};
+    state.active = FreedomDerelictRetrieval{
+        value["started_tick"].get<SimulationTick>(),
+        value["last_tick"].get<SimulationTick>(),
+        value["acquired_ticks"].get<std::uint32_t>(), *observer};
+  }
+  if (!j["canister"].is_null()) {
+    const auto& value = j["canister"];
+    if (!fields(value,
+                {"started_tick", "completed", "disposition", "sold_tick"}) ||
+        !unsigned_fields(value, {"started_tick"}) ||
+        !value["disposition"].is_string() ||
+        (!value["sold_tick"].is_null() &&
+         !value["sold_tick"].is_number_unsigned()))
+      return std::unexpected{failure("invalid closed recovered canister")};
+    const auto& disposition =
+        value["disposition"].get_ref<const std::string&>();
+    if (disposition != "carried" && disposition != "lost" &&
+        disposition != "sold")
+      return std::unexpected{failure("unknown canister disposition")};
+    const auto completed = derelict_record_value(value["completed"]);
+    if (!completed) return std::unexpected{completed.error()};
+    state.canister = FreedomRecoveredCanister{
+        value["started_tick"].get<SimulationTick>(),
+        *completed,
+        disposition == "carried" ? FreedomCanisterDisposition::carried
+        : disposition == "lost"  ? FreedomCanisterDisposition::lost
+                                 : FreedomCanisterDisposition::sold,
+        {}};
+    if (!value["sold_tick"].is_null())
+      state.canister->sold_tick = value["sold_tick"].get<SimulationTick>();
+  }
+  return state;
+}
 auto parse(std::string_view text, std::size_t limit)
     -> std::expected<Json, SaveSchemaError> {
   if (text.size() > limit)
@@ -416,9 +491,13 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"settled_paid_count", account.settled_paid_count},
         {"supported_sequence", account.supported_sequence},
         {"charged_generation", account.charged_generation}};
-    if (account.version == kPaidSpecimenOperationsVersion)
+    if (account.version == kPaidSpecimenOperationsVersion ||
+        account.version == kPaidDerelictOperationsVersion)
       root["paid_operations"]["settled_specimen_count"] =
           account.settled_specimen_count;
+    if (account.version == kPaidDerelictOperationsVersion)
+      root["paid_operations"]["settled_canister_count"] =
+          account.settled_canister_count;
   }
   if (k.specimen_sales) {
     const auto& sales = *k.specimen_sales;
@@ -456,6 +535,8 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
         {"inspection", k.derelicts->inspection
                            ? derelict_record_json(*k.derelicts->inspection)
                            : Json(nullptr)}};
+  if (k.derelict_recovery)
+    root["derelict_recovery"] = derelict_recovery_json(*k.derelict_recovery);
   auto text = root.dump(2) + '\n';
   const auto limit = freedom_knowledge_uses_network(r.version)
                          ? kMaximumFreedomNetworkKnowledgeBytes
@@ -492,6 +573,8 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
       root->is_object() && root->contains("station_stellar_lead");
   const bool derelicts_selected =
       root->is_object() && root->contains("derelicts");
+  const bool recovery_selected =
+      root->is_object() && root->contains("derelict_recovery");
   auto root_shape = *root;
   if (marker_selected) root_shape.erase("surface_marker");
   if (landmarks_selected) root_shape.erase("surface_landmarks");
@@ -500,6 +583,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (samples_selected) root_shape.erase("field_samples");
   if (search_selected) root_shape.erase("star_search");
   if (derelicts_selected) root_shape.erase("derelicts");
+  if (recovery_selected) root_shape.erase("derelict_recovery");
   if (lead_selected) root_shape.erase("station_stellar_lead");
   if (commissions_selected) root_shape.erase("survey_commissions");
   if (paid_selected) root_shape.erase("paid_operations");
@@ -838,6 +922,9 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const bool specimens_selected =
         account.is_object() && account.contains("settled_specimen_count");
     if (specimens_selected) account_shape.erase("settled_specimen_count");
+    const bool canister_selected =
+        account.is_object() && account.contains("settled_canister_count");
+    if (canister_selected) account_shape.erase("settled_canister_count");
     if (!network ||
         (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
          r["version"] != kFreedomUnchartedKnowledgeVersion) ||
@@ -852,12 +939,20 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                           "settled_paid_count", "supported_sequence",
                           "charged_generation"}) ||
         (account["version"] != kPaidOperationsVersion &&
-         account["version"] != kPaidSpecimenOperationsVersion) ||
+         account["version"] != kPaidSpecimenOperationsVersion &&
+         account["version"] != kPaidDerelictOperationsVersion) ||
         (specimens_selected !=
-         (account["version"] == kPaidSpecimenOperationsVersion)) ||
+         (account["version"] == kPaidSpecimenOperationsVersion ||
+          account["version"] == kPaidDerelictOperationsVersion)) ||
+        (canister_selected !=
+         (account["version"] == kPaidDerelictOperationsVersion)) ||
+        (canister_selected &&
+         (!account["settled_canister_count"].is_number_unsigned() ||
+          account["settled_canister_count"] != 1)) ||
         (specimens_selected &&
          (!account["settled_specimen_count"].is_number_unsigned() ||
-          account["settled_specimen_count"] == 0 ||
+          (account["version"] == kPaidSpecimenOperationsVersion &&
+           account["settled_specimen_count"] == 0) ||
           account["settled_specimen_count"] >
               std::numeric_limits<std::uint32_t>::max())) ||
         account["settled_paid_count"] >
@@ -877,6 +972,9 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
         account["charged_generation"].get<std::uint64_t>(),
         specimens_selected
             ? account["settled_specimen_count"].get<std::uint32_t>()
+            : 0U,
+        canister_selected
+            ? account["settled_canister_count"].get<std::uint32_t>()
             : 0U};
   }
   if (sales_selected) {
@@ -958,6 +1056,14 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     }
     k.derelicts = state;
   }
+  if (recovery_selected) {
+    if (!uncharted || !k.derelicts)
+      return std::unexpected{failure(
+          "derelict recovery requires its selected uncharted population")};
+    const auto state = derelict_recovery_value((*root)["derelict_recovery"]);
+    if (!state) return std::unexpected{state.error()};
+    k.derelict_recovery = *state;
+  }
   const auto& entries = (*root)["entries"];
   const auto maximum_facts = uncharted ? kMaximumFreedomUnchartedKnowledgeFacts
                              : network ? kMaximumFreedomNetworkKnowledgeFacts
@@ -1028,6 +1134,19 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
                flight.minor.has_value()))))
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
+  if (d.knowledge.derelict_recovery && d.knowledge.derelict_recovery->active) {
+    const auto& active = *d.knowledge.derelict_recovery->active;
+    const auto descriptor = generate_freedom_derelict(r.universe_seed);
+    const auto system =
+        flight.world ? flight.world->system : flight.flight.frame.system;
+    const auto planet = flight.world ? std::optional{flight.world->planet}
+                                     : flight.flight.frame.planet;
+    if (!descriptor || active.observer.craft != flight.origin.state.craft ||
+        flight.moon || flight.minor || !planet ||
+        descriptor->system != system || descriptor->planet != *planet)
+      return std::unexpected{
+          failure("active retrieval source craft or parent owner mismatch")};
+  }
   if (d.knowledge.orbital_surveys && d.knowledge.orbital_surveys->active) {
     const auto& active = *d.knowledge.orbital_surveys->active;
     const auto system =
