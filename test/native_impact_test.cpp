@@ -8,8 +8,12 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <nlohmann/json.hpp>
+#include <source_location>
 #include <stdexcept>
 #include <type_traits>
 
@@ -23,16 +27,23 @@ auto check(bool value, std::string_view message) -> void {
     std::cerr << "FAIL: " << message << '\n';
   }
 }
-template <class T, class E> auto need(std::expected<T, E> value) -> T {
+template <class T, class E>
+auto need(std::expected<T, E> value,
+          std::source_location at = std::source_location::current()) -> T {
   if (!value) {
+    auto message = "Native impact fixture line " + std::to_string(at.line());
     if constexpr (std::is_same_v<E, std::string>)
-      throw std::runtime_error(value.error());
+      message += ": " + value.error();
     else if constexpr (std::is_same_v<E, SaveSchemaError>)
-      throw std::runtime_error(value.error().detail);
-    else
-      throw std::runtime_error("Native impact fixture refused");
+      message += ": " + value.error().detail;
+    throw std::runtime_error(message);
   }
-  if constexpr (!std::is_void_v<T>) return std::move(*value);
+  if constexpr (!std::is_void_v<T>) {
+    if constexpr (std::is_trivially_copyable_v<T>)
+      return *value;
+    else
+      return std::move(*value);
+  }
 }
 using V = RigidVector3;
 auto add(V a, V b) -> V {
@@ -249,6 +260,245 @@ auto live_loss_batches(const NativeFreedomFlightSession& source) -> void {
   check(bytes(source) == original,
         "Native scheduler qualification never mutates its initialized source");
 }
+auto repair_origin_boundary(const NativeFreedomFlightSession& source)
+    -> std::unique_ptr<NativeFreedomFlightSession> {
+  // Preserve genuine swept-impact/pilot/condition/resource history, then
+  // initialize only the same-clock generated Origin attachment. This is a
+  // station-service fixture, not a flown damaged return or port approach.
+  auto selected = std::make_unique<FreedomConditionSaveDocument>(
+      need(source.condition_document()));
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(selected->voyage);
+  auto& boarding =
+      std::get<FreedomBoardingSaveDocument>(voyage.voyage.voyage.base);
+  const auto station =
+      generate_origin_station(source.document().origin.recipe.universe_seed);
+  const auto geometry = need(origin_station_geometry(station));
+  boarding.voyage.flight.flight = need(release_origin_port(
+      source.system(), station, geometry,
+      {geometry.version, boarding.voyage.docking.target,
+       source.document().flight.craft, source.document().flight.tick}));
+  boarding.voyage.docking.attached = true;
+  return std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_select_save_document(std::move(*selected))))));
+}
+auto repair_account_boundary(const NativeFreedomFlightSession& source,
+                             bool insufficient)
+    -> std::unique_ptr<NativeFreedomFlightSession> {
+  auto selected = std::make_unique<FreedomConditionSaveDocument>(
+      need(source.condition_document()));
+  auto& knowledge =
+      std::get<FreedomKnowledgeSaveDocument>(selected->voyage).knowledge;
+  check(
+      knowledge.recipe.version == kFreedomPlanetaryKnowledgeVersion &&
+          (!knowledge.survey_commissions ||
+           knowledge.survey_commissions->paid_count == 0) &&
+          !knowledge.specimen_sales && !knowledge.derelict_recovery,
+      "Repair payment fixture unexpectedly contains previously earned income");
+  // Explicit aggregate financial boundary. This does not claim the metadata
+  // was earned/spent by a flown trip; the subsequent repair debit is real.
+  knowledge.paid_operations = need(
+      make_paid_operations(PaidIncomeCounts{}, source.document().flight.tick,
+                           source.document().origin.lineage
+                               ? source.document().origin.lineage->generation
+                               : 0));
+  if (insufficient)
+    knowledge.paid_operations->spent_credits = kPaidOpeningCredits;
+  return std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_select_save_document(std::move(*selected))))));
+}
+auto repair_knowledge_json(nlohmann::ordered_json& document)
+    -> nlohmann::ordered_json& {
+  auto* current = &document;
+  for (unsigned depth = 0; depth < 12; ++depth) {
+    if (current->contains("knowledge")) return (*current)["knowledge"];
+    auto* next = static_cast<nlohmann::ordered_json*>(nullptr);
+    for (const auto* key : {"voyage", "base", "journey"})
+      if (current->contains(key) && (*current)[key].is_object()) {
+        next = &(*current)[key];
+        break;
+      }
+    if (!next) break;
+    current = next;
+  }
+  throw std::runtime_error(
+      "Repair test lacks its bounded active knowledge owner");
+}
+auto repair_only_changed(const std::string& original,
+                         const NativeFreedomFlightSession& after) -> void {
+  auto before_json = nlohmann::ordered_json::parse(original);
+  auto after_json = nlohmann::ordered_json::parse(bytes(after));
+  after_json["condition"] = before_json["condition"];
+  auto& old_knowledge = repair_knowledge_json(before_json);
+  auto& new_knowledge = repair_knowledge_json(after_json);
+  if (old_knowledge.contains("paid_operations"))
+    new_knowledge["paid_operations"] = old_knowledge["paid_operations"];
+  else
+    new_knowledge.erase("paid_operations");
+  check(after_json == before_json,
+        "Repair changed world, body, clocks, resources, cargo, drive, actor or "
+        "unrelated history");
+}
+auto repair_scenarios(const Fixtures& fixtures,
+                      const NativeFreedomFlightSession& forebody,
+                      const std::filesystem::path& output) -> void {
+  using Json = nlohmann::ordered_json;
+  Json phases = Json::array();
+  const auto phase = [&](const NativeFreedomFlightSession& session,
+                         const char* label) {
+    const auto original = bytes(session);
+    const auto quote = need(session.origin_repair_view());
+    check(need(session.origin_repair_view()).token == quote.token &&
+              bytes(session) == original,
+          "Repeated repair quote changed clock, condition, account or complete "
+          "Save");
+    check(bytes(resume(session)) == original,
+          "Repair source/result Continue changed full Save");
+    need(session.save_as(output / (std::string(label) + ".json")));
+    phases.push_back(
+        {{"file", std::string(label) + ".json"},
+         {"tick", std::to_string(session.document().flight.tick)},
+         {"condition_version", session.condition()->version},
+         {"forebody", session.condition()->forebody},
+         {"landing_structure", session.condition()->landing_structure},
+         {"paid", quote.paid_selected},
+         {"can_repair", quote.can_repair},
+         {"cash", std::to_string(quote.cash_before)}});
+  };
+  auto free = repair_origin_boundary(forebody);
+  phase(*free, "repair-flight-free");
+  const auto pristine_source = bytes(*free);
+  const auto free_quote = need(free->origin_repair_view());
+  check(free_quote.supported && free_quote.at_origin &&
+            !free_quote.paid_selected && free_quote.can_repair &&
+            free_quote.repair_credits == 0 && free_quote.forebody == 1 &&
+            free_quote.severity_units == 1,
+        "Actual damaged attached technical voyage lacks a free repair quote");
+  for (const auto& token : {std::string{}, std::string{"foreign"},
+                            std::string(4097, 'x'), std::string{"x\0", 2}})
+    check(!free->repair_at_origin(token) && bytes(*free) == pristine_source,
+          "Malformed repair token changed the complete voyage");
+  auto stale = std::make_unique<NativeFreedomFlightSession>(*free);
+  need(stale->advance({}));
+  const auto stale_source = bytes(*stale);
+  check(!stale->repair_at_origin(free_quote.token) &&
+            bytes(*stale) == stale_source,
+        "Stale-clock repair token posted a bill or changed condition");
+  auto walking = std::make_unique<NativeFreedomFlightSession>(*free);
+  need(walking->begin_disembarking());
+  for (SimulationTick tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    need(walking->advance_walk({}));
+  check(walking->walker().has_value(),
+        "Actual repair disembark did not return station actor");
+  phase(*walking, "repair-walk-free");
+  const auto walking_before = bytes(*walking);
+  need(walking->repair_at_origin(need(walking->origin_repair_view()).token));
+  repair_only_changed(walking_before, *walking);
+  phase(*walking, "repair-walk-free-done");
+  const auto previous = *free->condition();
+  need(free->repair_at_origin(free_quote.token));
+  check(free->condition()->version == kRepairedCraftConditionVersion &&
+            !free->condition()->forebody &&
+            !free->condition()->landing_structure &&
+            free->condition()->latest == previous.latest &&
+            free->condition()->next_event == previous.next_event &&
+            free->condition()->contact_armed == previous.contact_armed &&
+            free->condition()->clear_ticks == previous.clear_ticks,
+        "Native repair reset impact history, gate or serial instead of "
+        "repairing current damage");
+  repair_only_changed(pristine_source, *free);
+  phase(*free, "repair-flight-free-done");
+  const auto repaired = bytes(*free);
+  check(!free->repair_at_origin(free_quote.token) &&
+            !free->repair_at_origin(need(free->origin_repair_view()).token) &&
+            bytes(*free) == repaired,
+        "Duplicate/pristine repair charged or changed history");
+  auto remote = std::make_unique<NativeFreedomFlightSession>(
+      hit(fixtures.airborne(4, false)));
+  const auto remote_bytes = bytes(*remote);
+  check(
+      !need(remote->origin_repair_view()).at_origin &&
+          !remote->repair_at_origin(need(remote->origin_repair_view()).token) &&
+          bytes(*remote) == remote_bytes,
+      "Remote damaged craft acquired Origin repair from proximity or a valid "
+      "token");
+  phase(*remote, "repair-flight-remote");
+  auto paid_fixture = std::make_unique<Fixtures>(true);
+  auto actual_paid_damage = std::make_unique<NativeFreedomFlightSession>(
+      hit(paid_fixture->airborne(12, false)));
+  auto paid_origin = repair_origin_boundary(*actual_paid_damage);
+  auto paid = repair_account_boundary(*paid_origin, false);
+  auto insufficient = repair_account_boundary(*paid_origin, true);
+  phase(*insufficient, "repair-flight-insufficient");
+  const auto no_cash = bytes(*insufficient);
+  check(need(insufficient->origin_repair_view()).cash_before == 0 &&
+            !need(insufficient->origin_repair_view()).can_repair &&
+            !insufficient->repair_at_origin(
+                need(insufficient->origin_repair_view()).token) &&
+            bytes(*insufficient) == no_cash,
+        "Unaffordable repair mutated deferred bills, drew operating credit or "
+        "repaired damage");
+  phase(*paid, "repair-flight-paid");
+  const auto paid_quote = need(paid->origin_repair_view());
+  const auto paid_before = bytes(*paid);
+  const auto paid_account = *paid->knowledge()->paid_operations;
+  check(
+      paid_quote.can_repair && paid_quote.paid_selected &&
+          paid_quote.forebody == 2 && paid_quote.severity_units == 2 &&
+          paid_quote.repair_credits == 20 && paid_quote.cash_before == 180 &&
+          paid_quote.cash_after == 160 && paid_quote.berth_credits == 0,
+      "Actual paid repair quote does not use exact damage and post-berth cash");
+  need(paid->repair_at_origin(paid_quote.token));
+  check(paid->knowledge()->paid_operations->spent_credits ==
+                paid_account.spent_credits + 20 &&
+            need(paid->origin_repair_view()).cash_before == 160 &&
+            paid->condition()->latest_repair->payment.paid &&
+            paid->condition()->latest_repair->credits == 20,
+        "Actual repair command failed cash-only debit and receipt watermark");
+  repair_only_changed(paid_before, *paid);
+  phase(*paid, "repair-flight-paid-done");
+  const auto paid_done = bytes(*paid);
+  check(!paid->repair_at_origin(paid_quote.token) && bytes(*paid) == paid_done,
+        "Repeated paid repair spent the tariff twice");
+  const auto retired = *paid->condition();
+  const auto checksum = need(
+      rigid_body_state_checksum({paid->system()}, paid->document().flight));
+  // Explicit classified loss, not a claim that station service causes damage.
+  need(paid->record_loss(FreedomLossCause::recoverable_destruction,
+                         paid->document().origin.state.craft,
+                         paid->document().flight.tick, checksum));
+  const auto pending = bytes(*paid);
+  check(!paid->repair_at_origin(need(paid->origin_repair_view()).token) &&
+            bytes(*paid) == pending,
+        "Pending loss accepted repair or altered its frozen source");
+  phase(*paid, "repair-pending");
+  need(paid->complete_recovery());
+  auto recovered = std::make_unique<FreedomConditionSaveDocument>(
+      need(paid->condition_document()));
+  check(recovered->retired_condition == retired &&
+            !paid->condition()->latest_repair &&
+            paid->condition()->version == kCraftConditionVersion &&
+            !need(paid->origin_repair_view()).can_repair,
+        "Replacement lost exact repaired retired history or repaired the new "
+        "pristine craft");
+  phase(*paid, "repair-recovered");
+  std::ofstream manifest(output / "repair-scope.json");
+  if (!manifest)
+    throw std::runtime_error("Repair fixture manifest unavailable");
+  manifest << Json{{"schema", "apsis.origin-repair-scenario/1"},
+                   {"scope",
+                    "Actual existing swept terrain impacts, boarding history "
+                    "and native repair commands; generated Origin attachment "
+                    "and aggregate paid/insufficient-account boundaries are "
+                    "explicitly initialized, not a flown damaged return, "
+                    "earned/debt history or profit claim. Walking uses actual "
+                    "disembark; later loss is explicitly classified. All "
+                    "original impact phases remain unchanged."},
+                   {"phases", phases}}
+                  .dump(2)
+           << '\n';
+}
 auto run(const std::filesystem::path& output) -> void {
   const Fixtures fixtures;
   auto clear = fixtures.airborne(0, false);
@@ -373,6 +623,7 @@ auto run(const std::filesystem::path& output) -> void {
             !commissioned_loss.knowledge()
                  ->survey_commissions->active->measurement,
         "Commission impact recovery grants work, money or divergent state");
+  repair_scenarios(fixtures, forebody, output);
 }
 } // namespace
 

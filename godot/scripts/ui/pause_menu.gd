@@ -56,6 +56,8 @@ var observations_view: Control
 var observations_button: Button
 var commissions_view: Control
 var commissions_button: Button
+var origin_repair_view: Control
+var origin_repair_button: Button
 var surface_reference_view: Control
 var surface_reference_invoker: WeakRef
 var entry_focus_frames := 0
@@ -290,6 +292,9 @@ func _ready() -> void:
 		commissions_view = preload("res://scripts/native/survey_commissions.gd").new()
 		panel.add_child(commissions_view)
 		commissions_view.back_requested.connect(close_commissions)
+		origin_repair_view = preload("res://scripts/native/origin_repair.gd").new()
+		panel.add_child(origin_repair_view)
+		origin_repair_view.back_requested.connect(close_origin_repair)
 		surface_reference_view = preload("res://scripts/native/surface_reference.gd").new()
 		surface_reference_view.controls = controls
 		panel.add_child(surface_reference_view)
@@ -479,6 +484,9 @@ func back_from_nested() -> bool:
 	if is_instance_valid(settings_view) and settings_view.visible:
 		settings_view.cancel()
 		return true
+	if is_instance_valid(origin_repair_view) and origin_repair_view.visible:
+		close_origin_repair()
+		return true
 	if is_instance_valid(commissions_view) and commissions_view.visible:
 		close_commissions()
 		return true
@@ -492,6 +500,15 @@ func back_from_nested() -> bool:
 		close_basics()
 		return true
 	return false
+
+func close_origin_repair() -> void:
+	if not is_instance_valid(origin_repair_view) or not controls.focused: return
+	origin_repair_view.hide()
+	menu_margin.show()
+	if panel.visible and is_instance_valid(origin_repair_button):
+		origin_repair_button.grab_focus()
+		left_scroll.ensure_control_visible(origin_repair_button)
+		ensure_entry_focus_visible()
 
 func close_commissions() -> void:
 	if not is_instance_valid(commissions_view) or not controls.focused: return
@@ -549,6 +566,7 @@ func close_surface_reference() -> void:
 		ensure_entry_focus_visible()
 
 func show_basics() -> void:
+	if is_instance_valid(origin_repair_view) and origin_repair_view.visible: return
 	if not panel.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(basics):
 		return
 	menu_margin.hide()
@@ -589,6 +607,9 @@ func show_menu(reason := "") -> void:
 		if not reason.is_empty(): controls.status = reason
 		settings_view.refresh_status()
 		return
+	if is_instance_valid(origin_repair_view) and origin_repair_view.visible:
+		if not reason.is_empty(): controls.status = reason
+		return
 	if is_instance_valid(commissions_view) and commissions_view.visible:
 		if not reason.is_empty(): controls.status = reason
 		return
@@ -617,6 +638,7 @@ func ensure_entry_focus_visible() -> void:
 func hide_menu() -> void:
 	entry_focus_frames = 0
 	if is_instance_valid(commissions_view): commissions_view.hide()
+	if is_instance_valid(origin_repair_view): origin_repair_view.hide()
 	if is_instance_valid(observations_view): observations_view.hide()
 	if is_instance_valid(surface_reference_view): surface_reference_view.hide()
 	surface_reference_invoker = null
@@ -647,17 +669,18 @@ func _process(_delta: float) -> void:
 		refresh_bindings()
 
 func _input(event: InputEvent) -> void:
-	if is_instance_valid(commissions_view) and commissions_view.visible and panel.visible:
+	var reader: Control = origin_repair_view if is_instance_valid(origin_repair_view) and origin_repair_view.visible else commissions_view
+	if is_instance_valid(reader) and reader.visible and panel.visible:
 		var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
 		if not controls.focused or (pad and event.device != controls.device) or (event is InputEventKey and event.echo):
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
-			commissions_view.navigate(-1 if event.is_action_pressed("ui_up") else 1)
+			reader.navigate(-1 if event.is_action_pressed("ui_up") else 1)
 			get_viewport().set_input_as_handled()
 		# Keyboard buttons use normal release activation, after mapped flight keys are neutral.
 		elif pad and event.is_action_pressed("ui_accept"):
-			commissions_view.accept()
+			reader.accept()
 			get_viewport().set_input_as_handled()
 	# Stop queued GUI accepts/navigation while the window safety pause owns focus.
 	if panel.visible and not controls.focused:

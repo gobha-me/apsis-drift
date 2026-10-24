@@ -1,4 +1,5 @@
 #include "apsis_drift/paid_operations.hpp"
+#include "apsis_drift/craft_condition.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -173,6 +174,26 @@ auto purchase_paid_service(const PaidOperationsAccount& account,
   if (*cash < service_credits)
     return std::unexpected{"Insufficient cash for the quoted fuel service"};
   next->spent_credits += service_credits;
+  return *next;
+}
+auto purchase_paid_repair(const PaidOperationsAccount& account,
+                          PaidIncomeCounts counts, SimulationTick now,
+                          std::uint64_t generation,
+                          std::uint32_t severity_units)
+    -> std::expected<PaidOperationsAccount, std::string> {
+  if (!severity_units || severity_units > kCraftOriginRepairMaximumUnits)
+    return std::unexpected{"Repair requires one to six severity units"};
+  const auto credits = kCraftOriginRepairUnitCredits *
+                       static_cast<std::uint64_t>(severity_units);
+  auto next = reconcile_paid_berth(account, counts, now, generation);
+  if (!next) return std::unexpected{next.error()};
+  const auto cash = paid_operations_cash(*next, counts);
+  if (!cash) return std::unexpected{cash.error()};
+  if (*cash < credits)
+    return std::unexpected{"Insufficient cash for the quoted repair"};
+  if (next->spent_credits > maximum - credits)
+    return std::unexpected{"Repair debit would overflow"};
+  next->spent_credits += credits;
   return *next;
 }
 auto fund_paid_retainer(const PaidOperationsAccount& account,

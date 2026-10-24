@@ -483,6 +483,11 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("stage_freedom_derelict_recovery_new_game",
                         "universe_seed", "drive_kind", "origin_service"),
         &FreedomBridge::stage_freedom_derelict_recovery_new_game);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_origin_repair"),
+                                &FreedomBridge::get_freedom_origin_repair);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("repair_freedom_origin", "token"),
+        &FreedomBridge::repair_freedom_origin);
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_freedom_derelict_recovery"),
         &FreedomBridge::get_freedom_derelict_recovery);
@@ -1834,6 +1839,31 @@ class FreedomBridge : public godot::RefCounted {
       return session.sell_specimens(token);
     });
   }
+  auto repair_freedom_origin(const godot::Variant& value) -> bool {
+    if (value.get_type() != godot::Variant::STRING) {
+      last_error = "Repair requires a bounded quote token string";
+      return false;
+    }
+    const auto text = static_cast<godot::String>(value);
+    if (text.length() < 1 || text.length() > 4096) {
+      last_error = "Repair requires a bounded quote token string";
+      return false;
+    }
+    const auto encoded = text.utf8();
+    if (encoded.length() < 1 || encoded.length() > 4096) {
+      last_error = "Repair requires a bounded quote token string";
+      return false;
+    }
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
+    if (token.find('\0') != std::string::npos) {
+      last_error = "Repair requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.repair_at_origin(token);
+    });
+  }
   auto sell_freedom_derelict_recovery(const godot::Variant& value) -> bool {
     if (value.get_type() != godot::Variant::STRING) {
       last_error = "Canister sale requires a bounded quote token string";
@@ -3139,6 +3169,39 @@ class FreedomBridge : public godot::RefCounted {
     result["contents"] = godot::String{view->contents.c_str()};
     return result;
   }
+  auto get_freedom_origin_repair() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.origin_repair_view();
+    if (!view || view->token.size() > 4096 || view->note.size() > 1024 ||
+        view->terms.size() > 4096 ||
+        view->token.find('\0') != std::string::npos ||
+        view->note.find('\0') != std::string::npos ||
+        view->terms.find('\0') != std::string::npos)
+      return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = std::int64_t{1};
+    result["supported"] = view->supported;
+    result["at_origin"] = view->at_origin;
+    result["paid_selected"] = view->paid_selected;
+    result["can_repair"] = view->can_repair;
+    result["forebody"] = static_cast<std::int64_t>(view->forebody);
+    result["landing_structure"] =
+        static_cast<std::int64_t>(view->landing_structure);
+    result["severity_units"] = static_cast<std::int64_t>(view->severity_units);
+    result["tick"] = decimal(view->tick);
+    result["unit_credits"] = decimal(view->unit_credits);
+    result["repair_credits"] = decimal(view->repair_credits);
+    result["cash_before"] = decimal(view->cash_before);
+    result["cash_after"] = decimal(view->cash_after);
+    result["berth_credits"] = decimal(view->berth_credits);
+    result["token"] = godot::String{view->token.c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    result["terms"] = godot::String{view->terms.c_str()};
+    return result;
+  }
   auto get_freedom_derelict_recovery_sale() const -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;
@@ -3868,6 +3931,15 @@ class FreedomBridge : public godot::RefCounted {
           latest["catastrophic"] = receipt.catastrophic;
         }
         impact["latest"] = latest;
+        if (condition.latest_repair) {
+          const auto& receipt = *condition.latest_repair;
+          godot::Dictionary repair;
+          repair["tick"] = decimal(receipt.attachment.tick);
+          repair["boundary_serial"] = decimal(receipt.before.latest.serial);
+          repair["paid"] = receipt.payment.paid;
+          repair["credits"] = decimal(receipt.credits);
+          impact["repair"] = repair;
+        }
       }
       result["impact"] = impact;
       const auto impact_available = session.impact_consequences_available();

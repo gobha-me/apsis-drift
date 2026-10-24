@@ -6,6 +6,7 @@ const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const ImpactView = preload("res://scripts/native/native_impact_view.gd")
+const RepairChecks = preload("res://tests/origin_repair_test.gd")
 var failures := 0
 var captures: Array = []
 
@@ -232,6 +233,10 @@ func run() -> void:
 	check(shell.current_view is WalkView and fresh.craft_id != loss.craft_id and fresh.impact.selected and fresh.impact.forebody == 0 and fresh.impact.landing_structure == 0 and fresh.impact.latest.is_empty() and not fresh.impact.pending_loss and not is_instance_valid(retired_overlay), "Recovery retained the retired individual's crack/condition or selected another policy")
 	check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, 0.0, 0.0])), "Recovered station clock could not advance")
 	save_matches(owner, args[0].path_join("recovered.json"), args[2].path_join("recovered-copy.json"))
+	if failures == 0:
+		var repair_checks := RepairChecks.new()
+		failures += await repair_checks.run_repair(self, shell, owner, args[0], args[1], args[2].path_join("origin-repair"))
+		repair_checks = null
 	var output := FileAccess.open(args[2].path_join("impact-report.json"), FileAccess.WRITE)
 	if check(output != null, "Impact evidence report unavailable"):
 		var hashes := {}

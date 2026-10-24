@@ -105,6 +105,36 @@ auto recovery(const FreedomConditionVoyage& voyage)
     return &d->voyage;
   return nullptr;
 }
+auto condition_knowledge(const FreedomConditionVoyage& voyage)
+    -> const FreedomKnowledge& {
+  return std::visit(
+      [](const auto& d) -> const FreedomKnowledge& {
+        using T = std::decay_t<decltype(d)>;
+        if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+          return d.knowledge;
+        else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
+          return d.voyage.knowledge;
+        else if constexpr (std::is_same_v<T, FreedomRecoverySaveDocument>)
+          return recovery_knowledge(d.voyage).knowledge;
+        else
+          return recovery_knowledge(d.voyage.voyage).knowledge;
+      },
+      voyage);
+}
+auto repair_payment_matches(const CraftCondition& condition,
+                            const FreedomKnowledge& knowledge) -> bool {
+  // The nested voyage already authenticates this account's income/generation;
+  // the core condition validator owns receipt shape, tariff and digest proof.
+  if (!condition.latest_repair) return true;
+  const auto& repair = *condition.latest_repair;
+  const auto& account = knowledge.paid_operations;
+  if (repair.payment.paid)
+    return account && account->started_tick == repair.payment.started_tick &&
+           account->spent_credits >= repair.payment.spent_after;
+  // Selecting paid operations after technical service does not impose a
+  // retrospective fee. Equal clocks allow service then explicit enrollment.
+  return !account || account->started_tick >= repair.attachment.tick;
+}
 auto supported(const FreedomConditionVoyage& voyage) -> bool {
   if (const auto* d = std::get_if<FreedomTravelSaveDocument>(&voyage))
     return d->craft_binding == NativeStartingAssemblySelection{};
@@ -160,6 +190,9 @@ auto validate_freedom_condition_document(const FreedomConditionSaveDocument& d)
           validate_craft_condition(d.condition, condition_flight(d.voyage));
       !valid)
     return std::unexpected(failure(valid.error()));
+  if (!repair_payment_matches(d.condition, condition_knowledge(d.voyage)))
+    return std::unexpected(
+        failure("Current repair does not match its paid account boundary"));
   const auto* r = recovery(d.voyage);
   if (d.retired_condition) {
     if (!r || !r->recovery.latest)
@@ -169,6 +202,11 @@ auto validate_freedom_condition_document(const FreedomConditionSaveDocument& d)
             *d.retired_condition, recovery_flight(r->recovery.latest->retired));
         !valid)
       return std::unexpected(failure("Retired condition owner/tick mismatch"));
+    if (!repair_payment_matches(
+            *d.retired_condition,
+            recovery_knowledge(r->recovery.latest->retired).knowledge))
+      return std::unexpected(
+          failure("Retired repair does not match its source paid account"));
     if (r->recovery.pending && *d.retired_condition != d.condition)
       return std::unexpected(
           failure("Pending loss must retain its exact source condition"));

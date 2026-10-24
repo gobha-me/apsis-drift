@@ -25,6 +25,10 @@ const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 const StationCrew = preload("res://scripts/native/native_station_crew.gd")
 const ExplorationNotes = preload("res://scripts/native/exploration_notes.gd")
 const CrewConversation = preload("res://scripts/native/station_crew_conversation.gd")
+const OriginRepair = preload("res://scripts/native/origin_repair.gd")
+var origin_repair_view: Control
+var origin_repair_button: Button
+var repair_action_frame := -1
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
@@ -370,7 +374,7 @@ func build_ui() -> void:
 	load_button = Button.new()
 	load_button.text = "Load…"
 	load_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open():
 			pause_controls("Load replaces the journey only after confirmation.")
 			load_requested.emit())
 	column.add_child(load_button)
@@ -381,7 +385,7 @@ func build_ui() -> void:
 	title_button = Button.new()
 	title_button.text = "Title…"
 	title_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open():
 			pause_controls("Return to title only after discarding unsaved progress.")
 			title_requested.emit())
 	column.add_child(title_button)
@@ -439,6 +443,14 @@ func build_ui() -> void:
 	# The station owns device/focus filtering before forwarding reader scrolling.
 	# Letting the child process first would admit stale disconnected-pad events.
 	observations_view.set_process_input(false)
+	origin_repair_button = Button.new()
+	origin_repair_button.text = "Origin craft repair"
+	origin_repair_button.pressed.connect(open_origin_repair)
+	column.add_child(origin_repair_button)
+	origin_repair_view = OriginRepair.new()
+	origin_repair_view.action_requested.connect(origin_repair_command)
+	origin_repair_view.back_requested.connect(close_origin_repair)
+	add_child(origin_repair_view)
 	commissions_button = Button.new()
 	commissions_button.text = "Survey commissions"
 	commissions_button.pressed.connect(open_survey_commissions)
@@ -468,7 +480,7 @@ func refresh_frame_diagnostics_button() -> void:
 
 
 func toggle_frame_diagnostics() -> void:
-	if not paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible: return
+	if not paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible: return
 	frame_diagnostics.set_enabled(not frame_diagnostics.enabled)
 	refresh_frame_diagnostics_button()
 	save_status.text = "Frame diagnostics selected. Resume explicitly to continue."
@@ -511,7 +523,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button, commissions_button]:
+	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button, commissions_button, origin_repair_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
@@ -531,7 +543,7 @@ func layout_hud() -> void:
 
 func refresh_hud() -> void:
 	if hud_scroll == null or active_card == null: return
-	var nested := settings_open() or observations_open() or crew_open() or commissions_open()
+	var nested := settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open()
 	hud_scroll.visible = paused and not nested
 	active_card.visible = not paused and not nested and not journey_dialog_open and save_dialog != null and not save_dialog.visible and error.is_empty()
 	hud_hint.text = "%s / left stick walk · Mouse / look keys / right stick look\nEsc / Start releases the mouse and opens controls\nWalk toward D1 · E / A climb aboard Wayfarer" % preferences_provider.foot_keyboard_label()
@@ -567,7 +579,7 @@ func pause_controls(reason: String) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
-		if focused and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open():
+		if focused and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open():
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
@@ -577,6 +589,9 @@ func pause_controls(reason: String) -> void:
 
 
 func toggle_pause() -> void:
+	if origin_repair_open():
+		close_origin_repair()
+		return
 	if commissions_open():
 		close_survey_commissions()
 		return
@@ -596,7 +611,7 @@ func toggle_pause() -> void:
 
 
 func resume_requested() -> void:
-	if journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open(): return
+	if journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog == null or save_dialog.visible:
 		return
 	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
@@ -643,7 +658,7 @@ func controller_connection_changed(device: int, connected: bool) -> void:
 
 
 func open_save_dialog() -> void:
-	if not focused or save_dialog == null or settings_open() or observations_open() or crew_open() or commissions_open():
+	if not focused or save_dialog == null or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open():
 		return
 	pause_controls("Save As preserves the last committed journey state.")
 	save_dialog.popup_centered_ratio(0.75)
@@ -665,11 +680,56 @@ func settings_open() -> bool:
 func observations_open() -> bool:
 	return is_instance_valid(observations_view) and observations_view.visible
 
+func origin_repair_open() -> bool:
+	return is_instance_valid(origin_repair_view) and origin_repair_view.visible
+
+func repair_controls_available() -> bool:
+	return activated and paused and focused and not journey_dialog_open and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not boarding_transition() and preferences_provider != null and preferences_provider.waiting_action.is_empty() and current_controls_neutral()
+
+func open_origin_repair() -> void:
+	if origin_repair_open() or not repair_controls_available(): return
+	var value: Variant = bridge.get_freedom_origin_repair()
+	if not OriginRepair.valid_packet(value) or value.tick != state.tick:
+		save_status.text = "Origin repair quote is unavailable."
+		return
+	pause_controls("Review Origin repair. Reading does not repair, bill or advance time.")
+	origin_repair_view.open(value)
+	refresh_hud()
+
+func origin_repair_command(action: String) -> void:
+	if action != "repair" or not origin_repair_open() or not repair_controls_available() or repair_action_frame == Engine.get_process_frames(): return
+	if not origin_repair_view.repair_button.is_visible_in_tree() or origin_repair_view.repair_button.disabled: return
+	var fresh: Variant = bridge.get_freedom_origin_repair()
+	if not OriginRepair.valid_packet(fresh):
+		origin_repair_view.refresh({})
+		return
+	if fresh != origin_repair_view.packet:
+		origin_repair_view.refresh(fresh)
+		origin_repair_view.back.grab_focus()
+		return
+	if not fresh.can_repair: return
+	repair_action_frame = Engine.get_process_frames()
+	var repaired: bool = bridge.repair_freedom_origin(fresh.token)
+	var failure_reason: String = "" if repaired else str(bridge.get_last_error())
+	update_view(0.0)
+	var after: Variant = bridge.get_freedom_origin_repair()
+	origin_repair_view.refresh(after if OriginRepair.valid_packet(after) else {})
+	save_status.text = "Craft repaired at Origin. Remain paused; Save to retain the service." if repaired else failure_reason
+	origin_repair_view.back.grab_focus()
+
+func close_origin_repair() -> void:
+	if not origin_repair_open() or not focused or journey_dialog_open or save_dialog == null or save_dialog.visible: return
+	origin_repair_view.hide()
+	controls_armed = false
+	refresh_hud()
+	origin_repair_button.grab_focus()
+	hud_scroll.ensure_control_visible(origin_repair_button)
+
 func commissions_open() -> bool:
 	return is_instance_valid(commissions_view) and commissions_view.visible
 
 func open_survey_commissions() -> void:
-	if not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or commissions_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral(): return
+	if not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral(): return
 	if not bridge.has_method("get_freedom_survey_commissions"): return
 	var packet: Variant = bridge.get_freedom_survey_commissions()
 	if not SurveyCommissions.valid_packet(packet) or packet.tick != state.tick:
@@ -684,7 +744,7 @@ func open_survey_commissions() -> void:
 
 func survey_commission_command(action: String) -> void:
 	if commissions_open() and commissions_view.service_child_open(): return
-	if not commissions_open() or not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or commission_action_frame == Engine.get_process_frames(): return
+	if not commissions_open() or origin_repair_open() or not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or commission_action_frame == Engine.get_process_frames(): return
 	if action not in ["accept", "submit", "abandon"]: return
 	var button: Button = {"accept": commissions_view.accept_button, "submit": commissions_view.submit_button, "abandon": commissions_view.abandon_button}[action]
 	if button.disabled or not button.visible: return
@@ -717,7 +777,7 @@ func refresh_paid_operations() -> void:
 	commissions_view.refresh_paid(value if PaidOperations.valid_packet(value) and value.tick == state.tick else {})
 
 func paid_operations_controls_available() -> bool:
-	return commissions_open() and activated and paused and focused and not journey_dialog_open and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not boarding_transition() and preferences_provider != null and preferences_provider.waiting_action.is_empty() and current_controls_neutral()
+	return commissions_open() and not origin_repair_open() and activated and paused and focused and not journey_dialog_open and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not boarding_transition() and preferences_provider != null and preferences_provider.waiting_action.is_empty() and current_controls_neutral()
 
 func open_paid_operations() -> void:
 	if not paid_operations_controls_available() or commissions_view.service_child_open(): return
@@ -829,7 +889,7 @@ func derelict_recovery_sale_command(action: String = "sell") -> void:
 	save_status.text = "Canister sold; recovery note retained. The journey remains paused." if accepted else "Canister sale refused: " + str(bridge.get_last_error())
 
 func close_survey_commissions() -> void:
-	if not commissions_open() or not focused or journey_dialog_open or save_dialog == null or save_dialog.visible: return
+	if not commissions_open() or origin_repair_open() or not focused or journey_dialog_open or save_dialog == null or save_dialog.visible: return
 	if commissions_view.recovery_sale_open():
 		commissions_view.close_recovery_sale()
 		return
@@ -860,10 +920,10 @@ func crew_talk_owner() -> Array:
 	return [state.get("universe_seed"), state.get("system_id"), state.get("planet_id"), state.get("station_id"), state.get("craft_id"), state.get("actor_id")]
 
 func pending_crew_talk_valid() -> bool:
-	return activated and not paused and focused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not boarding_transition() and controls_armed and current_controls_neutral() and pending_crew_talk.get("owner") == crew_talk_owner()
+	return activated and not paused and focused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and not boarding_transition() and controls_armed and current_controls_neutral() and pending_crew_talk.get("owner") == crew_talk_owner()
 
 func request_crew_conversation(allow_pending := true) -> void:
-	if not activated or paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or boarding_transition(): return
+	if not activated or paused or not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open() or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or boarding_transition(): return
 	var boarding: Variant = bridge.get_freedom_boarding_availability()
 	if valid_boarding_availability(boarding, state) and boarding.available: return
 	if not controls_armed or not current_controls_neutral():
@@ -894,7 +954,7 @@ func request_crew_conversation(allow_pending := true) -> void:
 	refresh_hud()
 
 func select_crew_topic(id: int) -> void:
-	if not crew_open() or commissions_open() or not paused or not focused or journey_dialog_open or save_dialog.visible or not error.is_empty(): return
+	if not crew_open() or commissions_open() or origin_repair_open() or not paused or not focused or journey_dialog_open or save_dialog.visible or not error.is_empty(): return
 	# Eligibility and topic text come from the actual current owner on every
 	# selection. A stale UI topic cannot fabricate a new interaction or progress.
 	var packet: Variant = bridge.get_freedom_station_crew()
@@ -909,7 +969,7 @@ func select_crew_topic(id: int) -> void:
 			return
 
 func keep_station_lead() -> void:
-	if not crew_open() or commissions_open() or not paused or not focused or journey_dialog_open or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or crew_reader.keep.disabled or not crew_reader.keep.visible: return
+	if not crew_open() or commissions_open() or origin_repair_open() or not paused or not focused or journey_dialog_open or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or crew_reader.keep.disabled or not crew_reader.keep.visible: return
 	var packet: Variant = bridge.get_freedom_station_crew()
 	if not StationCrew.valid_packet(packet, state) or not packet.available: return
 	var offered := false
@@ -931,7 +991,7 @@ func keep_station_lead() -> void:
 	crew_reader.back.grab_focus()
 
 func close_crew_conversation() -> void:
-	if not crew_open() or commissions_open() or not focused: return
+	if not crew_open() or commissions_open() or origin_repair_open() or not focused: return
 	crew_reader.clear_lead()
 	crew_reader.hide()
 	controls_armed = false
@@ -973,7 +1033,7 @@ func refresh_crew() -> void:
 
 func refresh_crew_remark() -> void:
 	if crew_actor == null or crew_actor.bubble == null: return
-	if paused or not focused or journey_dialog_open or crew_open() or commissions_open() or boarding_transition() or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or crew_packet.is_empty():
+	if paused or not focused or journey_dialog_open or crew_open() or commissions_open() or origin_repair_open() or boarding_transition() or mode_change_pending or save_dialog == null or save_dialog.visible or not error.is_empty() or crew_packet.is_empty():
 		crew_actor.bubble.hide()
 		return
 	var p: PackedFloat64Array = state.foot_position_metres
@@ -991,7 +1051,7 @@ func refresh_crew_remark() -> void:
 
 
 func open_observations() -> void:
-	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open() or commissions_open(): return
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open(): return
 	pause_controls("Reading retained observations does not operate sensors.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
@@ -1003,7 +1063,7 @@ func open_observations() -> void:
 
 
 func mark_recorded_sample_site(target: Dictionary, replace: bool) -> Dictionary:
-	if not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not observations_open() or settings_open() or crew_open() or commissions_open() or preferences_provider == null or not preferences_provider.waiting_action.is_empty():
+	if not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not observations_open() or settings_open() or crew_open() or commissions_open() or origin_repair_open() or preferences_provider == null or not preferences_provider.waiting_action.is_empty():
 		return {"ok": false, "reason": "Return to the focused, paused archive before marking a site."}
 	var result: Dictionary = preload("res://scripts/native/exploration_notes.gd").mark_bridge(bridge, target, replace)
 	if result.ok: update_view(0.0)
@@ -1021,7 +1081,7 @@ func close_observations() -> void:
 
 
 func open_settings() -> void:
-	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open() or commissions_open(): return
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open(): return
 	pause_controls("Control choices stay pending until Apply.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
@@ -1057,7 +1117,7 @@ func stick(value: float) -> float:
 
 
 func input_controls(delta: float) -> PackedFloat64Array:
-	if paused or commissions_open() or not focused or not error.is_empty() or save_dialog.visible:
+	if paused or commissions_open() or origin_repair_open() or not focused or not error.is_empty() or save_dialog.visible:
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	var keyboard_move: Vector2 = preferences_provider.foot_keyboard_move()
 	var forward := keyboard_move.y
@@ -1104,7 +1164,7 @@ static func boarding_look_weight(progress: float) -> float:
 
 
 func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
-	if paused or commissions_open() or not focused or not error.is_empty() or (save_dialog != null and save_dialog.visible):
+	if paused or commissions_open() or origin_repair_open() or not focused or not error.is_empty() or (save_dialog != null and save_dialog.visible):
 		return true
 	if not bridge.advance_freedom_walk(delta, commands):
 		error = str(bridge.get_last_error())
@@ -1126,7 +1186,7 @@ func boarding_transition() -> bool:
 
 func board_requested() -> void:
 	pending_crew_talk.clear()
-	if paused or commissions_open() or not focused or not error.is_empty() or save_dialog.visible or boarding_transition(): return
+	if paused or commissions_open() or origin_repair_open() or not focused or not error.is_empty() or save_dialog.visible or boarding_transition(): return
 	if not current_controls_neutral():
 		save_status.text = "Release movement and look controls to board."
 		return
@@ -1141,7 +1201,7 @@ func board_requested() -> void:
 
 
 func sync_mouse_look() -> void:
-	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not mode_change_pending)
+	mouse_look.set_active(activated and focused and not paused and error.is_empty() and not journey_dialog_open and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open() and not mode_change_pending)
 
 
 func _exit_tree() -> void:
@@ -1257,7 +1317,7 @@ func update_view(delta: float = 0.0) -> void:
 
 func _process(delta: float) -> void:
 	if frame_diagnostics != null and frame_diagnostics.enabled:
-		frame_diagnostics.observe(delta, state, [viewport.size] if viewport != null else [], activated and focused and not paused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible)
+		frame_diagnostics.observe(delta, state, [viewport.size] if viewport != null else [], activated and focused and not paused and not journey_dialog_open and not settings_open() and not observations_open() and not crew_open() and not commissions_open() and not origin_repair_open() and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible)
 	if bridge == null or not activated:
 		return
 	if not pending_crew_talk.is_empty() and not pending_crew_talk_valid(): pending_crew_talk.clear()
@@ -1266,10 +1326,10 @@ func _process(delta: float) -> void:
 		stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
 	if settings_return_frames > 0:
 		settings_return_frames -= 1
-		if settings_return_frames == 0 and not settings_open() and not commissions_open(): hud_scroll.ensure_control_visible(settings_button)
+		if settings_return_frames == 0 and not settings_open() and not commissions_open() and not origin_repair_open(): hud_scroll.ensure_control_visible(settings_button)
 	if observations_return_frames > 0:
 		observations_return_frames -= 1
-		if observations_return_frames == 0 and not observations_open() and not settings_open() and not commissions_open(): hud_scroll.ensure_control_visible(observations_button)
+		if observations_return_frames == 0 and not observations_open() and not settings_open() and not commissions_open() and not origin_repair_open(): hud_scroll.ensure_control_visible(observations_button)
 	if paused:
 		refresh_crew_remark()
 		if not settings_open(): observe_neutral_controls()
@@ -1320,12 +1380,25 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if not focused or save_dialog == null or save_dialog.visible:
-		if observations_open() or commissions_open(): get_viewport().set_input_as_handled()
+		if observations_open() or commissions_open() or origin_repair_open(): get_viewport().set_input_as_handled()
 		return
 	if settings_open() and settings_view.handle_keyboard_capture(event): return
 	var pressed := event.is_pressed() and not event.is_echo()
 	var key: int = event.physical_keycode if event is InputEventKey else KEY_NONE
 	var button: int = event.button_index if event is InputEventJoypadButton else -1
+	if origin_repair_open():
+		if event is InputEventKey and event.echo:
+			get_viewport().set_input_as_handled()
+		elif pressed and (key == KEY_ESCAPE or button in [JOY_BUTTON_START, JOY_BUTTON_B]):
+			close_origin_repair()
+			get_viewport().set_input_as_handled()
+		elif pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
+			origin_repair_view.navigate(-1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1)
+			get_viewport().set_input_as_handled()
+		elif pressed and button == JOY_BUTTON_A:
+			origin_repair_view.accept()
+			get_viewport().set_input_as_handled()
+		return
 	if commissions_open():
 		if pressed and (key == KEY_ESCAPE or button in [JOY_BUTTON_START, JOY_BUTTON_B]):
 			close_survey_commissions()
@@ -1379,7 +1452,7 @@ func _input(event: InputEvent) -> void:
 		return
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button, commissions_button]
+		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button, frame_diagnostics_button, commissions_button, origin_repair_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):
@@ -1428,6 +1501,6 @@ func refresh_profile_actions() -> void:
 	save_button.tooltip_text = replace_save_button.tooltip_text
 
 func request_catalog_save(save_as: bool) -> void:
-	if not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or save_dialog.visible: return
+	if not focused or journey_dialog_open or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open() or save_dialog.visible: return
 	pause_controls("Save uses the last committed journey state.")
 	catalog_save_requested.emit(save_as)
