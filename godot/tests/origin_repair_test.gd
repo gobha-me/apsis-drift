@@ -96,9 +96,13 @@ func refused_controls(view: Control, owner: Variant, output: String, label: Stri
 	pad(3, false)
 	view.survey_commission_command("accept")
 	view.survey_commission_command("abandon")
+	# Pause toggles act as Back within a nested reader, keeping simulation paused.
 	view.toggle_pause()
-	check(view.paused and view.origin_repair_open(), "modal action resumed flight or closed the repair reader")
+	check(view.paused and not view.origin_repair_open(), "modal Back resumed simulation or retained the repair reader")
 	record(owner, output, label + "-guards-after", original)
+	view.observe_neutral_controls()
+	view.open_origin_repair()
+	check(view.paused and view.origin_repair_open() and page.packet == owner.get_freedom_origin_repair(), "repair quote did not reopen paused after Back")
 	page.packet.token += "x"
 	view.origin_repair_command("repair")
 	check(page.packet == owner.get_freedom_origin_repair(), "stale displayed quote did not refresh without confirmation")
@@ -106,7 +110,7 @@ func refused_controls(view: Control, owner: Variant, output: String, label: Stri
 
 func repaired_state(owner: Variant, before: Dictionary, view: Control) -> void:
 	var after: Dictionary = owner.get_freedom_flight_state()
-	check(Impact.valid(after.impact, after.craft_id, after.frame_id, after.frame_version) and after.impact.version == 2 and after.impact.forebody == 0 and after.impact.landing_structure == 0, "actual repair lacks a valid v2 current condition")
+	if not check(Impact.valid(after.impact, after.craft_id, after.frame_id, after.frame_version) and after.impact.version == 2 and after.impact.forebody == 0 and after.impact.landing_structure == 0, "actual repair lacks a valid v2 current condition"): return
 	check(after.tick == before.tick and after.craft_id == before.craft_id and after.resources == before.resources and after.impact.latest == before.impact.latest, "repair advanced time, replaced craft, refueled or erased the impact")
 	check(after.impact.repair.boundary_serial == after.impact.latest.serial and "repaired" in Impact.feedback(after.impact) and "history" in Impact.feedback(after.impact), "retained impact is still announced as current damage")
 	if view is FlightView:
