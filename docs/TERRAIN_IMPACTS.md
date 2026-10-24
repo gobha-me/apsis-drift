@@ -95,9 +95,11 @@ The flight presenter pauses controls and exhaust and opens the same explicit
 standard recovery choice used by Continue. Waiting there leaves the pending
 save intact. Continuing returns to a paused replacement actor at Origin Station.
 
-Repair costs, nanites, drones, combat, per-fragment physics and jump-stress
-mechanics are outside this slice. The stable condition identities leave room
-for those future decisions without creating competing damage stores.
+[Repair at Origin](ORIGIN_REPAIR.md) now clears noncatastrophic damage on the
+same surviving ship, while retaining its bounded impact history. Technical
+service is free; existing paid journeys review a cash-only quote. Nanites,
+drones, combat, per-fragment physics and jump-stress mechanics remain separate
+work. The stable condition identities remain shared across impacts and repair.
 
 ## Validation boundary
 

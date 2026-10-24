@@ -177,6 +177,13 @@ admitted system anchors in the paused chart and keeps existing destination
 controls. The current reference-region view creates no hidden markers, route
 owner, new travel rule or permanent universe ceiling. Wider #207 remains deferred.
 
+2026-10-24 engineering follow-through: [repair at Origin](ORIGIN_REPAIR.md)
+([#707](https://github.com/gobha-me/apsis-drift/issues/707)) restores the current
+noncatastrophic condition of a surviving attached Wayfarer. Technical service
+is free; an existing paid journey reviews a provisional cash-only quote.
+The ship and impact history persist. Timed shipyard work, materials and broader
+repair economics remain separate decisions.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

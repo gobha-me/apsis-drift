@@ -123,6 +123,13 @@ struct PaidRetainerOutcome {
                                          std::uint64_t generation,
                                          std::uint64_t service_credits)
     -> std::expected<PaidOperationsAccount, std::string>;
+// Cash-only repair expense. Existing due-berth reconciliation still applies;
+// this purchase never draws operating credit or changes the account version.
+[[nodiscard]] auto purchase_paid_repair(const PaidOperationsAccount&,
+                                        PaidIncomeCounts, SimulationTick,
+                                        std::uint64_t generation,
+                                        std::uint32_t severity_units)
+    -> std::expected<PaidOperationsAccount, std::string>;
 [[nodiscard]] auto fund_paid_retainer(const PaidOperationsAccount&,
                                       PaidIncomeCounts, SimulationTick,
                                       std::uint64_t generation,

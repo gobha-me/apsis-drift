@@ -272,6 +272,104 @@ auto income_and_replacement() -> void {
             !charge_paid_recovery(last, 0, 0, 0),
         "Recovery refuses unrepresentable or wrapped craft generations");
 }
+auto repair_expense() -> void {
+  constexpr SimulationTick start{100};
+  constexpr std::uint64_t generation{7};
+  for (const PaidIncomeCounts counts :
+       {PaidIncomeCounts{}, PaidIncomeCounts{2, 3, 0},
+        PaidIncomeCounts{2, 0, 1}, PaidIncomeCounts{2, 3, 1}}) {
+    auto account = need(make_paid_operations(counts, start, generation));
+    // Explicit valid financial boundaries, not a flown damage/income history.
+    account.operating_tab = 80;
+    account.recovery_due = 30;
+    account.supported_sequence = 4;
+    const auto original = account;
+    const auto initial_cash = need(paid_operations_cash(account, counts));
+    const auto now = start + 10 * kPaidHourTicks;
+    const auto billed =
+        need(reconcile_paid_berth(account, counts, now, generation));
+    auto expected = billed;
+    expected.spent_credits += 60;
+    const auto repaired =
+        need(purchase_paid_repair(account, counts, now, generation, 6));
+    check(repaired == expected && account == original &&
+              repaired.version == original.version &&
+              repaired.billed_through_hours == 11 &&
+              repaired.operating_tab == 80 && repaired.recovery_due == 30 &&
+              need(paid_operations_cash(repaired, counts)) == initial_cash - 95,
+          "All three account versions reconcile seven due berth hours then "
+          "debit sixty cash, preserving income/insurance/tab/support anchors");
+    check(need(purchase_paid_repair(billed, counts, now, generation, 6)) ==
+              repaired,
+          "A prior read-only billing preview cannot alter the repair debit");
+    check(
+        validate_paid_operations(repaired, counts, now, generation).has_value(),
+        "A repair expense remains admissible without changing account schema");
+    const auto one =
+        need(purchase_paid_repair(account, counts, start, generation, 1));
+    auto one_expected = account;
+    one_expected.spent_credits += 10;
+    check(
+        one == one_expected,
+        "A single severity unit costs exactly ten and draws no repair credit");
+    for (const auto units : {0U, 7U, std::numeric_limits<std::uint32_t>::max()})
+      check(!purchase_paid_repair(account, counts, now, generation, units) &&
+                account == original,
+            "Empty/free or excessive work refuses without posting due bills");
+    auto wrong_counts = counts;
+    ++wrong_counts.survey_paid;
+    check(
+        !purchase_paid_repair(account, wrong_counts, start, generation, 1) &&
+            !purchase_paid_repair(account, counts, start - 1, generation, 1) &&
+            !purchase_paid_repair(account, counts, start, generation + 1, 1) &&
+            !purchase_paid_repair(account, counts,
+                                  std::numeric_limits<SimulationTick>::max(),
+                                  generation, 1) &&
+            account == original,
+        "Stale income/generation, rewound time and overflow time refuse "
+        "before any repair or billing mutation");
+    auto invalid = account;
+    invalid.spent_credits = std::numeric_limits<std::uint64_t>::max();
+    const auto invalid_before = invalid;
+    check(!purchase_paid_repair(invalid, counts, now, generation, 1) &&
+              invalid == invalid_before,
+          "Malformed full-width spending refuses instead of wrapping a debit");
+  }
+  const PaidIncomeCounts counts{};
+  const auto opening = need(make_paid_operations(counts, start, generation));
+  const auto fuel =
+      need(purchase_paid_service(opening, counts, start, generation, 85));
+  const auto exact =
+      need(purchase_paid_service(fuel, counts, start, generation, 35));
+  const auto paid =
+      need(purchase_paid_repair(exact, counts, start, generation, 6));
+  check(need(paid_operations_cash(exact, counts)) == 60 &&
+            need(paid_operations_cash(paid, counts)) == 0 &&
+            paid.operating_tab == 0 && paid.recovery_due == 0,
+        "Exactly sixty available cash funds the full six-unit repair");
+  const auto before_due = exact;
+  check(!purchase_paid_repair(exact, counts, start + 4 * kPaidHourTicks,
+                              generation, 6) &&
+            exact == before_due && exact.billed_through_hours == 4 &&
+            need(paid_operations_cash(exact, counts)) == 60,
+        "Due berth gets first claim: cash sixty minus five refuses a "
+        "sixty-credit "
+        "repair without posting either the bill or repair to the input");
+  const auto one_less =
+      need(purchase_paid_service(exact, counts, start, generation, 1));
+  check(!purchase_paid_repair(one_less, counts, start, generation, 6) &&
+            one_less.operating_tab == 0 &&
+            need(paid_operations_cash(one_less, counts)) == 59,
+        "One credit short cannot finance repair from an unused operating tab");
+  const auto empty = capped();
+  const auto empty_before = empty;
+  check(!purchase_paid_repair(empty, counts, 100 * kPaidHourTicks, 0, 1) &&
+            empty == empty_before && empty.operating_tab == 200,
+        "Empty cash with capped debt never converts billing waiver or "
+        "hardship into repair financing");
+  check(!purchase_paid_service(opening, counts, start, generation, 86),
+        "The separate repair purchase leaves the existing fuel cap unchanged");
+}
 } // namespace
 auto main() -> int {
   try {
@@ -279,6 +377,7 @@ auto main() -> int {
     billing_and_validation();
     operating_support();
     income_and_replacement();
+    repair_expense();
   } catch (const std::exception& error) {
     std::cerr << "FAIL: " << error.what() << '\n';
     return 1;

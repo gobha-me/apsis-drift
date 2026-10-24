@@ -37,6 +37,8 @@ const SurfaceLandmarks = preload("res://scripts/native/native_surface_landmarks.
 var surface_landmarks := SurfaceLandmarks.new()
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
+const OriginRepair = preload("res://scripts/native/origin_repair.gd")
+var repair_action_frame := -1
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
@@ -1021,7 +1023,7 @@ func layout_hud() -> void:
 
 
 func show_instruments() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	pause_controls("Flight instruments and navigation.", false)
 	update_view(0.0)
 	if controls_menu != null: controls_menu.hide_menu()
@@ -1238,6 +1240,8 @@ func setup_controls() -> void:
 			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
+	controls_menu.origin_repair_button = controls_menu.add_button(survey_column, "Origin craft repair", open_origin_repair)
+	controls_menu.origin_repair_view.action_requested.connect(origin_repair_command)
 	controls_menu.commissions_button = controls_menu.add_button(survey_column, "Survey commissions", open_survey_commissions)
 	controls_menu.commissions_view.action_requested.connect(survey_commission_command)
 	controls_menu.commissions_view.paid_open_requested.connect(open_paid_operations)
@@ -1297,13 +1301,13 @@ func setup_controls() -> void:
 	controls_menu.resumed.connect(toggle_pause)
 	controls_menu.save_requested.connect(open_save_dialog)
 	controls_menu.catalog_save_requested.connect(func(save_as: bool):
-		if paused and focused and not journey_dialog_open and not save_dialog.visible:
+		if paused and focused and not journey_dialog_open and not save_dialog.visible and not origin_repair_open():
 			reset_quiet_travel()
 			catalog_save_requested.emit(save_as))
 	controls_menu.load_requested.connect(func():
-		if paused and focused and not journey_dialog_open and not save_dialog.visible: load_requested.emit())
+		if paused and focused and not journey_dialog_open and not save_dialog.visible and not origin_repair_open(): load_requested.emit())
 	controls_menu.title_requested.connect(func():
-		if paused and focused and not journey_dialog_open and not save_dialog.visible: title_requested.emit())
+		if paused and focused and not journey_dialog_open and not save_dialog.visible and not origin_repair_open(): title_requested.emit())
 	controls_menu.assistance_requested.connect(request_assistance)
 	controls_menu.hold_requested.connect(request_hold)
 	controls_menu.port_requested.connect(port_command)
@@ -1346,7 +1350,7 @@ func surface_conditions_text() -> String:
 
 
 func show_surface_conditions() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	# This action is only in the paused controls menu; querying cannot advance
 	# the C++ clock, cancel an aid, or implicitly resume the flight.
 	if not paused or not focused: return
@@ -1691,8 +1695,51 @@ func sample_frame_diagnostics(delta: float) -> void:
 
 
 func marker_controls_available() -> bool:
-	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible) and (controls_menu.commissions_view == null or not controls_menu.commissions_view.visible)
+	return paused and focused and controls_menu.panel.visible and player_input.waiting_action.is_empty() and not journey_dialog_open and not save_dialog.visible and not recovery_notified and error.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible) and (controls_menu.commissions_view == null or not controls_menu.commissions_view.visible) and not origin_repair_open()
 
+
+func origin_repair_open() -> bool:
+	return controls_menu != null and is_instance_valid(controls_menu.origin_repair_view) and controls_menu.origin_repair_view.visible
+
+func repair_controls_available() -> bool:
+	return activated and paused and focused and not journey_dialog_open and not recovery_notified and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and controls_menu != null and controls_menu.panel.visible and player_input != null and player_input.waiting_action.is_empty() and not controls_menu.settings_view.visible and not controls_menu.basics.visible and not controls_menu.surface_reference_view.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible) and not commissions_open() and state.get("boarding", {}).get("state", "") not in ["boarding", "disembarking"]
+
+func open_origin_repair() -> void:
+	if origin_repair_open() or not repair_controls_available() or not controls_menu.menu_margin.visible: return
+	observe_neutral_controls()
+	if not controls_armed: return
+	var value: Variant = bridge.get_freedom_origin_repair()
+	if not OriginRepair.valid_packet(value) or value.tick != state.tick:
+		report_action_status("Origin repair quote is unavailable.")
+		return
+	controls_menu.entry_focus_frames = 0
+	controls_menu.menu_margin.hide()
+	controls_menu.origin_repair_view.open(value)
+
+func origin_repair_command(action: String) -> void:
+	if action != "repair" or not origin_repair_open() or not repair_controls_available() or repair_action_frame == Engine.get_process_frames(): return
+	observe_neutral_controls()
+	if not controls_armed: return
+	var reader: Control = controls_menu.origin_repair_view
+	if not reader.repair_button.is_visible_in_tree() or reader.repair_button.disabled: return
+	var fresh: Variant = bridge.get_freedom_origin_repair()
+	if not OriginRepair.valid_packet(fresh):
+		reader.refresh({})
+		return
+	if fresh != reader.packet:
+		reader.refresh(fresh)
+		reader.back.grab_focus()
+		return
+	if not fresh.can_repair: return
+	repair_action_frame = Engine.get_process_frames()
+	var repaired: bool = bridge.repair_freedom_origin(fresh.token)
+	var failure_reason: String = "" if repaired else str(bridge.get_last_error())
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	var after: Variant = bridge.get_freedom_origin_repair()
+	reader.refresh(after if OriginRepair.valid_packet(after) else {})
+	report_action_status("Craft repaired at Origin. Remain paused; Save to retain the service." if repaired else failure_reason)
+	reader.back.grab_focus()
 
 func commissions_open() -> bool:
 	return controls_menu != null and is_instance_valid(controls_menu.commissions_view) and controls_menu.commissions_view.visible
@@ -1715,6 +1762,7 @@ func open_survey_commissions() -> void:
 
 
 func survey_commission_command(action: String) -> void:
+	if origin_repair_open(): return
 	if commissions_open() and controls_menu.commissions_view.service_child_open(): return
 	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or controls_menu == null or not controls_menu.panel.visible or controls_menu.commissions_view == null or not controls_menu.commissions_view.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return
 	if action not in ["accept", "submit", "abandon"] or commission_action_frame == Engine.get_process_frames(): return
@@ -1762,7 +1810,7 @@ func refresh_paid_operations() -> void:
 
 
 func paid_operations_controls_available() -> bool:
-	if not commissions_open() or not activated or not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not controls_menu.panel.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return false
+	if origin_repair_open() or not commissions_open() or not activated or not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or not controls_menu.panel.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return false
 	observe_neutral_controls()
 	return controls_armed
 
@@ -2146,7 +2194,7 @@ func refresh_control_hint() -> void:
 
 
 func request_assistance(enabled: bool) -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if surface_walking():
 		assist_button.set_pressed_no_signal(state.assistance)
 		save_status.text = "Return to the pilot seat to change flight assistance."
@@ -2176,7 +2224,7 @@ func report_action_status(message: String) -> void:
 
 
 func request_hold(enabled: bool) -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible or mode_change_pending:
 		return
 	if not bridge.set_freedom_hold(enabled):
@@ -2188,7 +2236,7 @@ func request_hold(enabled: bool) -> void:
 
 
 func open_save_dialog() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	reset_quiet_travel()
 	pause_controls("Save As preserves the last committed state.", false)
 	controls_menu.hide_menu()
@@ -2240,6 +2288,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 
 
 func change_camera() -> void:
+	if origin_repair_open(): return
 	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2" and not surface_walking():
 		cockpit = not cockpit
 		clear_cockpit_control()
@@ -2249,6 +2298,7 @@ func change_camera() -> void:
 
 
 func recenter_camera() -> void:
+	if origin_repair_open(): return
 	if error.is_empty() and focused and not paused and not save_dialog.visible:
 		clear_flight_mouse()
 		look_offset = Vector2(-float(state.surface_walk.heading), 0.0) if surface_walking() else Vector2.ZERO
@@ -2256,7 +2306,7 @@ func recenter_camera() -> void:
 
 
 func unboard_requested() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible or player_input == null: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -2272,7 +2322,7 @@ func unboard_requested() -> void:
 
 
 func select_moon_jump() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -2289,7 +2339,7 @@ func select_moon_jump() -> void:
 
 
 func select_minor_jump() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -2306,7 +2356,7 @@ func select_minor_jump() -> void:
 
 
 func select_jump_destination(ordinal: int) -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	var rows: Array = state.get("chart", {}).get("rows", [])
 	if ordinal < 0 or ordinal >= rows.size(): return
@@ -2326,7 +2376,7 @@ func quiet_travel_controls_available() -> bool:
 	if save_dialog == null or save_dialog.visible or player_input == null or not player_input.waiting_action.is_empty() or controls_menu == null or controls_menu.panel.visible: return false
 	if controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible: return false
 	if controls_menu.observations_view != null and controls_menu.observations_view.visible: return false
-	if controls_menu.commissions_view != null and controls_menu.commissions_view.visible: return false
+	if (controls_menu.commissions_view != null and controls_menu.commissions_view.visible) or origin_repair_open(): return false
 	return true
 
 
@@ -2396,7 +2446,7 @@ func charted_arrivals_controls_available() -> bool:
 	if player_input == null or not player_input.waiting_action.is_empty() or controls_menu == null or controls_menu.panel.visible: return false
 	if controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible: return false
 	if controls_menu.observations_view != null and controls_menu.observations_view.visible: return false
-	if controls_menu.commissions_view != null and controls_menu.commissions_view.visible: return false
+	if (controls_menu.commissions_view != null and controls_menu.commissions_view.visible) or origin_repair_open(): return false
 	return state.get("jump", {}).get("phase", "idle") == "idle" and not state.get("impact", {}).get("pending_loss", false)
 
 
@@ -2479,7 +2529,7 @@ func set_charted_arrivals(enabled: bool) -> void:
 
 
 func jump_requested() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
@@ -2497,7 +2547,7 @@ func jump_requested() -> void:
 
 
 func port_command(command: String, ordinal: int = 0) -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
@@ -2559,7 +2609,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 
 
 func enable_impacts() -> void:
-	if commissions_open(): return
+	if commissions_open() or origin_repair_open(): return
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible:
 		return
 	if not bridge.enable_freedom_impact_consequences():
@@ -2737,6 +2787,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
+	if origin_repair_open(): return
 	if not event is InputEventKey or not event.pressed or event.echo or save_dialog == null or save_dialog.visible:
 		return
 	# Esc/Start and remapped camera input belong to PlayerInput only.
