@@ -1,5 +1,7 @@
 #include "apsis_drift/native_flight_session.hpp"
 
+#include <memory>
+
 namespace apsis_drift {
 auto NativeFreedomFlightSession::recovery_document() const
     -> std::expected<FreedomRecoverySaveDocument, std::string> {
@@ -27,29 +29,32 @@ auto NativeFreedomFlightSession::record_loss(FreedomLossCause cause,
                                              SimulationTick tick,
                                              std::uint64_t checksum)
     -> std::expected<void, std::string> {
-  auto source = recovery_document();
+  // Retire unfinished retrieval before freezing its immutable loss source.
+  // A refused loss discards this candidate and preserves the original activity.
+  auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
+  candidate->cancel_derelict_recovery_unfinished();
+  auto source = candidate->recovery_document();
   if (!source) return std::unexpected{source.error()};
   auto result = record_freedom_loss(*source, cause, craft, tick, checksum);
   if (!result) return std::unexpected{result.error().detail};
-  auto candidate = *this;
-  candidate.recovery_ = std::move(result->recovery);
-  if (candidate.recovery_pending()) {
-    candidate.gear_clearance_.reset();
-    if (candidate.condition_) {
-      candidate.condition_->tick = candidate.document_.flight.tick;
-      candidate.retired_condition_ = candidate.condition_;
+  candidate->recovery_ = std::move(result->recovery);
+  if (candidate->recovery_pending()) {
+    candidate->gear_clearance_.reset();
+    if (candidate->condition_) {
+      candidate->condition_->tick = candidate->document_.flight.tick;
+      candidate->retired_condition_ = candidate->condition_;
     }
-    candidate.cancel_port_approach();
-    candidate.cancel_surface_maneuver();
+    candidate->cancel_port_approach();
+    candidate->cancel_surface_maneuver();
   }
-  if (candidate.condition_) {
-    auto selected = candidate.condition_document();
+  if (candidate->condition_) {
+    auto selected = candidate->condition_document();
     if (!selected) return std::unexpected{selected.error()};
     if (auto encoded = encode_freedom_condition_document_json(*selected);
         !encoded)
       return std::unexpected{encoded.error().detail};
   }
-  *this = std::move(candidate);
+  *this = std::move(*candidate);
   return {};
 }
 auto NativeFreedomFlightSession::complete_recovery()

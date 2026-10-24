@@ -123,6 +123,9 @@ class NativeCiTest(unittest.TestCase):
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered",
                      "lead-station", "lead-kept", "lead-confirmed", "lead-visited", "lead-recovered")}
+                    if family == "derelict_recovery_saves":
+                        row["files_sha256"] = {n + ".json": SHA for n in
+                            (*self.runner.DERELICT_RECOVERY_PHASES, "manifest")}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
@@ -155,6 +158,8 @@ class NativeCiTest(unittest.TestCase):
         for name in self.runner.ROUNDTRIP_TESTS:
             if name in selected:
                 cli += [f"{name}-refusal-{i}.log" for i in range(23)]
+        if "native_derelict" in selected:
+            cli += [f"derelict-recovery-refusal-{i}.log" for i in range(5)]
         for name in cli:
             self.log(directory, name, "argument refused\n")
         ci.write_json(directory / "report.json", r)
@@ -210,7 +215,7 @@ class NativeCiTest(unittest.TestCase):
     def test_pack_and_unpack_exact_payload_modes(self):
         output = self.root / "unpacked"
         ci.unpack(self.archive, self.envelope, output)
-        self.assertEqual(len(self.m["files"]), 13)
+        self.assertEqual(len(self.m["files"]), 14)
         for name, row in self.m["files"].items():
             p = output / name
             self.assertEqual(ci.digest(p), row["sha256"])
@@ -336,8 +341,8 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 81, "launch_cases": 25,
-                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 130})
+        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 82, "launch_cases": 25,
+                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 135})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
         relocated = self.root.parent / (self.root.name + "-relocated")
@@ -433,7 +438,7 @@ class NativeCiTest(unittest.TestCase):
                     self.change_report(args, group, remove)
                     with self.assertRaises(ValueError):
                         ci.check(args, self.repo)
-            self.change_report(args, group, lambda r: (r.clear(), r.update(copy.deepcopy(original))))
+            self.change_report(args, int(group), lambda r: (r.clear(), r.update(copy.deepcopy(original))))
 
     def test_bad_status_timeout_setup_helper_and_nonfinite_refused(self):
         args = self.make_check()
@@ -513,6 +518,41 @@ class NativeCiTest(unittest.TestCase):
             self.fail("Roundtrip CLI refusal fixture missing")
         # The remaining inventory and hashes are self-consistent. Admission
         # must still require every old and new CLI refusal, not just a prefix.
+        with self.assertRaisesRegex(ValueError, "Missing CLI refusal evidence"):
+            ci.check(args, self.repo)
+
+    def test_derelict_recovery_roster_requires_every_phase(self):
+        args = self.make_check()
+        group = next(group for group, names in ci.groups(self.repo).items()
+                     if "native_derelict" in names)
+        path = self.root / ("work-" + group + "/native-contracts-unit/report.json")
+        original = ci.read_json(path)
+        row = next(r for r in original["setup"] if r.get("family") == "derelict_recovery_saves")
+        self.assertEqual(len(row["files_sha256"]), 18)
+        for name in row["files_sha256"]:
+            with self.subTest(missing=name):
+                def remove(report):
+                    phase = next(r for r in report["setup"] if r.get("family") == "derelict_recovery_saves")
+                    del phase["files_sha256"][name]
+                self.change_report(args, int(group), lambda r: (r.clear(), r.update(copy.deepcopy(original)), remove(r)))
+                with self.assertRaisesRegex(ValueError, "Incomplete actual derelict recovery phases"):
+                    ci.check(args, self.repo)
+        self.change_report(args, int(group), lambda r: (r.clear(), r.update(copy.deepcopy(original))))
+
+    def test_derelict_recovery_cli_refusals_cannot_be_hidden(self):
+        args = self.make_check()
+        name = "derelict-recovery-refusal-4.log"
+        for inv_path in args.invocation:
+            invocation = ci.read_json(inv_path)
+            row = invocation["reports"][0]
+            if name not in row["logs"]:
+                continue
+            (self.root / row["path"]).parent.joinpath(name).unlink()
+            del row["logs"][name]
+            ci.write_json(inv_path, invocation)
+            break
+        else:
+            self.fail("Derelict recovery CLI refusal fixture missing")
         with self.assertRaisesRegex(ValueError, "Missing CLI refusal evidence"):
             ci.check(args, self.repo)
 

@@ -6,6 +6,8 @@ signal paid_open_requested
 signal paid_action_requested(action: String)
 signal sale_open_requested
 signal sale_action_requested(action: String)
+signal recovery_sale_open_requested
+signal recovery_sale_action_requested(action: String)
 
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 var paid_view: Control
@@ -15,6 +17,10 @@ const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
 var sale_view: Control
 var sale_button: Button
 var sale_packet: Dictionary = {}
+const RecoverySale = preload("res://scripts/native/derelict_recovery_sale.gd")
+var recovery_sale_view: Control
+var recovery_sale_button: Button
+var recovery_sale_packet: Dictionary = {}
 
 var packet: Dictionary = {}
 var accept_button: Button
@@ -127,6 +133,10 @@ func _ready() -> void:
 	sale_button.text = "Sell carried specimens · Origin buyer"
 	sale_button.pressed.connect(func(): sale_open_requested.emit())
 	column.add_child(sale_button)
+	recovery_sale_button = Button.new()
+	recovery_sale_button.text = "Sell recovered canister · Origin buyer"
+	recovery_sale_button.pressed.connect(func(): recovery_sale_open_requested.emit())
+	column.add_child(recovery_sale_button)
 	back = Button.new()
 	back.text = "Back · remain paused"
 	back.pressed.connect(func(): back_requested.emit())
@@ -139,6 +149,10 @@ func _ready() -> void:
 	sale_view.action_requested.connect(func(action: String): sale_action_requested.emit(action))
 	sale_view.back_requested.connect(func(): back_requested.emit())
 	add_child(sale_view)
+	recovery_sale_view = RecoverySale.new()
+	recovery_sale_view.action_requested.connect(func(action: String): recovery_sale_action_requested.emit(action))
+	recovery_sale_view.back_requested.connect(func(): back_requested.emit())
+	add_child(recovery_sale_view)
 	resized.connect(layout_reader)
 	get_window().size_changed.connect(layout_reader)
 	hide()
@@ -148,13 +162,14 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, back]:
+	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		button.custom_minimum_size.y = ceili(44 * scale)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func open(value: Dictionary) -> void:
 	paid_view.hide()
 	sale_view.hide()
+	recovery_sale_view.hide()
 	panel.show()
 	show()
 	scroll.scroll_vertical = 0
@@ -172,6 +187,8 @@ func refresh(value: Dictionary) -> void:
 	abandon_button.disabled = packet.is_empty() or not packet.can_abandon
 	paid_button.disabled = paid_packet.is_empty()
 	sale_button.disabled = sale_packet.is_empty()
+	recovery_sale_button.visible = not recovery_sale_packet.is_empty() and recovery_sale_packet.supported
+	recovery_sale_button.disabled = recovery_sale_packet.is_empty()
 	if packet.is_empty():
 		details.text = "Commission office unavailable: the current response was invalid. Return to Controls and try again."
 	else:
@@ -180,6 +197,7 @@ func refresh(value: Dictionary) -> void:
 			operating = "Paid operations selected · Cash: %s · Operating tab: %s · Insurance excess: %s.\nOpen Paid operations for current berth coverage and fuel quotes." % [paid_packet.cash, paid_packet.operating_tab, paid_packet.recovery_due]
 		var lines := PackedStringArray(["Optional survey work · 100 credits per fresh report.\n30 seconds of qualifying orbital measurement · accepted terms reserved for four game hours.\n" + operating, "Historical gross survey earnings: " + packet.earnings])
 		if not sale_packet.is_empty() and sale_packet.supported: lines.append("Historical gross specimen earnings: " + sale_packet.earned_credits)
+		if not recovery_sale_packet.is_empty() and recovery_sale_packet.supported: lines.append("Historical gross canister earnings: " + recovery_sale_packet.earned_credits)
 		if not packet.body_name.is_empty(): lines.append("Target: " + packet.body_name)
 		if packet.sequence != 0:
 			lines.append("Commission #%d · %.1f / 30 s\nReport due at ship time %s · Time left: %s." % [packet.sequence, floorf(float(packet.acquired_ticks) / 12.0) / 10.0, clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
@@ -188,9 +206,12 @@ func refresh(value: Dictionary) -> void:
 		lines.append(packet.note)
 		if not packet.last_payment.is_empty(): lines.append("Latest report paid: 100 credits. Receipt retained.")
 		details.text = "\n\n".join(lines)
-	if focused in [accept_button, submit_button, abandon_button, paid_button, sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
+	if focused in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
 
 func navigate(direction: int) -> void:
+	if recovery_sale_open():
+		recovery_sale_view.navigate(direction)
+		return
 	if sale_open():
 		sale_view.navigate(direction)
 		return
@@ -198,12 +219,15 @@ func navigate(direction: int) -> void:
 		paid_view.navigate(direction)
 		return
 	var buttons: Array[Button] = []
-	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, back]:
+	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		if button.visible and not button.disabled: buttons.append(button)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
 
 func accept() -> void:
+	if recovery_sale_open():
+		recovery_sale_view.accept()
+		return
 	if sale_open():
 		sale_view.accept()
 		return
@@ -211,7 +235,7 @@ func accept() -> void:
 		paid_view.accept()
 		return
 	var target := get_viewport().gui_get_focus_owner()
-	if target in [accept_button, submit_button, abandon_button, paid_button, sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
 
 func paid_open() -> bool:
 	return is_instance_valid(paid_view) and paid_view.visible
@@ -237,7 +261,7 @@ func sale_open() -> bool:
 	return is_instance_valid(sale_view) and sale_view.visible
 
 func service_child_open() -> bool:
-	return paid_open() or sale_open()
+	return paid_open() or sale_open() or recovery_sale_open()
 
 func refresh_sale(value: Dictionary) -> void:
 	sale_packet = value.duplicate(true) if SpecimenSale.valid_packet(value) else {}
@@ -255,3 +279,23 @@ func close_sale() -> void:
 	panel.show()
 	sale_button.grab_focus()
 	scroll.ensure_control_visible(sale_button)
+
+func recovery_sale_open() -> bool:
+	return is_instance_valid(recovery_sale_view) and recovery_sale_view.visible
+
+func refresh_recovery_sale(value: Dictionary) -> void:
+	recovery_sale_packet = value.duplicate(true) if RecoverySale.valid_packet(value) else {}
+	refresh(packet)
+
+func open_recovery_sale(value: Dictionary) -> void:
+	if service_child_open(): return
+	refresh_recovery_sale(value)
+	panel.hide()
+	recovery_sale_view.open(recovery_sale_packet)
+
+func close_recovery_sale() -> void:
+	if not recovery_sale_open(): return
+	recovery_sale_view.hide()
+	panel.show()
+	recovery_sale_button.grab_focus()
+	scroll.ensure_control_visible(recovery_sale_button)

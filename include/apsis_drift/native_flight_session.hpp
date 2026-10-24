@@ -188,6 +188,23 @@ struct NativeStarSearchView {
   std::string note;
 };
 
+struct NativeDerelictRecoveryView {
+  bool selected{}, known{}, can_begin{}, active{};
+  std::uint32_t acquired_ticks{},
+      required_ticks{kFreedomDerelictRetrievalTicks};
+  SimulationTick tick{};
+  std::string status{"unclaimed"}, note;
+};
+struct NativeDerelictRecoverySaleView {
+  bool supported{}, at_origin{}, paid_selected{}, can_sell{};
+  std::uint32_t carried_count{}, capacity{1};
+  std::uint64_t unit_credits{kFreedomDerelictCanisterCredits}, gross_credits{},
+      earned_credits{}, insurance_credits{}, tab_credits{}, net_credits{},
+      cash_after{};
+  SimulationTick tick{};
+  std::string token, note, contents;
+};
+
 struct NativeDerelictView {
   bool selected{}, known{}, local{}, inspected{}, can_scan{}, can_inspect{};
   std::uint64_t id{};
@@ -318,6 +335,16 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto begin_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto star_search_view() const -> NativeStarSearchView;
+  [[nodiscard]] auto derelict_recovery_view() const
+      -> std::expected<NativeDerelictRecoveryView, std::string>;
+  [[nodiscard]] auto begin_derelict_recovery()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto cancel_derelict_recovery()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto derelict_recovery_sale_view() const
+      -> std::expected<NativeDerelictRecoverySaleView, std::string>;
+  [[nodiscard]] auto sell_derelict_recovery(std::string_view token)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto derelict_view() const -> NativeDerelictView;
   [[nodiscard]] auto scan_derelict() -> std::expected<void, std::string>;
   [[nodiscard]] auto inspect_derelict() -> std::expected<void, std::string>;
@@ -538,6 +565,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto survey_paid_count() const -> std::uint32_t;
   [[nodiscard]] auto paid_income_counts() const -> PaidIncomeCounts;
   [[nodiscard]] auto specimen_sale_token() const -> std::string;
+  [[nodiscard]] auto derelict_recovery_sale_token() const -> std::string;
+  auto cancel_derelict_recovery_unfinished() noexcept -> void;
+  [[nodiscard]] auto advance_derelict_recovery_tick()
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto commit_survey_commission_account(SurveyCommissionAccount)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const

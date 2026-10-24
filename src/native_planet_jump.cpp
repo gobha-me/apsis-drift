@@ -402,6 +402,7 @@ auto NativeFreedomFlightSession::begin_composed_body_jump()
     if (!relative) return std::unexpected{relative.error()};
     candidate.document_.flight = *relative;
   }
+  candidate.cancel_derelict_recovery_unfinished();
   if (candidate.knowledge_->orbital_surveys)
     candidate.knowledge_->orbital_surveys->active.reset();
   candidate.travel_->phase = FreedomJumpPhase::spool;

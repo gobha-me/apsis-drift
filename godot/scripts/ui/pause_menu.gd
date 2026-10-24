@@ -495,6 +495,9 @@ func back_from_nested() -> bool:
 
 func close_commissions() -> void:
 	if not is_instance_valid(commissions_view) or not controls.focused: return
+	if commissions_view.recovery_sale_open():
+		commissions_view.close_recovery_sale()
+		return
 	if commissions_view.sale_open():
 		commissions_view.close_sale()
 		return
@@ -652,7 +655,8 @@ func _input(event: InputEvent) -> void:
 		if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down"):
 			commissions_view.navigate(-1 if event.is_action_pressed("ui_up") else 1)
 			get_viewport().set_input_as_handled()
-		elif event.is_action_pressed("ui_accept"):
+		# Keyboard buttons use normal release activation, after mapped flight keys are neutral.
+		elif pad and event.is_action_pressed("ui_accept"):
 			commissions_view.accept()
 			get_viewport().set_input_as_handled()
 	# Stop queued GUI accepts/navigation while the window safety pause owns focus.

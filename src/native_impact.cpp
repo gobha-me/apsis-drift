@@ -156,6 +156,9 @@ auto NativeFreedomFlightSession::advance_impact_tick(
               : "Terrain contact: inward motion stopped";
     }
     if (reduction->catastrophic) {
+      // Frozen retired knowledge must not be changed by post-impact
+      // acquisition.
+      candidate.cancel_derelict_recovery_unfinished();
       auto recovery = candidate.recovery_document();
       if (!recovery) return std::unexpected{recovery.error()};
       const auto checksum = freedom_recovery_source_checksum(recovery->voyage);

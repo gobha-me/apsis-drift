@@ -40,6 +40,12 @@ struct NativeStartup {
                                                      std::uint32_t chart_kind,
                                                      std::uint32_t drive_kind)
     -> std::expected<NativeStartup, std::string>;
+// Explicit chart-3 single-canister recovery selection; old factories stay
+// exact.
+[[nodiscard]] auto native_derelict_recovery_new_game(Seed universe_seed,
+                                                     std::uint32_t drive_kind,
+                                                     bool origin_service)
+    -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
 

@@ -37,6 +37,7 @@ FIXTURES = {
     "system_release": "apsis-drift-native-system-release-tests",
     "orbital_survey": "apsis-drift-native-orbital-survey-tests",
     "derelict": "apsis-drift-native-derelict-tests",
+    "derelict_recovery": "apsis-drift-native-derelict-recovery-tests",
 }
 EXPORTER = "src/godot/apsis-drift-godot-snapshot"
 BRIDGE = "src/godot/bin/libapsis_freedom_bridge.so"
@@ -350,6 +351,8 @@ def layout(selected, runner):
             add(role + "_saves", role)
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         add("derelict_saves", "derelict")
+    if "native_derelict" in selected:
+        add("derelict_recovery_saves", "derelict_recovery")
     for name in runner.SURFACE_TESTS:
         if name in selected:
             add(runner.TESTS[name] + ":" + name, "surface")
@@ -446,6 +449,10 @@ def validate_report(report, path, metadata, selected, m, runner):
                     ("station", "approach", "contact", "contact-recovered", "near", "inspection", "recovered",
                      "lead-station", "lead-kept", "lead-confirmed", "lead-visited", "lead-recovered")},
                     "Incomplete actual derelict phases")
+            if family == "derelict_recovery_saves":
+                require(set(row["files_sha256"]) == {name + ".json" for name in
+                    (*runner.DERELICT_RECOVERY_PHASES, "manifest")},
+                    "Incomplete actual derelict recovery phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
                     ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
@@ -486,6 +493,8 @@ def validate_report(report, path, metadata, selected, m, runner):
     for name in runner.ROUNDTRIP_TESTS:
         if name in selected:
             cli_logs += [f"{name}-refusal-{i}.log" for i in range(23)]
+    if "native_derelict" in selected:
+        cli_logs += [f"derelict-recovery-refusal-{i}.log" for i in range(5)]
     require(all(name in logs for name in cli_logs), "Missing CLI refusal evidence")
     if "native_first_flight_continuation" in selected:
         source = next(r for r in report["setup"] if r.get("family") == "native_first_flight_continuation")["continuation_source"]

@@ -11,12 +11,15 @@ constexpr auto initial_berth_cost =
 constexpr auto maximum_service_cost =
     kPaidFullFlightCredits + 3 * kPaidJumpChargeCredits;
 auto budget(PaidIncomeCounts counts) -> std::uint64_t {
-  // Both source counts are uint32; their fixed gross plus opening fits uint64.
+  // Source counts are bounded uint32 values; fixed gross plus opening fits
+  // uint64.
   return kPaidOpeningCredits +
          static_cast<std::uint64_t>(counts.survey_paid) *
              kPaidSurveyRewardCredits +
          static_cast<std::uint64_t>(counts.specimen_sold) *
-             kPaidSpecimenCredits;
+             kPaidSpecimenCredits +
+         static_cast<std::uint64_t>(counts.canister_sold) *
+             kPaidCanisterCredits;
 }
 auto coverage_fits(const PaidOperationsAccount& account, std::uint64_t hours)
     -> bool {
@@ -44,6 +47,7 @@ auto apply_income(PaidOperationsAccount account, PaidIncomeCounts counts,
                   std::uint64_t gross) -> PaidOperationsAccount {
   account.settled_paid_count = counts.survey_paid;
   account.settled_specimen_count = counts.specimen_sold;
+  account.settled_canister_count = counts.canister_sold;
   const auto insurance = std::min(account.recovery_due, gross);
   const auto remaining = gross - insurance;
   const auto tab_payment = std::min(account.operating_tab, remaining / 2);
@@ -57,13 +61,20 @@ auto apply_income(PaidOperationsAccount account, PaidIncomeCounts counts,
 auto paid_operations_cash(const PaidOperationsAccount& account,
                           PaidIncomeCounts counts)
     -> std::expected<std::uint64_t, std::string> {
+  const auto no_canister =
+      counts.canister_sold == 0 && account.settled_canister_count == 0;
   const auto legacy = account.version == kPaidOperationsVersion &&
                       counts.specimen_sold == 0 &&
-                      account.settled_specimen_count == 0;
-  const auto specimen = account.version == kPaidSpecimenOperationsVersion &&
-                        counts.specimen_sold != 0 &&
+                      account.settled_specimen_count == 0 && no_canister;
+  const auto specimen =
+      account.version == kPaidSpecimenOperationsVersion &&
+      counts.specimen_sold != 0 &&
+      account.settled_specimen_count == counts.specimen_sold && no_canister;
+  const auto canister = account.version == kPaidDerelictOperationsVersion &&
+                        counts.canister_sold == 1 &&
+                        account.settled_canister_count == 1 &&
                         account.settled_specimen_count == counts.specimen_sold;
-  if ((!legacy && !specimen) ||
+  if ((!legacy && !specimen && !canister) ||
       account.settled_paid_count != counts.survey_paid ||
       account.billed_through_hours < kPaidInitialBerthHours ||
       account.spent_credits < initial_berth_cost ||
@@ -95,11 +106,13 @@ auto make_paid_operations(PaidIncomeCounts counts, SimulationTick now,
                           std::uint64_t generation)
     -> std::expected<PaidOperationsAccount, std::string> {
   PaidOperationsAccount account;
-  account.version = counts.specimen_sold ? kPaidSpecimenOperationsVersion
-                                         : kPaidOperationsVersion;
+  account.version = counts.canister_sold   ? kPaidDerelictOperationsVersion
+                    : counts.specimen_sold ? kPaidSpecimenOperationsVersion
+                                           : kPaidOperationsVersion;
   account.started_tick = now;
   account.settled_paid_count = counts.survey_paid;
   account.settled_specimen_count = counts.specimen_sold;
+  account.settled_canister_count = counts.canister_sold;
   account.charged_generation = generation;
   if (auto valid = validate_paid_operations(account, counts, now, generation);
       !valid)
@@ -209,12 +222,14 @@ auto settle_paid_survey_income(const PaidOperationsAccount& account,
     -> std::expected<PaidOperationsAccount, std::string> {
   if (account.settled_paid_count == std::numeric_limits<std::uint32_t>::max() ||
       new_counts.survey_paid != account.settled_paid_count + 1 ||
-      new_counts.specimen_sold != account.settled_specimen_count)
+      new_counts.specimen_sold != account.settled_specimen_count ||
+      new_counts.canister_sold != account.settled_canister_count)
     return std::unexpected{"Exactly one new survey payment must be settled"};
   auto next =
       reconcile_paid_berth(account,
                            PaidIncomeCounts{account.settled_paid_count,
-                                            account.settled_specimen_count},
+                                            account.settled_specimen_count,
+                                            account.settled_canister_count},
                            now, generation);
   if (!next) return std::unexpected{next.error()};
   return apply_income(*next, new_counts, kPaidSurveyRewardCredits);
@@ -228,21 +243,43 @@ auto settle_paid_specimen_income(const PaidOperationsAccount& account,
       account.settled_specimen_count >
           std::numeric_limits<std::uint32_t>::max() - sold_units ||
       new_counts.specimen_sold != account.settled_specimen_count + sold_units ||
-      new_counts.survey_paid != account.settled_paid_count)
+      new_counts.survey_paid != account.settled_paid_count ||
+      new_counts.canister_sold != account.settled_canister_count)
     return std::unexpected{"One actual bounded specimen batch must be settled"};
   auto next =
       reconcile_paid_berth(account,
                            PaidIncomeCounts{account.settled_paid_count,
-                                            account.settled_specimen_count},
+                                            account.settled_specimen_count,
+                                            account.settled_canister_count},
                            now, generation);
   if (!next) return std::unexpected{next.error()};
   // Only this actual earning action promotes an existing selected account.
   // Reconcile the old budget first; the new gross cannot pay an overdue bill
   // ahead of the insurance-first income contract.
-  next->version = kPaidSpecimenOperationsVersion;
+  if (next->version != kPaidDerelictOperationsVersion)
+    next->version = kPaidSpecimenOperationsVersion;
   return apply_income(*next, new_counts,
                       static_cast<std::uint64_t>(sold_units) *
                           kPaidSpecimenCredits);
+}
+auto settle_paid_canister_income(const PaidOperationsAccount& account,
+                                 PaidIncomeCounts new_counts,
+                                 SimulationTick now, std::uint64_t generation)
+    -> std::expected<PaidOperationsAccount, std::string> {
+  if (account.settled_canister_count != 0 || new_counts.canister_sold != 1 ||
+      new_counts.survey_paid != account.settled_paid_count ||
+      new_counts.specimen_sold != account.settled_specimen_count)
+    return std::unexpected{
+        "Exactly one physical canister sale must be settled"};
+  auto next =
+      reconcile_paid_berth(account,
+                           PaidIncomeCounts{account.settled_paid_count,
+                                            account.settled_specimen_count, 0},
+                           now, generation);
+  if (!next) return std::unexpected{next.error()};
+  // Reconcile bills against the pre-sale budget before insurance-first income.
+  next->version = kPaidDerelictOperationsVersion;
+  return apply_income(*next, new_counts, kPaidCanisterCredits);
 }
 auto charge_paid_recovery(const PaidOperationsAccount& account,
                           PaidIncomeCounts counts, SimulationTick now,
@@ -271,7 +308,7 @@ auto charge_paid_recovery(const PaidOperationsAccount& account,
   return *next;
 }
 // Historical survey-only APIs intentionally supply no specimen income. The
-// typed admission rejects version2 here instead of silently discarding gross.
+// typed admission rejects later profiles instead of silently discarding gross.
 auto paid_operations_cash(const PaidOperationsAccount& account,
                           std::uint32_t paid_count)
     -> std::expected<std::uint64_t, std::string> {

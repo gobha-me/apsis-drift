@@ -40,6 +40,8 @@ const Status = preload("res://scripts/native/native_status.gd")
 const SurveyCommissions = preload("res://scripts/native/survey_commissions.gd")
 const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
+const RecoverySale = preload("res://scripts/native/derelict_recovery_sale.gd")
+const DerelictRecovery = preload("res://scripts/native/derelict_recovery.gd")
 const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
 const QuietTravel = preload("res://scripts/native/quiet_travel.gd")
 var quiet_travel_select: OptionButton
@@ -55,6 +57,8 @@ var derelict_view: Node3D
 var derelict_marker: Control
 var derelict_scan_button: Button
 var derelict_inspect_button: Button
+var derelict_recovery_button: Button
+var derelict_recovery_cancel_button: Button
 const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
 var frame_diagnostics: PanelContainer
 var frame_diagnostics_button: Button
@@ -255,6 +259,7 @@ static func valid_state(value: Dictionary) -> bool:
 	if value.has("survey_commission") and not valid_commission_progress(value.survey_commission): return false
 	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
 	if value.has("derelict") and not DerelictView.valid_packet(value.derelict): return false
+	if value.has("derelict_recovery") and not DerelictRecovery.valid_packet(value.derelict_recovery): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
 	if value.has("port_docking"):
@@ -1073,6 +1078,10 @@ func update_compact_hud() -> void:
 		primary_status.text += "\n" + derelict_text
 		primary_status.tooltip_text += "\n" + derelict_text + "\n" + str(state.derelict.note)
 		if not state.derelict.history.is_empty(): primary_status.tooltip_text += "\n" + state.derelict.history
+	var recovery_text := DerelictRecovery.text(state.get("derelict_recovery"))
+	if error.is_empty() and not recovery_text.is_empty():
+		primary_status.text += "\n" + recovery_text
+		primary_status.tooltip_text += "\n" + recovery_text + "\n" + str(state.derelict_recovery.note)
 	var personal: Dictionary = state.get("surface_marker", {})
 	if error.is_empty() and personal.get("present", false):
 		var marker_text := ""
@@ -1207,6 +1216,8 @@ func setup_controls() -> void:
 	controls_menu.commissions_view.paid_action_requested.connect(paid_operations_command)
 	controls_menu.commissions_view.sale_open_requested.connect(open_specimen_sale)
 	controls_menu.commissions_view.sale_action_requested.connect(specimen_sale_command)
+	controls_menu.commissions_view.recovery_sale_open_requested.connect(open_derelict_recovery_sale)
+	controls_menu.commissions_view.recovery_sale_action_requested.connect(derelict_recovery_sale_command)
 	setup_frame_diagnostics(survey_column)
 	setup_origin_service_controls(survey_column)
 	survey_start_button = controls_menu.add_button(survey_column, "Start orbital terrain survey", orbital_survey_command)
@@ -1216,6 +1227,8 @@ func setup_controls() -> void:
 	refresh_star_search()
 	derelict_scan_button = controls_menu.add_button(survey_column, "Scan local space", derelict_command)
 	derelict_inspect_button = controls_menu.add_button(survey_column, "Inspect derelict exterior", derelict_command.bind(true))
+	derelict_recovery_button = controls_menu.add_button(survey_column, "Retrieve sealed canister · 30 seconds", derelict_recovery_command)
+	derelict_recovery_cancel_button = controls_menu.add_button(survey_column, "Cancel canister retrieval", derelict_recovery_command.bind(true))
 	refresh_derelict_controls()
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
@@ -1664,6 +1677,7 @@ func open_survey_commissions() -> void:
 	controls_menu.commissions_view.open(packet)
 	refresh_paid_operations()
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 
 
 func survey_commission_command(action: String) -> void:
@@ -1692,6 +1706,7 @@ func survey_commission_command(action: String) -> void:
 	if SurveyCommissions.valid_packet(updated): reader.refresh(updated)
 	refresh_paid_operations()
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 	if not accepted: report_action_status(str(bridge.get_last_error()))
 	else:
 		state = bridge.get_freedom_flight_state()
@@ -1728,7 +1743,7 @@ func open_paid_operations() -> void:
 
 
 func paid_operations_command(action: String) -> void:
-	if not paid_operations_controls_available() or not controls_menu.commissions_view.paid_open() or controls_menu.commissions_view.sale_open() or commission_action_frame == Engine.get_process_frames(): return
+	if not paid_operations_controls_available() or not controls_menu.commissions_view.paid_open() or controls_menu.commissions_view.sale_open() or controls_menu.commissions_view.recovery_sale_open() or commission_action_frame == Engine.get_process_frames(): return
 	if action not in ["enable", "purchase", "retainer"]: return
 	var office: Control = controls_menu.commissions_view
 	var reader: Control = office.paid_view
@@ -1750,6 +1765,7 @@ func paid_operations_command(action: String) -> void:
 	office.refresh(after if SurveyCommissions.valid_packet(after) else {})
 	refresh_paid_operations()
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 	reader.refresh(office.paid_packet)
 	reader.back.grab_focus()
 	if accepted:
@@ -1766,6 +1782,7 @@ func refresh_specimen_sale() -> void:
 func open_specimen_sale() -> void:
 	if not paid_operations_controls_available() or controls_menu.commissions_view.service_child_open(): return
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 	if controls_menu.commissions_view.sale_packet.is_empty():
 		report_action_status("Specimen buyer terms are unavailable.")
 		return
@@ -1773,12 +1790,13 @@ func open_specimen_sale() -> void:
 
 
 func specimen_sale_command(action: String = "sell") -> void:
-	if action != "sell" or not paid_operations_controls_available() or not controls_menu.commissions_view.sale_open() or controls_menu.commissions_view.paid_open() or commission_action_frame == Engine.get_process_frames(): return
+	if action != "sell" or not paid_operations_controls_available() or not controls_menu.commissions_view.sale_open() or controls_menu.commissions_view.paid_open() or controls_menu.commissions_view.recovery_sale_open() or commission_action_frame == Engine.get_process_frames(): return
 	var office: Control = controls_menu.commissions_view
 	var reader: Control = office.sale_view
 	if not reader.sell_button.visible or reader.sell_button.disabled: return
 	var reviewed: Dictionary = reader.packet
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 	var fresh: Dictionary = office.sale_packet
 	if fresh.is_empty() or fresh != reviewed:
 		reader.refresh(fresh)
@@ -1790,6 +1808,7 @@ func specimen_sale_command(action: String = "sell") -> void:
 	var accepted: bool = bridge.sell_freedom_specimens(reviewed.token)
 	refresh_paid_operations()
 	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
 	reader.refresh(office.sale_packet)
 	reader.back.grab_focus()
 	if accepted:
@@ -1797,6 +1816,49 @@ func specimen_sale_command(action: String = "sell") -> void:
 		update_view(0.0)
 		refresh_field_samples()
 	report_action_status("Specimens sold; first field notes retained. The journey remains paused." if accepted else "Specimen sale refused: " + str(bridge.get_last_error()))
+
+
+
+func refresh_derelict_recovery_sale() -> void:
+	var value: Variant = bridge.get_freedom_derelict_recovery_sale() if bridge.has_method("get_freedom_derelict_recovery_sale") else {}
+	controls_menu.commissions_view.refresh_recovery_sale(value if RecoverySale.valid_packet(value) and value.tick == state.get("tick") else {})
+
+
+func open_derelict_recovery_sale() -> void:
+	if not paid_operations_controls_available() or controls_menu.commissions_view.service_child_open(): return
+	refresh_derelict_recovery_sale()
+	if controls_menu.commissions_view.recovery_sale_packet.is_empty():
+		report_action_status("Canister buyer terms are unavailable.")
+		return
+	controls_menu.commissions_view.open_recovery_sale(controls_menu.commissions_view.recovery_sale_packet)
+
+
+func derelict_recovery_sale_command(action: String = "sell") -> void:
+	if action != "sell" or not paid_operations_controls_available() or not controls_menu.commissions_view.recovery_sale_open() or controls_menu.commissions_view.paid_open() or controls_menu.commissions_view.sale_open() or commission_action_frame == Engine.get_process_frames(): return
+	var office: Control = controls_menu.commissions_view
+	var reader: Control = office.recovery_sale_view
+	if not reader.sell_button.visible or reader.sell_button.disabled: return
+	var reviewed: Dictionary = reader.packet
+	refresh_derelict_recovery_sale()
+	var fresh: Dictionary = office.recovery_sale_packet
+	if fresh.is_empty() or fresh != reviewed:
+		reader.refresh(fresh)
+		reader.back.grab_focus()
+		report_action_status("Canister quote changed. Review the refreshed page before confirming.")
+		return
+	if not fresh.at_origin or not fresh.can_sell: return
+	commission_action_frame = Engine.get_process_frames()
+	var accepted: bool = bridge.sell_freedom_derelict_recovery(reviewed.token)
+	refresh_paid_operations()
+	refresh_specimen_sale()
+	refresh_derelict_recovery_sale()
+	reader.refresh(office.recovery_sale_packet)
+	reader.back.grab_focus()
+	if accepted:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+		refresh_field_samples()
+	report_action_status("Canister sold; recovery note retained. The journey remains paused." if accepted else "Canister sale refused: " + str(bridge.get_last_error()))
 
 
 func orbital_survey_command(cancel := false) -> void:
@@ -1855,6 +1917,31 @@ func derelict_command(inspect := false) -> void:
 	controls_menu.resume_button.grab_focus()
 
 
+func derelict_recovery_command(cancel := false) -> void:
+	if not marker_controls_available() or mode_change_pending or commission_action_frame == Engine.get_process_frames(): return
+	if not DerelictRecovery.valid_packet(state.get("derelict_recovery")): return
+	observe_neutral_controls()
+	if not controls_armed:
+		report_action_status("Release movement controls before changing canister retrieval.")
+		return
+	var fresh: Variant = bridge.get_freedom_derelict_recovery()
+	if not DerelictRecovery.valid_packet(fresh) or fresh != state.derelict_recovery:
+		state = bridge.get_freedom_flight_state()
+		update_view(0.0)
+		report_action_status("Retrieval conditions changed. Review them before confirming.")
+		return
+	if not (fresh.active if cancel else fresh.can_begin): return
+	commission_action_frame = Engine.get_process_frames()
+	if not bridge.call("cancel_freedom_derelict_recovery" if cancel else "begin_freedom_derelict_recovery"):
+		report_action_status(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if not error.is_empty(): return
+	report_action_status("Retrieval canceled; source unclaimed." if cancel else "Retrieval started · Resume and hold stand-off/matched speed for 30 seconds. No automatic approach or transfer animation.")
+	controls_menu.resume_button.grab_focus()
+
+
 func refresh_derelict_controls() -> void:
 	if derelict_scan_button == null: return
 	var packet: Variant = state.get("derelict")
@@ -1870,6 +1957,16 @@ func refresh_derelict_controls() -> void:
 		derelict_scan_button.tooltip_text += "\n" + packet.note
 		derelict_inspect_button.tooltip_text += "\n" + packet.note
 		if not packet.history.is_empty(): derelict_inspect_button.tooltip_text += "\n" + packet.history
+	var recovery: Variant = state.get("derelict_recovery")
+	var selected: bool = DerelictRecovery.valid_packet(recovery) and recovery.selected
+	if derelict_recovery_button != null:
+		derelict_recovery_button.visible = selected and recovery.known and ordinary and not recovery.active and recovery.status == "unclaimed"
+		derelict_recovery_button.disabled = not selected or not recovery.can_begin
+		derelict_recovery_cancel_button.visible = selected and recovery.active
+		derelict_recovery_cancel_button.disabled = not selected or not recovery.active
+		if selected:
+			derelict_recovery_button.tooltip_text = recovery.note
+			derelict_recovery_cancel_button.tooltip_text = "Unfinished progress is discarded; the source remains unclaimed. Pause and Save preserve a valid attempt."
 	if derelict_marker != null:
 		derelict_marker.visible = available and packet.local and not surface_walking()
 		if derelict_marker.visible: derelict_marker.update_cue(camera, packet.position, false)

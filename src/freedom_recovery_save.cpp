@@ -182,6 +182,36 @@ auto retains_specimen_sales(
     return specimen.craft == current && specimen.tick >= loss_tick;
   });
 }
+auto canister_sold_count(const FreedomKnowledge& knowledge) -> std::uint32_t {
+  return knowledge.derelict_recovery && knowledge.derelict_recovery->canister &&
+                 knowledge.derelict_recovery->canister->disposition ==
+                     FreedomCanisterDisposition::sold
+             ? 1U
+             : 0U;
+}
+auto retains_derelict_recovery(
+    const std::optional<FreedomDerelictRecoveryState>& now,
+    const std::optional<FreedomDerelictRecoveryState>& old,
+    StarterCraftId current, SimulationTick loss_tick) -> bool {
+  if (now.has_value() != old.has_value()) return false;
+  if (!old) return true;
+  // Fatal/direct loss cancels before freezing the retired voyage. Replacement
+  // cannot resume its partial work or refill a claimed finite source.
+  if (old->active || now->version != old->version) return false;
+  if (old->canister) {
+    const auto required = lose_freedom_derelict_canister(*old);
+    return !now->active && now->canister == required.canister;
+  }
+  if (now->active && (now->active->started_tick < loss_tick ||
+                      now->active->observer.craft != current))
+    return false;
+  if (now->canister &&
+      (now->canister->started_tick < loss_tick ||
+       now->canister->completed.craft != current ||
+       now->canister->disposition == FreedomCanisterDisposition::lost))
+    return false;
+  return true;
+}
 auto retains_paid_operations(const FreedomKnowledge& now,
                              const FreedomKnowledge& old,
                              SimulationTick loss_tick) -> bool {
@@ -192,16 +222,22 @@ auto retains_paid_operations(const FreedomKnowledge& now,
       now.recipe.craft_lineage ? now.recipe.craft_lineage->generation : 0;
   const PaidIncomeCounts prior_counts{
       old.survey_commissions ? old.survey_commissions->paid_count : 0U,
-      old.specimen_sales ? old.specimen_sales->sold_count : 0U};
+      old.specimen_sales ? old.specimen_sales->sold_count : 0U,
+      canister_sold_count(old)};
   const auto charged = charge_paid_recovery(*old.paid_operations, prior_counts,
                                             loss_tick, new_generation);
   if (!charged) return false;
   const auto& current = *now.paid_operations;
   const auto& required = *charged;
   const bool promoted =
-      required.version == kPaidOperationsVersion &&
-      current.version == kPaidSpecimenOperationsVersion &&
-      current.settled_specimen_count > required.settled_specimen_count;
+      (required.version == kPaidOperationsVersion &&
+       current.version == kPaidSpecimenOperationsVersion &&
+       current.settled_specimen_count > required.settled_specimen_count) ||
+      ((required.version == kPaidOperationsVersion ||
+        required.version == kPaidSpecimenOperationsVersion) &&
+       current.version == kPaidDerelictOperationsVersion &&
+       required.settled_canister_count == 0 &&
+       current.settled_canister_count == 1);
   if ((current.version != required.version && !promoted) ||
       current.started_tick != required.started_tick ||
       current.billed_through_hours < required.billed_through_hours ||
@@ -209,19 +245,23 @@ auto retains_paid_operations(const FreedomKnowledge& now,
       current.supported_sequence < required.supported_sequence ||
       current.settled_paid_count < required.settled_paid_count ||
       current.settled_specimen_count < required.settled_specimen_count ||
+      current.settled_canister_count < required.settled_canister_count ||
       current.recovery_due > required.recovery_due)
     return false;
   // Actual post-loss spending/support may change the final debt amounts. Keep
   // necessary conservation and income-priority bounds rather than inventing
   // an unbounded transaction history or requiring the immediate result forever.
-  // Both validated u32 income counts have a bounded combined uint64 gross.
+  // Two validated u32 counts and one finite canister fit the uint64 gross.
   const auto income =
       static_cast<std::uint64_t>(current.settled_paid_count -
                                  required.settled_paid_count) *
           kPaidSurveyRewardCredits +
       static_cast<std::uint64_t>(current.settled_specimen_count -
                                  required.settled_specimen_count) *
-          kPaidSpecimenCredits;
+          kPaidSpecimenCredits +
+      static_cast<std::uint64_t>(current.settled_canister_count -
+                                 required.settled_canister_count) *
+          kPaidCanisterCredits;
   const auto insurance = std::min(required.recovery_due, income);
   const auto tab_payment =
       std::min(required.operating_tab, (income - insurance) / 2);
@@ -253,6 +293,9 @@ auto retains_knowledge(const FreedomKnowledge& now, const FreedomKnowledge& old,
     return false;
   if (!retains_specimen_sales(now.specimen_sales, old.specimen_sales, current,
                               loss_tick))
+    return false;
+  if (!retains_derelict_recovery(now.derelict_recovery, old.derelict_recovery,
+                                 current, loss_tick))
     return false;
   if (!retains_paid_operations(now, old, loss_tick)) return false;
   if (old.station_stellar_lead) {
@@ -518,6 +561,11 @@ auto validate_freedom_recovery_document(const FreedomRecoverySaveDocument& d)
     return std::unexpected{failure("unknown loss cause")};
   if (auto v = validate_voyage(loss.retired); !v) return v;
   const auto& retired = recovery_flight(loss.retired);
+  const auto& retired_retrieval =
+      recovery_knowledge(loss.retired).knowledge.derelict_recovery;
+  if (retired_retrieval && retired_retrieval->active)
+    return std::unexpected{failure(
+        "retired retrieval must be canceled before the loss source freezes")};
   if (!starter_selected(loss.retired) || retired.model.physical_catalog != 2 ||
       retired.model.physical_ephemeris != 2 ||
       freedom_recovery_source_checksum(loss.retired) != loss.source_checksum ||
@@ -682,6 +730,9 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
     knowledge.field_samples->carried.clear();
     knowledge.field_samples->carrier = *identity;
   }
+  if (knowledge.derelict_recovery)
+    knowledge.derelict_recovery =
+        lose_freedom_derelict_canister(*knowledge.derelict_recovery);
   if (knowledge.recipe.version == kFreedomObservedKnowledgeVersion) {
     knowledge.recipe.version = kFreedomTravelKnowledgeVersion;
     knowledge.recipe.world_domain = 1;
@@ -693,7 +744,8 @@ auto complete_freedom_recovery(const FreedomRecoverySaveDocument& d)
     const PaidIncomeCounts counts{
         knowledge.survey_commissions ? knowledge.survey_commissions->paid_count
                                      : 0U,
-        knowledge.specimen_sales ? knowledge.specimen_sales->sold_count : 0U};
+        knowledge.specimen_sales ? knowledge.specimen_sales->sold_count : 0U,
+        canister_sold_count(knowledge)};
     const auto charged = charge_paid_recovery(
         *knowledge.paid_operations, counts, replacement.flight.tick,
         replacement.origin.lineage->generation);
@@ -729,13 +781,27 @@ auto freedom_recovery_explanation(const FreedomRecoverySaveDocument& d)
               ? "Continue with a fresh starter, full flight fuel and three "
                 "jump charges. "
               : "Replacement delivered once; the lost craft remains retired. ";
-  text += "Your universe, discoveries and world changes are retained. No fee "
-          "or wreck retrieval is required.";
+  text += "Your universe, discoveries and world changes are retained. ";
+  if (recovery_knowledge(d.recovery.latest->retired).knowledge.paid_operations)
+    text += "The paid recovery excess is " +
+            std::to_string(kPaidRecoveryExcessCredits) +
+            " credits, using available cash first; any unpaid remainder is "
+            "withheld from later income. "
+            "Recovery is available without upfront cash. No wreck retrieval is "
+            "required.";
+  else
+    text += "No fee or wreck retrieval is required.";
   if (const auto& samples = recovery_knowledge(d.recovery.latest->retired)
                                 .knowledge.field_samples;
       samples && !samples->carried.empty())
     text += " Carried specimens are lost with this replacement; your "
             "collection notes are retained.";
+  if (const auto& retrieval = recovery_knowledge(d.recovery.latest->retired)
+                                  .knowledge.derelict_recovery;
+      retrieval && retrieval->canister &&
+      retrieval->canister->disposition == FreedomCanisterDisposition::carried)
+    text += " The carried service canister is lost; the claimed source stays "
+            "depleted and its recovery note is retained.";
   return text;
 }
 auto encode_freedom_recovery_document_json(const FreedomRecoverySaveDocument& d)

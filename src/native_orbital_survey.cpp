@@ -1,3 +1,4 @@
+#include "apsis_drift/freedom_derelict_recovery.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 
 #include <algorithm>
@@ -212,6 +213,8 @@ auto NativeFreedomFlightSession::advance_orbital_survey_tick()
 auto NativeFreedomFlightSession::advance_player(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  const bool retrieving = knowledge_ && knowledge_->derelict_recovery &&
+                          knowledge_->derelict_recovery->active;
   const bool survey = knowledge_ && knowledge_->orbital_surveys &&
                       knowledge_->orbital_surveys->active;
   const bool stars =
@@ -224,14 +227,29 @@ auto NativeFreedomFlightSession::advance_player(
       commission && document_.flight.tick < commission->deadline_tick &&
       (!commission->measurement || commission->measurement->acquired_ticks <
                                        kSurveyCommissionMeasurementTicks);
-  if (!survey && !stars && !acquiring_commission)
+  if (!survey && !stars && !acquiring_commission && !retrieving)
     return advance_flight(controls, step);
   // Only this outer transaction counts a committed flight interval. Recursive
   // frame/impact/aid integration cannot count twice, and a refused acquisition
   // cannot commit a partial physical step.
   auto candidate = *this;
+  if (retrieving) {
+    const auto source = candidate.derelict_view();
+    if (!source.can_inspect || !source.inspected || !source.local ||
+        source.distance_metres < kFreedomDerelictRetrievalMinimumMetres ||
+        source.distance_metres > kFreedomDerelictRetrievalMaximumMetres ||
+        source.relative_speed_metres_per_second >
+            kFreedomDerelictRetrievalMaximumSpeedMetresPerSecond)
+      candidate.cancel_derelict_recovery_unfinished();
+  }
   auto result = candidate.advance_flight(controls, step);
   if (!result) return std::unexpected{result.error()};
+  // Loss snapshots were finalized inside the physical step; never edit their
+  // retained knowledge. A frozen arrival is not a retrieval interval.
+  if (!candidate.recovery_pending() && !result->jump_arrived) {
+    if (auto acquired = candidate.advance_derelict_recovery_tick(); !acquired)
+      return std::unexpected{acquired.error()};
+  }
   if (auto acquired = candidate.advance_orbital_survey_tick(); !acquired)
     return std::unexpected{acquired.error()};
   if (auto acquired = candidate.advance_star_search_tick(); !acquired)

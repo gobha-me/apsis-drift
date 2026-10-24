@@ -474,6 +474,25 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_quiet_travel", "multiplier"),
         &FreedomBridge::set_freedom_quiet_travel);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_derelict_recovery_new_game",
+                        "universe_seed", "drive_kind", "origin_service"),
+        &FreedomBridge::stage_freedom_derelict_recovery_new_game);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_derelict_recovery"),
+        &FreedomBridge::get_freedom_derelict_recovery);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("begin_freedom_derelict_recovery"),
+        &FreedomBridge::begin_freedom_derelict_recovery);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("cancel_freedom_derelict_recovery"),
+        &FreedomBridge::cancel_freedom_derelict_recovery);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_derelict_recovery_sale"),
+        &FreedomBridge::get_freedom_derelict_recovery_sale);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("sell_freedom_derelict_recovery", "token"),
+        &FreedomBridge::sell_freedom_derelict_recovery);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_specimen_sale"),
                                 &FreedomBridge::get_freedom_specimen_sale);
     godot::ClassDB::bind_method(
@@ -888,6 +907,27 @@ class FreedomBridge : public godot::RefCounted {
       const godot::String& universe_seed) -> bool {
     return stage_freedom_new_game_selection(universe_seed,
                                             native_uncharted_network_new_game);
+  }
+  auto stage_freedom_derelict_recovery_new_game(
+      const godot::String& universe_seed, const godot::Variant& drive,
+      const godot::Variant& service) -> bool {
+    if (drive.get_type() != godot::Variant::INT ||
+        service.get_type() != godot::Variant::BOOL) {
+      last_error = "Derelict recovery requires an integer drive choice and "
+                   "boolean service choice";
+      return false;
+    }
+    const auto kind = static_cast<std::int64_t>(drive);
+    if (kind < 0 || kind > 2) {
+      last_error = "Unsupported drive choice";
+      return false;
+    }
+    return stage_freedom_new_game_selection(
+        universe_seed,
+        [kind, selected = static_cast<bool>(service)](Seed seed) {
+          return native_derelict_recovery_new_game(
+              seed, static_cast<std::uint32_t>(kind), selected);
+        });
   }
   auto stage_freedom_planetary_network_new_game(
       const godot::String& universe_seed) -> bool {
@@ -1787,6 +1827,41 @@ class FreedomBridge : public godot::RefCounted {
     }
     return change_freedom_port([&](NativeFreedomFlightSession& session) {
       return session.sell_specimens(token);
+    });
+  }
+  auto sell_freedom_derelict_recovery(const godot::Variant& value) -> bool {
+    if (value.get_type() != godot::Variant::STRING) {
+      last_error = "Canister sale requires a bounded quote token string";
+      return false;
+    }
+    const auto text = static_cast<godot::String>(value);
+    if (text.length() < 1 || text.length() > 4096) {
+      last_error = "Canister sale requires a bounded quote token string";
+      return false;
+    }
+    const auto encoded = text.utf8();
+    if (encoded.length() < 1 || encoded.length() > 4096) {
+      last_error = "Canister sale requires a bounded quote token string";
+      return false;
+    }
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
+    if (token.find('\0') != std::string::npos) {
+      last_error = "Canister sale requires a bounded quote token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.sell_derelict_recovery(token);
+    });
+  }
+  auto begin_freedom_derelict_recovery() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_derelict_recovery();
+    });
+  }
+  auto cancel_freedom_derelict_recovery() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.cancel_derelict_recovery();
     });
   }
   static auto paid_token(const godot::Variant& value)
@@ -3059,6 +3134,39 @@ class FreedomBridge : public godot::RefCounted {
     result["contents"] = godot::String{view->contents.c_str()};
     return result;
   }
+  auto get_freedom_derelict_recovery_sale() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    const auto view = saved_flight->session.derelict_recovery_sale_view();
+    if (!view || view->token.size() > 4096 || view->note.size() > 1024 ||
+        view->contents.size() > 4096 ||
+        view->token.find('\0') != std::string::npos ||
+        view->note.find('\0') != std::string::npos ||
+        view->contents.find('\0') != std::string::npos)
+      return result;
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    result["version"] = 1;
+    result["supported"] = view->supported;
+    result["at_origin"] = view->at_origin;
+    result["paid_selected"] = view->paid_selected;
+    result["can_sell"] = view->can_sell;
+    result["carried_count"] = static_cast<std::int64_t>(view->carried_count);
+    result["capacity"] = static_cast<std::int64_t>(view->capacity);
+    result["tick"] = decimal(view->tick);
+    result["unit_credits"] = decimal(view->unit_credits);
+    result["gross_credits"] = decimal(view->gross_credits);
+    result["earned_credits"] = decimal(view->earned_credits);
+    result["insurance_credits"] = decimal(view->insurance_credits);
+    result["tab_credits"] = decimal(view->tab_credits);
+    result["net_credits"] = decimal(view->net_credits);
+    result["cash_after"] = decimal(view->cash_after);
+    result["token"] = godot::String{view->token.c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    result["contents"] = godot::String{view->contents.c_str()};
+    return result;
+  }
   auto get_freedom_paid_operations() const -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;
@@ -4058,6 +4166,29 @@ class FreedomBridge : public godot::RefCounted {
                ? project_origin_service_status(saved_flight->session, true)
                : godot::Dictionary{};
   }
+  static auto project_derelict_recovery(
+      const NativeFreedomFlightSession& session) -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto view = session.derelict_recovery_view();
+    if (!view || view->note.empty() || view->note.size() > 1024 ||
+        view->note.find('\0') != std::string::npos)
+      return result;
+    result["version"] = std::int64_t{1};
+    result["selected"] = view->selected;
+    result["known"] = view->known;
+    result["can_begin"] = view->can_begin;
+    result["active"] = view->active;
+    result["acquired_ticks"] = static_cast<std::int64_t>(view->acquired_ticks);
+    result["required_ticks"] = static_cast<std::int64_t>(view->required_ticks);
+    result["status"] = godot::String{view->status.c_str()};
+    result["tick"] = godot::String{std::to_string(view->tick).c_str()};
+    result["note"] = godot::String{view->note.c_str()};
+    return result;
+  }
+  auto get_freedom_derelict_recovery() const -> godot::Dictionary {
+    return saved_flight ? project_derelict_recovery(saved_flight->session)
+                        : godot::Dictionary{};
+  }
   static auto project_derelict(const NativeFreedomFlightSession& session)
       -> godot::Dictionary {
     const auto view = session.derelict_view();
@@ -4209,6 +4340,12 @@ class FreedomBridge : public godot::RefCounted {
       if (quiet.is_empty()) return {};
       result["quiet_travel"] = quiet;
       result["derelict"] = project_derelict(selected.session);
+      if (selected.session.knowledge() &&
+          selected.session.knowledge()->derelict_recovery) {
+        const auto recovery = project_derelict_recovery(selected.session);
+        if (recovery.is_empty()) return {};
+        result["derelict_recovery"] = recovery;
+      }
       if (selected.session.origin_assistance()) {
         auto status = project_origin_service_status(selected.session);
         status["craft"] = project_origin_service_craft(selected.session);

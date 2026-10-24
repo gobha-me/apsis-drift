@@ -135,6 +135,12 @@ inspected exposure. **Sample pouch** shows its source and retained field notes;
 Discard frees one of four slots. See [hand specimens](FREEDOM_SURFACE_LANDMARKS.md#hand-specimens)
 for persistence and replacement rules.
 
+For the optional [canister recovery](DERELICT_RECOVERY.md), start with
+**Four charted + two uncharted systems** and enable **Derelict recovery · prototype**.
+Inspect the existing derelict, then retrieve one canister while holding a close
+matched-speed stand-off. Sell physical cargo explicitly at Origin; discovery
+notes remain after sale or loss. Existing journeys keep their original selection.
+
 **Recorded observations** is available at the station and in planetary, Moon
 and asteroid controls. After the body records, its pages include retained
 specimen notes and any acquired derelict contact/history. A collection page

@@ -155,6 +155,16 @@ ticks still own all movement and costs; manual flight and constrained phases
 return to Normal. This is a provisional engineering direction, not a quoted
 owner priority selection or hardware throughput qualification.
 
+The owner subsequently confirmed **optional clear-space time acceleration**
+and then **small salvage recoveries from the existing derelict** on 2026-10-23.
+This confirmation follows the provisional travel scope above. The bounded
+[canister-recovery prototype](DERELICT_RECOVERY.md)
+([#699](https://github.com/gobha-me/apsis-drift/issues/699)) adds a default-off
+New Game selection, actual close matched-speed retrieval, one finite carried
+item and an explicit Origin sale. Loss preserves notes while losing cargo;
+older unselected journeys keep their rules. Transfer animation, wider salvage,
+boarding and the broader economic horizon remain separate.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

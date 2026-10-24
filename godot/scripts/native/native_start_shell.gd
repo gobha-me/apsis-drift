@@ -311,7 +311,12 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 		"recovery": staged = owner.stage_freedom_recovery()
 		"new_game":
 			var chart_kind := 3 if options.get("uncharted", false) else 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0
-			if options.get("origin_service", false):
+			if options.get("derelict_recovery", false):
+				if chart_kind != 3:
+					error = "Derelict recovery requires four charted + two uncharted systems"
+					return false
+				staged = owner.stage_freedom_derelict_recovery_new_game(options.value, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0, options.get("origin_service", false))
+			elif options.get("origin_service", false):
 				staged = owner.stage_freedom_origin_assistance_new_game(options.value, chart_kind, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0)
 			elif options.get("drive_strain", false):
 				staged = owner.stage_freedom_jump_strain_new_game(options.value, chart_kind)
