@@ -5,6 +5,7 @@
 #include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
+#include "apsis_drift/native_derelict_motion.hpp"
 #include "apsis_drift/native_known_chart_map.hpp"
 #include "apsis_drift/native_return_charge.hpp"
 #include "apsis_drift/native_startup.hpp"
@@ -211,6 +212,7 @@ struct NativeDerelictView {
   bool selected{}, known{}, local{}, inspected{}, can_scan{}, can_inspect{};
   std::uint64_t id{};
   std::optional<RigidBodyState> hull;
+  std::optional<DerelictRelativeMotion> motion;
   double distance_metres{}, relative_speed_metres_per_second{};
   std::string note, history;
 };

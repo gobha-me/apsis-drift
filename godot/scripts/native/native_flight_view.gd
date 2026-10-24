@@ -42,6 +42,7 @@ const PaidOperations = preload("res://scripts/native/paid_operations.gd")
 const SpecimenSale = preload("res://scripts/native/specimen_sale.gd")
 const RecoverySale = preload("res://scripts/native/derelict_recovery_sale.gd")
 const DerelictRecovery = preload("res://scripts/native/derelict_recovery.gd")
+const DerelictMotion = preload("res://scripts/native/derelict_motion.gd")
 const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
 const QuietTravel = preload("res://scripts/native/quiet_travel.gd")
 const ReturnChargeCheck = preload("res://scripts/native/native_return_charge_check.gd")
@@ -62,6 +63,7 @@ var derelict_view: Node3D
 var derelict_marker: Control
 var derelict_scan_button: Button
 var derelict_inspect_button: Button
+var derelict_motion_note: Label
 var derelict_recovery_button: Button
 var derelict_recovery_cancel_button: Button
 const FrameDiagnostics = preload("res://scripts/native/native_frame_diagnostics.gd")
@@ -264,6 +266,7 @@ static func valid_state(value: Dictionary) -> bool:
 	if value.has("survey_commission") and not valid_commission_progress(value.survey_commission): return false
 	if value.has("star_search") and not StarSearch.valid(value.star_search): return false
 	if value.has("derelict") and not DerelictView.valid_packet(value.derelict): return false
+	if value.has("derelict_motion") and not DerelictMotion.valid_state(value): return false
 	if value.has("derelict_recovery") and not DerelictRecovery.valid_packet(value.derelict_recovery): return false
 	if value.get("body_kind") == "moon": return MoonState.valid(value)
 	if value.get("body_kind") == "minor": return MinorState.valid(value)
@@ -1092,8 +1095,16 @@ func update_compact_hud() -> void:
 		primary_status.tooltip_text += "\n" + search_text + "\n" + str(state.star_search.note)
 	var derelict_text := DerelictView.text(state.get("derelict"))
 	if error.is_empty() and not derelict_text.is_empty():
-		primary_status.text += "\n" + derelict_text
+		var motion_text := DerelictMotion.hud_text(state)
+		if motion_text.is_empty():
+			primary_status.text += "\n" + derelict_text
+		else:
+			# Keep approach cues near the top, ahead of optional survey/rumor lines.
+			var lines := primary_status.text.split("\n")
+			lines.insert(1, motion_text)
+			primary_status.text = "\n".join(lines)
 		primary_status.tooltip_text += "\n" + derelict_text + "\n" + str(state.derelict.note)
+		if not motion_text.is_empty(): primary_status.tooltip_text += "\n" + motion_text + "\n" + str(state.derelict_motion.note)
 		if not state.derelict.history.is_empty(): primary_status.tooltip_text += "\n" + state.derelict.history
 	var recovery_text := DerelictRecovery.text(state.get("derelict_recovery"))
 	if error.is_empty() and not recovery_text.is_empty():
@@ -1244,6 +1255,10 @@ func setup_controls() -> void:
 	refresh_star_search()
 	derelict_scan_button = controls_menu.add_button(survey_column, "Scan local space", derelict_command)
 	derelict_inspect_button = controls_menu.add_button(survey_column, "Inspect derelict exterior", derelict_command.bind(true))
+	derelict_motion_note = Label.new()
+	derelict_motion_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	derelict_motion_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	survey_column.add_child(derelict_motion_note)
 	derelict_recovery_button = controls_menu.add_button(survey_column, "Retrieve sealed canister · 30 seconds", derelict_recovery_command)
 	derelict_recovery_cancel_button = controls_menu.add_button(survey_column, "Cancel canister retrieval", derelict_recovery_command.bind(true))
 	refresh_derelict_controls()
@@ -1962,6 +1977,10 @@ func derelict_recovery_command(cancel := false) -> void:
 
 
 func refresh_derelict_controls() -> void:
+	if derelict_motion_note != null:
+		derelict_motion_note.text = DerelictMotion.text(state)
+		derelict_motion_note.visible = not derelict_motion_note.text.is_empty()
+		derelict_motion_note.tooltip_text = str(state.get("derelict_motion", {}).get("note", ""))
 	if derelict_scan_button == null: return
 	var packet: Variant = state.get("derelict")
 	var available: bool = DerelictView.valid_packet(packet) and packet.selected

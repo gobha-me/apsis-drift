@@ -4,6 +4,7 @@ extends SceneTree
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Derelict = preload("res://scripts/native/native_derelict_view.gd")
+const Motion = preload("res://scripts/native/derelict_motion.gd")
 const ViewChecks = preload("res://tests/native_derelict_view_test.gd")
 const RecoveryChecks = preload("res://tests/derelict_recovery_test.gd")
 var failures := 0
@@ -77,6 +78,7 @@ func run() -> void:
 		shell.free(); quit(1); return
 	shell.current_view.set_process(false)
 	var station: Dictionary = owner.get_freedom_flight_state()
+	check(Motion.valid_state(station) and not station.derelict_motion.available and Motion.text(station).is_empty(), "Station leaked live derelict motion")
 	check(Derelict.valid_packet(station.derelict) and station.derelict.selected and not station.derelict.known and not station.derelict.can_scan and not station.derelict.can_inspect, "Station leaked a contact or enabled space actions")
 	check(not owner.scan_freedom_derelict() and not owner.inspect_freedom_derelict() and owner.get_freedom_flight_state() == station, "Station action refusal changed state")
 	check_archive(shell.current_view, owner, "", phases.path_join("station.json"), output.path_join("station-archive.json"))
@@ -95,6 +97,7 @@ func run() -> void:
 	view.observe_neutral_controls()
 	var before: Dictionary = owner.get_freedom_flight_state()
 	check(Derelict.valid_packet(before.derelict) and before.derelict.can_scan and not before.derelict.known and before.derelict.id.is_empty() and before.derelict.history.is_empty() and before.derelict.position == Vector3.ZERO and before.derelict.basis == Basis.IDENTITY and before.derelict.distance_metres == 0.0 and before.derelict.relative_speed_metres_per_second == 0.0, "Unknown approach leaked hull identity, motion or history")
+	check(Motion.valid_state(before) and not before.derelict_motion.available and Motion.text(before).is_empty() and not view.derelict_motion_note.visible, "Unknown approach leaked a motion cue")
 	check(view.derelict_scan_button.visible and not view.derelict_scan_button.disabled and not view.derelict_inspect_button.visible and not view.derelict_marker.visible and view.derelict_view == null, "Unknown approach lost generic scan or revealed a hull")
 	view.focused = false
 	view.derelict_scan_button.pressed.emit()
@@ -115,6 +118,11 @@ func run() -> void:
 	check(view.derelict_view != null and view.derelict_marker.visible and view.derelict_inspect_button.visible and view.derelict_inspect_button.disabled and "100–500 m" in view.derelict_inspect_button.tooltip_text and "No boarding or hull collision" in view.derelict_inspect_button.tooltip_text, "Contact lost marker, range refusal or prototype boundary")
 	checkpoint(owner, output.path_join("contact.json"), phases.path_join("contact.json"))
 	ViewChecks.run(view.scene, assets, view.service_binding, contact.derelict, check)
+	ViewChecks.motion_boundaries(contact, check)
+	check(view.derelict_motion_note.visible and view.derelict_motion_note.text == Motion.text(contact) and "positive: approaching" in view.derelict_motion_note.tooltip_text, "Actual instrument panel lost current motion or sign legend")
+	check(Motion.hud_text(contact) in view.primary_status.text and "positive: approaching" in view.primary_status.tooltip_text, "Actual flight HUD lost prioritized motion cue or legend")
+	check(view.primary_status.text.split("\n")[1].begins_with("DERELICT"), "Approach cue was buried below optional telemetry")
+	checkpoint(owner, output.path_join("contact.json"), phases.path_join("contact.json"))
 	checkpoint(owner, output.path_join("render-neutral.json"), phases.path_join("contact.json"))
 	var neutral := PackedFloat64Array()
 	neutral.resize(12)
@@ -138,7 +146,7 @@ func run() -> void:
 	if peer != null:
 		checkpoint(peer, output.path_join("continued.json"), saved)
 		var continued: Dictionary = peer.get_freedom_flight_state()
-		for field in ["tick", "craft_id", "system_id", "planet_id", "position_metres", "velocity_metres_per_second", "orientation_wxyz", "derelict"]:
+		for field in ["tick", "craft_id", "system_id", "planet_id", "position_metres", "velocity_metres_per_second", "orientation_wxyz", "derelict", "derelict_motion"]:
 			check(continued[field] == inspected[field], "Independent Continue changed authoritative owner: " + field)
 	view.derelict_inspect_button.pressed.emit()
 	checkpoint(owner, output.path_join("repeat.json"), saved)
@@ -155,6 +163,8 @@ func run() -> void:
 		view = shell.current_view
 		view.set_process(false)
 		check(view.has_method("open_observations") and owner.get_freedom_flight_state().derelict.inspected, "Recovery did not retain the note at the actual station")
+		var recovered_state: Dictionary = owner.get_freedom_flight_state()
+		check(Motion.valid_state(recovered_state) and not recovered_state.derelict_motion.available and Motion.text(recovered_state).is_empty(), "Replacement retained live remote-hull motion")
 		check_archive(view, owner, inspected.derelict.history, recovered, output.path_join("recovered-archive.json"))
 	for source in original_hashes:
 		check(FileAccess.get_sha256(source) == original_hashes[source], "Godot rewrote a C++ source phase")
