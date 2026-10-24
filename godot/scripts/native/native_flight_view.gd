@@ -44,6 +44,8 @@ const RecoverySale = preload("res://scripts/native/derelict_recovery_sale.gd")
 const DerelictRecovery = preload("res://scripts/native/derelict_recovery.gd")
 const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
 const QuietTravel = preload("res://scripts/native/quiet_travel.gd")
+const ReturnChargeCheck = preload("res://scripts/native/native_return_charge_check.gd")
+var return_charge_status: RichTextLabel
 var quiet_travel_select: OptionButton
 var quiet_travel_status: RichTextLabel
 var quiet_travel_packet: Dictionary = {}
@@ -769,6 +771,8 @@ func build_ui() -> void:
 		jump_destinations.append(destination)
 	jump_status = hud_text()
 	column.add_child(jump_status)
+	return_charge_status = hud_text()
+	column.add_child(return_charge_status)
 	jump_button = Button.new()
 	jump_button.focus_mode = Control.FOCUS_ALL
 	jump_button.pressed.connect(jump_requested)
@@ -1010,6 +1014,7 @@ func show_instruments() -> void:
 	instruments_open = true
 	layout_hud()
 	refresh_charted_arrivals()
+	refresh_return_charge_check()
 	refresh_quiet_travel()
 	instruments_button.grab_focus()
 
@@ -1446,6 +1451,7 @@ func select_planet_destination(index: int) -> void:
 		refresh_planet_routes()
 		return
 	state = bridge.get_freedom_flight_state()
+	refresh_return_charge_check()
 	update_view(0.0)
 	refresh_planet_routes()
 	report_action_status("Planet target selected · %s. Begin selected jump when ready; one charge commits after spooling." % row.name)
@@ -2244,6 +2250,7 @@ func select_moon_jump() -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	refresh_return_charge_check()
 	report_action_status("Nearby moon selected. One charge commits after spooling." + (" Last charge: none will remain for Home." if int(state.get("resources", {}).get("jump_charges", 0)) == 1 else ""))
 	update_view(0.0)
 
@@ -2259,6 +2266,7 @@ func select_minor_jump() -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	refresh_return_charge_check()
 	report_action_status("Asteroid inspection selected. One charge commits after spooling." + (" Last charge: none will remain for Home." if int(state.get("resources", {}).get("jump_charges", 0)) == 1 else ""))
 	update_view(0.0)
 
@@ -2273,6 +2281,7 @@ func select_jump_destination(ordinal: int) -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	refresh_charted_arrivals()
+	refresh_return_charge_check()
 	update_view(0.0)
 
 
@@ -2367,6 +2376,13 @@ func sync_charted_arrivals_ui() -> void:
 	charted_arrival_status.text = str(charted_arrival_packet.note) if valid else "Arrival option unavailable."
 
 
+func refresh_return_charge_check() -> void:
+	if return_charge_status == null: return
+	return_charge_status.visible = paused and instruments_open and chart_button.visible and not surface_walking()
+	var value: Variant = bridge.get_freedom_return_charge_check() if bridge.has_method("get_freedom_return_charge_check") else {}
+	return_charge_status.text = ReturnChargeCheck.text(value)
+
+
 func refresh_charted_arrivals() -> void:
 	if charted_arrival_button == null: return
 	var value: Variant = bridge.get_freedom_charted_arrivals() if bridge.has_method("get_freedom_charted_arrivals") else {}
@@ -2407,6 +2423,7 @@ func jump_requested() -> void:
 		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
+	refresh_return_charge_check()
 	report_action_status("Spool canceled · no jump charge spent" if cancel else "Spooling · Resume flight explicitly." if paused else "Spooling · one charge commits after 3 seconds")
 	update_view(0.0)
 
@@ -2448,6 +2465,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		return
 	update_view(0.0)
 	if command == "replenish_freedom_resources":
+		refresh_return_charge_check()
 		report_action_status("Flight reserve and three jump charges replenished · free station service")
 	elif state.attached:
 		report_action_status("Attached to D%d. Release before firing propulsion." % state.target_port)
@@ -2969,6 +2987,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	var jump: Dictionary = state.get("jump", {})
 	var phase: String = jump.get("phase", "idle")
 	sync_charted_arrivals_ui()
+	return_charge_status.visible = paused and instruments_open and chart_button.visible and not surface_walking()
 	quiet_travel_packet = state.get("quiet_travel", {}).duplicate(true) if QuietTravel.valid_packet(state.get("quiet_travel")) else {}
 	sync_quiet_travel_ui()
 	assist_button.disabled = phase != "idle" or surface_walking()

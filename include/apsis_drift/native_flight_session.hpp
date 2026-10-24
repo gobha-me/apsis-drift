@@ -5,6 +5,7 @@
 #include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
+#include "apsis_drift/native_return_charge.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/origin_station_crew.hpp"
 #include <memory>
@@ -294,6 +295,8 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto local_jump_preview() const
       -> std::expected<FrozenLocalBodyJumpArrival, std::string>;
 
+  [[nodiscard]] auto return_charge_view() const
+      -> std::expected<NativeReturnChargeView, std::string>;
   [[nodiscard]] auto jump_preview() const
       -> std::expected<FreedomJumpPreview, std::string>;
   [[nodiscard]] auto begin_jump() -> std::expected<void, std::string>;

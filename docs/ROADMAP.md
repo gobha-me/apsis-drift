@@ -165,6 +165,12 @@ item and an explicit Origin sale. Loss preserves notes while losing cargo;
 older unselected journeys keep their rules. Transfer animation, wider salvage,
 boarding and the broader economic horizon remain separate.
 
+2026-10-24 engineering follow-through: the [return-charge check](RETURN_CHARGE_CHECK.md)
+([#701](https://github.com/gobha-me/apsis-drift/issues/701)) shows the named system
+trip back to Origin and any shortfall against carried charges. It uses recorded
+identity/location evidence and changes no travel rules or saved state. The wider
+saved-routing and risk horizon in #195 remains deferred.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

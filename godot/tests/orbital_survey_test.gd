@@ -4,7 +4,9 @@ const Survey = preload("res://scripts/native/native_orbital_survey.gd")
 const Observations = preload("res://scripts/native/recorded_observations.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
+const ReturnCharge = preload("res://scripts/native/native_return_charge_check.gd")
 var failures := 0
+var return_charge_assertions := 0
 
 func check(ok: bool, reason: String) -> bool:
 	if not ok:
@@ -17,6 +19,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func check_inputs() -> void:
+	check_return_charge_inputs()
 	var packet := {"selected": false, "active": false, "can_begin": true, "completed": false, "note": "Ready", "body_name": "Known planet", "acquired_ticks": 0, "required_ticks": 3600, "result": {}}
 	check(Survey.valid(packet) and Survey.text(packet).is_empty(), "First survey opt-in or quiet idle presentation refused")
 	for change in [{"extra": true}, {"selected": 1}, {"active": null}, {"can_begin": "yes"}, {"completed": 0}, {"note": null}, {"body_name": 1}, {"note": "x".repeat(513)}, {"acquired_ticks": NAN}, {"acquired_ticks": INF}, {"acquired_ticks": -1}, {"acquired_ticks": 3601}, {"required_ticks": 3600.0}, {"required_ticks": 3599}, {"result": null}, {"result": {"character": "rugged", "water_basis_points": 0}}]:
@@ -58,6 +61,193 @@ func check_inputs() -> void:
 	check(Observations.valid_readings(readings) and "30 s acquired" in Observations.subject_text(subject) and "craft 2" in Observations.subject_text(subject), "Reader lost optional survey provenance")
 	subject.orbital_survey = null
 	check(not Observations.valid_readings(readings), "Null survey provenance accepted by reader")
+
+
+func charge_check(ok: bool, reason: String) -> bool:
+	return_charge_assertions += 1
+	return check(ok, "Return-charge check: " + reason)
+
+func check_return_charge_inputs() -> void:
+	var packet := {"version": 1, "available": true, "tick": "18446744073709551615", "jump_charges": 3, "required_charges": 2, "charge_shortfall": 0, "flight_fraction": 0.75, "reserve": false, "operationally_empty": false, "legs": [{"source_id": "1", "destination_id": "2", "source_name": "Origin", "destination_name": "Neighbor"}, {"source_id": "2", "destination_id": "1", "source_name": "Neighbor", "destination_name": "Origin"}], "note": "Charge budget only; maneuver fuel and jump feasibility remain separate."}
+	charge_check(ReturnCharge.valid_packet(packet), "valid closed11/two closed4 legs refused")
+	var text: String = ReturnCharge.text(packet)
+	charge_check("Origin → Neighbor → Origin" in text and "2 charges needed" in text and "3 carried" in text and "75.0%" in text and packet.note in text, "named route/actual quantities/provider qualification lost")
+	var one := packet.duplicate(true)
+	one.legs.resize(1)
+	one.required_charges = 1
+	charge_check(ReturnCharge.valid_packet(one), "one-leg budget refused")
+	var bounds := packet.duplicate(true)
+	bounds.note = "é".repeat(512)
+	bounds.legs[0].destination_name = "é".repeat(128)
+	bounds.legs[1].source_name = bounds.legs[0].destination_name
+	bounds.legs[0].destination_id = "18446744073709551615"
+	bounds.legs[1].source_id = bounds.legs[0].destination_id
+	charge_check(ReturnCharge.valid_packet(bounds), "maximum canonical ID/UTF8 byte bounds refused")
+	var shortfall := packet.duplicate(true)
+	shortfall.jump_charges = 0
+	shortfall.charge_shortfall = 2
+	shortfall.flight_fraction = 0.0
+	shortfall.reserve = true
+	shortfall.operationally_empty = true
+	charge_check(ReturnCharge.valid_packet(shortfall) and "SHORT 2" in ReturnCharge.text(shortfall) and "EMPTY" in ReturnCharge.text(shortfall), "shortfall or empty fuel warning lost")
+	var unavailable := packet.duplicate(true)
+	unavailable.available = false
+	unavailable.required_charges = 0
+	unavailable.charge_shortfall = 0
+	unavailable.legs = []
+	charge_check(ReturnCharge.valid_packet(unavailable) and ReturnCharge.text(unavailable) == unavailable.note, "unavailable reading invented applicable route quantities")
+	for field in packet:
+		var missing := packet.duplicate(true)
+		missing.erase(field)
+		charge_check(not ReturnCharge.valid_packet(missing), "missing closed field accepted: " + str(field))
+		var wrong := packet.duplicate(true)
+		wrong[field] = null
+		charge_check(not ReturnCharge.valid_packet(wrong), "null field accepted: " + str(field))
+	for change in [{"extra": true}, {"version": 1.0}, {"version": 2}, {"available": 1}, {"tick": 0}, {"tick": "01"}, {"tick": "-1"}, {"tick": "18446744073709551616"}, {"jump_charges": true}, {"jump_charges": 4}, {"jump_charges": -1}, {"required_charges": 2.0}, {"required_charges": 0}, {"required_charges": 3}, {"charge_shortfall": 1}, {"charge_shortfall": -1}, {"flight_fraction": 1}, {"flight_fraction": NAN}, {"flight_fraction": INF}, {"flight_fraction": -0.1}, {"flight_fraction": 1.1}, {"reserve": 1}, {"operationally_empty": 0}, {"legs": []}, {"legs": [null]}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "é".repeat(513)}]:
+		var bad := packet.duplicate(true)
+		bad.merge(change, true)
+		charge_check(not ReturnCharge.valid_packet(bad) and "unavailable" in ReturnCharge.text(bad).to_lower(), "malformed packet reached budget text: " + str(change.keys()))
+	for field in packet.legs[0]:
+		var missing := packet.duplicate(true)
+		missing.legs[0].erase(field)
+		charge_check(not ReturnCharge.valid_packet(missing), "missing closed leg field accepted")
+	for change in [{"extra": true}, {"source_id": "0"}, {"source_id": 1}, {"source_id": "01"}, {"destination_id": "1"}, {"destination_id": "18446744073709551616"}, {"source_name": ""}, {"destination_name": "x".repeat(257)}, {"source_name": "é".repeat(129)}]:
+		var bad := packet.duplicate(true)
+		bad.legs[0].merge(change, true)
+		charge_check(not ReturnCharge.valid_packet(bad), "malformed closed leg accepted")
+	for field in ["source_id", "source_name"]:
+		var disconnected := packet.duplicate(true)
+		disconnected.legs[1][field] = "3" if field == "source_id" else "Another neighbor"
+		charge_check(not ReturnCharge.valid_packet(disconnected), "disconnected named legs accepted")
+	var excess := packet.duplicate(true)
+	excess.legs.append(packet.legs[0].duplicate(true))
+	charge_check(not ReturnCharge.valid_packet(excess), "third leg accepted")
+	unavailable.legs = packet.legs
+	charge_check(not ReturnCharge.valid_packet(unavailable), "unavailable route leaked legs")
+	for bad in [null, [], true, "packet", NAN]: charge_check(not ReturnCharge.valid_packet(bad), "non-dictionary accepted")
+
+func charge_pad(device: int, down: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = JOY_BUTTON_A
+	event.pressed = down
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func check_return_charge_readers(fixtures: String, assets: String, output: String) -> void:
+	if not charge_check(DirAccess.make_dir_recursive_absolute(output) == OK, "proof directory unavailable"): return
+	var source := fixtures.path_join("charted-arrivals")
+	var source_hashes := {}
+	var witnesses: Array = []
+	var origin_id := ""
+	for row in [{"phase": "seated-on", "required": 2}, {"phase": "origin-selected", "required": 1}, {"phase": "outbound-spool", "required": 0}, {"phase": "outbound-arrived", "required": 0}]:
+		var path: String = source.path_join(row.phase + ".json")
+		var original := FileAccess.get_file_as_bytes(path)
+		source_hashes[row.phase + ".json"] = FileAccess.get_sha256(path)
+		var owner: Variant = restore(path)
+		if owner == null: return
+		var state: Dictionary = owner.get_freedom_flight_state()
+		var packet: Dictionary = owner.get_freedom_return_charge_check()
+		if not charge_check(ReturnCharge.valid_packet(packet), "actual getter packet refused: " + row.phase): return
+		charge_check(packet.available == (row.required > 0) and packet.required_charges == row.required and packet.tick == state.tick, "selected/phase ownership or actual clock mismatch: " + row.phase)
+		charge_check(packet.jump_charges == state.resources.jump_charges and packet.flight_fraction == state.resources.fraction and packet.reserve == state.resources.reserve and packet.operationally_empty == state.resources.operationally_empty, "charge/fuel fields diverged from actual resource reading")
+		if row.phase == "seated-on":
+			origin_id = state.system_id
+			charge_check(state.attached and not state.jump.available and packet.available, "docked charge check was incorrectly gated on physical departure readiness")
+		if packet.available:
+			charge_check(packet.legs[0].source_id == state.system_id and packet.legs[0].destination_id == state.jump.selected and packet.legs[-1].destination_id == origin_id, "budget does not follow actual current/selected/Origin identity")
+			for leg: Dictionary in packet.legs:
+				for chart_row: Dictionary in state.chart.rows:
+					if chart_row.system_id == leg.source_id: charge_check(chart_row.name == leg.source_name, "source name was not the known chart identity")
+					if chart_row.system_id == leg.destination_id: charge_check(chart_row.name == leg.destination_name, "destination name was not the known chart identity")
+		for repeat in 3: charge_check(owner.get_freedom_return_charge_check() == packet, "repeated getter changed quote or clock")
+		var saved := output.path_join(row.phase + "-read.json")
+		charge_check(owner.get_freedom_flight_state() == state, "read-only getter changed current state: " + row.phase)
+		charge_check(save_bytes(owner, saved) == original, "read-only getter changed complete Save: " + row.phase)
+		witnesses.append({"file": saved.get_file(), "source": row.phase + ".json", "sha256": FileAccess.get_sha256(saved), "required_charges": packet.required_charges, "packet": packet})
+		owner = null
+	var shell_owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := shell_for(shell_owner, source.path_join("seated-on.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var original := FileAccess.get_file_as_bytes(source.path_join("seated-on.json"))
+	var original_size := root.size
+	var original_device: int = view.player_input.device
+	var original_pads: Dictionary = view.player_input.available_pads.duplicate(true)
+	view.player_input.available_pads[2] = true
+	var navigation: Button
+	for child in view.controls_menu.save_button.get_parent().get_children():
+		if child is Button and child.text == "Flight instruments & navigation": navigation = child
+	if not charge_check(navigation != null, "paused navigation entry missing"):
+		shell.free(); return
+	for row in [{"size": Vector2i(640, 450), "device": -1, "name": "keyboard-small"}, {"size": Vector2i(1280, 720), "device": 2, "name": "pad-normal"}]:
+		root.size = row.size
+		view.player_input.device = row.device
+		view.player_input.install()
+		for frame in 3: await process_frame
+		view.observe_neutral_controls()
+		navigation.grab_focus()
+		if row.device < 0:
+			key(KEY_SPACE, true)
+			key(KEY_SPACE, false)
+		else:
+			charge_pad(2, true)
+			charge_pad(2, false)
+		for frame in 2: await process_frame
+		var packet: Dictionary = shell_owner.get_freedom_return_charge_check()
+		charge_check(view.paused and view.instruments_open and view.return_charge_status.is_visible_in_tree() and view.return_charge_status.text == ReturnCharge.text(packet), "actual keyboard/pad opening omitted charge budget: " + row.name)
+		view.hud_scroll.ensure_control_visible(view.return_charge_status)
+		for frame in 2: await process_frame
+		var viewport := Rect2(view.hud_scroll.global_position, view.hud_scroll.size).grow(1.0)
+		charge_check(viewport.encloses(view.return_charge_status.get_global_rect()) and view.return_charge_status.get_content_height() > 0 and view.return_charge_status.get_content_height() <= view.return_charge_status.size.y + 1.0, "budget text clipped at small/normal viewport: " + row.name)
+		var open_path: String = output.path_join(row.name + "-open.json")
+		charge_check(save_bytes(shell_owner, open_path) == original, "opening navigation changed complete Save")
+		view.instruments_button.grab_focus()
+		if row.device < 0:
+			key(KEY_SPACE, true)
+			key(KEY_SPACE, false)
+		else:
+			charge_pad(2, true)
+			charge_pad(2, false)
+		for frame in 2: await process_frame
+		var back_path: String = output.path_join(row.name + "-back.json")
+		charge_check(view.paused and not view.instruments_open and view.controls_menu.panel.visible and save_bytes(shell_owner, back_path) == original, "Back navigation resumed or changed Save")
+		witnesses.append({"file": open_path.get_file(), "source": "seated-on.json", "sha256": FileAccess.get_sha256(open_path), "input": row.name})
+		witnesses.append({"file": back_path.get_file(), "source": "seated-on.json", "sha256": FileAccess.get_sha256(back_path), "input": row.name})
+	root.size = original_size
+	view.player_input.device = original_device
+	view.player_input.available_pads = original_pads
+	view.player_input.install()
+	view.show_instruments()
+	view.chart_button.button_pressed = true
+	view.update_view(0.0)
+	var state: Dictionary = shell_owner.get_freedom_flight_state()
+	var selected := -1
+	for i in state.chart.rows.size():
+		var row: Dictionary = state.chart.rows[i]
+		if row.selectable and not row.current and row.system_id != state.jump.selected:
+			selected = i
+			break
+	if charge_check(selected >= 0, "existing four-system chart lacks a second selectable route"):
+		var peer: Variant = restore(source.path_join("seated-on.json"))
+		if peer != null:
+			charge_check(peer.select_freedom_jump(state.chart.rows[selected].system_id), "independent ordinary route selection refused")
+			view.jump_destinations[selected].pressed.emit()
+			var packet: Dictionary = shell_owner.get_freedom_return_charge_check()
+			charge_check(ReturnCharge.valid_packet(packet) and packet.available and packet.legs[0].destination_id == state.chart.rows[selected].system_id and view.return_charge_status.text == ReturnCharge.text(packet), "actual system selection left stale budget text")
+			charge_check(shell_owner.get_freedom_flight_state().tick == state.tick and shell_owner.get_freedom_flight_state().resources == state.resources, "selection/budget reading consumed clock or resources")
+			var path := output.path_join("selected-route.json")
+			var oracle := output.path_join("selected-route-oracle.json")
+			charge_check(save_bytes(shell_owner, path) == save_bytes(peer, oracle), "UI selection/getter differs from independent C++ selection complete Save")
+			witnesses.append({"file": path.get_file(), "oracle": oracle.get_file(), "sha256": FileAccess.get_sha256(path), "destination_id": packet.legs[0].destination_id})
+		peer = null
+	for phase in source_hashes: charge_check(FileAccess.get_sha256(source.path_join(phase)) == source_hashes[phase], "reader rewrote existing source fixture")
+	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
+	if charge_check(file != null, "proof report unavailable"):
+		file.store_string(JSON.stringify({"schema": "apsis.return-charge-native/1", "completed": failures == 0, "failures": failures, "assertions": return_charge_assertions, "source_sha256": source_hashes, "witnesses": witnesses, "scope": "Read-only actual getter, docked two-leg/selected-Origin one-leg and spool/unselected refusal using existing C++ charted fixtures. One existing FlightView asset host, keyboard-small/selected-pad-normal opening and Back, full Save purity and independent ordinary system-selection parity. No new voyage, forecast, range/price/orbit/return-feasibility, manual hardware or GPU acceptance."}, "\t") + "\n")
+	shell.free()
+	shell_owner = null
+	await process_frame
 
 func save_bytes(owner: Variant, path: String) -> PackedByteArray:
 	if not check(owner.save_freedom_as(path), "Survey complete Save refused: " + str(owner.get_last_error())): return PackedByteArray()
@@ -219,6 +409,7 @@ func run() -> void:
 	shell.free()
 	owner = null
 	await process_frame
+	if not failures: await check_return_charge_readers(args[0], args[1], output.path_join("return-charge-check"))
 	var commissions := preload("res://tests/survey_commissions_test.gd").new()
 	failures += await commissions.run(self, args[0], args[1], output.path_join("commissions"))
 	var paid := preload("res://tests/paid_operations_test.gd").new()

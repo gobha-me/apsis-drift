@@ -10,6 +10,15 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     set_tests_properties(${recovery_case}-contract PROPERTIES TIMEOUT 120)
   endforeach()
 
+  add_executable(apsis-drift-native-return-charge-tests test/native_return_charge_test.cpp)
+  target_include_directories(apsis-drift-native-return-charge-tests PRIVATE src)
+  target_link_libraries(apsis-drift-native-return-charge-tests PRIVATE
+    apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-native-return-charge-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME native-return-charge-contract COMMAND apsis-drift-native-return-charge-tests)
+  set_tests_properties(native-return-charge-contract PROPERTIES TIMEOUT 120)
+
   add_executable(apsis-drift-native-quiet-travel-tests
     test/native_quiet_travel_test.cpp)
   target_include_directories(apsis-drift-native-quiet-travel-tests PRIVATE src)
