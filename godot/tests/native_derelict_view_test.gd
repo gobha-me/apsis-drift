@@ -2,6 +2,7 @@ extends RefCounted
 ## Called by the actual native integration case with an earned C++ contact.
 ## Malformed/camera-distance copies test presentation only, never bridge input.
 const Derelict = preload("res://scripts/native/native_derelict_view.gd")
+const Motion = preload("res://scripts/native/derelict_motion.gd")
 
 static func packet_boundaries(packet: Dictionary, check: Callable) -> void:
 	check.call(Derelict.valid_packet(packet), "Actual C++ derelict packet refused")
@@ -64,3 +65,42 @@ static func run(parent: Node, assets: String, binding: Dictionary, contact: Dict
 	check.call(not view.present(contact, false, NAN, 2000.0) and not view.visible, "Invalid render range retained a visible hull")
 	check.call(not view.present(contact, false, 500.0, INF) and not view.visible, "Infinite far clip admitted")
 	view.free()
+
+
+static func motion_boundaries(state: Dictionary, check: Callable) -> void:
+	var packet: Dictionary = state.derelict_motion
+	check.call(Motion.valid_packet(packet) and Motion.valid_state(state) and packet.available, "Actual earned local C++ motion packet refused")
+	check.call("Closing" in Motion.text(state) and "Sideways" in Motion.text(state) and "m/s" in Motion.text(state), "Current C++ motion lost sign/unit labels")
+	for field in packet:
+		var missing := state.duplicate(true)
+		missing.derelict_motion.erase(field)
+		check.call(not Motion.valid_state(missing) and Motion.text(missing).is_empty(), "Motion accepted missing " + str(field))
+	for patch in [{"version": 1.0}, {"available": 1}, {"tick": "01"}, {"tick": "18446744073709551616"}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "x" + String.chr(0)}, {"closing_metres_per_second": 1}, {"closing_metres_per_second": NAN}, {"closing_metres_per_second": INF}, {"closing_metres_per_second": -4.1e9}, {"transverse_metres_per_second": -0.1}, {"transverse_metres_per_second": NAN}, {"transverse_metres_per_second": INF}, {"transverse_metres_per_second": 4.1e9}]:
+		var bad := state.duplicate(true)
+		bad.derelict_motion.merge(patch, true)
+		check.call(not Motion.valid_state(bad) and Motion.hud_text(bad).is_empty(), "Malformed motion admitted: " + str(patch))
+	var extra := state.duplicate(true)
+	extra.derelict_motion["future_position"] = Vector3.ONE
+	check.call(not Motion.valid_state(extra), "Motion admitted a private extra field")
+	var stale := state.duplicate(true)
+	stale.derelict_motion.tick = str(int(state.tick) + 1)
+	check.call(not Motion.valid_state(stale) and Motion.text(stale).is_empty(), "Motion accepted a different simulation tick")
+	var coincident := state.duplicate(true)
+	coincident.derelict.distance_metres = 0.0
+	check.call(not Motion.valid_state(coincident), "Motion invented a line of sight at zero separation")
+	var hidden := state.duplicate(true)
+	hidden.derelict_motion.merge({"available": false, "closing_metres_per_second": 0.0, "transverse_metres_per_second": 0.0}, true)
+	check.call(Motion.valid_state(hidden) and Motion.hud_text(hidden).is_empty(), "Unavailable motion retained a live cue")
+	for field in ["closing_metres_per_second", "transverse_metres_per_second"]:
+		var leak := hidden.duplicate(true)
+		leak.derelict_motion[field] = 1.0
+		check.call(not Motion.valid_state(leak), "Unavailable motion leaked a nonzero rate")
+	# Text-only copies exercise labels; they are not travelled physical states.
+	for closing in [2.5, -2.5, 0.0]:
+		var copy := state.duplicate(true)
+		copy.derelict_motion.merge({"closing_metres_per_second": closing, "transverse_metres_per_second": 1.5}, true)
+		var expected := "Closing %+.1f m/s · Sideways 1.5 m/s" % closing
+		check.call(Motion.text(copy) == expected, "Closing sign or sideways label changed")
+	var almost_zero := state.duplicate(true)
+	almost_zero.derelict_motion.closing_metres_per_second = -0.01
+	check.call("Closing +0.0 m/s" in Motion.text(almost_zero), "Subprecision closing displayed negative zero")

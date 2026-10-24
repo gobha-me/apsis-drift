@@ -4250,9 +4250,28 @@ class FreedomBridge : public godot::RefCounted {
     return saved_flight ? project_derelict_recovery(saved_flight->session)
                         : godot::Dictionary{};
   }
-  static auto project_derelict(const NativeFreedomFlightSession& session)
+  static auto project_derelict_motion(const NativeDerelictView& view,
+                                      SimulationTick tick)
       -> godot::Dictionary {
-    const auto view = session.derelict_view();
+    godot::Dictionary packet;
+    const auto available = view.local && view.known && view.motion.has_value();
+    packet["version"] = std::int64_t{1};
+    packet["available"] = available;
+    packet["tick"] = godot::String{std::to_string(tick).c_str()};
+    packet["closing_metres_per_second"] =
+        available ? view.motion->closing_metres_per_second : 0.0;
+    packet["transverse_metres_per_second"] =
+        available ? view.motion->transverse_metres_per_second : 0.0;
+    packet["note"] =
+        available ? "Closing positive: approaching; negative: separating. "
+                    "Sideways is speed across the line of sight. "
+                    "Current motion only, not stopping clearance."
+                  : "Relative motion is unavailable for this contact";
+    return packet;
+  }
+  static auto project_derelict(const NativeFreedomFlightSession& session,
+                               const NativeDerelictView& view)
+      -> godot::Dictionary {
     godot::Dictionary packet;
     packet["version"] = std::int64_t{1};
     packet["selected"] = view.selected;
@@ -4400,7 +4419,10 @@ class FreedomBridge : public godot::RefCounted {
       const auto quiet = project_quiet_travel(selected);
       if (quiet.is_empty()) return {};
       result["quiet_travel"] = quiet;
-      result["derelict"] = project_derelict(selected.session);
+      const auto derelict = selected.session.derelict_view();
+      result["derelict"] = project_derelict(selected.session, derelict);
+      result["derelict_motion"] = project_derelict_motion(
+          derelict, selected.session.document().flight.tick);
       if (selected.session.knowledge() &&
           selected.session.knowledge()->derelict_recovery) {
         const auto recovery = project_derelict_recovery(selected.session);

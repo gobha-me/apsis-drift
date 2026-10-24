@@ -3,6 +3,7 @@
 #include "apsis_drift/save_file.hpp"
 
 #include <cmath>
+#include <limits>
 
 namespace apsis_drift {
 namespace {
@@ -15,6 +16,48 @@ auto observation(const RigidBodyState& body, StarterCraftId craft)
           body.linear_velocity_metres_per_second};
 }
 } // namespace
+
+auto observe_derelict_relative_motion(const RigidBodyState& player,
+                                      const RigidBodyState& hull)
+    -> std::optional<DerelictRelativeMotion> {
+  const auto& frame = player.frame;
+  if (frame.kind != RigidFrameKind::planet_relative_inertial ||
+      frame.system.value == 0 || !frame.planet || frame.planet->value == 0 ||
+      frame.station || frame.body || frame != hull.frame ||
+      player.tick != hull.tick ||
+      player.tick == std::numeric_limits<SimulationTick>::max())
+    return std::nullopt;
+  const auto bounded = [](RigidVector3 vector, double limit) {
+    return std::isfinite(vector.x) && std::isfinite(vector.y) &&
+           std::isfinite(vector.z) && std::abs(vector.x) <= limit &&
+           std::abs(vector.y) <= limit && std::abs(vector.z) <= limit;
+  };
+  for (const auto* body : {&player, &hull}) {
+    if (!bounded(body->position_metres, kRigidBodyMaximumPositionMetres) ||
+        !bounded(body->linear_velocity_metres_per_second,
+                 kRigidBodyMaximumVelocityMetresPerSecond))
+      return std::nullopt;
+  }
+  const RigidVector3 offset{hull.position_metres.x - player.position_metres.x,
+                            hull.position_metres.y - player.position_metres.y,
+                            hull.position_metres.z - player.position_metres.z};
+  const auto range = std::hypot(offset.x, offset.y, offset.z);
+  if (range == 0) return std::nullopt;
+  const RigidVector3 direction{offset.x / range, offset.y / range,
+                               offset.z / range};
+  const RigidVector3 velocity{hull.linear_velocity_metres_per_second.x -
+                                  player.linear_velocity_metres_per_second.x,
+                              hull.linear_velocity_metres_per_second.y -
+                                  player.linear_velocity_metres_per_second.y,
+                              hull.linear_velocity_metres_per_second.z -
+                                  player.linear_velocity_metres_per_second.z};
+  const auto radial = direction.x * velocity.x + direction.y * velocity.y +
+                      direction.z * velocity.z;
+  return DerelictRelativeMotion{-radial,
+                                std::hypot(velocity.x - radial * direction.x,
+                                           velocity.y - radial * direction.y,
+                                           velocity.z - radial * direction.z)};
+}
 
 auto NativeFreedomFlightSession::derelict_view() const -> NativeDerelictView {
   NativeDerelictView view;
@@ -64,6 +107,7 @@ auto NativeFreedomFlightSession::derelict_view() const -> NativeDerelictView {
   if (!hull || !view.known) return view;
   view.local = true;
   view.hull = *hull;
+  view.motion = observe_derelict_relative_motion(*body, *hull);
   view.distance_metres =
       separation(body->position_metres, hull->position_metres);
   view.relative_speed_metres_per_second =

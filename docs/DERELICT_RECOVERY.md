@@ -10,8 +10,14 @@ After inspecting the hull, approach to **100–150 m** and match its velocity to
 **2 m/s or less**. Pause, choose **Retrieve sealed canister · 30 seconds**, then Resume and
 maintain that envelope for **30 seconds of game time**. The progress readout
 comes from actual C++ simulation ticks. Pilot assistance can still use fuel;
-retrieval adds no autopilot. This first transfer uses a shipboard retrieval
-abstraction; a drone, cable and transfer animation remain asset work.
+retrieval adds no autopilot. The earned local contact shows **Closing** speed:
+positive means approaching; negative means separating. **Sideways** speed is
+motion across the line of sight. Both are current C++ observations, in m/s,
+alongside range and total relative speed. They are not stopping clearance or an
+automatic rendezvous. Unknown/remote contacts and undefined zero separation
+have no motion cue. The same values and sign legend appear in paused flight
+instruments. This first transfer uses a shipboard retrieval abstraction; a
+drone, cable and transfer animation remain asset work.
 
 Pause stops progress. Save/Continue retains actual progress. Leaving the
 supported body, stand-off or speed envelope, starting a jump, explicit Cancel

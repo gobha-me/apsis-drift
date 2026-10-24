@@ -4,8 +4,10 @@
 #include "apsis_drift/save_file.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <stdexcept>
@@ -28,6 +30,165 @@ template <class T, class E> auto need(std::expected<T, E> result) -> T {
     throw std::runtime_error("Derelict fixture refused");
   }
   if constexpr (!std::is_void_v<T>) return std::move(*result);
+}
+auto relative_motion_boundaries() -> void {
+  RigidBodyState player;
+  player.frame = {RigidFrameKind::planet_relative_inertial, SystemId{1},
+                  PlanetId{2}, std::nullopt, std::nullopt};
+  player.tick = 100;
+  auto hull = player;
+  hull.position_metres = {100, 0, 0};
+  hull.linear_velocity_metres_per_second = {-3, 4, 0};
+  const auto approaching = observe_derelict_relative_motion(player, hull);
+  check(approaching && approaching->closing_metres_per_second == 3 &&
+            approaching->transverse_metres_per_second == 4,
+        "Closing is positive for shrinking range; transverse is a magnitude");
+  check(observe_derelict_relative_motion(hull, player) == approaching,
+        "Exchanging the two observers preserves range kinematics");
+  hull.linear_velocity_metres_per_second = {3, 0, 0};
+  const auto opening = observe_derelict_relative_motion(player, hull);
+  check(opening && opening->closing_metres_per_second == -3 &&
+            opening->transverse_metres_per_second == 0,
+        "Opening range has negative closing and no transverse component");
+  hull.linear_velocity_metres_per_second = {0, -4, 0};
+  const auto lateral = observe_derelict_relative_motion(player, hull);
+  check(lateral && lateral->closing_metres_per_second == 0 &&
+            lateral->transverse_metres_per_second == 4,
+        "Pure sideways motion does not imply closing");
+  player.linear_velocity_metres_per_second = {10, 20, -30};
+  hull.linear_velocity_metres_per_second =
+      player.linear_velocity_metres_per_second;
+  check(observe_derelict_relative_motion(player, hull) ==
+            std::optional{DerelictRelativeMotion{}},
+        "Matched velocities at positive range have valid zero motion");
+  hull.position_metres = {};
+  check(!observe_derelict_relative_motion(player, hull),
+        "Coincident positions have no directional cue");
+  hull.position_metres = {std::numeric_limits<double>::min(), 0, 0};
+  check(observe_derelict_relative_motion(player, hull).has_value(),
+        "A finite positive range is not discarded by an invented epsilon");
+  hull.position_metres = {3, 4, 0};
+  player.linear_velocity_metres_per_second = {};
+  hull.linear_velocity_metres_per_second = {-6, -8, 0};
+  const auto diagonal = observe_derelict_relative_motion(player, hull);
+  check(diagonal &&
+            std::abs(diagonal->closing_metres_per_second - 10) < 1e-12 &&
+            diagonal->transverse_metres_per_second < 1e-12,
+        "Normalized line of sight preserves diagonal radial motion");
+
+  for (const auto kind :
+       {RigidFrameKind::system_inertial, RigidFrameKind::planet_fixed,
+        RigidFrameKind::station_relative_inertial,
+        RigidFrameKind::body_relative_inertial, RigidFrameKind::body_fixed}) {
+    auto other_player = player;
+    auto other_hull = hull;
+    other_player.frame.kind = kind;
+    other_hull.frame.kind = kind;
+    check(!observe_derelict_relative_motion(other_player, other_hull),
+          "Matching unsupported coordinate frames refuse motion");
+  }
+  auto invalid = hull;
+  invalid.frame.system = SystemId{3};
+  check(!observe_derelict_relative_motion(player, invalid),
+        "Different parent systems refuse motion");
+  invalid = hull;
+  invalid.frame.planet = PlanetId{3};
+  check(!observe_derelict_relative_motion(player, invalid),
+        "Different parent planets refuse motion");
+  for (unsigned field = 0; field < 5; ++field) {
+    auto other_player = player;
+    auto other_hull = hull;
+    auto& frame = other_player.frame;
+    if (field == 0) frame.system = SystemId{};
+    if (field == 1) frame.planet.reset();
+    if (field == 2) frame.planet = PlanetId{};
+    if (field == 3) frame.station = OriginStationId{1};
+    if (field == 4) frame.body = body_id(PlanetId{2});
+    other_hull.frame = frame;
+    check(!observe_derelict_relative_motion(other_player, other_hull),
+          "Matching malformed parent frames refuse motion");
+  }
+  invalid = hull;
+  ++invalid.tick;
+  check(!observe_derelict_relative_motion(player, invalid),
+        "Different committed ticks cannot supply simultaneous motion");
+  invalid.tick = std::numeric_limits<SimulationTick>::max();
+  auto invalid_player = player;
+  invalid_player.tick = invalid.tick;
+  check(!observe_derelict_relative_motion(invalid_player, invalid),
+        "The reserved rigid-body overflow tick refuses motion");
+
+  for (bool corrupt_player : {false, true}) {
+    for (bool position : {false, true}) {
+      const double bound = position ? kRigidBodyMaximumPositionMetres
+                                    : kRigidBodyMaximumVelocityMetresPerSecond;
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        for (const double bad :
+             {std::numeric_limits<double>::quiet_NaN(),
+              std::numeric_limits<double>::infinity(),
+              -std::numeric_limits<double>::infinity(),
+              std::nextafter(bound, std::numeric_limits<double>::infinity()),
+              std::nextafter(-bound,
+                             -std::numeric_limits<double>::infinity())}) {
+          auto other_player = player;
+          auto other_hull = hull;
+          auto& body = corrupt_player ? other_player : other_hull;
+          auto& vector = position ? body.position_metres
+                                  : body.linear_velocity_metres_per_second;
+          if (axis == 0) vector.x = bad;
+          if (axis == 1) vector.y = bad;
+          if (axis == 2) vector.z = bad;
+          check(!observe_derelict_relative_motion(other_player, other_hull),
+                "Each invalid position/velocity component refuses before "
+                "relative subtraction");
+        }
+      }
+    }
+  }
+  player.position_metres = {-kRigidBodyMaximumPositionMetres,
+                            -kRigidBodyMaximumPositionMetres,
+                            -kRigidBodyMaximumPositionMetres};
+  hull.position_metres = {kRigidBodyMaximumPositionMetres,
+                          kRigidBodyMaximumPositionMetres,
+                          kRigidBodyMaximumPositionMetres};
+  player.linear_velocity_metres_per_second = {
+      kRigidBodyMaximumVelocityMetresPerSecond,
+      kRigidBodyMaximumVelocityMetresPerSecond,
+      kRigidBodyMaximumVelocityMetresPerSecond};
+  hull.linear_velocity_metres_per_second = {
+      -kRigidBodyMaximumVelocityMetresPerSecond,
+      -kRigidBodyMaximumVelocityMetresPerSecond,
+      -kRigidBodyMaximumVelocityMetresPerSecond};
+  const auto extreme = observe_derelict_relative_motion(player, hull);
+  check(extreme && std::isfinite(extreme->closing_metres_per_second) &&
+            std::isfinite(extreme->transverse_metres_per_second) &&
+            std::abs(extreme->closing_metres_per_second -
+                     2e9 * std::sqrt(3.0)) < 1e-5 &&
+            extreme->transverse_metres_per_second < 1e-5,
+        "Inclusive rigid component limits produce finite kinematics without "
+        "squaring enormous positions");
+}
+
+auto motion_read_purity(const NativeFreedomFlightSession& live) -> void {
+  const auto original =
+      need(encode_native_save_document_json(need(live.save_document())));
+  const auto initial = live.derelict_view();
+  for (unsigned repeat = 0; repeat < 3; ++repeat) {
+    const auto view = live.derelict_view();
+    check(view.motion == initial.motion &&
+              need(encode_native_save_document_json(
+                  need(live.save_document()))) == original,
+          "Repeated same-tick motion reads preserve the complete Save");
+  }
+  if (initial.local && initial.hull) {
+    const auto body = need(live.relative_state());
+    check(initial.motion ==
+              observe_derelict_relative_motion(body, *initial.hull),
+          "Local motion uses the admitted player and hull at one actual tick");
+  } else {
+    check(!initial.motion,
+          "Unknown or nonlocal contact exposes no relative motion");
+  }
 }
 auto fixture() -> NativeFreedomFlightSession {
   const Seed seed{42};
@@ -104,6 +265,9 @@ auto continued(const NativeFreedomFlightSession& live,
       need(encode_native_save_document_json(need(live.save_document()))) ==
           need(encode_native_save_document_json(need(resumed.save_document()))),
       "Continue preserves the exact current voyage and evidence");
+  check(live.derelict_view().motion == resumed.derelict_view().motion,
+        "Continue reconstructs relative motion without saving a second state");
+  motion_read_purity(resumed);
   return resumed;
 }
 auto crew_log_topic(const NativeFreedomFlightSession& live, bool inspected)
@@ -223,17 +387,19 @@ auto exercise(const std::filesystem::path& output) -> void {
   const auto facts = live.knowledge()->entries;
   const auto hidden = live.derelict_view();
   check(hidden.can_scan && !hidden.known && !hidden.local && !hidden.hull &&
-            hidden.id == 0 && hidden.distance_metres == 0 &&
+            !hidden.motion && hidden.id == 0 && hidden.distance_metres == 0 &&
             hidden.history.empty() && !live.inspect_derelict(),
         "Actual local unknown hull supplies no pose, identity or history");
   need(live.scan_derelict());
   const auto contact = live.derelict_view();
-  check(contact.known && contact.local && contact.hull &&
+  check(contact.known && contact.local && contact.hull && contact.motion &&
+            contact.motion->closing_metres_per_second > 0 &&
             contact.distance_metres > 500 && !contact.can_inspect &&
             contact.history.empty() && !live.inspect_derelict() &&
             live.document() == before && live.resources() == resources &&
             live.knowledge()->entries == facts,
         "Earned contact and out-of-range refusal spend no time/fuel or facts");
+  motion_read_purity(live);
   auto resumed = continued(live, output / "contact.json");
   contact_recovery(live, output);
   // Both independent peers coast through real committed physics ticks from
@@ -244,8 +410,10 @@ auto exercise(const std::filesystem::path& output) -> void {
   }
   check(live.document() == resumed.document() &&
             live.knowledge() == resumed.knowledge() &&
-            live.derelict_view().can_inspect,
+            live.derelict_view().can_inspect &&
+            live.derelict_view().motion == resumed.derelict_view().motion,
         "Continued real flight reaches the physical inspection stand-off");
+  motion_read_purity(live);
   need(live.save_as(output / "near.json"));
   const auto near = live.document();
   const auto near_resources = live.resources();
@@ -403,6 +571,7 @@ auto main(int argc, char** argv) -> int {
                                                     .time_since_epoch()
                                                     .count()));
   try {
+    relative_motion_boundaries();
     exercise(output);
     stellar_lead_exercise(output);
   } catch (const std::exception& error) {
