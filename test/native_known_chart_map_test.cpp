@@ -277,8 +277,9 @@ auto malformed_and_empty(const NativeFreedomFlightSession& source) -> void {
       need(source.travel_document()));
   empty->voyage.voyage.resources.jump_charges = 0;
   empty->voyage.voyage.resources.flight_quanta = 0;
-  auto drained = std::make_unique<NativeFreedomFlightSession>(need(
-      NativeFreedomFlightSession::open(need(native_select_save_document(std::move(*empty)))))));
+  auto drained = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_select_save_document(std::move(*empty))))));
   check(view(*drained, 4) == view(source, 4),
         "Passive chart was gated on fuel or charges");
   for (unsigned fault = 0; fault < 7; ++fault) {
