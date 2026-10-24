@@ -543,7 +543,9 @@ auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint,
         "A distinct later loss replaces once, retires generations, and bounds "
         "latest history");
 }
-auto limits(Seed seed) -> void {
+// Release this independent scenario's large save carriers before the caller
+// later exercises nested Continue decoding.
+[[gnu::noinline]] auto limits(Seed seed) -> void {
   auto selected = need(native_new_game(seed));
   auto session = need(NativeFreedomFlightSession::open(std::move(selected)));
   auto source = need(session.recovery_document());
