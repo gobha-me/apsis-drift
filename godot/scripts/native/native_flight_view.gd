@@ -45,6 +45,9 @@ const DerelictRecovery = preload("res://scripts/native/derelict_recovery.gd")
 const ChartedArrivals = preload("res://scripts/native/charted_arrivals.gd")
 const QuietTravel = preload("res://scripts/native/quiet_travel.gd")
 const ReturnChargeCheck = preload("res://scripts/native/native_return_charge_check.gd")
+const KnownChartMap = preload("res://scripts/native/known_chart_map.gd")
+var known_chart_map
+var known_chart_map_legend: RichTextLabel
 var return_charge_status: RichTextLabel
 var quiet_travel_select: OptionButton
 var quiet_travel_status: RichTextLabel
@@ -750,11 +753,18 @@ func build_ui() -> void:
 	chart_button.focus_mode = Control.FOCUS_ALL
 	chart_button.toggled.connect(func(shown: bool):
 		chart_status.visible = shown
+		refresh_known_chart_map()
 		refresh_charted_arrivals())
 	column.add_child(chart_button)
 	chart_status = hud_text()
 	chart_status.visible = false
 	column.add_child(chart_status)
+	known_chart_map = KnownChartMap.new()
+	known_chart_map.visible = false
+	column.add_child(known_chart_map)
+	known_chart_map_legend = hud_text()
+	known_chart_map_legend.visible = false
+	column.add_child(known_chart_map_legend)
 	charted_arrival_button = CheckButton.new()
 	charted_arrival_button.text = "Closer charted arrivals"
 	charted_arrival_button.focus_mode = Control.FOCUS_ALL
@@ -962,6 +972,7 @@ func layout_hud() -> void:
 	if usable.x <= 0 or usable.y <= 0:
 		return
 	hud_theme.default_font_size = roundi(18 * scale)
+	if known_chart_map != null: known_chart_map.set_ui_scale(scale)
 	# ScrollContainer reserves the intrinsic style width, not a custom minimum.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
@@ -1015,6 +1026,7 @@ func show_instruments() -> void:
 	layout_hud()
 	refresh_charted_arrivals()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	refresh_quiet_travel()
 	instruments_button.grab_focus()
 
@@ -1452,6 +1464,7 @@ func select_planet_destination(index: int) -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	update_view(0.0)
 	refresh_planet_routes()
 	report_action_status("Planet target selected · %s. Begin selected jump when ready; one charge commits after spooling." % row.name)
@@ -2251,6 +2264,7 @@ func select_moon_jump() -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	report_action_status("Nearby moon selected. One charge commits after spooling." + (" Last charge: none will remain for Home." if int(state.get("resources", {}).get("jump_charges", 0)) == 1 else ""))
 	update_view(0.0)
 
@@ -2267,6 +2281,7 @@ func select_minor_jump() -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	report_action_status("Asteroid inspection selected. One charge commits after spooling." + (" Last charge: none will remain for Home." if int(state.get("resources", {}).get("jump_charges", 0)) == 1 else ""))
 	update_view(0.0)
 
@@ -2282,6 +2297,7 @@ func select_jump_destination(ordinal: int) -> void:
 	state = bridge.get_freedom_flight_state()
 	refresh_charted_arrivals()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	update_view(0.0)
 
 
@@ -2376,6 +2392,38 @@ func sync_charted_arrivals_ui() -> void:
 	charted_arrival_status.text = str(charted_arrival_packet.note) if valid else "Arrival option unavailable."
 
 
+func update_chart_text(chart: Dictionary, acquired_chart: bool) -> void:
+	chart_status.text = "Navigation chart · known system locations" if acquired_chart else "Starting chart · granted positions"
+	if chart.get("local_sensors", false):
+		chart_status.text += "\nShip sensors · %d recorded findings" % chart.observed_facts
+	var ordinals := {}
+	if known_chart_map != null and KnownChartMap.valid_packet(known_chart_map.packet) and known_chart_map.packet.available:
+		for i in known_chart_map.packet.nodes.size(): ordinals[known_chart_map.packet.nodes[i].system_id] = i + 1
+	for row: Dictionary in chart.get("rows", []):
+		var detail: String = " · current" if row.current else " · %.1f light-hours · %s" % [float(row.distance_light_seconds) / 3600.0, "1 charge available" if row.affordable else "No jump charges"]
+		if not row.current and not row.get("selectable", false): detail += "\n" + str(row.get("disabled_reason", "Destination unavailable"))
+		var ordinal: String = str(ordinals[row.system_id]) + ". " if ordinals.has(row.system_id) else ""
+		chart_status.text += "\n%s%s · %s%s" % [ordinal, row.name, row.confidence.to_upper(), detail]
+
+
+func sync_known_chart_map() -> void:
+	if known_chart_map == null or known_chart_map_legend == null: return
+	var shown: bool = paused and instruments_open and chart_button.visible and chart_button.button_pressed and not surface_walking()
+	known_chart_map.visible = shown and KnownChartMap.valid_packet(known_chart_map.packet) and known_chart_map.packet.available
+	known_chart_map_legend.visible = shown
+
+
+func refresh_known_chart_map() -> void:
+	if known_chart_map == null or known_chart_map_legend == null: return
+	var shown: bool = paused and instruments_open and chart_button.visible and chart_button.button_pressed and not surface_walking()
+	if shown:
+		var value: Variant = bridge.get_freedom_known_chart_map() if bridge.has_method("get_freedom_known_chart_map") else {}
+		known_chart_map.configure(value)
+		known_chart_map_legend.text = str(value.note) if KnownChartMap.valid_packet(value) else "Known-system diagram unavailable."
+		update_chart_text(state.get("chart", {}), state.get("star_search", {}).get("selected", false))
+	sync_known_chart_map()
+
+
 func refresh_return_charge_check() -> void:
 	if return_charge_status == null: return
 	return_charge_status.visible = paused and instruments_open and chart_button.visible and not surface_walking()
@@ -2424,6 +2472,7 @@ func jump_requested() -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	refresh_return_charge_check()
+	refresh_known_chart_map()
 	report_action_status("Spool canceled · no jump charge spent" if cancel else "Spooling · Resume flight explicitly." if paused else "Spooling · one charge commits after 3 seconds")
 	update_view(0.0)
 
@@ -2466,6 +2515,7 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	update_view(0.0)
 	if command == "replenish_freedom_resources":
 		refresh_return_charge_check()
+		refresh_known_chart_map()
 		report_action_status("Flight reserve and three jump charges replenished · free station service")
 	elif state.attached:
 		report_action_status("Attached to D%d. Release before firing propulsion." % state.target_port)
@@ -2974,14 +3024,9 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	chart_button.text = "Navigation chart" if acquired_chart else "Starting chart"
 	chart_button.visible = chart.get("selected", false)
 	chart_status.visible = chart_button.visible and chart_button.button_pressed
+	sync_known_chart_map()
 	if chart_button.visible:
-		chart_status.text = "Navigation chart · known system locations" if acquired_chart else "Starting chart · granted positions"
-		if chart.get("local_sensors", false):
-			chart_status.text += "\nShip sensors · %d recorded findings" % chart.observed_facts
-		for row: Dictionary in chart.rows:
-			var detail: String = " · current" if row.current else " · %.1f light-hours · %s" % [float(row.distance_light_seconds) / 3600.0, "1 charge available" if row.affordable else "No jump charges"]
-			if not row.current and not row.get("selectable", false): detail += "\n" + str(row.get("disabled_reason", "Destination unavailable"))
-			chart_status.text += "\n%s · %s%s" % [row.name, row.confidence.to_upper(), detail]
+		update_chart_text(chart, acquired_chart)
 	else:
 		chart_status.visible = false
 	var jump: Dictionary = state.get("jump", {})

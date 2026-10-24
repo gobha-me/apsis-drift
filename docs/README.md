@@ -72,6 +72,7 @@ player's station-to-flight journey.
 - [Closer charted arrivals](CHARTED_ARRIVALS.md): explicit near-planet placement for known primary planets, retaining momentum and earlier journeys.
 - [Quiet travel](QUIET_TRAVEL.md): optional bounded time acceleration using ordinary simulation ticks and normal operating costs.
 - [Return-charge check](RETURN_CHARGE_CHECK.md): read-only named system return legs, carried charges and shortfalls.
+- [Known-system diagram](KNOWN_SYSTEM_CHART.md): admitted chart positions, current/selected markers and existing destination controls.
 - [Measured Freedom endurance contract](FREEDOM_ENDURANCE.md)
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)
 - [Boarding body](ORIGIN_BOARDING_BODY.md), [support](ORIGIN_BOARDING_SUPPORT.md)
