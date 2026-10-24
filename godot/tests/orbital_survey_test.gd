@@ -173,7 +173,9 @@ func check_return_charge_readers(fixtures: String, assets: String, output: Strin
 			origin_id = state.system_id
 			charge_check(state.attached and not state.jump.available and packet.available, "docked charge check was incorrectly gated on physical departure readiness")
 		if packet.available:
-			charge_check(charge_system_label(packet.legs[0].source_id) == state.system_id and charge_system_label(packet.legs[0].destination_id) == state.jump.selected and charge_system_label(packet.legs[-1].destination_id) == origin_id, "budget does not follow actual current/selected/Origin identity")
+			charge_check(packet.legs[0].source_id == state.system_id, "budget source differs from decimal current-system identity")
+			charge_check(charge_system_label(packet.legs[0].destination_id) == state.jump.selected, "budget destination differs from selected system label")
+			charge_check(packet.legs[-1].destination_id == origin_id, "budget return differs from decimal Origin identity")
 			for leg: Dictionary in packet.legs:
 				for chart_row: Dictionary in state.chart.rows:
 					if chart_row.system_id == charge_system_label(leg.source_id): charge_check(chart_row.name == leg.source_name, "source name was not the known chart identity")
