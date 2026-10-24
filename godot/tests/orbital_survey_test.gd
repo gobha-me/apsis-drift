@@ -67,7 +67,25 @@ func charge_check(ok: bool, reason: String) -> bool:
 	return_charge_assertions += 1
 	return check(ok, "Return-charge check: " + reason)
 
+func charge_system_label(value: String) -> String:
+	# Test-only join between the new decimal protocol and existing chart labels.
+	# Each multiply is at most 10 * UINT32_MAX + 9, safely inside positive int64.
+	if value.is_empty() or value.length() > 20 or value == "0" or (value.length() > 1 and value.begins_with("0")): return ""
+	var high: int = 0
+	var low: int = 0
+	for index in value.length():
+		var digit: int = value.unicode_at(index) - 48
+		if digit < 0 or digit > 9: return ""
+		var expanded: int = low * 10 + digit
+		low = expanded & 0xffffffff
+		high = high * 10 + (expanded >> 32)
+		if high > 0xffffffff: return ""
+	return "system-%08x%08x" % [high, low]
+
 func check_return_charge_inputs() -> void:
+	# Independent known formatting, including actual fixture IDs above signed64.
+	for row in [["18446744073709551615", "system-ffffffffffffffff"], ["9223372036854775808", "system-8000000000000000"], ["677859337506523986", "system-09683d79dbc20b52"], ["2910174744474113395", "system-28630482e6b15573"], ["11569431468446217840", "system-a08ee09f81f67670"]]:
+		charge_check(charge_system_label(row[0]) == row[1], "decimal ID/legacy label normalization failed: " + row[0])
 	var packet := {"version": 1, "available": true, "tick": "18446744073709551615", "jump_charges": 3, "required_charges": 2, "charge_shortfall": 0, "flight_fraction": 0.75, "reserve": false, "operationally_empty": false, "legs": [{"source_id": "1", "destination_id": "2", "source_name": "Origin", "destination_name": "Neighbor"}, {"source_id": "2", "destination_id": "1", "source_name": "Neighbor", "destination_name": "Origin"}], "note": "Charge budget only; maneuver fuel and jump feasibility remain separate."}
 	charge_check(ReturnCharge.valid_packet(packet), "valid closed11/two closed4 legs refused")
 	var text: String = ReturnCharge.text(packet)
@@ -155,11 +173,11 @@ func check_return_charge_readers(fixtures: String, assets: String, output: Strin
 			origin_id = state.system_id
 			charge_check(state.attached and not state.jump.available and packet.available, "docked charge check was incorrectly gated on physical departure readiness")
 		if packet.available:
-			charge_check(packet.legs[0].source_id == state.system_id and packet.legs[0].destination_id == state.jump.selected and packet.legs[-1].destination_id == origin_id, "budget does not follow actual current/selected/Origin identity")
+			charge_check(charge_system_label(packet.legs[0].source_id) == state.system_id and charge_system_label(packet.legs[0].destination_id) == state.jump.selected and charge_system_label(packet.legs[-1].destination_id) == origin_id, "budget does not follow actual current/selected/Origin identity")
 			for leg: Dictionary in packet.legs:
 				for chart_row: Dictionary in state.chart.rows:
-					if chart_row.system_id == leg.source_id: charge_check(chart_row.name == leg.source_name, "source name was not the known chart identity")
-					if chart_row.system_id == leg.destination_id: charge_check(chart_row.name == leg.destination_name, "destination name was not the known chart identity")
+					if chart_row.system_id == charge_system_label(leg.source_id): charge_check(chart_row.name == leg.source_name, "source name was not the known chart identity")
+					if chart_row.system_id == charge_system_label(leg.destination_id): charge_check(chart_row.name == leg.destination_name, "destination name was not the known chart identity")
 		for repeat in 3: charge_check(owner.get_freedom_return_charge_check() == packet, "repeated getter changed quote or clock")
 		var saved := output.path_join(row.phase + "-read.json")
 		charge_check(owner.get_freedom_flight_state() == state, "read-only getter changed current state: " + row.phase)
@@ -234,7 +252,8 @@ func check_return_charge_readers(fixtures: String, assets: String, output: Strin
 			charge_check(peer.select_freedom_jump(state.chart.rows[selected].system_id), "independent ordinary route selection refused")
 			view.jump_destinations[selected].pressed.emit()
 			var packet: Dictionary = shell_owner.get_freedom_return_charge_check()
-			charge_check(ReturnCharge.valid_packet(packet) and packet.available and packet.legs[0].destination_id == state.chart.rows[selected].system_id and view.return_charge_status.text == ReturnCharge.text(packet), "actual system selection left stale budget text")
+			charge_check(ReturnCharge.valid_packet(packet) and packet.available and charge_system_label(packet.legs[0].destination_id) == state.chart.rows[selected].system_id, "actual system selection budget has a different destination")
+			charge_check(view.return_charge_status.text == ReturnCharge.text(packet), "actual system selection left stale budget text")
 			charge_check(shell_owner.get_freedom_flight_state().tick == state.tick and shell_owner.get_freedom_flight_state().resources == state.resources, "selection/budget reading consumed clock or resources")
 			var path := output.path_join("selected-route.json")
 			var oracle := output.path_join("selected-route-oracle.json")
