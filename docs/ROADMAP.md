@@ -171,6 +171,12 @@ trip back to Origin and any shortfall against carried charges. It uses recorded
 identity/location evidence and changes no travel rules or saved state. The wider
 saved-routing and risk horizon in #195 remains deferred.
 
+The next bounded engineering presentation scope is the [known-system diagram](KNOWN_SYSTEM_CHART.md)
+([#703](https://github.com/gobha-me/apsis-drift/issues/703)). It projects already
+admitted system anchors in the paused chart and keeps existing destination
+controls. The current reference-region view creates no hidden markers, route
+owner, new travel rule or permanent universe ceiling. Wider #207 remains deferred.
+
 2026-09-18 implementation increment: [controller foundation 06](CONTROLLER_FOUNDATION_06.md)
 adds analog input and a remappable, controller-navigable native control surface.
 Controller-first play is the design direction; hardware qualification and the

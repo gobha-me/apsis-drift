@@ -5,8 +5,10 @@ const Observations = preload("res://scripts/native/recorded_observations.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const ReturnCharge = preload("res://scripts/native/native_return_charge_check.gd")
+const KnownMap = preload("res://scripts/native/known_chart_map.gd")
 var failures := 0
 var return_charge_assertions := 0
+var known_map_assertions := 0
 
 func check(ok: bool, reason: String) -> bool:
 	if not ok:
@@ -20,6 +22,7 @@ func _initialize() -> void:
 
 func check_inputs() -> void:
 	check_return_charge_inputs()
+	check_known_map_inputs()
 	var packet := {"selected": false, "active": false, "can_begin": true, "completed": false, "note": "Ready", "body_name": "Known planet", "acquired_ticks": 0, "required_ticks": 3600, "result": {}}
 	check(Survey.valid(packet) and Survey.text(packet).is_empty(), "First survey opt-in or quiet idle presentation refused")
 	for change in [{"extra": true}, {"selected": 1}, {"active": null}, {"can_begin": "yes"}, {"completed": 0}, {"note": null}, {"body_name": 1}, {"note": "x".repeat(513)}, {"acquired_ticks": NAN}, {"acquired_ticks": INF}, {"acquired_ticks": -1}, {"acquired_ticks": 3601}, {"required_ticks": 3600.0}, {"required_ticks": 3599}, {"result": null}, {"result": {"character": "rugged", "water_basis_points": 0}}]:
@@ -270,6 +273,223 @@ func check_return_charge_readers(fixtures: String, assets: String, output: Strin
 	shell_owner = null
 	await process_frame
 
+func map_check(ok: bool, reason: String) -> bool:
+	known_map_assertions += 1
+	return check(ok, "Known chart map: " + reason)
+
+func map_rect_bounds(boxes: Array[Rect2], dimensions: Vector2, count: int) -> void:
+	map_check(boxes.size() == count, "marker count differs from admitted nodes")
+	for i in boxes.size():
+		map_check(boxes[i].position.is_finite() and boxes[i].size.is_finite() and boxes[i].has_area() and Rect2(Vector2.ZERO, dimensions).encloses(boxes[i]), "marker escaped finite padded drawing bounds")
+		for j in i: map_check(not boxes[i].intersects(boxes[j]), "distinct canonical markers overlap")
+
+func check_known_map_inputs() -> void:
+	var points := [Vector2(0.0, 0.5), Vector2(1.0, 0.5), Vector2(0.5, 0.0), Vector2(0.5, 1.0), Vector2(0.25, 0.25), Vector2(0.75, 0.75)]
+	var packet := {"version": 1, "available": true, "tick": "18446744073709551615", "nodes": [], "note": "Known locations only; diagram is not distance or jump range."}
+	for i in points.size(): packet.nodes.append({"system_id": "system-%016x" % (i + 1), "name": "Known " + str(i + 1), "current": i == 0, "selected": i == 1, "plot_x": float(points[i].x), "plot_y": float(points[i].y)})
+	map_check(KnownMap.valid_packet(packet), "six-node closed5/node6 packet refused")
+	for dimensions in [Vector2(272, 176), Vector2(640, 450), Vector2(1280, 720), Vector2(16384, 16384)]: map_rect_bounds(KnownMap.rects_for_packet(packet, dimensions), dimensions, 6)
+	for dimensions in [Vector2.ZERO, Vector2(-1, 176), Vector2(271, 176), Vector2(272, 175), Vector2(16385, 176), Vector2(272, 16385), Vector2(NAN, 176), Vector2(272, NAN), Vector2(INF, 176), Vector2(272, INF)]: map_check(KnownMap.rects_for_packet(packet, dimensions).is_empty(), "invalid dimensions reached marker drawing")
+	var shared := packet.duplicate(true)
+	shared.nodes[0].selected = true
+	shared.nodes[1].selected = false
+	map_check(KnownMap.valid_packet(shared), "current and selected flags cannot share one actual node")
+	for node: Dictionary in shared.nodes:
+		node.current = false
+		node.selected = false
+	map_check(KnownMap.valid_packet(shared), "zero admitted current/selected markers refused")
+	var unavailable := packet.duplicate(true)
+	unavailable.available = false
+	unavailable.nodes = []
+	map_check(KnownMap.valid_packet(unavailable) and KnownMap.rects_for_packet(unavailable, Vector2(640, 450)).is_empty(), "unavailable chart invented markers")
+	for field in packet:
+		var bad := packet.duplicate(true)
+		bad.erase(field)
+		map_check(not KnownMap.valid_packet(bad), "missing closed map field accepted")
+	for change in [{"extra": true}, {"version": 1.0}, {"version": 2}, {"available": 1}, {"tick": "01"}, {"tick": "-1"}, {"tick": "18446744073709551616"}, {"nodes": []}, {"nodes": [null]}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "é".repeat(513)}]:
+		var bad := packet.duplicate(true)
+		bad.merge(change, true)
+		map_check(not KnownMap.valid_packet(bad) and KnownMap.rects_for_packet(bad, Vector2(640, 450)).is_empty(), "malformed map reached drawing: " + str(change.keys()))
+	for field in packet.nodes[0]:
+		var bad := packet.duplicate(true)
+		bad.nodes[0].erase(field)
+		map_check(not KnownMap.valid_packet(bad), "missing closed node field accepted")
+	for change in [{"extra": true}, {"system_id": "1"}, {"system_id": "system-0000000000000000"}, {"system_id": "system-FFFFFFFFFFFFFFFF"}, {"name": ""}, {"name": "é".repeat(129)}, {"current": 1}, {"selected": 0}, {"plot_x": 0}, {"plot_x": NAN}, {"plot_y": INF}, {"plot_x": -0.1}, {"plot_y": 1.1}]:
+		var bad := packet.duplicate(true)
+		bad.nodes[0].merge(change, true)
+		map_check(not KnownMap.valid_packet(bad), "malformed closed node accepted")
+	for field in ["system_id", "current", "selected"]:
+		var bad := packet.duplicate(true)
+		bad.nodes[2][field] = packet.nodes[0].system_id if field == "system_id" else true
+		map_check(not KnownMap.valid_packet(bad), "duplicate ID/current/selected marker accepted")
+	var excess := packet.duplicate(true)
+	excess.nodes.append(packet.nodes[0].duplicate(true))
+	map_check(not KnownMap.valid_packet(excess), "seventh node accepted")
+	for bad in [null, [], true, "packet", NAN]: map_check(not KnownMap.valid_packet(bad), "non-dictionary map accepted")
+	var widget := KnownMap.new()
+	widget.size = Vector2(640, 450)
+	widget.configure(packet)
+	map_check(widget.packet == packet and widget.marker_rects() == KnownMap.rects_for_packet(packet, widget.size), "cached configured map changed marker data")
+	var cached: Dictionary = widget.packet.duplicate(true)
+	packet.nodes[0].name = "Changed caller data"
+	map_check(widget.packet == cached, "map retained a mutable alias to caller data")
+	widget.configure({})
+	map_check(widget.packet.is_empty() and widget.marker_rects().is_empty(), "invalid configure left stale markers")
+	widget.free()
+
+func check_known_map_readers(fixtures: String, assets: String, output: String) -> void:
+	if not map_check(DirAccess.make_dir_recursive_absolute(output) == OK, "proof folder unavailable"): return
+	var source := fixtures.path_join("charted-arrivals")
+	var sources := {}
+	var witnesses: Array = []
+	var four_nodes := {}
+	for row in [{"phase": "seated-on", "count": 4}, {"phase": "origin-selected", "count": 4}, {"phase": "outbound-arrived", "count": 4}, {"phase": "unknown-before-search", "count": 4}, {"phase": "unknown-primary-selected", "count": 5}]:
+		var path: String = source.path_join(row.phase + ".json")
+		var original := FileAccess.get_file_as_bytes(path)
+		sources[row.phase + ".json"] = FileAccess.get_sha256(path)
+		var owner: Variant = restore(path)
+		if owner == null: return
+		var state: Dictionary = owner.get_freedom_flight_state()
+		var packet: Dictionary = owner.get_freedom_known_chart_map()
+		if not map_check(KnownMap.valid_packet(packet) and packet.available and packet.nodes.size() == row.count, "actual admitted chart count/packet invalid: " + row.phase): return
+		map_check(packet.tick == state.tick, "chart getter has a different actual clock")
+		var chart_rows := {}
+		for item: Dictionary in state.chart.rows: chart_rows[item.system_id] = item
+		var ids: Array = []
+		for node: Dictionary in packet.nodes:
+			ids.append(node.system_id)
+			if not map_check(chart_rows.has(node.system_id), "map disclosed a system absent from actual known chart"): continue
+			var known: Dictionary = chart_rows[node.system_id]
+			map_check(node.name == known.name and node.current == known.current, "known name/current ownership mismatch")
+			var selected: String = state.jump.get("selected", "") if state.jump.get("route_kind", "system") == "system" else ""
+			map_check(node.selected == (node.system_id == selected), "selected marker differs from actual SYSTEM selection")
+			if row.phase == "unknown-before-search": four_nodes[node.system_id] = node.duplicate(true)
+			if row.phase == "unknown-primary-selected" and four_nodes.has(node.system_id): map_check(node.plot_x == four_nodes[node.system_id].plot_x and node.plot_y == four_nodes[node.system_id].plot_y, "earned fifth point moved existing known points")
+		var admitted_order: Array = []
+		for item: Dictionary in state.chart.rows:
+			if ids.has(item.system_id): admitted_order.append(item.system_id)
+		map_check(ids == admitted_order, "diagram changed compacted admitted chart order")
+		for repeat in 3: map_check(owner.get_freedom_known_chart_map() == packet, "repeated getter changed chart or flags")
+		map_check(owner.get_freedom_flight_state() == state, "chart reading mutated authoritative state")
+		var saved := output.path_join(row.phase + "-read.json")
+		map_check(save_bytes(owner, saved) == original, "chart reading changed complete Save")
+		witnesses.append({"file": saved.get_file(), "source": row.phase + ".json", "sha256": FileAccess.get_sha256(saved), "packet": packet})
+		owner = null
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := shell_for(owner, source.path_join("seated-on.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var original := FileAccess.get_file_as_bytes(source.path_join("seated-on.json"))
+	var old_size := root.size
+	var old_device: int = view.player_input.device
+	var old_pads: Dictionary = view.player_input.available_pads.duplicate(true)
+	view.player_input.available_pads[2] = true
+	var navigation: Button
+	for child in view.controls_menu.save_button.get_parent().get_children():
+		if child is Button and child.text == "Flight instruments & navigation": navigation = child
+	if not map_check(navigation != null, "navigation entry missing"):
+		shell.free(); return
+	for row in [{"size": Vector2i(640, 450), "device": -1, "name": "keyboard-small"}, {"size": Vector2i(1280, 720), "device": 2, "name": "pad-normal"}]:
+		root.size = row.size
+		view.player_input.device = row.device
+		view.player_input.install()
+		view.chart_button.set_pressed_no_signal(false)
+		view.refresh_known_chart_map()
+		for frame in 3: await process_frame
+		navigation.grab_focus()
+		if row.device < 0:
+			key(KEY_SPACE, true)
+			key(KEY_SPACE, false)
+		else:
+			charge_pad(2, true)
+			charge_pad(2, false)
+		for frame in 2: await process_frame
+		map_check(view.paused and view.instruments_open and not view.known_chart_map.visible, "opening navigation disclosed the chart before its existing toggle")
+		view.chart_button.grab_focus()
+		if row.device < 0:
+			key(KEY_SPACE, true)
+			key(KEY_SPACE, false)
+		else:
+			charge_pad(2, true)
+			charge_pad(2, false)
+		view.update_view(0.0)
+		for frame in 2: await process_frame
+		var packet: Dictionary = owner.get_freedom_known_chart_map()
+		map_check(view.paused and view.chart_button.button_pressed and view.known_chart_map.is_visible_in_tree() and view.known_chart_map.packet == packet and view.known_chart_map_legend.text == packet.note, "actual chart disclosure omitted current cached map/legend")
+		map_check(view.known_chart_map.focus_mode == Control.FOCUS_NONE and view.known_chart_map.mouse_filter == Control.MOUSE_FILTER_IGNORE and root.gui_get_focus_owner() == view.chart_button, "passive map stole keyboard/pad focus or input")
+		view.hud_scroll.ensure_control_visible(view.known_chart_map)
+		for frame in 2: await process_frame
+		map_rect_bounds(view.known_chart_map.marker_rects(), view.known_chart_map.size, 4)
+		var density: Vector2 = view.get_viewport().get_final_transform().get_scale().abs()
+		var font_pixels: float = float(roundi(20.0 * view.known_chart_map.ui_scale)) * minf(density.x, density.y)
+		var marker_pixels: float = INF
+		for box: Rect2 in view.known_chart_map.marker_rects(): marker_pixels = minf(marker_pixels, minf(box.size.x * density.x, box.size.y * density.y))
+		map_check(density.is_finite() and minf(density.x, density.y) > 0.0 and font_pixels >= 18.0, "ordinal font is too small in actual physical pixels: " + row.name)
+		map_check(is_finite(marker_pixels) and marker_pixels >= 40.0, "outer marker is too small in actual physical pixels: " + row.name)
+		for i in packet.nodes.size(): map_check("%d. %s" % [i + 1, packet.nodes[i].name] in view.chart_status.text, "chart text ordinal does not match map node order")
+		var cached: Dictionary = view.known_chart_map.packet.duplicate(true)
+		root.size = Vector2i(1280, 720) if row.size == Vector2i(640, 450) else Vector2i(640, 450)
+		for frame in 3: await process_frame
+		view.layout_hud()
+		map_check(view.known_chart_map.packet == cached, "actual resize rewrote cached known points")
+		map_rect_bounds(view.known_chart_map.marker_rects(), view.known_chart_map.size, 4)
+		root.size = row.size
+		for frame in 3: await process_frame
+		view.layout_hud()
+		map_check(view.known_chart_map.packet == cached, "restored viewport rewrote cached known points")
+		var opened: String = output.path_join(row.name + "-open.json")
+		map_check(save_bytes(owner, opened) == original, "opening/disclosure/resize changed complete Save")
+		view.instruments_button.grab_focus()
+		if row.device < 0:
+			key(KEY_SPACE, true)
+			key(KEY_SPACE, false)
+		else:
+			charge_pad(2, true)
+			charge_pad(2, false)
+		for frame in 2: await process_frame
+		var back: String = output.path_join(row.name + "-back.json")
+		map_check(view.paused and not view.instruments_open and not view.known_chart_map.is_visible_in_tree() and view.controls_menu.panel.visible and save_bytes(owner, back) == original, "Back resumed flight, retained map or changed Save")
+		witnesses.append({"file": opened.get_file(), "source": "seated-on.json", "sha256": FileAccess.get_sha256(opened), "input": row.name, "viewport_pixels": [row.size.x, row.size.y], "font_pixels": font_pixels, "marker_pixels": marker_pixels})
+		witnesses.append({"file": back.get_file(), "source": "seated-on.json", "sha256": FileAccess.get_sha256(back), "input": row.name})
+	root.size = old_size
+	view.player_input.device = old_device
+	view.player_input.available_pads = old_pads
+	view.player_input.install()
+	view.show_instruments()
+	view.chart_button.button_pressed = true
+	view.update_view(0.0)
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var ordinal := -1
+	for i in state.chart.rows.size():
+		var item: Dictionary = state.chart.rows[i]
+		if item.selectable and not item.current and item.system_id != state.jump.selected:
+			ordinal = i
+			break
+	if map_check(ordinal >= 0, "actual chart lacks another selectable system"):
+		var peer: Variant = restore(source.path_join("seated-on.json"))
+		if peer != null:
+			map_check(peer.select_freedom_jump(state.chart.rows[ordinal].system_id), "ordinary peer selection refused")
+			view.jump_destinations[ordinal].pressed.emit()
+			var packet: Dictionary = owner.get_freedom_known_chart_map()
+			map_check(view.known_chart_map.packet == packet, "accepted existing selection left cached diagram stale")
+			var selected_flags := 0
+			for node: Dictionary in packet.nodes:
+				if node.selected:
+					selected_flags += 1
+					map_check(node.system_id == state.chart.rows[ordinal].system_id, "selected box follows the wrong system")
+			map_check(selected_flags == 1 and owner.get_freedom_flight_state().tick == state.tick and owner.get_freedom_flight_state().resources == state.resources, "selection changed time/fuel or lost selected marker")
+			var saved := output.path_join("selected-route.json")
+			var oracle := output.path_join("selected-route-oracle.json")
+			map_check(save_bytes(owner, saved) == save_bytes(peer, oracle), "map/existing selection differs from independent C++ selection")
+			witnesses.append({"file": saved.get_file(), "oracle": oracle.get_file(), "sha256": FileAccess.get_sha256(saved)})
+		peer = null
+	for phase in sources: map_check(FileAccess.get_sha256(source.path_join(phase)) == sources[phase], "map reader rewrote C++ source fixture")
+	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
+	if map_check(file != null, "map report unavailable"): file.store_string(JSON.stringify({"schema": "apsis.known-chart-map-native/1", "completed": failures == 0, "failures": failures, "assertions": known_map_assertions, "source_sha256": sources, "witnesses": witnesses, "scope": "Existing actual four/five-known C++ charted fixtures, passive cached projection, stable admitted points, read-only whole Save, keyboard-small/selected-pad-normal chart disclosure/resize/Back and unchanged existing selection/C++oracle. Six-node synthetic bounds precede asset host; real six-known and alternate axes are C++ coverage. No new voyage/anchors/distances/edges/range/world or manual/GPU acceptance."}, "\t") + "\n")
+	shell.free()
+	owner = null
+	await process_frame
+
 func save_bytes(owner: Variant, path: String) -> PackedByteArray:
 	if not check(owner.save_freedom_as(path), "Survey complete Save refused: " + str(owner.get_last_error())): return PackedByteArray()
 	return FileAccess.get_file_as_bytes(path)
@@ -431,6 +651,7 @@ func run() -> void:
 	owner = null
 	await process_frame
 	if not failures: await check_return_charge_readers(args[0], args[1], output.path_join("return-charge-check"))
+	if not failures: await check_known_map_readers(args[0], args[1], output.path_join("known-chart-map"))
 	var commissions := preload("res://tests/survey_commissions_test.gd").new()
 	failures += await commissions.run(self, args[0], args[1], output.path_join("commissions"))
 	var paid := preload("res://tests/paid_operations_test.gd").new()

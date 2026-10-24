@@ -469,6 +469,8 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_charted_arrivals", "enabled"),
         &FreedomBridge::set_freedom_charted_arrivals);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_known_chart_map"),
+                                &FreedomBridge::get_freedom_known_chart_map);
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_freedom_return_charge_check"),
         &FreedomBridge::get_freedom_return_charge_check);
@@ -4187,6 +4189,31 @@ class FreedomBridge : public godot::RefCounted {
     result["tick"] = godot::String{std::to_string(view->tick).c_str()};
     result["note"] = godot::String{view->note.c_str()};
     return result;
+  }
+  auto get_freedom_known_chart_map() const -> godot::Dictionary {
+    if (!saved_flight) return {};
+    const auto view = require(saved_flight->session.known_chart_map_view());
+    if (view.node_count > view.nodes.size())
+      throw std::invalid_argument("Known chart map exceeds its node bound");
+    godot::Dictionary packet;
+    packet["version"] = static_cast<std::int64_t>(view.version);
+    packet["available"] = view.available;
+    packet["tick"] = godot::String{std::to_string(view.tick).c_str()};
+    packet["note"] = godot::String{view.note.c_str()};
+    godot::Array nodes;
+    for (std::uint32_t i = 0; i < view.node_count; ++i) {
+      const auto& node = view.nodes[i];
+      godot::Dictionary item;
+      item["system_id"] = godot::String{system_id_string(node.system).c_str()};
+      item["name"] = godot::String{node.name.c_str()};
+      item["current"] = node.current;
+      item["selected"] = node.selected;
+      item["plot_x"] = node.plot_x;
+      item["plot_y"] = node.plot_y;
+      nodes.append(item);
+    }
+    packet["nodes"] = nodes;
+    return packet;
   }
   auto get_freedom_return_charge_check() const -> godot::Dictionary {
     if (!saved_flight) return {};
