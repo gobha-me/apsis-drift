@@ -434,6 +434,7 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/specimen-sales/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/charted-arrivals/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/quiet-travel/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/return-charge-check/*.json
           if-no-files-found: warn
           retention-days: 7
 
