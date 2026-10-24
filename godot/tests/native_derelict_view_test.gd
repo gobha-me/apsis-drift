@@ -75,7 +75,8 @@ static func motion_boundaries(state: Dictionary, check: Callable) -> void:
 		var missing := state.duplicate(true)
 		missing.derelict_motion.erase(field)
 		check.call(not Motion.valid_state(missing) and Motion.text(missing).is_empty(), "Motion accepted missing " + str(field))
-	for patch in [{"version": 1.0}, {"available": 1}, {"tick": "01"}, {"tick": "18446744073709551616"}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "x" + String.chr(0)}, {"closing_metres_per_second": 1}, {"closing_metres_per_second": NAN}, {"closing_metres_per_second": INF}, {"closing_metres_per_second": -4.1e9}, {"transverse_metres_per_second": -0.1}, {"transverse_metres_per_second": NAN}, {"transverse_metres_per_second": INF}, {"transverse_metres_per_second": 4.1e9}]:
+	# Godot sanitizes NUL when constructing String. Raw bytes test type refusal.
+	for patch in [{"version": 1.0}, {"available": 1}, {"tick": "01"}, {"tick": "18446744073709551616"}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": PackedByteArray([120, 0])}, {"closing_metres_per_second": 1}, {"closing_metres_per_second": NAN}, {"closing_metres_per_second": INF}, {"closing_metres_per_second": -4.1e9}, {"transverse_metres_per_second": -0.1}, {"transverse_metres_per_second": NAN}, {"transverse_metres_per_second": INF}, {"transverse_metres_per_second": 4.1e9}]:
 		var bad := state.duplicate(true)
 		bad.derelict_motion.merge(patch, true)
 		check.call(not Motion.valid_state(bad) and Motion.hud_text(bad).is_empty(), "Malformed motion admitted: " + str(patch))
