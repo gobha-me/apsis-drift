@@ -469,6 +469,9 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_charted_arrivals", "enabled"),
         &FreedomBridge::set_freedom_charted_arrivals);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_return_charge_check"),
+        &FreedomBridge::get_freedom_return_charge_check);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_quiet_travel"),
                                 &FreedomBridge::get_freedom_quiet_travel);
     godot::ClassDB::bind_method(
@@ -4184,6 +4187,37 @@ class FreedomBridge : public godot::RefCounted {
     result["tick"] = godot::String{std::to_string(view->tick).c_str()};
     result["note"] = godot::String{view->note.c_str()};
     return result;
+  }
+  auto get_freedom_return_charge_check() const -> godot::Dictionary {
+    if (!saved_flight) return {};
+    const auto view = require(saved_flight->session.return_charge_view());
+    godot::Dictionary packet;
+    packet["version"] = static_cast<std::int64_t>(view.version);
+    packet["available"] = view.available;
+    packet["tick"] = godot::String{std::to_string(view.tick).c_str()};
+    packet["jump_charges"] = static_cast<std::int64_t>(view.jump_charges);
+    packet["required_charges"] =
+        static_cast<std::int64_t>(view.required_charges);
+    packet["charge_shortfall"] =
+        static_cast<std::int64_t>(view.charge_shortfall);
+    packet["flight_fraction"] = view.flight_fraction;
+    packet["reserve"] = view.reserve;
+    packet["operationally_empty"] = view.operationally_empty;
+    godot::Array legs;
+    for (std::uint32_t i = 0; i < view.leg_count; ++i) {
+      const auto& leg = view.legs[i];
+      godot::Dictionary item;
+      item["source_id"] =
+          godot::String{std::to_string(leg.source.value).c_str()};
+      item["destination_id"] =
+          godot::String{std::to_string(leg.destination.value).c_str()};
+      item["source_name"] = godot::String{leg.source_name.c_str()};
+      item["destination_name"] = godot::String{leg.destination_name.c_str()};
+      legs.append(item);
+    }
+    packet["legs"] = legs;
+    packet["note"] = godot::String{view.note.c_str()};
+    return packet;
   }
   auto get_freedom_derelict_recovery() const -> godot::Dictionary {
     return saved_flight ? project_derelict_recovery(saved_flight->session)
