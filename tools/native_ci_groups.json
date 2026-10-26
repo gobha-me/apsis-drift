@@ -2,6 +2,8 @@
   "schema_version": 1,
   "groups": {
     "1": [
+      "native_derelict",
+      "native_station_crew",
       "native_surface_loop",
       "native_first_flight_continuation"
     ],
@@ -13,9 +15,6 @@
       "orbital_survey",
       "native_environment",
       "native_audio",
-      "native_derelict",
-      "native_station_crew",
-      "native_title",
       "native_planetary",
       "native_voyage",
       "home_navigation",
@@ -32,6 +31,7 @@
       "native_moon",
       "native_recovery",
       "native_port",
+      "native_title",
       "native_roundtrip_pilot_aligned",
       "native_roundtrip_pilot_offset",
       "native_status",
