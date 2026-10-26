@@ -449,6 +449,9 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/frontier-chart/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/frontier-search-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/frontier-title-start.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/title-controller-newgame.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/title-catalog-*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/hud-tracking-*.json
           if-no-files-found: warn
           retention-days: 7
 
