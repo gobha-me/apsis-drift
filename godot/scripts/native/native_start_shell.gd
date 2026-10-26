@@ -784,9 +784,10 @@ func start_from_title(selection: Dictionary, requester_id: int) -> void:
 		cancel_title_request(requester, generation)
 		return
 	var tree: SceneTree = get_tree()
-	# Let the acknowledgement finish a complete frame before synchronous world
-	# and asset preparation. Nothing yields inside the existing commit/view swap.
-	for frame in 2:
+	# process_frame can resume during the current frame's signal dispatch.
+	# Three boundaries allow two completed opportunities for the acknowledgement
+	# before synchronous preparation; the commit/view swap itself never yields.
+	for frame in 3:
 		await tree.process_frame
 		if not is_instance_valid(requester): return
 		if not title_request_current(requester, generation):

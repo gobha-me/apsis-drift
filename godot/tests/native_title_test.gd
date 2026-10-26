@@ -35,7 +35,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func settle() -> void:
-	for frame in 4: await process_frame
+	for frame in 5: await process_frame
 
 func key(code: Key) -> void:
 	for down in [true, false]:
