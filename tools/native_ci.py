@@ -159,7 +159,8 @@ def groups(repo):
     for names in result.values():
         require(names == [name for name in SELECTED if name in names], "Group order changed")
     for pair in (("native_surface_loop", "native_first_flight_continuation"),
-                 ("native_planetary", "native_voyage")):
+                 ("native_planetary", "native_voyage"),
+                 ("native_derelict", "native_station_crew")):
         require(any(all(name in names for name in pair) for names in result.values()),
                 "Required journey pair split")
     return result

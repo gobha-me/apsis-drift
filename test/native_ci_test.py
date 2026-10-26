@@ -343,7 +343,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 83, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 97, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 135})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -611,13 +611,39 @@ class NativeCiTest(unittest.TestCase):
 
     def test_groups_exact_and_pairs_cannot_split(self):
         path = self.repo / "tools/native_ci_groups.json"
-        value = ci.read_json(path)
-        self.assertEqual(sum(map(len, value["groups"].values())), 45)
-        value["groups"]["1"].remove("native_first_flight_continuation")
-        value["groups"]["2"].append("native_first_flight_continuation")
-        ci.write_json(path, value)
-        with self.assertRaises(ValueError):
-            ci.groups(self.repo)
+        original = ci.read_json(path)
+        self.assertEqual(sum(map(len, original["groups"].values())), 45)
+        for pair in (("native_surface_loop", "native_first_flight_continuation"),
+                     ("native_planetary", "native_voyage"),
+                     ("native_derelict", "native_station_crew")):
+            with self.subTest(pair=pair):
+                value = copy.deepcopy(original)
+                source = next(k for k, names in value["groups"].items() if pair[1] in names)
+                target = next(k for k in value["groups"] if k != source)
+                value["groups"][source].remove(pair[1])
+                value["groups"][target].append(pair[1])
+                for key, names in value["groups"].items():
+                    value["groups"][key] = [n for n in ci.SELECTED if n in names]
+                ci.write_json(path, value)
+                with self.assertRaisesRegex(ValueError, "Required journey pair split"):
+                    ci.groups(self.repo)
+
+    def test_group_partition_boundaries(self):
+        path = self.repo / "tools/native_ci_groups.json"
+        original = ci.read_json(path)
+        for kind in ("missing_case", "duplicate_case", "foreign_case", "missing_group", "foreign_group", "reordered"):
+            with self.subTest(kind=kind):
+                value = copy.deepcopy(original)
+                names = value["groups"]["1"]
+                if kind == "missing_case": names.pop()
+                elif kind == "duplicate_case": names.append(names[0])
+                elif kind == "foreign_case": names[0] = "foreign_native_case"
+                elif kind == "missing_group": del value["groups"]["4"]
+                elif kind == "foreign_group": value["groups"]["5"] = []
+                else: names.reverse()
+                ci.write_json(path, value)
+                with self.assertRaises(ValueError):
+                    ci.groups(self.repo)
 
 
 if __name__ == "__main__":
