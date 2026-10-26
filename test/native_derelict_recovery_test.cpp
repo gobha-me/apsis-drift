@@ -172,6 +172,95 @@ auto sell(Session& session, std::uint64_t insurance, std::uint64_t tab,
           need(session.derelict_recovery_sale_view()).earned_credits == 100,
       "Repeat sale paid twice, retained physical cargo or lost earned receipt");
 }
+auto survey_after_paid_sale(const Session& sold,
+                            const std::filesystem::path& output) -> void {
+  // Independent branch of the real sale. Its existing same-tick Origin
+  // attachment is an initialized transaction boundary, not a flown return.
+  auto live = std::make_unique<Session>(sold);
+  const auto source = bytes(sold);
+  const auto tick = sold.document().flight.tick;
+  const auto account = *sold.knowledge()->paid_operations;
+  const auto cargo = sold.knowledge()->derelict_recovery;
+  const auto notes = sold.knowledge()->derelicts;
+  const auto stores = sold.resources();
+  const auto retained_sale = [&] {
+    const auto quote = need(live->derelict_recovery_sale_view());
+    return live->document().flight.tick == tick &&
+           live->resources() == stores &&
+           live->knowledge()->paid_operations == account &&
+           live->knowledge()->derelict_recovery == cargo &&
+           live->knowledge()->derelicts == notes && account.version == 3 &&
+           account.settled_canister_count == 1 &&
+           need(live->paid_operations_view()).cash == 280 &&
+           quote.carried_count == 0 && quote.earned_credits == 100 &&
+           !quote.can_sell;
+  };
+  const auto offer = need(live->survey_commission_view());
+  check(offer.at_origin && offer.can_accept && offer.offer_sequence == 1 &&
+            offer.offer_until > tick && retained_sale() &&
+            need(live->survey_commission_view()).can_accept &&
+            bytes(*live) == source,
+        "Paid canister sale lost its advertised commission or read purity");
+  check(!live->accept_survey_commission(0, offer.offer_sequence) &&
+            !live->accept_survey_commission(offer.offer_until, 0) &&
+            bytes(*live) == source,
+        "Stale commission offer after paid sale changed complete Save");
+  need(live->accept_survey_commission(offer.offer_until, offer.offer_sequence));
+  const auto& accepted = *live->knowledge()->survey_commissions;
+  check(accepted.active && accepted.active->sequence == offer.offer_sequence &&
+            accepted.active->accepted_tick == tick &&
+            !accepted.active->measurement && accepted.paid_count == 0 &&
+            !accepted.latest_paid && accepted.next_sequence == 2 &&
+            retained_sale(),
+        "Accepting survey after paid sale lost or paid canister income twice");
+  const auto accepted_bytes = bytes(*live);
+  check(!live->accept_survey_commission(offer.offer_until,
+                                        offer.offer_sequence) &&
+            !live->submit_survey_commission(offer.offer_sequence) &&
+            bytes(*live) == accepted_bytes,
+        "Duplicate acceptance or incomplete submission mutated paid sale");
+  // Temporary continuation evidence is removed; the original17-phase exporter
+  // roster and every exported source session remain unchanged.
+  const auto path = output / "paid-sale-survey-continue.tmp.json";
+  need(live->save_as(path));
+  auto continued = std::make_unique<Session>(
+      need(Session::open(need(native_continue(path)))));
+  check(read(path) == accepted_bytes && bytes(*continued) == accepted_bytes &&
+            bytes(*live) == accepted_bytes,
+        "Accepted post-sale commission lost complete Save/Continue parity");
+  check(std::filesystem::remove(path),
+        "Could not remove temporary post-sale commission evidence");
+  live.swap(continued);
+  need(live->abandon_survey_commission(offer.offer_sequence));
+  const auto& abandoned = *live->knowledge()->survey_commissions;
+  check(!abandoned.active && abandoned.paid_count == 0 &&
+            !abandoned.latest_paid && abandoned.next_sequence == 2 &&
+            retained_sale(),
+        "Abandoning survey erased or repeated settled canister income");
+  const auto abandoned_bytes = bytes(*live);
+  const auto sold_quote = need(live->derelict_recovery_sale_view());
+  check(!live->abandon_survey_commission(offer.offer_sequence) &&
+            !live->sell_derelict_recovery(sold_quote.token) &&
+            bytes(*live) == abandoned_bytes,
+        "Repeated abandonment or canister sale created wealth after survey");
+  const auto next = need(live->survey_commission_view());
+  check(next.at_origin && next.can_accept && next.offer_sequence == 2 &&
+            next.offer_until == offer.offer_until,
+        "Abandonment locked the paid canister owner out of fresh work");
+  need(live->accept_survey_commission(next.offer_until, next.offer_sequence));
+  check(live->knowledge()->survey_commissions->active &&
+            live->knowledge()->survey_commissions->active->sequence == 2 &&
+            !live->knowledge()->survey_commissions->active->measurement &&
+            retained_sale(),
+        "Fresh acceptance reset prior canister settlement or invented work");
+  need(live->abandon_survey_commission(next.offer_sequence));
+  check(!live->knowledge()->survey_commissions->active &&
+            live->knowledge()->survey_commissions->paid_count == 0 &&
+            !live->knowledge()->survey_commissions->latest_paid &&
+            live->knowledge()->survey_commissions->next_sequence == 3 &&
+            retained_sale() && bytes(sold) == source,
+        "Repeated fresh commission lifecycle changed settled income or source");
+}
 auto scenario(const std::filesystem::path& output) -> void {
   Json manifest{
       {"schema", "apsis.derelict-recovery-scenario/1"},
@@ -307,6 +396,7 @@ auto scenario(const std::filesystem::path& output) -> void {
         "Paid sale did not promote3 and add100 once to180");
   phase(*paid_sold, output, "paid-sold", "origin-paid", "sell",
         "Actual reviewed sale and paid-v3 settlement.", manifest);
+  survey_after_paid_sale(*paid_sold, output);
   auto enrolled = std::make_unique<Session>(*free_sold);
   need(enrolled->enable_paid_operations(
       need(enrolled->paid_operations_view()).token));
