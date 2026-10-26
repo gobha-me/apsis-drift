@@ -350,7 +350,7 @@ auto expiry_and_invalid_state() -> void {
     auto& receipt = *bad.latest_paid;
     auto& measurement = *receipt.commission.measurement;
     switch (kind) {
-      case 0: bad.version = 3; break;
+      case 0: bad.version = kChosenTargetSurveyCommissionVersion + 1U; break;
       case 1: bad.next_sequence = 0; break;
       case 2: bad.paid_count = bad.next_sequence; break;
       case 3: bad.paid_count = 0; break;
