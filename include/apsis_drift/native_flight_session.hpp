@@ -365,6 +365,9 @@ class NativeFreedomFlightSession {
       -> std::expected<NativeSurveyCommissionView, std::string>;
   [[nodiscard]] auto survey_commission_offers() const
       -> std::expected<NativeSurveyCommissionOffersView, std::string>;
+  // Current eligibility only: reading this never advances acquisition or time.
+  [[nodiscard]] auto survey_commission_acquisition_status() const
+      -> std::string;
   [[nodiscard]] auto accept_survey_commission_target(BodyTarget target,
                                                      SimulationTick offer_until,
                                                      std::uint32_t sequence)
@@ -617,6 +620,8 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto commission_return_charge_view(SystemId destination) const
       -> std::expected<NativeReturnChargeView, std::string>;
   [[nodiscard]] auto advance_survey_commission_tick()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto survey_commission_measurement_conditions() const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto paid_operations_origin_available() const -> bool;
   [[nodiscard]] auto origin_repair_available() const -> bool;

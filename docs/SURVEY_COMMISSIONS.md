@@ -27,6 +27,12 @@ qualifying flight acquires the measurement.
 The scanner does not steer or establish an orbit. Partial progress holds when
 conditions become unsuitable. During flight, the HUD shows progress in seconds
 and the actual submission time remaining, including when the report is ready.
+For unfinished orbital work it also shows the current C++ eligibility or held
+reason, such as travelling to the accepted planet, approaching within two radii,
+or establishing a bound orbit above the atmosphere. “Survey eligible” describes
+current conditions; the counter advances only through committed qualifying
+flight intervals. A paused eligible readout earns no work. Ready reports and
+expired deadlines take precedence over acquisition status.
 Pausing freezes the countdown with the simulation; the display runs no separate
 clock.
 

@@ -67,16 +67,40 @@ func packet_controls(packet: Dictionary) -> void:
 		var bad := packet.duplicate(true)
 		bad.merge(change, true)
 		check(not Office.valid_packet(bad), "malformed office packet accepted: " + str(change.keys()))
-	var progress := {"active": true, "completed": false, "expired": false, "acquired_ticks": 3599, "earnings": "0", "remaining_ticks": 1}
+	var progress := {"active": true, "completed": false, "expired": false, "acquired_ticks": 3599, "earnings": "0", "remaining_ticks": 1, "status": "Survey eligible: maintain a stable orbit"}
 	check(FlightView.valid_commission_progress(progress), "bounded partial progress refused")
+	check(progress.status in FlightView.commission_progress_text(progress), "eligible current conditions omitted from the compact readout")
+	var held: Dictionary = progress.duplicate(true)
+	held.status = "Survey held: travel to the accepted planet"
+	check(FlightView.valid_commission_progress(held) and held.status in FlightView.commission_progress_text(held), "held reason was replaced by an inferred progress decision")
+	for status in ["x".repeat(256), "é".repeat(128)]:
+		var boundary: Dictionary = progress.duplicate(true)
+		boundary.status = status
+		check(FlightView.valid_commission_progress(boundary), "valid256-byte status boundary refused")
+	for status in [null, false, 1, 1.0, NAN, INF, [], {}, "", "x".repeat(257), "é".repeat(129), "held\nnow", "held\rnow", "held\tnow", "held" + String.chr(127), "held" + String.chr(133)]:
+		var bad: Dictionary = progress.duplicate(true)
+		bad.status = status
+		check(not FlightView.valid_commission_progress(bad), "malformed or unbounded acquisition status accepted")
 	check("29.9 / 30 s" in FlightView.commission_progress_text(progress) and "less than 1 s" in FlightView.commission_progress_text(progress), "3599 intervals or last pre-deadline tick round up")
 	var complete := progress.duplicate()
-	complete.merge({"completed": true, "acquired_ticks": 3600, "remaining_ticks": 120}, true)
+	complete.merge({"completed": true, "acquired_ticks": 3600, "remaining_ticks": 120, "status": ""}, true)
 	check("report ready" in FlightView.commission_progress_text(complete) and "0:00:01 left" in FlightView.commission_progress_text(complete), "completed report loses remaining submission time")
 	complete.merge({"expired": true, "remaining_ticks": 0}, true)
 	check(FlightView.valid_commission_progress(complete) and FlightView.commission_progress_text(complete) == "Commission · deadline passed", "deadline equality does not expire a completed report")
-	var inactive := {"active": false, "completed": false, "expired": false, "acquired_ticks": 0, "earnings": "100", "remaining_ticks": 0}
+	var inactive := {"active": false, "completed": false, "expired": false, "acquired_ticks": 0, "earnings": "100", "remaining_ticks": 0, "status": ""}
 	check(FlightView.valid_commission_progress(inactive) and FlightView.commission_progress_text(inactive).is_empty(), "inactive paid account invents active countdown")
+	for settled in [inactive, complete]:
+		var bad: Dictionary = settled.duplicate(true)
+		bad.status = "Survey eligible: maintain a stable orbit"
+		check(not FlightView.valid_commission_progress(bad), "inactive/completed/expired progress retained a status")
+	var ready_only: Dictionary = progress.duplicate(true)
+	ready_only.merge({"completed": true, "acquired_ticks": 3600, "status": ""}, true)
+	check(FlightView.valid_commission_progress(ready_only) and "report ready" in FlightView.commission_progress_text(ready_only) and not "Survey eligible" in FlightView.commission_progress_text(ready_only), "ready report lost precedence over acquisition status")
+	ready_only.status = "held"
+	check(not FlightView.valid_commission_progress(ready_only), "completed unexpired report accepted a nonempty acquisition status")
+	var expired_only: Dictionary = progress.duplicate(true)
+	expired_only.merge({"expired": true, "remaining_ticks": 0, "status": ""}, true)
+	check(FlightView.valid_commission_progress(expired_only) and FlightView.commission_progress_text(expired_only) == "Commission · deadline passed", "unfinished expired work lost deadline precedence")
 	for bad_remaining in [null, false, 1.0, NAN, INF, -1, 1728001, 0]:
 		var bad := progress.duplicate(true)
 		bad.remaining_ticks = bad_remaining
@@ -113,7 +137,7 @@ func geological_packet_controls(owner: Variant, output: String) -> void:
 	check(FlightView.valid_commission_progress(progress) and "collect a fresh specimen" in FlightView.commission_progress_text(progress), "geological HUD invents orbital measurement")
 	progress.ready = true
 	check(FlightView.valid_commission_progress(progress) and "fresh specimen carried" in FlightView.commission_progress_text(progress), "geological HUD hides actual physical readiness")
-	for change in [{"acquired_ticks": 3600}, {"completed": true}, {"version": 2.0}, {"kind": 1}, {"active": false}, {"ready": 1}, {"remaining_ticks": 0}, {"earnings": "1"}]:
+	for change in [{"status": ""}, {"acquired_ticks": 3600}, {"completed": true}, {"version": 2.0}, {"kind": 1}, {"active": false}, {"ready": 1}, {"remaining_ticks": 0}, {"earnings": "1"}]:
 		var bad := progress.duplicate(true)
 		bad.merge(change, true)
 		check(not FlightView.valid_commission_progress(bad), "malformed physical HUD accepted: " + str(change.keys()))
@@ -131,7 +155,41 @@ func progress_matches_office(owner: Variant, packet: Dictionary) -> bool:
 	var remaining := maxi(0, int(packet.deadline_tick) - int(packet.tick)) if packet.sequence != 0 else 0
 	if packet.get("kind", 1) == 2 and packet.sequence != 0:
 		return progress.get("version") == 2 and progress.ready == packet.completed and progress.expired == packet.expired and progress.remaining_ticks == remaining
-	return progress.remaining_ticks == remaining and progress.active == (packet.sequence != 0) and progress.completed == packet.completed and progress.expired == packet.expired and progress.acquired_ticks == packet.acquired_ticks
+	var status_matches: bool = progress.status.is_empty()
+	if progress.active and not progress.completed and not progress.expired:
+		status_matches = packet.note.begins_with("Acquiring fresh orbital reference measurements.") if progress.status == "Survey eligible: maintain a stable orbit" else progress.status == packet.note
+	return status_matches and progress.remaining_ticks == remaining and progress.active == (packet.sequence != 0) and progress.completed == packet.completed and progress.expired == packet.expired and progress.acquired_ticks == packet.acquired_ticks
+
+func progress_layout(tree: SceneTree, view: Control, owner: Variant, witness: String, original: PackedByteArray) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var previous_size: Vector2i = tree.root.size
+	var controls_visible: bool = view.controls_menu.panel.visible
+	var previous_focus: Control = tree.root.gui_get_focus_owner()
+	view.controls_menu.hide_menu()
+	check(tree.root.content_scale_size == Vector2i(1920, 1080) and tree.root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "commission progress lost actual project stretch")
+	for pixels in [Vector2i(640, 450), Vector2i(1280, 720)]:
+		tree.root.size = pixels
+		for frame in 3: await tree.process_frame
+		view.state = owner.get_freedom_flight_state()
+		view.layout_hud()
+		view.update_compact_hud()
+		for frame in 2: await tree.process_frame
+		view.update_compact_hud()
+		await tree.process_frame
+		var label: RichTextLabel = view.primary_status
+		var progress: Dictionary = before.survey_commission
+		var readout: String = FlightView.commission_progress_text(progress)
+		var density: Vector2 = view.get_viewport().get_final_transform().get_scale().abs()
+		check(view.paused and label.is_visible_in_tree() and view.get_global_rect().grow(1).encloses(label.get_global_rect()) and not label.get_global_rect().intersects(view.instruments_button.get_global_rect()), "commission status escaped or covered Controls at " + str(pixels))
+		check(label.get_theme_font_size("normal_font_size") * density.y >= 17.5 and label.get_content_height() > 0 and label.get_content_height() <= label.size.y + 1.0, "commission status clipped/shrank at %s: content%d/%.1f text=%s" % [pixels, label.get_content_height(), label.size.y, label.text])
+		check(FlightView.valid_commission_progress(progress) and not progress.status.is_empty() and readout in label.text and progress.status in label.text and progress.status in label.tooltip_text, "actual held/eligible status or counter missing from flight HUD")
+		check(owner.get_freedom_flight_state() == before and save(owner, witness) == original, "paused status/read/layout changed ticks, resources, acquisition or whole Save")
+	tree.root.size = previous_size
+	for frame in 3: await tree.process_frame
+	view.layout_hud()
+	if controls_visible: view.controls_menu.show_menu()
+	if is_instance_valid(previous_focus) and previous_focus.is_visible_in_tree(): previous_focus.grab_focus()
+	check(view.paused and owner.get_freedom_flight_state() == before and save(owner, witness) == original, "status layout did not restore the paused source")
 
 func offer_packet_controls(owner: Variant, output: String) -> void:
 	var before: PackedByteArray = save(owner, output.path_join("offers-query-before.json"))
@@ -428,9 +486,14 @@ func run_destinations(tree: SceneTree, fixtures: String, assets: String, output:
 	await tree.process_frame
 	page.accept_button.pressed.emit()
 	check(save(owner, output.path_join("zero-accepted-ui.json")) == originals.accepted, "zero-charge flight acceptance differs from actual C++ result")
+	var held_state: Dictionary = owner.get_freedom_flight_state()
+	check(FlightView.valid_commission_progress(held_state.survey_commission) and held_state.survey_commission.size() == 7 and held_state.survey_commission.status == "Survey held: travel to the accepted planet" and progress_matches_office(owner, page.packet), "actual wrong-body progress disagrees with authoritative office eligibility")
+	for attempt in 3:
+		check(owner.get_freedom_flight_state() == held_state, "repeated paused wrong-body reads changed authoritative state")
 	page.back.pressed.emit()
 	view.service_button.pressed.emit()
 	check(save(owner, output.path_join("supported-ui.json")) == originals.supported, "existing free replenishment became unavailable after zero-charge acceptance")
+	await progress_layout(tree, view, owner, output.path_join("supported-ui.json"), originals.supported)
 	shell.free(); owner = null
 	await tree.process_frame
 
@@ -440,6 +503,12 @@ func run_destinations(tree: SceneTree, fixtures: String, assets: String, output:
 		var quote: Dictionary = backend.get_freedom_survey_commissions()
 		check(Office.valid_packet(quote) and save(backend, output.path_join(phase + "-continued.json")) == originals[phase], "destination phase Continue/read changed full Save: " + phase)
 		if phase != "seated": check(quote.system_id == target.system_id and quote.planet_id == target.planet_id and quote.acquired_ticks == (600 if phase == "partial" else 3600), "target acquisition or literal accepted terms changed")
+		var current: Dictionary = backend.get_freedom_flight_state()
+		if phase != "seated":
+			check(progress_matches_office(backend, quote) and current.survey_commission.status == ("Survey eligible: maintain a stable orbit" if phase == "partial" else ""), "actual partial/ready status disagrees with C++ conditions or report precedence")
+		else:
+			check(not current.has("survey_commission"), "reading an unselected seated source invented commission state")
+		check(save(backend, output.path_join(phase + "-continued.json")) == originals[phase], "actual acquisition status read changed complete Save")
 		backend = null
 
 	shell = host(tree, fixtures.path_join("expired.json"), assets)
@@ -448,6 +517,7 @@ func run_destinations(tree: SceneTree, fixtures: String, assets: String, output:
 	view.open_survey_commissions(); page = reader(view)
 	var expired: Dictionary = owner.get_freedom_survey_commissions()
 	check(page.packet == expired and expired.sequence != 0 and expired.expired and expired.can_abandon and expired.can_accept and owner.get_freedom_survey_commissions_for_target(expired.system_id, expired.planet_id) == expired, "expired matching read replaced accepted terms with a fresh proposal")
+	check(progress_matches_office(owner, expired) and owner.get_freedom_flight_state().survey_commission.status == "", "expired unfinished work still displays acquisition eligibility")
 	for button: Button in page.destination_buttons: check(button.disabled, "expired destination became changeable")
 	view.survey_commission_command("choose_geological")
 	check(save(owner, output.path_join("expired-locked.json")) == originals.expired, "expired kind change bypassed explicit abandonment")
@@ -569,6 +639,8 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	check(save(owner, output.path_join("remote-refused.json")) == originals["commission-near"], "remote office action changed account")
 	page.back.pressed.emit()
 	check(view.paused and not page.visible, "flight Back auto-resumed")
+	check(owner.get_freedom_flight_state().survey_commission.status == "Survey eligible: maintain a stable orbit", "actual paused bound orbit lost eligibility status")
+	await progress_layout(tree, view, owner, output.path_join("near-reader.json"), originals["commission-near"])
 	view.observe_neutral_controls()
 	view.toggle_pause()
 	check(not view.paused, "explicit neutral Resume refused measurement flight")
@@ -580,6 +652,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	view.open_survey_commissions()
 	page = reader(view)
 	check(progress_matches_office(owner, page.packet) and "report ready" in view.primary_status.text, "actual completed HUD lost submission countdown")
+	check(view.state.survey_commission.status == "" and not "Survey eligible" in view.primary_status.text, "completed report retained stale acquisition eligibility")
 	check(page.visible and page.packet.completed and page.packet.acquired_ticks == 3600 and page.packet.earnings == "0" and view.state.survey_commission.completed and save(owner, output.path_join("complete-ui.json")) == originals["commission-complete"], "one genuine completing tick differs from C++ fixture or pays remotely")
 	oracle = restore(output.path_join("complete-ui.json"))
 	if oracle != null:
