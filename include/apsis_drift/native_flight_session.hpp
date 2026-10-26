@@ -158,6 +158,25 @@ struct NativeSurveyCommissionView {
   std::string body_name, note, last_payment;
   SurveyCommissionKind kind{SurveyCommissionKind::orbital};
   std::string specimen, submission_token;
+  friend auto operator==(const NativeSurveyCommissionView&,
+                         const NativeSurveyCommissionView&) -> bool = default;
+};
+struct NativeSurveyCommissionOffer {
+  BodyTarget target;
+  std::string system_name, body_name;
+  NativeReturnChargeView route;
+  friend auto operator==(const NativeSurveyCommissionOffer&,
+                         const NativeSurveyCommissionOffer&) -> bool = default;
+};
+struct NativeSurveyCommissionOffersView {
+  std::uint32_t version{1};
+  SimulationTick tick{};
+  std::array<NativeSurveyCommissionOffer, 2> offers{};
+  std::uint32_t offer_count{};
+  std::string note;
+  friend auto operator==(const NativeSurveyCommissionOffersView&,
+                         const NativeSurveyCommissionOffersView&)
+      -> bool = default;
 };
 
 struct NativeChartedArrivalView {
@@ -341,8 +360,15 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto request_paid_retainer(std::string_view token)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto survey_commission_view(
-      SurveyCommissionKind requested_kind = SurveyCommissionKind::orbital) const
+      SurveyCommissionKind requested_kind = SurveyCommissionKind::orbital,
+      std::optional<BodyTarget> requested_target = std::nullopt) const
       -> std::expected<NativeSurveyCommissionView, std::string>;
+  [[nodiscard]] auto survey_commission_offers() const
+      -> std::expected<NativeSurveyCommissionOffersView, std::string>;
+  [[nodiscard]] auto accept_survey_commission_target(BodyTarget target,
+                                                     SimulationTick offer_until,
+                                                     std::uint32_t sequence)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto accept_survey_commission(SimulationTick offer_until,
                                               std::uint32_t sequence)
       -> std::expected<void, std::string>;
@@ -588,6 +614,8 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_measurement_conditions() const
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto commission_return_charge_view(SystemId destination) const
+      -> std::expected<NativeReturnChargeView, std::string>;
   [[nodiscard]] auto advance_survey_commission_tick()
       -> std::expected<void, std::string>;
   [[nodiscard]] auto paid_operations_origin_available() const -> bool;

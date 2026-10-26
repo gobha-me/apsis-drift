@@ -350,7 +350,7 @@ auto expiry_and_invalid_state() -> void {
     auto& receipt = *bad.latest_paid;
     auto& measurement = *receipt.commission.measurement;
     switch (kind) {
-      case 0: bad.version = 3; break;
+      case 0: bad.version = kChosenTargetSurveyCommissionVersion + 1U; break;
       case 1: bad.next_sequence = 0; break;
       case 2: bad.paid_count = bad.next_sequence; break;
       case 3: bad.paid_count = 0; break;
@@ -391,10 +391,75 @@ auto expiry_and_invalid_state() -> void {
   check(!validate_survey_commissions(paid, 3600),
         "A receipt cannot be loaded before its submitted tick");
 }
+auto chosen_target_terms() -> void {
+  const auto chosen =
+      need(accept_targeted_survey_commission({}, {4}, {5}, 100));
+  check(chosen.version == 3 &&
+            chosen.active->target_policy ==
+                SurveyCommissionTargetPolicy::charted_waypoint &&
+            chosen.active->deadline_tick ==
+                100 + kSurveyCommissionReservationTicks,
+        "Alternative acceptance alone selects version3 with unchanged terms");
+  const auto deadline = chosen.active->deadline_tick;
+  check(!accept_targeted_survey_commission(chosen, {4}, {5}, deadline - 1) &&
+            !accept_targeted_survey_commission(chosen, {6}, {5}, deadline) &&
+            !accept_targeted_survey_commission(chosen, {4}, {6}, deadline),
+        "Accepted destination stays locked even at deadline equality");
+  const auto renewed =
+      need(accept_targeted_survey_commission(chosen, {4}, {5}, deadline));
+  check(renewed.version == 3 && renewed.active->sequence == 2 &&
+            renewed.active->accepted_tick == deadline &&
+            !renewed.active->measurement &&
+            renewed.active->target_policy == chosen.active->target_policy,
+        "Same-target expired renewal retains policy and requires fresh work");
+  for (unsigned fault = 0; fault < 5; ++fault) {
+    auto bad = chosen;
+    if (fault == 0) bad.version = 1;
+    if (fault == 1) bad.version = 2;
+    if (fault == 2) bad.active->kind = SurveyCommissionKind::geological;
+    if (fault == 3)
+      bad.active->target_policy = static_cast<SurveyCommissionTargetPolicy>(0);
+    if (fault == 4)
+      bad.active->target_policy = static_cast<SurveyCommissionTargetPolicy>(3);
+    check(!validate_survey_commissions(bad, 100),
+          "Unknown policies, old-policy containers and geological alternatives "
+          "refuse");
+  }
+  const auto ready = acquire(chosen, 101);
+  const auto paid = need(submit_survey_commission(ready, 1, 3700));
+  check(paid.version == 3 && paid.paid_count == 1 &&
+            paid.latest_paid->commission == *ready.active &&
+            survey_commission_earnings(paid) == 100 &&
+            !submit_survey_commission(paid, 1, 3700),
+        "Chosen terms pay the unchanged reward once with exact retained "
+        "provenance");
+  const auto geo =
+      need(accept_geological_survey_commission(paid, {2}, {3}, 3700));
+  const auto mixed =
+      need(submit_geological_survey_commission(geo, 2, 3701, specimen(3701)));
+  check(mixed.version == 3 && mixed.geological_paid_count == 1 &&
+            mixed.paid_count == 2 &&
+            mixed.latest_paid->commission.target_policy ==
+                SurveyCommissionTargetPolicy::legacy &&
+            mixed.latest_paid->delivered_specimen == specimen(3701),
+        "Geological delivery after alternative work preserves version3 and "
+        "both income counters");
+  auto legacy = need(accept_survey_commission({}, {2}, {3}, 0));
+  check(!accept_targeted_survey_commission(legacy, {4}, {5},
+                                           legacy.active->deadline_tick),
+        "Expired legacy work requires explicit abandonment before changing "
+        "target");
+  legacy = need(abandon_survey_commission(legacy, 1, 0));
+  check(need(accept_targeted_survey_commission(legacy, {4}, {5}, 0)).version ==
+            3,
+        "Explicit abandonment permits chosen-target enrollment without time "
+        "advancement");
+}
 } // namespace
 int main() {
   try {
     geological_invalid_boundaries();
+    chosen_target_terms();
     boundaries();
     acquisition_and_payment();
     expiry_and_invalid_state();

@@ -10,6 +10,12 @@ auto validate_commission(const SurveyCommission& commission, SimulationTick now)
        commission.kind != SurveyCommissionKind::geological) ||
       (commission.kind == SurveyCommissionKind::geological &&
        commission.measurement) ||
+      (commission.target_policy != SurveyCommissionTargetPolicy::legacy &&
+       commission.target_policy !=
+           SurveyCommissionTargetPolicy::charted_waypoint) ||
+      (commission.target_policy ==
+           SurveyCommissionTargetPolicy::charted_waypoint &&
+       commission.kind != SurveyCommissionKind::orbital) ||
       !commission.sequence || !commission.system.value ||
       !commission.planet.value || commission.accepted_tick > now ||
       commission.deadline_tick < commission.accepted_tick ||
@@ -57,7 +63,8 @@ auto validate_survey_commissions(const SurveyCommissionAccount& account,
     -> std::expected<void, std::string> {
   if (now == std::numeric_limits<SimulationTick>::max() ||
       (account.version != kSurveyCommissionVersion &&
-       account.version != kGeologicalSurveyCommissionVersion) ||
+       account.version != kGeologicalSurveyCommissionVersion &&
+       account.version != kChosenTargetSurveyCommissionVersion) ||
       (account.version == kSurveyCommissionVersion &&
        account.geological_paid_count != 0) ||
       account.geological_paid_count > account.paid_count ||
@@ -71,7 +78,8 @@ auto validate_survey_commissions(const SurveyCommissionAccount& account,
     const bool geological =
         receipt.commission.kind == SurveyCommissionKind::geological;
     if ((geological &&
-         (account.version != kGeologicalSurveyCommissionVersion ||
+         ((account.version != kGeologicalSurveyCommissionVersion &&
+           account.version != kChosenTargetSurveyCommissionVersion) ||
           account.geological_paid_count == 0 || !receipt.delivered_specimen ||
           !valid_specimen(receipt.commission, *receipt.delivered_specimen,
                           receipt.submitted_tick))) ||
@@ -80,6 +88,9 @@ auto validate_survey_commissions(const SurveyCommissionAccount& account,
           account.paid_count == account.geological_paid_count ||
           receipt.submitted_tick <
               receipt.commission.measurement->last_tick)) ||
+        (account.version != kChosenTargetSurveyCommissionVersion &&
+         receipt.commission.target_policy !=
+             SurveyCommissionTargetPolicy::legacy) ||
         receipt.commission.sequence >= account.next_sequence ||
         receipt.commission.sequence < account.paid_count ||
         receipt.submitted_tick > now ||
@@ -91,6 +102,8 @@ auto validate_survey_commissions(const SurveyCommissionAccount& account,
     if (auto valid = validate_commission(active, now); !valid) return valid;
     if ((account.version == kSurveyCommissionVersion &&
          active.kind != SurveyCommissionKind::orbital) ||
+        (account.version != kChosenTargetSurveyCommissionVersion &&
+         active.target_policy != SurveyCommissionTargetPolicy::legacy) ||
         active.sequence != account.next_sequence - 1 ||
         (account.latest_paid &&
          (active.sequence <= account.latest_paid->commission.sequence ||
@@ -139,8 +152,26 @@ auto accept_geological_survey_commission(const SurveyCommissionAccount& account,
     -> std::expected<SurveyCommissionAccount, std::string> {
   auto next = accept_survey_commission(account, system, planet, now);
   if (!next) return std::unexpected{next.error()};
-  next->version = kGeologicalSurveyCommissionVersion;
+  if (next->version != kChosenTargetSurveyCommissionVersion)
+    next->version = kGeologicalSurveyCommissionVersion;
   next->active->kind = SurveyCommissionKind::geological;
+  return next;
+}
+
+auto accept_targeted_survey_commission(const SurveyCommissionAccount& account,
+                                       SystemId system, PlanetId planet,
+                                       SimulationTick now)
+    -> std::expected<SurveyCommissionAccount, std::string> {
+  if (account.active &&
+      (account.active->kind != SurveyCommissionKind::orbital ||
+       account.active->target_policy !=
+           SurveyCommissionTargetPolicy::charted_waypoint ||
+       account.active->system != system || account.active->planet != planet))
+    return std::unexpected{"Abandon existing work before changing destination"};
+  auto next = accept_survey_commission(account, system, planet, now);
+  if (!next) return std::unexpected{next.error()};
+  next->version = kChosenTargetSurveyCommissionVersion;
+  next->active->target_policy = SurveyCommissionTargetPolicy::charted_waypoint;
   return next;
 }
 

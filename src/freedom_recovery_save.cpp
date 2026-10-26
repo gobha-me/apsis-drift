@@ -115,9 +115,13 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
   const auto prior_paid = old ? old->paid_count : 0U;
   const auto prior_geological = old ? old->geological_paid_count : 0U;
   const auto prior_orbital = prior_paid - prior_geological;
-  const bool promotion = old && old->version == kSurveyCommissionVersion &&
-                         now->version == kGeologicalSurveyCommissionVersion &&
-                         now->next_sequence > prior_next;
+  const bool promotion =
+      old && now->next_sequence > prior_next &&
+      ((old->version == kSurveyCommissionVersion &&
+        now->version == kGeologicalSurveyCommissionVersion) ||
+       ((old->version == kSurveyCommissionVersion ||
+         old->version == kGeologicalSurveyCommissionVersion) &&
+        now->version == kChosenTargetSurveyCommissionVersion));
   if (now_tick < loss_tick || now->next_sequence < prior_next ||
       now->paid_count < prior_paid ||
       now->geological_paid_count < prior_geological ||
@@ -128,7 +132,8 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
                              const SurveyCommission& b) {
     return a.sequence == b.sequence && a.system == b.system &&
            a.planet == b.planet && a.accepted_tick == b.accepted_tick &&
-           a.deadline_tick == b.deadline_tick && a.kind == b.kind;
+           a.deadline_tick == b.deadline_tick && a.kind == b.kind &&
+           a.target_policy == b.target_policy;
   };
   const auto admitted = [&](const SurveyCommission& commission) {
     if (old && old->active && commission.sequence == old->active->sequence) {

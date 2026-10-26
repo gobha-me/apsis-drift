@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_knowledge.hpp"
+#include "apsis_drift/freedom_jump_targeting.hpp"
 
 #include "apsis_drift/moon_surface_landmarks.hpp"
 #include "apsis_drift/physical_moon.hpp"
@@ -479,6 +480,50 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
       if (commission.kind == SurveyCommissionKind::geological)
         return commission.system == w.origin.catalog.id &&
                commission.planet == w.station.orbit.host_planet;
+      if (commission.target_policy ==
+          SurveyCommissionTargetPolicy::charted_waypoint) {
+        if (k.survey_commissions->version !=
+                kChosenTargetSurveyCommissionVersion ||
+            !w.network || w.additional.empty() ||
+            w.additional.front().catalog.planets.empty() ||
+            commission.system != w.additional.front().catalog.id ||
+            commission.planet !=
+                w.additional.front().catalog.planets.front().descriptor.id)
+          return false;
+        const auto resolved_at_acceptance = [&](KnowledgeSubject subject) {
+          for (const auto fact :
+               {KnowledgeFact::identity_type, KnowledgeFact::location}) {
+            const auto entry = locate(k, subject, fact);
+            if (entry == k.entries.end() ||
+                !std::ranges::any_of(
+                    entry->transitions, [&](const auto& transition) {
+                      return transition.level >=
+                                 NavigationKnowledgeLevel::resolved &&
+                             transition.tick <= commission.accepted_tick;
+                    }))
+              return false;
+          }
+          return true;
+        };
+        // The surrounding validator owns this world/ledger. Public knowledge
+        // queries would recursively re-enter the complete admission here.
+        if (!resolved_at_acceptance({KnowledgeSubjectKind::system,
+                                     commission.system,
+                                     commission.system.value}) ||
+            !resolved_at_acceptance({KnowledgeSubjectKind::planet,
+                                     commission.system,
+                                     commission.planet.value}))
+          return false;
+        const auto outward = resolve_freedom_system_network_route(
+            *w.network, w.origin.catalog.id, commission.system);
+        const auto homeward = resolve_freedom_system_network_route(
+            *w.network, commission.system, w.origin.catalog.id);
+        return outward && homeward &&
+               outward->distance_metres <= kFreedomJumpRatedMetres &&
+               homeward->distance_metres <= kFreedomJumpRatedMetres &&
+               (!commission.measurement ||
+                valid_sample_craft(w, commission.measurement->craft));
+      }
       return commission.system == w.neighbor->catalog.id &&
              commission.planet ==
                  w.neighbor->catalog.planets.front().descriptor.id &&

@@ -96,6 +96,15 @@ auto NativeFreedomFlightSession::paid_operations_token() const -> std::string {
     word(work.sequence);
     word(work.deadline_tick);
     word(work.measurement ? work.measurement->acquired_ticks : 0);
+    if (knowledge_->survey_commissions->version ==
+        kChosenTargetSurveyCommissionVersion) {
+      token += ":survey-target1";
+      word(static_cast<std::uint64_t>(work.kind));
+      word(static_cast<std::uint64_t>(work.target_policy));
+      word(work.system.value);
+      word(work.planet.value);
+      word(work.accepted_tick);
+    }
   } else {
     word(0);
   }

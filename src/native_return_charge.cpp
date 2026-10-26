@@ -1,5 +1,8 @@
 #include "apsis_drift/native_flight_session.hpp"
 
+#include "apsis_drift/freedom_jump_targeting.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
+
 #include <algorithm>
 #include <optional>
 
@@ -33,6 +36,36 @@ auto resolved_system_name(const FreedomKnowledge& knowledge, SystemId system,
       name->name.find('\0') != std::string::npos)
     return std::unexpected{"Return charge system identity is unavailable"};
   return name->name;
+}
+auto named_return_plan(NativeReturnChargeView view,
+                       const FreedomKnowledge& knowledge, SystemId current,
+                       SystemId destination, SystemId origin)
+    -> std::expected<NativeReturnChargeView, std::string> {
+  const auto current_name = resolved_system_name(knowledge, current, view.tick);
+  const auto destination_name =
+      resolved_system_name(knowledge, destination, view.tick);
+  const auto origin_name = resolved_system_name(knowledge, origin, view.tick);
+  if (!current_name || !destination_name || !origin_name)
+    return std::unexpected{"Return charge system evidence could not be read"};
+  if (!*current_name || !*destination_name || !*origin_name) {
+    view.note = "Resolved system identity and location are required for the "
+                "selected route and Origin return.";
+    return view;
+  }
+  view.legs[0] = {current, destination, **current_name, **destination_name};
+  view.leg_count = 1;
+  if (destination != origin) {
+    view.legs[1] = {destination, origin, **destination_name, **origin_name};
+    view.leg_count = 2;
+  }
+  view.required_charges = view.leg_count;
+  view.charge_shortfall = view.required_charges > view.jump_charges
+                              ? view.required_charges - view.jump_charges
+                              : 0;
+  view.available = true;
+  view.note = "Charge budget only; maneuver fuel and jump feasibility must be "
+              "checked separately. No replenishment is assumed.";
+  return view;
 }
 } // namespace
 
@@ -102,31 +135,47 @@ auto NativeFreedomFlightSession::return_charge_view() const
   const auto origin =
       generate_first_universe_route(document_.origin.recipe.universe_seed)
           .origin;
-  const auto current_name =
-      resolved_system_name(*knowledge_, current, view.tick);
-  const auto destination_name =
-      resolved_system_name(*knowledge_, destination, view.tick);
-  const auto origin_name = resolved_system_name(*knowledge_, origin, view.tick);
-  if (!current_name || !destination_name || !origin_name)
-    return std::unexpected{"Return charge system evidence could not be read"};
-  if (!*current_name || !*destination_name || !*origin_name) {
-    view.note = "Resolved system identity and location are required for the "
-                "selected route and Origin return.";
-    return view;
-  }
-  view.legs[0] = {current, destination, **current_name, **destination_name};
-  view.leg_count = 1;
-  if (destination != origin) {
-    view.legs[1] = {destination, origin, **destination_name, **origin_name};
-    view.leg_count = 2;
-  }
-  view.required_charges = view.leg_count;
-  view.charge_shortfall = view.required_charges > view.jump_charges
-                              ? view.required_charges - view.jump_charges
-                              : 0;
-  view.available = true;
-  view.note = "Charge budget only; maneuver fuel and jump feasibility must be "
-              "checked separately. No replenishment is assumed.";
-  return view;
+  return named_return_plan(view, *knowledge_, current, destination, origin);
+}
+auto NativeFreedomFlightSession::commission_return_charge_view(
+    SystemId destination) const
+    -> std::expected<NativeReturnChargeView, std::string> {
+  if (!knowledge_ || !resources_ || !document_.origin.network ||
+      !validate_freedom_knowledge(*knowledge_, document_.flight.tick) ||
+      !validate_freedom_resources(*resources_, document_) ||
+      knowledge_->recipe.universe_seed !=
+          document_.origin.recipe.universe_seed ||
+      knowledge_->recipe.physical_catalog != document_.model.physical_catalog ||
+      knowledge_->recipe.ephemeris != document_.model.physical_ephemeris ||
+      knowledge_->recipe.craft_lineage != document_.origin.lineage ||
+      document_.origin.network->version !=
+          freedom_knowledge_network_version(knowledge_->recipe.version))
+    return std::unexpected{"Commission route owners are unavailable"};
+  const auto origin =
+      generate_first_universe_route(document_.origin.recipe.universe_seed)
+          .origin;
+  const auto network = generate_freedom_system_network(
+      document_.origin.recipe.universe_seed, document_.origin.network->version);
+  if (!network)
+    return std::unexpected{"Commission route network is unavailable"};
+  const auto outward =
+      resolve_freedom_system_network_route(*network, origin, destination);
+  const auto homeward =
+      resolve_freedom_system_network_route(*network, destination, origin);
+  if (!outward || !homeward ||
+      outward->distance_metres > kFreedomJumpRatedMetres ||
+      homeward->distance_metres > kFreedomJumpRatedMetres)
+    return std::unexpected{
+        "Commission route exceeds the existing rated policy"};
+  const auto reading = freedom_resource_reading(*resources_, 0, false);
+  if (!reading)
+    return std::unexpected{"Commission route resources are unavailable"};
+  NativeReturnChargeView view;
+  view.tick = document_.flight.tick;
+  view.jump_charges = reading->jump_charges;
+  view.flight_fraction = reading->fraction;
+  view.reserve = reading->reserve;
+  view.operationally_empty = reading->operationally_empty;
+  return named_return_plan(view, *knowledge_, origin, destination, origin);
 }
 } // namespace apsis_drift

@@ -1,4 +1,5 @@
 #include "apsis_drift/freedom_recovery_save.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
 #include "apsis_drift/native_startup.hpp"
 
 #include <algorithm>
@@ -652,6 +653,150 @@ auto geological_recovery() -> void {
         "Replacement cannot promote old version1 without a fresh accepted "
         "serial");
 }
+auto chosen_target() -> BodyTarget {
+  const auto network = need(generate_freedom_system_network({42}, 2));
+  const auto owner =
+      need(resolve_freedom_network_system(network, network.nodes[2].system, 2));
+  return {owner.catalog.id,
+          body_id(owner.catalog.planets.front().descriptor.id)};
+}
+auto chosen_metadata() -> void {
+  const auto destination = chosen_target();
+  const auto craft = need(derive_freedom_craft_identity({42}, 0));
+  for (const std::uint32_t recipe : {5U, 6U, 7U}) {
+    auto knowledge = need(make_freedom_starting_knowledge({42}, recipe));
+    const auto old = need(encode_freedom_knowledge_json(knowledge, 1));
+    knowledge.survey_commissions = need(accept_targeted_survey_commission(
+        {}, destination.system, PlanetId{destination.body.value}, 1));
+    const auto encoded = need(encode_freedom_knowledge_json(knowledge, 1));
+    const auto json = Json::parse(encoded);
+    const auto& account = json["survey_commissions"];
+    check(account.size() == 6 && account["version"] == 3 &&
+              account["active"].size() == 8 &&
+              account["active"]["target_policy"] == 2 &&
+              need(decode_freedom_knowledge_json(encoded, 1)) == knowledge &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(encoded, 1)), 1)) ==
+                  encoded,
+          "Explicit chosen terms have one closed version3 schema and stable "
+          "bytes");
+    auto absent = json;
+    absent.erase("survey_commissions");
+    check(absent.dump(2) + '\n' == old,
+          "Destination selection must not grant or rewrite navigation facts");
+    for (unsigned fault = 0; fault < 12; ++fault) {
+      auto bad = json;
+      auto& a = bad["survey_commissions"];
+      auto& job = a["active"];
+      switch (fault) {
+        case 0: job.erase("target_policy"); break;
+        case 1: job["target_policy"] = 2.0; break;
+        case 2: job["target_policy"] = 0U; break;
+        case 3: job["target_policy"] = 3U; break;
+        case 4: a["version"] = 2U; break;
+        case 5: job["kind"] = 2U; break;
+        case 6: job["system"] = target().first.value; break;
+        case 7: job["planet"] = target().second.value; break;
+        case 8: job["target_policy"] = 1U; break;
+        case 9: job["unexpected"] = nullptr; break;
+        case 10:
+          job["measurement"] = {{"craft", UINT64_MAX},
+                                {"started_tick", 2U},
+                                {"last_tick", 2U},
+                                {"acquired_ticks", 1U}};
+          break;
+        case 11: job["system"] = 0U; break;
+        default: throw std::runtime_error("Unknown chosen metadata fault");
+      }
+      check(!decode_freedom_knowledge_json(bad.dump(), 2),
+            "Mixed versions, unbound targets, forged lineage and nonclosed "
+            "terms refuse");
+    }
+    auto missing = knowledge;
+    std::erase_if(missing.entries, [&](const auto& entry) {
+      return entry.subject.system == destination.system &&
+             entry.subject.kind == KnowledgeSubjectKind::planet &&
+             entry.subject.identity == destination.body.value &&
+             entry.fact == KnowledgeFact::location;
+    });
+    check(!validate_freedom_knowledge(missing, 1),
+          "Removing mandatory charted location evidence cannot authenticate "
+          "chosen terms");
+    knowledge.survey_commissions = need(submit_survey_commission(
+        complete(*knowledge.survey_commissions, craft), 1, 3601));
+    const auto receipt = need(encode_freedom_knowledge_json(knowledge, 3601));
+    check(Json::parse(receipt)["survey_commissions"]["latest_paid"]
+                              ["commission"]["target_policy"] == 2 &&
+              need(decode_freedom_knowledge_json(receipt, 3601)) == knowledge,
+          "Retained payout must authenticate its own target policy after "
+          "completion");
+  }
+  // A selected policy3 container retains older exact logical receipts, without
+  // retroactively changing their target policy or geological proof.
+  auto mixed = geological_knowledge(true);
+  const auto old_receipt = mixed.survey_commissions->latest_paid;
+  mixed.survey_commissions = need(accept_targeted_survey_commission(
+      *mixed.survey_commissions, destination.system,
+      PlanetId{destination.body.value}, 8));
+  check(mixed.survey_commissions->version == 3 &&
+            mixed.survey_commissions->latest_paid == old_receipt &&
+            need(decode_freedom_knowledge_json(
+                need(encode_freedom_knowledge_json(mixed, 8)), 8)) == mixed,
+        "Version2 geological receipt remains exact when fresh alternative work "
+        "selects version3");
+}
+auto chosen_recovery() -> void {
+  const auto destination = chosen_target();
+  auto source = std::make_unique<FreedomKnowledgeSaveDocument>(fixture());
+  source->knowledge.survey_commissions = need(accept_targeted_survey_commission(
+      {}, destination.system, PlanetId{destination.body.value}, 0));
+  snapshot_tick(*source, 10);
+  auto replacement =
+      std::make_unique<FreedomRecoverySaveDocument>(replace(*source));
+  auto& current = std::get<FreedomKnowledgeSaveDocument>(replacement->voyage);
+  check(current.knowledge.survey_commissions ==
+            source->knowledge.survey_commissions,
+        "Replacement must retain alternative reservation and exact target "
+        "policy");
+  auto forged = std::make_unique<FreedomRecoverySaveDocument>(*replacement);
+  auto& changed = *std::get<FreedomKnowledgeSaveDocument>(forged->voyage)
+                       .knowledge.survey_commissions;
+  const auto [nearby_system, nearby_planet] = target();
+  changed.active->system = nearby_system;
+  changed.active->planet = nearby_planet;
+  changed.active->target_policy = SurveyCommissionTargetPolicy::legacy;
+  check(validate_freedom_knowledge_document(
+            std::get<FreedomKnowledgeSaveDocument>(forged->voyage))
+                .has_value() &&
+            !validate_freedom_recovery_document(*forged),
+        "A valid replacement ledger cannot rewrite the retired same-sequence "
+        "target terms");
+  current.knowledge.survey_commissions = need(
+      abandon_survey_commission(*current.knowledge.survey_commissions, 1, 10));
+  current.knowledge.survey_commissions =
+      need(accept_geological_survey_commission(
+          *current.knowledge.survey_commissions,
+          geological_record().target.system,
+          PlanetId{geological_record().target.body.value}, 10));
+  check(current.knowledge.survey_commissions->version == 3 &&
+            validate_freedom_recovery_document(*replacement).has_value(),
+        "Later explicitly accepted geological work cannot downgrade a "
+        "recovered policy3 account");
+  // Promotion after loss needs a real new acceptance, not a silent version
+  // edit.
+  source->knowledge.survey_commissions = accepted();
+  replacement = std::make_unique<FreedomRecoverySaveDocument>(replace(*source));
+  auto& promoted = std::get<FreedomKnowledgeSaveDocument>(replacement->voyage);
+  promoted.knowledge.survey_commissions = need(
+      abandon_survey_commission(*promoted.knowledge.survey_commissions, 1, 10));
+  promoted.knowledge.survey_commissions =
+      need(accept_targeted_survey_commission(
+          *promoted.knowledge.survey_commissions, destination.system,
+          PlanetId{destination.body.value}, 10));
+  check(validate_freedom_recovery_document(*replacement).has_value(),
+        "A new post-loss acceptance may explicitly promote legacy work to "
+        "chosen targets");
+}
 } // namespace
 auto main() -> int {
   try {
@@ -660,6 +805,8 @@ auto main() -> int {
     completed_recovery();
     geological_metadata();
     geological_recovery();
+    chosen_metadata();
+    chosen_recovery();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
