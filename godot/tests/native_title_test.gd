@@ -195,6 +195,13 @@ func run() -> void:
 	check(catalog_data.is_absolute_path() and not DirAccess.dir_exists_absolute(catalog_data), "Title catalog test storage was not fresh and isolated")
 	if not catalog_data.is_absolute_path() or DirAccess.dir_exists_absolute(catalog_data): quit(1); return
 	OS.set_environment("XDG_DATA_HOME", catalog_data)
+	# Godot created its original user directory before this deliberate XDG
+	# relocation. Initialize only the relocated Godot folder, leaving the C++
+	# profile catalog absent until the real catalog tests create it.
+	var title_user_dir := ProjectSettings.globalize_path("user://")
+	var user_dir_error := DirAccess.make_dir_recursive_absolute(title_user_dir)
+	check(user_dir_error == OK and DirAccess.dir_exists_absolute(title_user_dir), "Relocated title user directory could not be initialized")
+	if user_dir_error != OK or not DirAccess.dir_exists_absolute(title_user_dir): quit(1); return
 	for value in ["", "-1", "+1", "01", "00", " 42", "42 ", "4.2", "18446744073709551616", "1".repeat(21), "１２", "NaN"]:
 		check(not Title.valid_seed(value), "Invalid title seed accepted: " + value)
 	for value in ["0", "42", "9223372036854775808", "18446744073709551615"]:
