@@ -2,16 +2,23 @@
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <source_location>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace apsis_drift {
 namespace {
@@ -570,5 +577,352 @@ auto run_native_survey_commission_scenario(
     std::filesystem::create_directories(*paid_output);
   }
   run_commission_scenario(paid_output, true);
+}
+
+namespace paid_recovery_reference {
+using Json = nlohmann::ordered_json;
+unsigned checks{};
+auto require(bool condition, const char* message) -> void {
+  ++checks;
+  if (!condition) throw std::runtime_error(message);
+}
+template <class T, class E> auto need(std::expected<T, E> value) -> T {
+  if (!value) {
+    if constexpr (std::is_same_v<E, std::string>)
+      throw std::runtime_error(value.error());
+    else
+      throw std::runtime_error(value.error().detail);
+  }
+  if constexpr (!std::is_void_v<T>) {
+    if constexpr (std::is_trivially_copyable_v<T>)
+      return *value;
+    else
+      return std::move(*value);
+  }
+}
+auto bytes(const NativeFreedomFlightSession& session) -> std::string {
+  auto saved =
+      std::make_unique<NativeSaveDocument>(need(session.save_document()));
+  return need(encode_native_save_document_json(*saved));
+}
+auto retainer_quote(const NativePaidOperationsView& view) -> Json {
+  return {{"can_retainer", view.can_retainer},
+          {"service_credits", std::to_string(view.service_credits)},
+          {"retainer_cash", std::to_string(view.retainer_cash)},
+          {"retainer_tab", std::to_string(view.retainer_tab)},
+          {"retainer_subsidy", std::to_string(view.retainer_subsidy)},
+          {"retainer_berth", std::to_string(view.retainer_berth)},
+          {"retainer_total", std::to_string(view.retainer_total)},
+          {"terms", view.terms},
+          {"note", view.note},
+          {"funded", false}};
+}
+auto snapshot(const NativeFreedomFlightSession& session,
+              const std::filesystem::path& folder, const std::string& name,
+              Json& actions) -> Json {
+  const auto before = bytes(session);
+  const auto path = folder / (name + ".json");
+  need(session.save_as(path));
+  actions.push_back(
+      {{"action", "save_as"}, {"file", path.filename().string()}});
+  std::ifstream stream(path, std::ios::binary);
+  const std::string written{std::istreambuf_iterator<char>{stream},
+                            std::istreambuf_iterator<char>{}};
+  require(written == before && bytes(session) == before,
+          "Snapshot mutated complete Save");
+  const auto paid = need(session.paid_operations_view());
+  const auto view = need(session.survey_commission_view());
+  const auto& resources = *session.resources();
+  const auto& account = *session.knowledge()->paid_operations;
+  const auto& work = *session.knowledge()->survey_commissions;
+  require(view.earnings == 0 && work.paid_count == 0 &&
+              work.geological_paid_count == 0 && !work.latest_paid &&
+              work.active && !work.active->measurement &&
+              work.active->kind == SurveyCommissionKind::orbital &&
+              account.settled_paid_count == 0 &&
+              account.settled_specimen_count == 0 &&
+              account.settled_canister_count == 0 &&
+              account.started_tick == 0 && account.operating_tab == 0 &&
+              bytes(session) == before,
+          "Read or replacement created earnings, another opening grant or "
+          "operating debt");
+  return {
+      {"file", path.filename().string()},
+      {"tick", std::to_string(session.document().flight.tick)},
+      {"craft", std::to_string(session.document().origin.state.craft.value)},
+      {"generation", session.document().origin.lineage
+                         ? session.document().origin.lineage->generation
+                         : 0},
+      {"resource_craft", std::to_string(resources.craft.value)},
+      {"resource_tick", std::to_string(resources.tick)},
+      {"flight_quanta", std::to_string(resources.flight_quanta)},
+      {"jump_charges", resources.jump_charges},
+      {"cash", std::to_string(paid.cash)},
+      {"insurance_due", std::to_string(paid.recovery_due)},
+      {"operating_tab", std::to_string(paid.operating_tab)},
+      {"spent_credits", std::to_string(account.spent_credits)},
+      {"charged_generation", account.charged_generation},
+      {"earnings", std::to_string(view.earnings)},
+      {"commission",
+       {{"sequence", work.active->sequence},
+        {"next_sequence", work.next_sequence},
+        {"system", std::to_string(work.active->system.value)},
+        {"planet", std::to_string(work.active->planet.value)},
+        {"accepted_tick", std::to_string(work.active->accepted_tick)},
+        {"deadline_tick", std::to_string(work.active->deadline_tick)},
+        {"kind", static_cast<unsigned>(work.active->kind)},
+        {"paid_count", work.paid_count},
+        {"acquired_ticks", view.acquired_ticks}}}};
+}
+auto run(const std::filesystem::path& folder) -> Json {
+  Json result{
+      {"schema", "apsis.paid-recovery-reference/1"},
+      {"seed", "42"},
+      {"completed", false},
+      {"phase", "new-game"},
+      {"completed_cycles", 0},
+      {"actions", Json::array()},
+      {"scope",
+       "Debt/replacement composition only. Public New Game, accepted orbital "
+       "work and one paid enrollment; real1194-tick walk, full "
+       "boarding/release and120 ordinary manual actuator ticks per cycle. Each "
+       "loss is an explicitly classified recoverable_destruction application "
+       "event, not a physical collision. No initialized pose/resources/time, "
+       "commission earnings, additional opening grant, funded retainer, "
+       "route/profit/start-viability/manual or GPU claim."},
+      {"inputs",
+       {{"walk_controls", {0, -1, 0}},
+        {"walk_ticks", 1194},
+        {"boarding_ticks", kGameplayBoardingTicks},
+        {"work_controls", {{"negative_translation_y", 0.25}}},
+        {"work_ticks", 120},
+        {"retainer_action", "query only; no demand or funding invocation"}}},
+      {"cycles", Json::array()}};
+  try {
+    result["actions"].push_back(
+        {{"action", "new_game"}, {"preset", "planetary"}, {"seed", "42"}});
+    auto startup = std::make_unique<NativeStartup>(
+        need(native_planetary_network_new_game({42})));
+    auto live = std::make_unique<NativeFreedomFlightSession>(
+        need(NativeFreedomFlightSession::open(std::move(*startup))));
+    const auto first = need(live->survey_commission_view());
+    need(live->accept_survey_commission(first.offer_until,
+                                        first.offer_sequence));
+    result["actions"].push_back(
+        {{"action", "accept_survey_commission"},
+         {"offer_until", std::to_string(first.offer_until)},
+         {"sequence", first.offer_sequence}});
+    const auto enrollment = need(live->paid_operations_view());
+    need(live->enable_paid_operations(enrollment.token));
+    result["actions"].push_back(
+        {{"action", "enable_paid_operations"}, {"token", enrollment.token}});
+    require(need(live->paid_operations_view()).cash == 180 &&
+                live->document().flight.tick == 0,
+            "Initial acceptance/enrollment changed opening180 or time");
+    result["initial"] = snapshot(*live, folder, "initial", result["actions"]);
+    constexpr std::array<std::uint64_t, 3> expected_cash{80, 0, 0};
+    constexpr std::array<std::uint64_t, 3> expected_due{0, 20, 100};
+    for (unsigned cycle = 1; cycle <= 3; ++cycle) {
+      const auto prefix = "cycle-" + std::to_string(cycle);
+      result["phase"] = prefix + "-walk";
+      result["cycles"].push_back(
+          {{"cycle", cycle},
+           {"predeparture", snapshot(*live, folder, prefix + "-predeparture",
+                                     result["actions"])}});
+      auto& row = result["cycles"].back();
+      const auto commission = *live->knowledge()->survey_commissions;
+      const auto prior_craft = live->document().origin.state.craft;
+      require(need(live->survey_commission_view()).at_origin &&
+                  live->resources()->craft == prior_craft,
+              "Next attempt is not at actual Origin with current stores owner");
+      for (unsigned i = 0; i < 1194; ++i)
+        need(live->advance_walk({0, -1, 0}));
+      result["actions"].push_back({{"action", "advance_walk"},
+                                   {"controls", {0, -1, 0}},
+                                   {"ticks", 1194}});
+      result["phase"] = prefix + "-board";
+      need(live->begin_boarding());
+      result["actions"].push_back({{"action", "begin_boarding"}});
+      for (SimulationTick i = 0; i < kGameplayBoardingTicks; ++i)
+        need(live->advance_walk({}));
+      result["actions"].push_back({{"action", "advance_walk"},
+                                   {"controls", {0, 0, 0}},
+                                   {"ticks", kGameplayBoardingTicks}});
+      need(live->release_port());
+      result["actions"].push_back({{"action", "release_port"}});
+      result["phase"] = prefix + "-actuate";
+      const auto fuel_before = live->resources()->flight_quanta;
+      NativeFlightControls controls;
+      controls.negative_translation.y = 0.25;
+      std::uint64_t fuel_debit{};
+      unsigned applied{};
+      for (unsigned i = 0; i < 120; ++i) {
+        const auto step = need(live->advance(controls));
+        fuel_debit += step.fuel_debit_quanta;
+        const auto force =
+            step.actuation.central.propulsion.applied_force_newtons;
+        applied += force.x != 0 || force.y != 0 || force.z != 0;
+      }
+      result["actions"].push_back(
+          {{"action", "advance"},
+           {"controls", {0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0}},
+           {"ticks", 120}});
+      require(applied > 0 && fuel_debit > 0 &&
+                  live->resources()->flight_quanta < fuel_before &&
+                  live->resources()->jump_charges == 3 &&
+                  !live->recovery_pending(),
+              "Ordinary actuator work did not apply/spend fuel or caused an "
+              "unclassified loss");
+      row["work"] = {{"fuel_debit_quanta", std::to_string(fuel_debit)},
+                     {"applied_force_ticks", applied},
+                     {"state", snapshot(*live, folder, prefix + "-worked",
+                                        result["actions"])}};
+      result["phase"] = prefix + "-record-loss";
+      const auto loss_tick = live->document().flight.tick;
+      require(loss_tick == cycle * SimulationTick{2754},
+              "Reference changed its actual committed tick counts");
+      auto recovery = std::make_unique<FreedomRecoverySaveDocument>(
+          need(live->recovery_document()));
+      const auto checksum =
+          need(freedom_recovery_source_checksum(recovery->voyage));
+      need(live->record_loss(FreedomLossCause::recoverable_destruction,
+                             prior_craft, loss_tick, checksum));
+      result["actions"].push_back(
+          {{"action", "record_loss"},
+           {"cause", "recoverable_destruction"},
+           {"craft", std::to_string(prior_craft.value)},
+           {"tick", std::to_string(loss_tick)},
+           {"source_checksum", std::to_string(checksum)}});
+      require(live->recovery_pending(),
+              "Explicit classified loss did not freeze pending recovery");
+      row["source_checksum"] = std::to_string(checksum);
+      row["pending"] =
+          snapshot(*live, folder, prefix + "-pending", result["actions"]);
+      result["phase"] = prefix + "-replacement";
+      need(live->complete_recovery());
+      result["actions"].push_back({{"action", "complete_recovery"}});
+      recovery = std::make_unique<FreedomRecoverySaveDocument>(
+          need(live->recovery_document()));
+      require(!live->recovery_pending() && recovery->recovery.latest &&
+                  recovery_flight(recovery->recovery.latest->retired)
+                          .origin.state.craft == prior_craft &&
+                  recovery->recovery.latest->source_checksum == checksum &&
+                  live->document().origin.state.craft != prior_craft &&
+                  live->document().origin.lineage &&
+                  live->document().origin.lineage->generation == cycle &&
+                  live->resources()->craft ==
+                      live->document().origin.state.craft &&
+                  live->resources()->flight_quanta ==
+                      kFreedomFlightCapacityQuanta &&
+                  live->resources()->jump_charges == 3 &&
+                  live->document().flight.tick == loss_tick &&
+                  *live->knowledge()->survey_commissions == commission,
+              "Replacement changed time/commission, kept retired craft, or "
+              "invalidated full current stores");
+      const auto paid = need(live->paid_operations_view());
+      require(paid.cash == expected_cash[cycle - 1] &&
+                  paid.recovery_due == expected_due[cycle - 1] &&
+                  paid.operating_tab == 0,
+              "Insurance-first repeated-loss accounting differs from180 "
+              "initial cash/100 excess/cap100");
+      row["retired_craft"] = std::to_string(prior_craft.value);
+      row["replacement"] =
+          snapshot(*live, folder, prefix + "-replacement", result["actions"]);
+      const auto completed = bytes(*live);
+      need(live->complete_recovery());
+      result["actions"].push_back({{"action", "complete_recovery"}});
+      require(bytes(*live) == completed,
+              "Repeated complete_recovery changed full Save or charged again");
+      row["repeat_recovery_save_neutral"] = true;
+      result["phase"] = prefix + "-continue";
+      const auto saved = folder / (prefix + "-replacement.json");
+      auto continued = std::make_unique<NativeFreedomFlightSession>(
+          need(NativeFreedomFlightSession::open(need(native_continue(saved)))));
+      result["actions"].push_back(
+          {{"action", "continue"}, {"file", saved.filename().string()}});
+      require(bytes(*continued) == completed,
+              "Replacement Save/Continue lost state");
+      live.swap(continued);
+      row["continued"] =
+          snapshot(*live, folder, prefix + "-continued", result["actions"]);
+      result["phase"] = prefix + "-next-work";
+      need(live->abandon_survey_commission(commission.active->sequence));
+      result["actions"].push_back({{"action", "abandon_survey_commission"},
+                                   {"sequence", commission.active->sequence}});
+      const auto fresh = need(live->survey_commission_view());
+      require(fresh.at_origin && fresh.can_accept,
+              "Actual Origin lacks a fresh unpaid next action");
+      need(live->accept_survey_commission(fresh.offer_until,
+                                          fresh.offer_sequence));
+      result["actions"].push_back(
+          {{"action", "accept_survey_commission"},
+           {"offer_until", std::to_string(fresh.offer_until)},
+           {"sequence", fresh.offer_sequence}});
+      require(live->knowledge()->survey_commissions->active &&
+                  !live->knowledge()->survey_commissions->active->measurement &&
+                  live->knowledge()->survey_commissions->paid_count == 0 &&
+                  need(live->paid_operations_view()).cash == paid.cash,
+              "Abandon/reaccept created income or reused progress");
+      row["next_attempt"] =
+          snapshot(*live, folder, prefix + "-next-work", result["actions"]);
+      const auto quote_before = bytes(*live);
+      const auto quote = need(live->paid_operations_view());
+      row["retainer_quote"] = retainer_quote(quote);
+      result["actions"].push_back(
+          {{"action", "query_retainer"}, {"funded", false}});
+      require(bytes(*live) == quote_before,
+              "Retainer quote mutated the full Save");
+      // Full stores do not demand support eligibility. If support is offered
+      // here, only the actual prepaid-berth extension needs funding.
+      if (quote.can_retainer)
+        require(quote.service_credits == 0 && quote.retainer_berth == 5 &&
+                    quote.retainer_total == 5 && quote.retainer_tab == 5 &&
+                    quote.retainer_cash == 0 && quote.retainer_subsidy == 0,
+                "Observed full-store retainer quote is not the berth-only5 "
+                "boundary");
+      result["completed_cycles"] = cycle;
+    }
+    result["phase"] = "complete";
+    result["completed"] = true;
+  } catch (const std::exception& e) {
+    result["error"] = e.what();
+  }
+  result["checks"] = checks;
+  return result;
+}
+
+} // namespace paid_recovery_reference
+auto run_native_paid_recovery_reference(
+    const std::optional<std::filesystem::path>& output) -> void {
+  const auto folder = output
+                          ? *output / "paid-recovery-reference"
+                          : std::filesystem::temp_directory_path() /
+                                ("apsis-paid-recovery-reference-" +
+                                 std::to_string(std::chrono::steady_clock::now()
+                                                    .time_since_epoch()
+                                                    .count()));
+  if (output)
+    std::filesystem::create_directories(folder);
+  else if (!std::filesystem::create_directory(folder))
+    throw std::runtime_error(
+        "Could not create owned paid recovery temporary directory");
+  paid_recovery_reference::checks = 0;
+  const auto result = paid_recovery_reference::run(folder);
+  {
+    std::ofstream stream(folder / "manifest.json", std::ios::binary);
+    stream << result.dump(2) << '\n';
+    if (!stream)
+      throw std::runtime_error(
+          "Could not retain paid recovery reference manifest in " +
+          folder.string());
+  }
+  if (!result["completed"].get<bool>())
+    throw std::runtime_error("Paid recovery reference failed at " +
+                             result["phase"].get<std::string>() + ": " +
+                             result["error"].get<std::string>() +
+                             "; retained evidence " + folder.string());
+  std::cout << "Paid recovery reference: " << paid_recovery_reference::checks
+            << " checks, 0 failures\n";
+  if (!output) std::filesystem::remove_all(folder);
 }
 } // namespace apsis_drift
