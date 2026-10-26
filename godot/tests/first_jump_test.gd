@@ -154,7 +154,10 @@ func run() -> void:
 			neighbor_shell.confirm_title()
 			check(neighbor_shell.current_view == null and neighbor_shell.bridge.get_freedom_start().is_empty(), "Committed Title did not discard only after confirmation")
 			neighbor_shell.title_view.choose_continue(trace + ".leg0.360.json")
-			await process_frame
+			# Title acknowledges before its three frame boundaries and atomic
+			# load/commit. Match the bounded title consumer wait before reading
+			# the replacement owner or freeing its requesting shell.
+			for frame in 5: await process_frame
 			check(neighbor_shell.current_view != null and neighbor_shell.current_view.paused, "Committed Continue after Title failed")
 			checkpoint(neighbor_shell.bridge, directory.path_join("title-continued-jump.json"), trace + ".leg0.360.json")
 			neighbor_shell.free()
