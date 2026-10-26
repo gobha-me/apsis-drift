@@ -2,12 +2,14 @@ extends Control
 ## A paused reader. Topics are supplied and revalidated by the C++ owner.
 signal topic_requested(id: int)
 signal keep_requested
+signal service_requested(service: String)
 signal back_requested
 var title: Label
 var text: Label
 var topics: Array[Button] = []
 var back: Button
 var keep: Button
+var services: Array[Button] = []
 var offer_tick := ""
 var panel: PanelContainer
 var readable_theme: Theme
@@ -51,6 +53,13 @@ func _ready() -> void:
 	keep.pressed.connect(func(): keep_requested.emit())
 	column.add_child(keep)
 	clear_lead()
+	for service in ["office", "repair"]:
+		var button := Button.new()
+		button.text = "Survey office · work and sales" if service == "office" else "Origin hull repair"
+		button.set_meta("service", service)
+		button.pressed.connect(func(): service_requested.emit(str(button.get_meta("service"))))
+		column.add_child(button)
+		services.append(button)
 	back = Button.new()
 	back.text = "Back · remain paused"
 	back.pressed.connect(func(): back_requested.emit())
@@ -64,10 +73,14 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in topics + [keep, back]: button.custom_minimum_size.y = ceili(44 * scale)
+	for button in topics + [keep] + services + [back]: button.custom_minimum_size.y = ceili(44 * scale)
 
 func open(packet: Dictionary) -> void:
 	clear_lead()
+	# The owning view supplies fresh, validated service availability on entry.
+	for button in services:
+		button.disabled = true
+		button.tooltip_text = "Station service is unavailable in this journey."
 	title.text = packet.name
 	text.text = "Optional conversation. Choose a topic, or return to paused controls."
 	scroll.scroll_vertical = 0
@@ -82,6 +95,12 @@ func open(packet: Dictionary) -> void:
 	show()
 	layout_reader()
 	topics[0].grab_focus()
+
+func set_service(service: String, available: bool, reason: String) -> void:
+	for button in services:
+		if button.get_meta("service") == service:
+			button.disabled = not available
+			button.tooltip_text = reason
 
 func clear_lead() -> void:
 	offer_tick = ""
@@ -106,10 +125,12 @@ func navigate(direction: int) -> void:
 	for button in topics:
 		if button.visible and not button.disabled: buttons.append(button)
 	if keep.visible and not keep.disabled: buttons.append(keep)
+	for button in services:
+		if button.visible and not button.disabled: buttons.append(button)
 	buttons.append(back)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
 
 func accept() -> void:
 	var target := get_viewport().gui_get_focus_owner()
-	if target in topics + [keep, back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in topics + [keep] + services + [back] and target.visible and not target.disabled: target.pressed.emit()
