@@ -529,8 +529,9 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("request_freedom_paid_retainer", "token"),
         &FreedomBridge::request_freedom_paid_retainer);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("get_freedom_survey_commissions"),
-        &FreedomBridge::get_freedom_survey_commissions);
+        godot::D_METHOD("get_freedom_survey_commissions", "kind"),
+        &FreedomBridge::get_freedom_survey_commissions,
+        godot::Variant{std::int64_t{1}});
     godot::ClassDB::bind_method(
         godot::D_METHOD("accept_freedom_survey_commission", "offer_until",
                         "sequence"),
@@ -538,6 +539,13 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("submit_freedom_survey_commission", "sequence"),
         &FreedomBridge::submit_freedom_survey_commission);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("accept_freedom_geological_survey_commission",
+                        "offer_until", "sequence"),
+        &FreedomBridge::accept_freedom_geological_survey_commission);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("submit_freedom_geological_survey_commission", "token"),
+        &FreedomBridge::submit_freedom_geological_survey_commission);
     godot::ClassDB::bind_method(
         godot::D_METHOD("abandon_freedom_survey_commission", "sequence"),
         &FreedomBridge::abandon_freedom_survey_commission);
@@ -2024,6 +2032,46 @@ class FreedomBridge : public godot::RefCounted {
       return session.submit_survey_commission(*number);
     });
   }
+  auto accept_freedom_geological_survey_commission(
+      const godot::Variant& until, const godot::Variant& sequence) -> bool {
+    const auto number = commission_sequence(sequence);
+    if (until.get_type() != godot::Variant::STRING || !number) {
+      last_error = "Geological terms require canonical decimal strings";
+      return false;
+    }
+    const auto tick = identity_word(static_cast<godot::String>(until));
+    if (!tick) {
+      last_error = "Geological terms require canonical decimal strings";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.accept_geological_survey_commission(*tick, *number);
+    });
+  }
+  static auto geological_token(const godot::Variant& value)
+      -> std::optional<std::string> {
+    if (value.get_type() != godot::Variant::STRING) return std::nullopt;
+    const auto text = static_cast<godot::String>(value);
+    if (text.length() < 1 || text.length() > 2048) return std::nullopt;
+    const auto encoded = text.utf8();
+    if (encoded.length() < 1 || encoded.length() > 2048) return std::nullopt;
+    const std::string token{encoded.get_data(),
+                            static_cast<std::size_t>(encoded.length())};
+    for (const unsigned char character : token)
+      if (!character || character > 127) return std::nullopt;
+    return token;
+  }
+  auto submit_freedom_geological_survey_commission(const godot::Variant& value)
+      -> bool {
+    const auto token = geological_token(value);
+    if (!token) {
+      last_error = "Geological delivery requires a bounded token string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.submit_geological_survey_commission(*token);
+    });
+  }
   auto abandon_freedom_survey_commission(const godot::Variant& sequence)
       -> bool {
     const auto number = commission_sequence(sequence);
@@ -3323,15 +3371,27 @@ class FreedomBridge : public godot::RefCounted {
     result["note"] = godot::String{view->note.c_str()};
     return result;
   }
-  auto get_freedom_survey_commissions() const -> godot::Dictionary {
+  auto get_freedom_survey_commissions(const godot::Variant& kind) const
+      -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;
-    const auto view = saved_flight->session.survey_commission_view();
+    if (kind.get_type() != godot::Variant::INT) return result;
+    const auto number = static_cast<std::int64_t>(kind);
+    if (number != 1 && number != 2) return result;
+    const auto view = saved_flight->session.survey_commission_view(
+        static_cast<SurveyCommissionKind>(number));
     if (!view) return result;
     const auto decimal = [](std::uint64_t value) {
       return godot::String{std::to_string(value).c_str()};
     };
-    result["version"] = 1;
+    const bool geological = view->kind == SurveyCommissionKind::geological;
+    result["version"] = geological ? 2 : 1;
+    if (geological) {
+      result["kind"] = 2;
+      result["specimen"] = godot::String{view->specimen.c_str()};
+      result["submission_token"] =
+          godot::String{view->submission_token.c_str()};
+    }
     result["supported"] = view->supported;
     result["selected"] = view->selected;
     result["at_origin"] = view->at_origin;
@@ -3343,8 +3403,8 @@ class FreedomBridge : public godot::RefCounted {
     result["sequence"] = static_cast<std::int64_t>(view->sequence);
     result["offer_sequence"] = static_cast<std::int64_t>(view->offer_sequence);
     result["acquired_ticks"] = static_cast<std::int64_t>(view->acquired_ticks);
-    result["required_ticks"] =
-        static_cast<std::int64_t>(kSurveyCommissionMeasurementTicks);
+    result["required_ticks"] = static_cast<std::int64_t>(
+        geological ? 0 : kSurveyCommissionMeasurementTicks);
     result["reward_credits"] =
         static_cast<std::int64_t>(kSurveyCommissionRewardCredits);
     result["tick"] = decimal(view->tick);
@@ -3368,6 +3428,33 @@ class FreedomBridge : public godot::RefCounted {
     const auto count = account.active && account.active->measurement
                            ? account.active->measurement->acquired_ticks
                            : 0U;
+    if (account.active &&
+        account.active->kind == SurveyCommissionKind::geological) {
+      const auto tick = session.document().flight.tick;
+      const auto remaining = tick < account.active->deadline_tick
+                                 ? account.active->deadline_tick - tick
+                                 : 0;
+      bool ready = false;
+      const auto& pouch = session.knowledge()->field_samples;
+      if (pouch && pouch->carrier == session.document().origin.state.craft) {
+        for (const auto& specimen : pouch->carried) {
+          if (apsis_drift::submit_geological_survey_commission(
+                  account, account.active->sequence, tick, specimen)) {
+            ready = true;
+            break;
+          }
+        }
+      }
+      result["version"] = 2;
+      result["kind"] = 2;
+      result["active"] = true;
+      result["ready"] = ready;
+      result["expired"] = remaining == 0;
+      result["remaining_ticks"] = static_cast<std::int64_t>(remaining);
+      result["earnings"] = godot::String{
+          std::to_string(survey_commission_earnings(account)).c_str()};
+      return result;
+    }
     result["acquired_ticks"] = static_cast<std::int64_t>(count);
     result["completed"] = count == kSurveyCommissionMeasurementTicks;
     // Admitted reservations bound this guarded difference to four hours.

@@ -183,7 +183,8 @@ auto NativeFreedomFlightSession::paid_operations_view() const
   if (view.at_origin && knowledge_->survey_commissions &&
       knowledge_->survey_commissions->active) {
     const auto& work = *knowledge_->survey_commissions->active;
-    if ((!work.measurement || work.measurement->acquired_ticks == 0) &&
+    if (work.kind == SurveyCommissionKind::orbital &&
+        (!work.measurement || work.measurement->acquired_ticks == 0) &&
         view.tick < work.deadline_tick) {
       const auto supported = fund_paid_retainer(
           *knowledge_->paid_operations, count, view.tick, generation,
@@ -267,6 +268,8 @@ auto NativeFreedomFlightSession::request_paid_retainer(std::string_view token)
   if (!view->can_retainer || token != view->token)
     return std::unexpected{"Review an eligible fresh-work retainer at Origin"};
   const auto& work = *knowledge_->survey_commissions->active;
+  if (work.kind != SurveyCommissionKind::orbital)
+    return std::unexpected{"Operating retainers support fresh orbital work"};
   const auto supported = fund_paid_retainer(
       *knowledge_->paid_operations, paid_income_counts(), document_.flight.tick,
       paid_operations_generation(), work.sequence, work.deadline_tick,

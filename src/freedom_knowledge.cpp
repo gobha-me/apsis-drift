@@ -476,6 +476,9 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
         !validate_survey_commissions(*k.survey_commissions, now))
       return std::unexpected{Error::invalid_survey_commissions};
     const auto valid_commission = [&](const SurveyCommission& commission) {
+      if (commission.kind == SurveyCommissionKind::geological)
+        return commission.system == w.origin.catalog.id &&
+               commission.planet == w.station.orbit.host_planet;
       return commission.system == w.neighbor->catalog.id &&
              commission.planet ==
                  w.neighbor->catalog.planets.front().descriptor.id &&
@@ -487,7 +490,27 @@ auto validate(const FreedomKnowledge& k, const KnowledgeWorld& w,
         (account.latest_paid &&
          !valid_commission(account.latest_paid->commission)))
       return std::unexpected{Error::invalid_survey_commissions};
+    if (account.latest_paid && account.latest_paid->delivered_specimen) {
+      const auto& receipt = *account.latest_paid;
+      const auto& specimen = *receipt.delivered_specimen;
+      if (!k.field_samples ||
+          !valid_sample_source(k, w, specimen, receipt.submitted_tick))
+        return std::unexpected{Error::invalid_survey_commissions};
+      const auto note =
+          std::ranges::find_if(k.field_samples->journal, [&](const auto& item) {
+            return same_sample_source(item, specimen);
+          });
+      if (note == k.field_samples->journal.end() ||
+          note->tick > specimen.tick ||
+          std::ranges::find(k.field_samples->carried, specimen) !=
+              k.field_samples->carried.end() ||
+          (k.specimen_sales &&
+           std::ranges::find(k.specimen_sales->latest.specimens, specimen) !=
+               k.specimen_sales->latest.specimens.end()))
+        return std::unexpected{Error::invalid_survey_commissions};
+    }
   }
+
   if (k.paid_operations) {
     const PaidIncomeCounts counts{
         k.survey_commissions ? k.survey_commissions->paid_count : 0U,

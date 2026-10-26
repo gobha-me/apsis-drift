@@ -224,7 +224,8 @@ auto NativeFreedomFlightSession::advance_player(
                                ? &*knowledge_->survey_commissions->active
                                : nullptr;
   const bool acquiring_commission =
-      commission && document_.flight.tick < commission->deadline_tick &&
+      commission && commission->kind == SurveyCommissionKind::orbital &&
+      document_.flight.tick < commission->deadline_tick &&
       (!commission->measurement || commission->measurement->acquired_ticks <
                                        kSurveyCommissionMeasurementTicks);
   if (!survey && !stars && !acquiring_commission && !retrieving)

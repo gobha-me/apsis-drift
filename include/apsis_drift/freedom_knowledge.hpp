@@ -3,6 +3,7 @@
 #include "apsis_drift/freedom_charted_arrival.hpp"
 #include "apsis_drift/freedom_derelict.hpp"
 #include "apsis_drift/freedom_derelict_recovery.hpp"
+#include "apsis_drift/freedom_field_sample_record.hpp"
 #include "apsis_drift/freedom_navigation.hpp"
 #include "apsis_drift/moon_terrain.hpp"
 #include "apsis_drift/paid_operations.hpp"
@@ -250,19 +251,6 @@ struct FreedomOrbitalSurveyState {
   std::vector<FreedomOrbitalSurveyRecord> completed;
   friend auto operator==(const FreedomOrbitalSurveyState&,
                          const FreedomOrbitalSurveyState&) -> bool = default;
-};
-// Physical pouch contents and first-collection notes are separate. Source
-// authentication is not a composition assay or a navigation fact.
-struct FreedomFieldSampleRecord {
-  BodyTarget target;
-  SurfaceLandmarkCell cell;
-  SurfaceLandmarkId site;
-  std::uint32_t terrain_recipe{};
-  SurfaceLandmarkKind kind{};
-  StarterCraftId craft;
-  SimulationTick tick{};
-  friend auto operator==(const FreedomFieldSampleRecord&,
-                         const FreedomFieldSampleRecord&) -> bool = default;
 };
 struct FreedomFieldSampleState {
   std::uint32_t version{kFreedomFieldSamplesVersion};

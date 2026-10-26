@@ -23,6 +23,9 @@ var recovery_sale_button: Button
 var recovery_sale_packet: Dictionary = {}
 
 var packet: Dictionary = {}
+var requested_kind := 1
+var orbital_button: Button
+var geological_button: Button
 var accept_button: Button
 var submit_button: Button
 var abandon_button: Button
@@ -56,13 +59,25 @@ static func remaining_text(deadline: String, now: String) -> String:
 	return "less than 1 s" if seconds < 1.0 else seconds_text(floori(seconds))
 
 static func valid_packet(value: Variant) -> bool:
-	if not value is Dictionary or value.size() != 24 or not value.get("version") is int or value.version != 1: return false
+	if not value is Dictionary or not value.get("version") is int: return false
+	var geological: bool = value.version == 2
+	if value.version not in [1, 2] or value.size() != (27 if geological else 24): return false
+	if geological:
+		if not value.get("kind") is int or value.kind != 2: return false
+		for field in ["specimen", "submission_token"]:
+			if not value.get(field) is String or value[field].to_utf8_buffer().size() > (2048 if field == "submission_token" else 512): return false
+			for index in value[field].length():
+				if value[field].unicode_at(index) == 0 or (field == "submission_token" and value[field].unicode_at(index) > 127): return false
 	for key in ["supported", "selected", "at_origin", "can_accept", "can_submit", "can_abandon", "completed", "expired"]:
 		if not value.get(key) is bool: return false
+	if geological:
+		if value.completed != (not value.specimen.is_empty() and not value.submission_token.is_empty()): return false
+		if value.specimen.is_empty() != value.submission_token.is_empty(): return false
 	for key in ["sequence", "offer_sequence"]:
 		if not value.get(key) is int or value[key] < 0 or value[key] > 4294967295: return false
 	if not value.get("acquired_ticks") is int or value.acquired_ticks < 0 or value.acquired_ticks > 3600: return false
-	if not value.get("required_ticks") is int or value.required_ticks != 3600: return false
+	if not value.get("required_ticks") is int or value.required_ticks != (0 if geological else 3600): return false
+	if geological and value.acquired_ticks != 0: return false
 	if not value.get("reward_credits") is int or value.reward_credits != 100: return false
 	for key in ["tick", "offer_until", "accepted_tick", "deadline_tick", "earnings", "system_id", "planet_id"]:
 		if not decimal(value.get(key)): return false
@@ -75,7 +90,8 @@ static func valid_packet(value: Variant) -> bool:
 		if value.acquired_ticks != 0 or value.completed or value.expired or value.accepted_tick != "0" or value.deadline_tick != "0": return false
 	else:
 		if decimal_before(value.tick, value.accepted_tick) or not decimal_before(value.accepted_tick, value.deadline_tick): return false
-		if value.completed != (value.acquired_ticks == 3600) or value.expired != (not decimal_before(value.tick, value.deadline_tick)): return false
+		if (not geological and value.completed != (value.acquired_ticks == 3600)) or value.expired != (not decimal_before(value.tick, value.deadline_tick)): return false
+		if geological and value.expired and value.completed: return false
 	if value.can_accept:
 		if not value.supported or not value.at_origin or value.offer_sequence == 0 or not decimal_before(value.tick, value.offer_until) or (value.sequence != 0 and not value.expired): return false
 	if value.can_submit and (not value.supported or not value.selected or not value.at_origin or value.sequence == 0 or not value.completed or value.expired): return false
@@ -113,6 +129,14 @@ func _ready() -> void:
 	details = Label.new()
 	details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(details)
+	orbital_button = Button.new()
+	orbital_button.text = "Choose orbital measurement work"
+	orbital_button.pressed.connect(func(): action_requested.emit("choose_orbital"))
+	column.add_child(orbital_button)
+	geological_button = Button.new()
+	geological_button.text = "Choose geological specimen work"
+	geological_button.pressed.connect(func(): action_requested.emit("choose_geological"))
+	column.add_child(geological_button)
 	accept_button = Button.new()
 	accept_button.text = "Accept commission · 100 credits"
 	accept_button.pressed.connect(func(): action_requested.emit("accept"))
@@ -162,7 +186,7 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
+	for button in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		button.custom_minimum_size.y = ceili(44 * scale)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -182,6 +206,12 @@ func open(value: Dictionary) -> void:
 func refresh(value: Dictionary) -> void:
 	var focused := get_viewport().gui_get_focus_owner()
 	packet = value.duplicate(true) if valid_packet(value) else {}
+	if not packet.is_empty(): requested_kind = packet.get("kind", 1)
+	orbital_button.disabled = packet.is_empty() or packet.sequence != 0 or requested_kind == 1
+	geological_button.disabled = packet.is_empty() or packet.sequence != 0 or requested_kind == 2
+	var geological: bool = requested_kind == 2
+	accept_button.text = "Accept geological commission · 100 credits" if geological else "Accept commission · 100 credits"
+	submit_button.text = "Deliver named specimen · consume one · 100 credits" if geological else "Submit completed report"
 	accept_button.disabled = packet.is_empty() or not packet.can_accept
 	submit_button.disabled = packet.is_empty() or not packet.can_submit
 	abandon_button.disabled = packet.is_empty() or not packet.can_abandon
@@ -195,18 +225,23 @@ func refresh(value: Dictionary) -> void:
 		var operating := "Fuel service remains free unless you explicitly select paid operations."
 		if not paid_packet.is_empty() and paid_packet.selected:
 			operating = "Paid operations selected · Cash: %s · Operating tab: %s · Insurance excess: %s.\nOpen Paid operations for current berth coverage and fuel quotes." % [paid_packet.cash, paid_packet.operating_tab, paid_packet.recovery_due]
-		var lines := PackedStringArray(["Optional survey work · 100 credits per fresh report.\n30 seconds of qualifying orbital measurement · accepted terms reserved for four game hours.\n" + operating, "Historical gross survey earnings: " + packet.earnings])
+		var terms := "Optional geological work · 100 credits for one fresh carried specimen.\nCollect after acceptance on the named planet; deliver one item at Origin before four game hours. Discovery notes and other items remain. No additional 40-credit sale is booked." if geological else "Optional survey work · 100 credits per fresh report.\n30 seconds of qualifying orbital measurement · accepted terms reserved for four game hours."
+		var lines := PackedStringArray([terms + "\n" + operating, "Historical gross commission earnings: " + packet.earnings])
 		if not sale_packet.is_empty() and sale_packet.supported: lines.append("Historical gross specimen earnings: " + sale_packet.earned_credits)
 		if not recovery_sale_packet.is_empty() and recovery_sale_packet.supported: lines.append("Historical gross canister earnings: " + recovery_sale_packet.earned_credits)
 		if not packet.body_name.is_empty(): lines.append("Target: " + packet.body_name)
 		if packet.sequence != 0:
-			lines.append("Commission #%d · %.1f / 30 s\nReport due at ship time %s · Time left: %s." % [packet.sequence, floorf(float(packet.acquired_ticks) / 12.0) / 10.0, clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
+			if geological:
+				lines.append("Commission #%d · %s\nDelivery due at ship time %s · Time left: %s." % [packet.sequence, "fresh specimen carried" if packet.completed else "fresh physical specimen required", clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
+				if not packet.specimen.is_empty(): lines.append("Deliver exactly: " + packet.specimen + ". This item will be consumed; its discovery note remains.")
+			else:
+				lines.append("Commission #%d · %.1f / 30 s\nReport due at ship time %s · Time left: %s." % [packet.sequence, floorf(float(packet.acquired_ticks) / 12.0) / 10.0, clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
 		elif packet.can_accept:
 			lines.append("Offer changes at ship time %s · Time left: %s." % [clock_text(packet.offer_until), remaining_text(packet.offer_until, packet.tick)])
 		lines.append(packet.note)
 		if not packet.last_payment.is_empty(): lines.append("Latest report paid: 100 credits. Receipt retained.")
 		details.text = "\n\n".join(lines)
-	if focused in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
+	if focused in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
 
 func navigate(direction: int) -> void:
 	if recovery_sale_open():
@@ -219,7 +254,7 @@ func navigate(direction: int) -> void:
 		paid_view.navigate(direction)
 		return
 	var buttons: Array[Button] = []
-	for button in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
+	for button in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		if button.visible and not button.disabled: buttons.append(button)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
@@ -235,7 +270,7 @@ func accept() -> void:
 		paid_view.accept()
 		return
 	var target := get_viewport().gui_get_focus_owner()
-	if target in [accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
 
 func paid_open() -> bool:
 	return is_instance_valid(paid_view) and paid_view.visible

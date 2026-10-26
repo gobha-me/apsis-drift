@@ -10,6 +10,8 @@ auto run_native_survey_commission_scenario(
     const std::optional<std::filesystem::path>& output) -> void;
 auto run_native_specimen_sale_scenario(
     const std::optional<std::filesystem::path>& output) -> void;
+auto run_native_geological_commission_scenario(
+    const std::optional<std::filesystem::path>& output) -> void;
 auto run_native_charted_arrivals_scenario(
     const std::optional<std::filesystem::path>& output) -> void;
 } // namespace apsis_drift
@@ -224,6 +226,7 @@ int main(int argc, char** argv) {
     apsis_drift::run_native_survey_commission_scenario(output);
     apsis_drift::run_native_specimen_sale_scenario(output);
     apsis_drift::run_native_charted_arrivals_scenario(output);
+    apsis_drift::run_native_geological_commission_scenario(output);
     std::cout << "Orbital survey: " << checks << " checks, 0 failures\n";
     return 0;
   } catch (const std::exception& error) {

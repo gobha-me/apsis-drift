@@ -1,9 +1,12 @@
 # Survey commissions
 
-The first optional earning prototype pays for a fresh orbital reference
-measurement. It is available in the existing **planetary-chart** and
-**four charted + two uncharted systems** journeys. Older journeys keep their
+Optional survey work pays for a fresh orbital reference measurement or a
+newly collected physical specimen. It is available in the existing
+**planetary-chart**, **four charted + two uncharted systems** and
+**Outer frontier: four charted systems** journeys. Older journeys keep their
 charts, fuel service and movement rules.
+
+## Orbital commissions
 
 At Origin, pause and open **Survey commissions**. Review the already-charted
 remote planet and select **Accept commission**. Fly to that planet and maintain
@@ -26,6 +29,43 @@ These are provisional earnings, not a balanced operating economy. Flight/jump
 fuel service remains free unless the player separately enables the
 [paid operating prototype](PAID_OPERATIONS.md). The account starts with zero earned credits. The broader
 paid-operation contract remains [#293](https://github.com/gobha-me/apsis-drift/issues/293).
+
+## Geological commissions
+
+With no active commission, choose **Geological specimen** in the office and
+review the request for Origin's already-charted planet. Accepting reserves
+**100 prototype credits** for **four game hours**. The orbital and geological
+offers share one active slot; abandon the current job before choosing another
+kind. Existing orbital work keeps its own measurement rules.
+
+Land and walk to an existing exposure, inspect it, and collect a specimen
+**after acceptance**. The existing [specimen pouch](SPECIMEN_SALES.md) carries
+the physical item separately from its discovery note. A sample collected
+earlier, or a retained note without the item, does not fulfill fresh work.
+Revisiting a previously noted exposure can provide a new physical specimen
+under the existing collection rules.
+
+Return and attach at Origin. The office names the exact pouch slot and sample
+that **Deliver named specimen** will consume. Confirming removes that one
+item, retains all notes and other cargo, and pays 100 once. This is the total
+commission payment; the delivered item also earns no ordinary buyer payment.
+Selling or discarding it first invalidates the delivery quote. Abandonment and
+expiry consume nothing, so any retained sample can still use the ordinary buyer.
+
+Standard replacement retains the accepted terms and notes while losing carried
+specimens. Collect a new item before the original deadline or abandon the job;
+a note cannot recreate lost goods. Completed orbital reports retain their
+existing recovery behavior. Paid delivery uses the same insurance-first and
+operating-tab settlement as orbital income. Existing operating retainers fund
+only fresh orbital work; geological acceptance adds no retainer eligibility.
+
+The first geological acceptance selects survey-account version 2. Its kind,
+delivered-record proof and geological payment counter distinguish physical
+deliveries from orbital acquisition in strict saves and recovery. Existing
+version-1 accounts keep their exact encoding and meaning. The reward is a
+provisional prototype value, not evidence of profitable landing/ascent across
+seeds or final price balance. This bounded scope is
+[#713](https://github.com/gobha-me/apsis-drift/issues/713).
 
 ## Terms and time
 

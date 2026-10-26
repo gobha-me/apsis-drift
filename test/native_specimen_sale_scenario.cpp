@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <source_location>
@@ -102,9 +103,33 @@ auto rotate(RigidOrientation q, V v) -> V {
   const auto factor = 2 / (q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
   return plus(v, scale(plus(scale(a, q.w), b), factor));
 }
-auto collection_session() -> NativeFreedomFlightSession {
+auto collection_session(bool geological = false,
+                        const std::optional<std::filesystem::path>& output =
+                            std::nullopt) -> NativeFreedomFlightSession {
   auto session = need(NativeFreedomFlightSession::open(
       need(native_planetary_network_new_game({42}))));
+  if (geological) {
+    const auto before = bytes(session);
+    const auto offer =
+        need(session.survey_commission_view(SurveyCommissionKind::geological));
+    check(offer.can_accept && offer.at_origin && bytes(session) == before,
+          "Geological offer did not preserve the actual starting Save");
+    if (output) need(session.save_as(*output / "geo-offer.json"));
+    check(
+        !session.accept_geological_survey_commission(0, offer.offer_sequence) &&
+            !session.accept_geological_survey_commission(offer.offer_until,
+                                                         0) &&
+            bytes(session) == before,
+        "Stale geological acceptance mutated the starting session");
+    need(session.accept_geological_survey_commission(offer.offer_until,
+                                                     offer.offer_sequence));
+    check(session.knowledge()->survey_commissions->version == 2 &&
+              session.knowledge()->survey_commissions->active->kind ==
+                  SurveyCommissionKind::geological &&
+              !session.knowledge()->survey_commissions->active->measurement,
+          "Geological acceptance invented an orbital measurement");
+    if (output) need(session.save_as(*output / "geo-accepted.json"));
+  }
   // Actual station walking/boarding; the following descent/support and actor
   // placement are explicitly initialized, not an uninterrupted flown excursion.
   for (unsigned tick = 0; tick < 1194; ++tick)
@@ -537,5 +562,155 @@ auto run_native_specimen_sale_scenario(
     check(static_cast<bool>(file), "Specimen scenario manifest write failed");
   }
   std::cout << "Native specimen sales: " << checks << " checks, 0 failures\n";
+}
+
+auto run_native_geological_commission_scenario(
+    const std::optional<std::filesystem::path>& parent) -> void {
+  const auto prior_checks = checks;
+  std::optional<std::filesystem::path> output;
+  if (parent) {
+    output = *parent / "geological-commissions";
+    std::filesystem::create_directories(*output);
+  }
+  Json phases = Json::array({{{"file", "geo-offer.json"},
+                              {"tick", "0"},
+                              {"sequence", 0},
+                              {"ready", false},
+                              {"earnings", "0"}},
+                             {{"file", "geo-accepted.json"},
+                              {"tick", "0"},
+                              {"sequence", 1},
+                              {"ready", false},
+                              {"earnings", "0"}}});
+  const auto checkpoint_geo = [&](const NativeFreedomFlightSession& session,
+                                  std::string_view name) {
+    const auto before = bytes(session);
+    const auto view =
+        need(session.survey_commission_view(SurveyCommissionKind::geological));
+    auto continued =
+        std::make_unique<NativeFreedomFlightSession>(reopen(session));
+    check(bytes(*continued) == before && bytes(session) == before,
+          "Geological reader/Continue changed the complete Save");
+    if (output) need(session.save_as(*output / (std::string{name} + ".json")));
+    phases.push_back({{"file", std::string{name} + ".json"},
+                      {"tick", std::to_string(view.tick)},
+                      {"sequence", view.sequence},
+                      {"ready", view.completed},
+                      {"earnings", std::to_string(view.earnings)}});
+  };
+  auto remote = std::make_unique<NativeFreedomFlightSession>(
+      collection_session(true, output));
+  check(need(remote->survey_commission_view()).completed &&
+            !need(remote->survey_commission_view()).can_submit &&
+            !remote->knowledge()->survey_commissions->active->measurement,
+        "Real fresh collection did not ready physical work outside Origin");
+  checkpoint_geo(*remote, "geo-collected");
+  // Same-clock attached-Origin fixture: keeps the real accepted terms,
+  // collection, resources and clock. It does not claim a flown return.
+  auto origin =
+      std::make_unique<NativeFreedomFlightSession>(at_origin(*remote, true));
+  const auto journal = origin->knowledge()->field_samples->journal;
+  const auto item = origin->knowledge()->field_samples->carried.front();
+  const auto tick = origin->document().flight.tick;
+  const auto stores = origin->resources();
+  checkpoint_geo(*origin, "geo-origin");
+  auto paid = std::make_unique<NativeFreedomFlightSession>(*origin);
+  need(paid->enable_paid_operations(need(paid->paid_operations_view()).token));
+  const auto quote = need(paid->survey_commission_view());
+  check(quote.at_origin && quote.can_submit && quote.completed &&
+            quote.kind == SurveyCommissionKind::geological &&
+            quote.acquired_ticks == 0 && !quote.specimen.empty() &&
+            !quote.submission_token.empty() &&
+            need(paid->paid_operations_view()).cash == 180 &&
+            !need(paid->paid_operations_view()).can_retainer,
+        "Actual paid geological quote misrepresented physical work or support");
+  const auto before = bytes(*paid);
+  check(!paid->submit_geological_survey_commission(quote.submission_token +
+                                                   "x") &&
+            !paid->submit_survey_commission(quote.sequence) &&
+            !paid->request_paid_retainer(
+                need(paid->paid_operations_view()).token) &&
+            bytes(*paid) == before,
+        "Stale/mixed geological actions changed the complete paid Save");
+  checkpoint_geo(*paid, "geo-paid-origin");
+  auto lost = std::make_unique<NativeFreedomFlightSession>(*paid);
+  const auto record = std::make_unique<FreedomRecoverySaveDocument>(
+      need(lost->recovery_document()));
+  need(lost->record_loss(
+      FreedomLossCause::recoverable_destruction,
+      lost->document().origin.state.craft, tick,
+      need(freedom_recovery_source_checksum(record->voyage))));
+  const auto pending = bytes(*lost);
+  check(!lost->submit_geological_survey_commission(quote.submission_token) &&
+            bytes(*lost) == pending,
+        "Pending loss delivered a frozen physical specimen");
+  need(lost->complete_recovery());
+  check(
+      lost->knowledge()->field_samples->carried.empty() &&
+          lost->knowledge()->field_samples->journal == journal &&
+          lost->knowledge()->survey_commissions->active &&
+          lost->knowledge()->survey_commissions->paid_count == 0 &&
+          !need(lost->survey_commission_view()).can_submit,
+      "Replacement reconstructed a specimen from its note or paid lost cargo");
+  checkpoint_geo(*lost, "geo-lost");
+  auto race = std::make_unique<NativeFreedomFlightSession>(*paid);
+  need(race->sell_specimens(need(race->specimen_sale_view()).token));
+  const auto sold = bytes(*race);
+  check(!race->submit_geological_survey_commission(quote.submission_token) &&
+            bytes(*race) == sold &&
+            race->knowledge()->survey_commissions->paid_count == 0 &&
+            need(race->specimen_sale_view()).earned_credits == 40,
+        "An ordinary sale also fulfilled the geological request");
+  auto abandoned = std::make_unique<NativeFreedomFlightSession>(*paid);
+  need(abandoned->abandon_survey_commission(quote.sequence));
+  check(abandoned->knowledge()->field_samples->carried.front() == item &&
+            abandoned->knowledge()->field_samples->journal == journal &&
+            abandoned->knowledge()->survey_commissions->paid_count == 0 &&
+            need(abandoned->paid_operations_view()).cash == 180,
+        "Abandonment consumed or paid a physical specimen");
+  checkpoint_geo(*abandoned, "geo-abandoned");
+  need(paid->submit_geological_survey_commission(quote.submission_token));
+  const auto& account = *paid->knowledge()->survey_commissions;
+  check(!account.active && account.paid_count == 1 &&
+            account.geological_paid_count == 1 &&
+            account.latest_paid->delivered_specimen == item &&
+            paid->knowledge()->field_samples->carried.empty() &&
+            paid->knowledge()->field_samples->journal == journal &&
+            !paid->knowledge()->specimen_sales &&
+            need(paid->specimen_sale_view()).earned_credits == 0 &&
+            need(paid->paid_operations_view()).cash == 280 &&
+            paid->document().flight.tick == tick && paid->resources() == stores,
+        "Geological delivery lost notes/stores or booked more than100 once");
+  const auto delivered = bytes(*paid);
+  check(!paid->submit_geological_survey_commission(quote.submission_token) &&
+            !paid->sell_specimens(need(paid->specimen_sale_view()).token) &&
+            bytes(*paid) == delivered,
+        "A delivered specimen paid twice or sold from its note");
+  checkpoint_geo(*paid, "geo-delivered");
+  const auto free_quote = need(origin->survey_commission_view());
+  need(
+      origin->submit_geological_survey_commission(free_quote.submission_token));
+  check(!origin->knowledge()->paid_operations &&
+            origin->knowledge()->survey_commissions->paid_count == 1 &&
+            origin->knowledge()->field_samples->journal == journal,
+        "Free geological work silently enrolled paid operations");
+  if (output) {
+    std::ofstream file{*output / "manifest.json"};
+    file << Json{{"schema", "apsis.geological-commission-scenario/1"},
+                 {"checks", checks - prior_checks},
+                 {"phases", phases},
+                 {"scope",
+                  "Actual public acceptance, station walking/boarding, "
+                  "inspection/collection, enrollment/delivery/sale/abandonment "
+                  "and classified loss/replacement. Existing explicitly "
+                  "initialized supported-ground/outside-foot and same-clock "
+                  "Origin attachment fixtures; not an uninterrupted flown "
+                  "excursion, profitability, manual or GPU acceptance."}}
+                .dump(2)
+         << '\n';
+    check(static_cast<bool>(file), "Geological scenario manifest write failed");
+  }
+  std::cout << "Native geological commissions: " << checks - prior_checks
+            << " checks, 0 failures\n";
 }
 } // namespace apsis_drift
