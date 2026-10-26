@@ -406,7 +406,7 @@ auto network_contract() -> void {
       check(!preview_freedom_jump(bad),
             "Oldrequest1 cannot acquire a selector implicitly");
       bad = request;
-      bad.network->version = 3;
+      bad.network->version = 4;
       check(!preview_freedom_jump(bad), "Unsupported network selector refuses");
       bad = request;
       bad.destination = from.system;

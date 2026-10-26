@@ -597,9 +597,11 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                        r["version"].is_number_unsigned() &&
                        (r["version"] == kFreedomNetworkKnowledgeVersion ||
                         r["version"] == kFreedomPlanetaryKnowledgeVersion ||
-                        r["version"] == kFreedomUnchartedKnowledgeVersion);
+                        r["version"] == kFreedomUnchartedKnowledgeVersion ||
+                        r["version"] == kFreedomOuterKnowledgeVersion);
   const bool uncharted =
-      network && r["version"] == kFreedomUnchartedKnowledgeVersion;
+      network && (r["version"] == kFreedomUnchartedKnowledgeVersion ||
+                  r["version"] == kFreedomOuterKnowledgeVersion);
   if (!network && text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
@@ -850,10 +852,14 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const auto& search = (*root)["star_search"];
     if (!uncharted || !fields(search, {"version", "active", "completed"}) ||
         !unsigned_fields(search, {"version"}) ||
-        search["version"] != kFreedomStarSearchVersion ||
-        !search["completed"].is_array() || search["completed"].size() > 2)
+        search["version"] !=
+            freedom_knowledge_star_search_version(k.recipe.version) ||
+        !search["completed"].is_array() ||
+        search["completed"].size() >
+            freedom_knowledge_star_search_limit(k.recipe.version))
       return std::unexpected{failure("invalid star search state")};
     FreedomStarSearchState state;
+    state.version = search["version"].get<std::uint32_t>();
     if (!search["active"].is_null()) {
       const auto& item = search["active"];
       if (!fields(item, {"source", "target", "craft", "started_tick",
@@ -886,9 +892,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   }
   if (commissions_selected) {
     const auto& account = (*root)["survey_commissions"];
-    if (!network ||
-        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
-         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+    if (!network || !freedom_knowledge_has_planetary_chart(k.recipe.version) ||
         !fields(account, {"version", "next_sequence", "paid_count", "active",
                           "latest_paid"}) ||
         !unsigned_fields(account, {"version", "next_sequence", "paid_count"}) ||
@@ -925,9 +929,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     const bool canister_selected =
         account.is_object() && account.contains("settled_canister_count");
     if (canister_selected) account_shape.erase("settled_canister_count");
-    if (!network ||
-        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
-         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+    if (!network || !freedom_knowledge_has_planetary_chart(k.recipe.version) ||
         !fields(account_shape,
                 {"version", "started_tick", "billed_through_hours",
                  "spent_credits", "operating_tab", "recovery_due",
@@ -979,9 +981,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   }
   if (sales_selected) {
     const auto& sales = (*root)["specimen_sales"];
-    if (!network ||
-        (r["version"] != kFreedomPlanetaryKnowledgeVersion &&
-         r["version"] != kFreedomUnchartedKnowledgeVersion) ||
+    if (!network || !freedom_knowledge_has_planetary_chart(k.recipe.version) ||
         !fields(sales, {"version", "sold_count", "latest"}) ||
         !unsigned_fields(sales, {"version", "sold_count"}) ||
         sales["version"] != kFreedomSpecimenSalesVersion ||

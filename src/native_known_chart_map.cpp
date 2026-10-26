@@ -78,6 +78,7 @@ auto NativeFreedomFlightSession::known_chart_map_view() const
          document_.origin.network->version !=
              freedom_knowledge_network_version(recipe.version)))
       return std::unexpected{"Known chart knowledge owner or clock is invalid"};
+    if (recipe.version == kFreedomOuterKnowledgeVersion) view.version = 2;
   }
   const auto current = document_.flight.frame.system;
   if (!current.value || current != system_.catalog.id ||
@@ -92,12 +93,14 @@ auto NativeFreedomFlightSession::known_chart_map_view() const
   if (!chart)
     return std::unexpected{"The admitted navigation chart is invalid"};
   std::array<ChartAnchor, kNativeKnownChartMapCapacity> anchors{};
+  const auto capacity = view.version == 2 ? kNativeKnownChartMapCapacity
+                                          : kFreedomUnchartedSystemNetworkSize;
   std::size_t count{};
   for (const auto& row : chart->destinations) {
     const auto anchor = admitted_anchor(*knowledge_, row.system, view.tick);
     if (!anchor) return std::unexpected{anchor.error()};
     if (!*anchor) continue;
-    if (count == anchors.size() || !row.position ||
+    if (count == capacity || !row.position ||
         *row.position != (**anchor).position)
       return std::unexpected{"Known chart anchor count or owner is invalid"};
     for (std::size_t i = 0; i < count; ++i)

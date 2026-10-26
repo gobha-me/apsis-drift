@@ -114,6 +114,15 @@ uses real flight ticks; actual charged jumps and local observations earn visits
 and planetary knowledge. Existing journeys, resources and drive rules retain
 their meanings. Probes, relays and the wider #207 horizon remain separate.
 
+2026-10-25 engineering follow-through:
+[#709](https://github.com/gobha-me/apsis-drift/issues/709) scopes a separate
+[outer-frontier profile](FREEDOM_TOPOLOGY.md#outer-frontier): preserve the old
+six systems, append two seeded contacts, and require movement within acquisition
+reach to find them. This is an engineering default under the continuing loop,
+not a quoted new owner priority. Current drives, three charges and physical
+Origin service remain; routing, extra stations and the wider horizon remain
+separate.
+
 2026-10-22 engineering follow-through: [#674](https://github.com/gobha-me/apsis-drift/issues/674)
 adds one [seeded derelict exterior](FREEDOM_TOPOLOGY.md#derelict-inspection) to
 new uncharted journeys. Local signal acquisition, manual approach and a retained

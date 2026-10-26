@@ -8,7 +8,9 @@ system, and its jump preview to assess distance and readiness.
 
 This is an oblique position diagram. Its spacing is not a distance scale or a
 jump-clearance assessment. The current reference region supports the original
-pair, four charted systems, or four plus up to two genuinely resolved systems.
+pair, four charted systems, or four plus genuinely acquired frontier fixes.
+The original discoverable profile admits up to six systems; the separate
+[outer-frontier profile](FREEDOM_TOPOLOGY.md#outer-frontier) admits up to eight.
 An unverified station lead adds no marker. The view does not set a permanent
 universe size or reveal unknown slots. Existing markers keep their diagram
 positions when a further system is resolved.
@@ -26,8 +28,14 @@ on the destination controls. Reads, opening, resize and Back advance no time,
 spend no resources and preserve the complete Save. Selecting a destination has
 the same saved result as the ordinary selection command.
 
-The view adds no world, generation, Save or request version. It creates no
-route edges or travel action and queries no future arrival. This is the bounded
-presentation increment in [#703](https://github.com/gobha-me/apsis-drift/issues/703);
+The original version1 presentation packet retains its six-node bound. Only the
+outer-frontier profile uses version2 with an eight-node bound and a taller
+minimum plot to keep its markers distinct. Both use the same admitted anchor
+coordinates and preserve marker positions as discoveries are added.
+
+The diagram creates no world, route edges or travel action and queries no future
+arrival. The original presentation increment is
+[#703](https://github.com/gobha-me/apsis-drift/issues/703), extended by
+[#709](https://github.com/gobha-me/apsis-drift/issues/709);
 the wider [#207](https://github.com/gobha-me/apsis-drift/issues/207) horizon and
 manual/controller/GPU acceptance remain separate.

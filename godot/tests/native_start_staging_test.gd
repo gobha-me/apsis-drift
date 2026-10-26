@@ -225,6 +225,7 @@ func run() -> void:
 	else:
 		check(false, "A seated network Continue did not create the actual flight view")
 	await check_uncharted(shell, bridge, args)
+	await check_frontier(shell, bridge, args)
 	for chart in 4:
 		check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "network": chart > 0, "planetary": chart == 2, "uncharted": chart == 3, "drive_recovery": true, "assets": args[0]}), "Independent drive/chart staging refused: " + shell.error)
 		var selected_drive: Dictionary = bridge.get_freedom_flight_state()
@@ -298,6 +299,116 @@ func check_uncharted(shell: Control, owner: Variant, args: PackedStringArray) ->
 		var bad := packet.duplicate(true)
 		bad.merge(change, true)
 		check(not StarSearch.valid(bad), "Malformed or target-leaking search packet admitted")
+
+
+func check_frontier(shell: Control, owner: Variant, args: PackedStringArray) -> void:
+	var initial_failures := failures
+	var output := args[1].get_base_dir().path_join("frontier-search-native")
+	if DirAccess.make_dir_recursive_absolute(output) != OK:
+		check(false, "Frontier output directory unavailable")
+		return
+	if not shell.select_start(owner, {"mode": "new_game", "value": "42", "frontier": true, "assets": args[0]}):
+		check(false, "Actual frontier start refused: " + shell.error)
+		return
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	check(initial.chart.rows.size() == 4 and StarSearch.valid(initial.star_search) and initial.star_search.get("version") == 2 and initial.star_search.completed == 0 and not initial.star_search.can_begin, "Frontier station leaked a contact or allowed station search")
+	check(owner.save_freedom_as(output.path_join("station.json")), "Frontier station Save refused")
+	for frame in 298: check(owner.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, -1.0, 0.0])), "Frontier actual station walk refused")
+	check(owner.advance_freedom_walk(1.0 / 60.0, PackedFloat64Array([0.0, -1.0, 0.0])) and owner.begin_freedom_boarding(), "Frontier actual boarding refused")
+	for frame in 360: check(owner.advance_freedom_walk(1.0 / 30.0, PackedFloat64Array([0.0, 0.0, 0.0])), "Frontier boarding progression refused")
+	check(owner.release_freedom_port(), "Frontier actual port release refused")
+	var withdrawal := PackedFloat64Array()
+	withdrawal.resize(12)
+	withdrawal[4] = 0.25
+	for frame in 180: check(owner.advance_freedom_flight(1.0 / 30.0, withdrawal, false), "Frontier real departure withdrawal refused")
+	var departure := output.path_join("departure.json")
+	check(owner.save_freedom_as(departure) and shell.select_start(owner, {"mode": "continue", "value": departure, "assets": args[0]}), "Actual frontier departure Continue refused")
+	if not shell.current_view is FlightView:
+		check(false, "Frontier departure did not retain actual seated flight")
+		return
+	var view: Control = shell.current_view
+	view.set_process(false)
+	view.focused = true
+	view.player_input.focused = true
+	view.player_input.persist = false
+	view.observe_neutral_controls()
+	view.controls_menu.show_menu()
+	view.update_view(0.0)
+	var home: Dictionary = owner.get_freedom_flight_state()
+	var home_bytes := FileAccess.get_file_as_bytes(departure)
+	check(not home.star_search.can_begin and view.star_search_start_button.visible and view.star_search_start_button.disabled and not home.star_search.note.is_empty(), "Home falsely advertises an in-range frontier fix or hides its refusal")
+	check(not owner.begin_freedom_star_search() and owner.save_freedom_as(departure) and FileAccess.get_file_as_bytes(departure) == home_bytes, "Home no-signal refusal changed complete Save")
+	view.show_instruments()
+	view.chart_button.button_pressed = true
+	view.update_view(0.0)
+	check(view.known_chart_map.packet.version == 2 and view.known_chart_map.packet.nodes.size() == 4 and view.jump_destinations.filter(func(button: Button) -> bool: return button.visible).size() == 4, "Frontier opening disclosed hidden map points or destination slots")
+	# Existing admitted chart order: Home, Nearby, then charted waypoints.
+	var waypoint: String = home.chart.rows[2].system_id
+	view.jump_destinations[2].pressed.emit()
+	check(owner.get_freedom_flight_state().jump.selected == waypoint, "Existing chart button did not select its admitted waypoint")
+	view.jump_button.pressed.emit()
+	var neutral := PackedFloat64Array()
+	neutral.resize(12)
+	for frame in 150: check(owner.advance_freedom_flight(1.0 / 30.0, neutral, false), "Actual charged frontier waypoint jump refused")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	var arrived: Dictionary = owner.get_freedom_flight_state()
+	var ready: bool = arrived.chart.rows[2].current and arrived.jump.phase == "idle" and arrived.resources.jump_charges == 2 and arrived.star_search.can_begin
+	check(ready, "Waypoint arrival lost its real charged owner or in-range search")
+	if not ready: return
+	check(owner.save_freedom_as(output.path_join("waypoint.json")), "Actual waypoint Save refused")
+	view.pause_controls("Frontier search input checks")
+	view.observe_neutral_controls()
+	ready = view.state.star_search.can_begin and view.star_search_start_button.visible and not view.star_search_start_button.disabled
+	check(ready, "Arrived frontier view lacks the current enabled search action")
+	if not ready: return
+	var before: Dictionary = owner.get_freedom_flight_state()
+	view.focused = false
+	view.star_search_start_button.pressed.emit()
+	view.focused = true
+	view.journey_dialog_open = true
+	view.star_search_start_button.pressed.emit()
+	view.journey_dialog_open = false
+	check(owner.get_freedom_flight_state() == before, "Unfocused or modal frontier search changed state")
+	view.star_search_start_button.pressed.emit()
+	var started: Dictionary = owner.get_freedom_flight_state()
+	ready = started.star_search.active and started.star_search.acquired_ticks == 0 and started.tick == before.tick and started.resources == before.resources and view.paused
+	check(ready, "Frontier begin refused, spent time/resources or resumed")
+	if not ready: return
+	view.star_search_cancel_button.pressed.emit()
+	ready = not owner.get_freedom_flight_state().star_search.active and owner.get_freedom_flight_state().tick == before.tick
+	check(ready, "Frontier stop failed or advanced time")
+	if not ready: return
+	view.star_search_start_button.pressed.emit()
+	var begun: Dictionary = owner.get_freedom_flight_state()
+	ready = begun.star_search.active and begun.star_search.acquired_ticks == 0 and begun.tick == before.tick and begun.resources == before.resources and view.paused
+	check(ready, "Frontier restart refused, spent time/resources or resumed")
+	if not ready: return
+	check(owner.advance_freedom_flight(0.1, neutral, true) and owner.get_freedom_flight_state() == begun, "Paused frontier search advanced")
+	for frame in 150: check(owner.advance_freedom_flight(1.0 / 30.0, neutral, false), "Actual partial frontier acquisition refused")
+	var partial := output.path_join("partial.json")
+	ready = owner.get_freedom_flight_state().star_search.acquired_ticks == 600 and owner.save_freedom_as(partial)
+	check(ready, "Frontier partial600 Save refused")
+	if not ready: return
+	var partial_bytes := FileAccess.get_file_as_bytes(partial)
+	ready = shell.select_start(owner, {"mode": "continue", "value": partial, "assets": args[0]}) and owner.save_freedom_as(output.path_join("continued.json")) and FileAccess.get_file_as_bytes(output.path_join("continued.json")) == partial_bytes
+	check(ready, "Frontier partial Continue changed complete Save")
+	if not ready: return
+	view = shell.current_view
+	view.set_process(false)
+	view.focused = true
+	view.player_input.focused = true
+	view.observe_neutral_controls()
+	for frame in 150: check(owner.advance_freedom_flight(1.0 / 30.0, neutral, false), "Actual frontier acquisition completion refused")
+	view.state = owner.get_freedom_flight_state()
+	view.show_instruments()
+	view.chart_button.button_pressed = true
+	view.update_view(0.0)
+	var acquired: Dictionary = owner.get_freedom_flight_state()
+	check(acquired.chart.rows.size() == 5 and acquired.star_search.completed == 1 and not acquired.star_search.active and acquired.resources.jump_charges == 2 and view.known_chart_map.packet.nodes.size() == 5, "Actual frontier fix failed to reveal exactly one admitted system")
+	check(view.jump_destinations.filter(func(button: Button) -> bool: return button.visible).size() == 5 and owner.save_freedom_as(output.path_join("acquired.json")), "Frontier chart omitted earned destination or Save")
+	if failures == initial_failures:
+		print("Frontier native staging: real departure, charged waypoint, partial Continue and one earned fix; physical return is a separate C++ voyage proof")
 
 
 func joy_axis(axis: int, value: float, device: int) -> void:

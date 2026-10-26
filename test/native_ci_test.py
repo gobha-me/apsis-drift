@@ -126,6 +126,8 @@ class NativeCiTest(unittest.TestCase):
                     if family == "derelict_recovery_saves":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             (*self.runner.DERELICT_RECOVERY_PHASES, "manifest")}
+                    if family == "frontier_chart_saves":
+                        row["files_sha256"] = {name: SHA for name in self.runner.FRONTIER_CHART_FILES}
                     if family == "moon_voyage":
                         row["files_sha256"] = {n + ".json": SHA for n in
                             ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",
@@ -215,7 +217,7 @@ class NativeCiTest(unittest.TestCase):
     def test_pack_and_unpack_exact_payload_modes(self):
         output = self.root / "unpacked"
         ci.unpack(self.archive, self.envelope, output)
-        self.assertEqual(len(self.m["files"]), 14)
+        self.assertEqual(len(self.m["files"]), 15)
         for name, row in self.m["files"].items():
             p = output / name
             self.assertEqual(ci.digest(p), row["sha256"])
@@ -341,7 +343,7 @@ class NativeCiTest(unittest.TestCase):
         args = self.make_check()
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
-        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 82, "launch_cases": 25,
+        self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 83, "launch_cases": 25,
                                            "expected_nonzero_launches": 9, "cli_refusal_logs": 135})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
@@ -439,6 +441,28 @@ class NativeCiTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         ci.check(args, self.repo)
             self.change_report(args, int(group), lambda r: (r.clear(), r.update(copy.deepcopy(original))))
+
+    def test_frontier_chart_requires_save_packet_and_lineage(self):
+        args = self.make_check()
+        group = next(int(group) for group, names in ci.groups(self.repo).items()
+                     if "orbital_survey" in names)
+        original = ci.read_json(self.root / f"work-{group}/native-contracts-unit/report.json")
+        row = next(r for r in original["setup"] if r.get("family") == "frontier_chart_saves")
+        self.assertEqual(set(row["files_sha256"]), set(self.runner.FRONTIER_CHART_FILES))
+        for name in self.runner.FRONTIER_CHART_FILES:
+            with self.subTest(missing=name):
+                def remove(report):
+                    report.clear()
+                    report.update(copy.deepcopy(original))
+                    phases = next(r for r in report["setup"]
+                                  if r.get("family") == "frontier_chart_saves")
+                    phases["files_sha256"].pop(name)
+                self.change_report(args, group, remove)
+                with self.assertRaisesRegex(ValueError, "Incomplete actual frontier chart phases"):
+                    ci.check(args, self.repo)
+        self.change_report(args, group,
+                           lambda report: (report.clear(), report.update(copy.deepcopy(original))))
+        ci.check(args, self.repo)
 
     def test_bad_status_timeout_setup_helper_and_nonfinite_refused(self):
         args = self.make_check()

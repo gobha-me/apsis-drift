@@ -1,6 +1,7 @@
 extends SceneTree
 const Status = preload("res://scripts/native/native_status.gd")
 const MouseLook = preload("res://scripts/native/native_mouse_look.gd")
+const StarSearch = preload("res://scripts/native/native_star_search.gd")
 const StationView = preload("res://scripts/native/native_station_view.gd")
 var failed := 0
 
@@ -9,6 +10,7 @@ func check(value: bool, reason: String) -> void:
 
 func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
+	check_star_search_packets()
 	check_mouse_boundaries()
 	check_surface_reference_warning()
 	check_observation_cue()
@@ -437,3 +439,26 @@ func check_surface_reference_warning() -> void:
 	check(Status.reference_limits_text({"margins": known.margins, "operation_supported": false}) == "This frame does not support this operation.\nKnown reference limits: Pressure INSUFFICIENT", "Paused reference text changed while sharing the formatter")
 	check(Status.reference_limits_text({"margins": [{"kind": "pressure", "rating": "MARGINAL", "legacy_extra": 7}]}) == "Known reference limits: Pressure MARGINAL", "Existing paused formatter acquired new closed-shape restrictions")
 	check(Status.reference_limits_text({}) == "Reference margin details are unavailable." and Status.reference_limits_text({"margins": [{"kind": "pressure", "rating": "UNKNOWN"}]}) == "Reference margin details are unavailable.", "Existing paused invalid-data wording changed")
+
+
+func check_star_search_packets() -> void:
+	var legacy := {"selected": true, "active": false, "can_begin": false, "acquired_ticks": 0, "completed": 2, "note": "Legacy regional search"}
+	check(StarSearch.valid(legacy) and "2 / 2" in StarSearch.text(legacy), "Legacy six-key search shape or wording changed")
+	var frontier := legacy.duplicate(true)
+	frontier.version = 2
+	frontier.completed = 3
+	frontier.can_begin = true
+	frontier.note = "Declared reach applies to the current source system"
+	var original := frontier.duplicate(true)
+	check(StarSearch.valid(frontier) and "3" in StarSearch.text(frontier) and not " / 4" in StarSearch.text(frontier), "Frontier search rejected retained fixes or disclosed a hidden-total denominator")
+	frontier.completed = 4
+	frontier.can_begin = false
+	check(StarSearch.valid(frontier), "Version2 four-record boundary refused")
+	for change in [{"version": 1}, {"version": 2.0}, {"version": 3}, {"target": "hidden"}, {"remaining": 1}, {"completed": 5}, {"completed": 4, "can_begin": true}, {"active": true, "acquired_ticks": 1200}, {"active": true, "can_begin": true}, {"selected": false, "completed": 1}]:
+		var malformed := original.duplicate(true)
+		malformed.merge(change, true)
+		check(not StarSearch.valid(malformed), "Malformed or target-leaking frontier search admitted: " + str(change.keys()))
+	var wrong_legacy := legacy.duplicate(true)
+	wrong_legacy.completed = 3
+	check(not StarSearch.valid(wrong_legacy), "Legacy search silently accepted the new completion bound")
+	check(original == {"selected": true, "active": false, "can_begin": true, "acquired_ticks": 0, "completed": 3, "note": "Declared reach applies to the current source system", "version": 2}, "Search formatting mutated its input")

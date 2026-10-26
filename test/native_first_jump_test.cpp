@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <type_traits>
@@ -608,11 +609,188 @@ auto uncharted_roundtrip(const std::filesystem::path& path) -> void {
         "recorded");
   live = resume(live, path);
 }
+auto frontier_roundtrip(const std::filesystem::path& path) -> void {
+  const Seed seed{42};
+  const auto network = need(
+      generate_freedom_system_network(seed, kFreedomOuterSystemNetworkVersion));
+  auto live = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_frontier_network_new_game(seed)))));
+  const auto saved_bytes = [](const NativeFreedomFlightSession& session) {
+    return need(
+        encode_native_save_document_json(need(session.save_document())));
+  };
+  check(live->document().origin.network == FreedomNetworkSelection{3} &&
+            live->knowledge()->recipe.version ==
+                kFreedomOuterKnowledgeVersion &&
+            live->knowledge()->star_search->version ==
+                kFreedomRangedStarSearchVersion &&
+            live->walker() && live->docking() && live->docking()->attached &&
+            need(live->known_chart_map_view()).node_count == 4 &&
+            live->star_search_view().version == 2 &&
+            !live->star_search_view().can_begin,
+        "Frontier starts at actual Origin with four charted anchors, explicit "
+        "search2 and no station search operation");
+  const auto initial = saved_bytes(*live);
+  check(!live->begin_star_search() && saved_bytes(*live) == initial,
+        "Station search refusal leaves the complete frontier voyage unchanged");
+  for (const auto ordinal : {4U, 5U, 6U, 7U})
+    check(!live->select_jump(network.nodes[ordinal].system) &&
+              saved_bytes(*live) == initial,
+          "Generated but unearned hidden IDs cannot select a frontier jump");
+  // The station has no travel owner before its first selected jump.
+  need(live->save_as(path));
+  auto station_copy = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(need(native_continue(path)))));
+  check(saved_bytes(*station_copy) == initial,
+        "Station Save/Continue preserves the complete predeparture journey");
+  live = std::move(station_copy);
+  for (unsigned tick = 0; tick < 1194; ++tick)
+    need(live->advance_walk({0, -1, 0}));
+  need(live->begin_boarding());
+  for (SimulationTick tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    need(live->advance_walk({}));
+  need(live->release_port());
+  NativeFlightControls withdrawal;
+  withdrawal.negative_translation.y = .25;
+  for (unsigned tick = 0; tick < 720; ++tick)
+    need(live->advance(withdrawal));
+  check(!live->walker() && live->boarding() &&
+            live->boarding()->phase == FreedomBoardingPhase::seated &&
+            live->docking() && !live->docking()->attached &&
+            live->resources()->flight_quanta < kFreedomFlightCapacityQuanta &&
+            need(live->observe()).atmosphere.altitude_metres >
+                need(live->observe()).atmosphere.space_boundary_altitude_metres,
+        "Actual walk, boarding, release and rated thrusters depart into space "
+        "without pose, clock, fuel or seat initialization");
+  const auto departed = saved_bytes(*live);
+  check(live->star_search_view().selected &&
+            !live->star_search_view().can_begin && !live->begin_star_search() &&
+            saved_bytes(*live) == departed,
+        "Ordinary Home space flight truthfully has no in-range frontier fix");
+  need(live->select_jump(network.nodes[2].system));
+  leg(*live, path);
+  check(live->system().catalog.id == network.nodes[2].system &&
+            live->resources()->jump_charges == 2 &&
+            live->star_search_view().can_begin,
+        "The first charged leg reaches an already charted Waypoint with a "
+        "real signal in reach");
+
+  const auto acquire = [&](SystemId source, std::size_t expected_count) {
+    const auto before_charges = live->resources()->jump_charges;
+    const auto before_tick = live->document().flight.tick;
+    need(live->begin_star_search());
+    std::unique_ptr<NativeFreedomFlightSession> continued;
+    for (unsigned tick = 0; tick < kFreedomStarSearchTicks; ++tick) {
+      need(live->advance({}));
+      if (tick == 599) {
+        check(live->star_search_view().active &&
+                  live->star_search_view().acquired_ticks == 600,
+              "Exactly600 actual qualifying flight intervals reach the "
+              "frontier midpoint");
+        continued =
+            std::make_unique<NativeFreedomFlightSession>(resume(*live, path));
+        check(saved_bytes(*continued) == saved_bytes(*live),
+              "The midpoint Save/Continue preserves full ownership, resources "
+              "and partial frontier acquisition");
+      } else if (tick >= 600) {
+        need(continued->advance({}));
+      }
+    }
+    const auto& state = *live->knowledge()->star_search;
+    if (state.active || state.completed.size() != expected_count)
+      throw std::runtime_error("Actual frontier search did not complete");
+    const auto& record = state.completed.back();
+    check(!state.active && state.version == kFreedomRangedStarSearchVersion &&
+              state.completed.size() == expected_count &&
+              record.source == source &&
+              record.craft == live->document().origin.state.craft &&
+              record.started_tick == before_tick &&
+              record.completed_tick == before_tick + kFreedomStarSearchTicks &&
+              live->document().flight.tick == record.completed_tick &&
+              live->resources()->jump_charges == before_charges &&
+              saved_bytes(*continued) == saved_bytes(*live),
+          "Continuous and600tick-resumed acquisition converge after1200 real "
+          "ticks with exact source/craft/clock and no jump debit");
+    return record.target;
+  };
+  const auto hidden = acquire(network.nodes[2].system, 1);
+  check(hidden == network.nodes[4].system || hidden == network.nodes[5].system,
+        "A Waypoint search earns one original hidden anchor");
+  const auto first_fix = live->knowledge()->star_search->completed.front();
+  const auto hidden_world =
+      need(resolve_freedom_network_system(network, hidden));
+  for (const auto& body : hidden_world.catalog.planets)
+    check(!need(query_freedom_knowledge(
+              *live->knowledge(),
+              {KnowledgeSubjectKind::planet, hidden, body.descriptor.id.value},
+              KnowledgeFact::identity_type, live->document().flight.tick)),
+          "The acquired stellar fix does not reveal remote planetary facts");
+  need(live->select_jump(hidden));
+  leg(*live, path);
+  check(live->system() == hidden_world && live->resources()->jump_charges == 1,
+        "The second actual charged leg reaches the earned hidden system");
+  const auto outer = acquire(hidden, 2);
+  check(
+      (outer == network.nodes[6].system || outer == network.nodes[7].system) &&
+          live->knowledge()->star_search->completed.front() == first_fix &&
+          live->jump_selection_available(outer),
+      "The acquired hidden source earns an outer fix without rewriting the "
+      "first receipt or requiring a preexisting outer chart grant");
+  const auto outer_world = need(resolve_freedom_network_system(network, outer));
+  for (const auto& body : outer_world.catalog.planets)
+    check(!need(query_freedom_knowledge(
+              *live->knowledge(),
+              {KnowledgeSubjectKind::planet, outer, body.descriptor.id.value},
+              KnowledgeFact::identity_type, live->document().flight.tick)),
+          "The retained outer fix remains navigation evidence, not a remote "
+          "planetary survey");
+  const auto outer_fix = live->knowledge()->star_search->completed.back();
+  need(live->select_jump(network.nodes.front().system));
+  leg(*live, path);
+  check(live->system().catalog.id == network.nodes.front().system &&
+            live->resources()->jump_charges == 0 &&
+            live->travel()->next_attempt == 4 &&
+            live->knowledge()->star_search->completed.back() == outer_fix &&
+            live->jump_selection_available(outer),
+        "Three genuine charged legs return Home with zero charges and the "
+        "earned outer anchor still eligible for destination selection");
+  const auto home_arrival = saved_bytes(*live);
+  check(!live->star_search_view().can_begin &&
+            live->star_search_view().completed == 2 &&
+            !live->begin_star_search() && !live->replenish_resources() &&
+            saved_bytes(*live) == home_arrival,
+        "Being Home grants neither a local signal nor service without actual "
+        "attachment and preserves both frontier receipts");
+  const auto fuel = live->resources()->flight_quanta;
+  const auto capture_ticks = origin_route_reuse_fixture::capture_home(*live);
+  check(capture_ticks > 0 && live->docking() && live->docking()->attached &&
+            live->resources()->flight_quanta < fuel &&
+            live->resources()->jump_charges == 0,
+        "The existing powered return pilot physically captures Origin, "
+        "consumes flight fuel and never relocates the craft to a port");
+  need(live->replenish_resources());
+  check(live->resources()->flight_quanta == kFreedomFlightCapacityQuanta &&
+            live->resources()->jump_charges == 3 &&
+            live->knowledge()->star_search->completed.size() == 2 &&
+            live->knowledge()->star_search->completed.front() == first_fix &&
+            live->knowledge()->star_search->completed.back() == outer_fix,
+        "Explicit service replenishes only the genuinely attached craft and "
+        "retains earned search history");
+  need(live->select_jump(outer));
+  *live = resume(*live, path);
+  check(live->travel()->selected == outer &&
+            live->jump_selection_available(outer) &&
+            live->resources()->jump_charges == 3,
+        "The serviced Home journey can select its retained outer fix through "
+        "Continue without claiming a second flown sortie");
+}
 } // namespace
 auto main(int argc, char** argv) -> int {
   const bool uncharted =
       argc == 2 && std::string_view{argv[1]} == "--uncharted";
-  if (argc != 1 && !uncharted) return 2;
+  const bool frontier = argc == 2 && std::string_view{argv[1]} == "--frontier";
+  if (argc != 1 && !uncharted && !frontier) return 2;
   const auto directory =
       std::filesystem::temp_directory_path() /
       ("apsis-native-jump-" +
@@ -620,6 +798,12 @@ auto main(int argc, char** argv) -> int {
            std::chrono::steady_clock::now().time_since_epoch().count()));
   try {
     std::filesystem::create_directories(directory);
+    if (frontier) {
+      frontier_roundtrip(directory / "frontier.json");
+      std::filesystem::remove_all(directory);
+      std::cout << checks << " frontier native checks\n";
+      return failures ? 1 : 0;
+    }
     if (uncharted) {
       uncharted_roundtrip(directory / "uncharted.json");
       std::filesystem::remove_all(directory);

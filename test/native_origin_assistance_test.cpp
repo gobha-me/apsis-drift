@@ -229,7 +229,7 @@ auto explicit_selection(const std::filesystem::path& output) -> void {
       check(bytes(legacy) == original, "Opt-in and selected actor ticking "
                                        "leave independent legacy source exact");
     }
-  check(!native_origin_assistance_new_game({42}, 4, 0) &&
+  check(!native_origin_assistance_new_game({42}, 5, 0) &&
             !native_origin_assistance_new_game({42}, 0, 3),
         "Unknown chart/drive selections refuse");
 }

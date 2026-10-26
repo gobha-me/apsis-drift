@@ -14,11 +14,14 @@ inline constexpr std::uint32_t kFreedomSystemNetworkVersion{1};
 inline constexpr std::size_t kFreedomSystemNetworkSize{4};
 inline constexpr std::uint32_t kFreedomUnchartedSystemNetworkVersion{2};
 inline constexpr std::size_t kFreedomUnchartedSystemNetworkSize{6};
+inline constexpr std::uint32_t kFreedomOuterSystemNetworkVersion{3};
+inline constexpr std::size_t kFreedomOuterSystemNetworkSize{8};
 
 [[nodiscard]] constexpr auto freedom_system_network_version_supported(
     std::uint32_t version) -> bool {
   return version == kFreedomSystemNetworkVersion ||
-         version == kFreedomUnchartedSystemNetworkVersion;
+         version == kFreedomUnchartedSystemNetworkVersion ||
+         version == kFreedomOuterSystemNetworkVersion;
 }
 
 struct FreedomSystemNetworkNode {
@@ -33,8 +36,8 @@ struct FreedomSystemNetwork {
   std::uint32_t version{kFreedomSystemNetworkVersion};
   Seed universe_seed;
   Seed network_seed;
-  // Stable Home, original neighbor, added2..5 order; no mutable discovery.
-  // Admission requires exact canonical equality and size4/6, before lookup or
+  // Stable Home, original neighbor, added2..7 order; no mutable discovery.
+  // Admission requires exact canonical equality and size4/6/8, before lookup or
   // coordinate arithmetic. Recipe1's default remains the original four nodes.
   std::vector<FreedomSystemNetworkNode> nodes;
   friend auto operator==(const FreedomSystemNetwork&,

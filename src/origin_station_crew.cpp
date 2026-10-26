@@ -114,7 +114,7 @@ auto NativeFreedomFlightSession::station_stellar_lead_view() const
     -> std::expected<NativeStationStellarLeadView, std::string> {
   NativeStationStellarLeadView view;
   if (!knowledge_ ||
-      knowledge_->recipe.version != kFreedomUnchartedKnowledgeVersion)
+      !freedom_knowledge_has_star_search(knowledge_->recipe.version))
     return view;
   const auto status =
       freedom_station_stellar_lead_status(*knowledge_, document_.flight.tick);

@@ -199,7 +199,8 @@ auto validate_freedom_save_document(const FreedomSaveDocument& document)
   if (document.derelicts &&
       (document.derelicts->version != kFreedomDerelictSelectionVersion ||
        !document.network ||
-       document.network->version != kFreedomUnchartedSystemNetworkVersion))
+       (document.network->version != kFreedomUnchartedSystemNetworkVersion &&
+        document.network->version != kFreedomOuterSystemNetworkVersion)))
     return std::unexpected{
         error(SaveSchemaErrorCode::invalid_state, "$.derelicts",
               "derelicts require explicit uncharted network")};

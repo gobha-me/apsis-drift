@@ -118,6 +118,11 @@ For [planetary trips](FREEDOM_PLANET_TRAVEL.md), choose **Four systems + planeta
 charts** when starting a journey. Paused Controls list the known planets in the
 current system and **Begin selected jump**. Each leg uses one charge; arrival
 leaves descent and landing to the pilot. Continue retains its original chart.
+For [farther stellar discovery](FREEDOM_TOPOLOGY.md#outer-frontier), choose
+**Outer frontier: four charted systems**. Search from a charted waypoint to
+acquire a new system, then travel there to search farther out. The search status
+states its reach between system anchors. Keep enough charges to return to
+Origin for physical docking and refueling; a retained fix does not provide fuel.
 For the [airless Moon trip](AIRLESS_MOON.md#local-voyage-and-operation), choose
 **Select nearby moon jump** after departing the station. **Deploy gear · manual
 descent** deploys the gear; brake and descend with your thrusters. **Release
@@ -136,7 +141,8 @@ Discard frees one of four slots. See [hand specimens](FREEDOM_SURFACE_LANDMARKS.
 for persistence and replacement rules.
 
 For the optional [canister recovery](DERELICT_RECOVERY.md), start with
-**Four charted + two uncharted systems** and enable **Derelict recovery · prototype**.
+either **Four charted + two uncharted systems** or **Outer frontier: four charted
+systems**, and enable **Derelict recovery · prototype**.
 Inspect the existing derelict, then retrieve one canister while holding a close
 matched-speed stand-off. Sell physical cargo explicitly at Origin; discovery
 notes remain after sale or loss. Existing journeys keep their original selection.

@@ -98,7 +98,8 @@ func _ready() -> void:
 	network_choice.add_item("Four charted systems")
 	network_choice.add_item("Four systems + planetary charts")
 	network_choice.add_item("Four charted + two uncharted systems")
-	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The uncharted choice adds two generated systems found through Search nearby stars during flight and an exterior derelict to find with Scan local space. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
+	network_choice.add_item("Outer frontier: four charted systems")
+	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The original uncharted choice keeps its regional search. Outer frontier starts with four charted systems and a declared limited-reach stellar search; search from charted waypoints for new contacts. Scan local space can find an exterior derelict. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
 	var drive_label := Label.new()
@@ -116,12 +117,12 @@ func _ready() -> void:
 	column.add_child(origin_service_choice)
 	derelict_recovery_choice = CheckButton.new()
 	derelict_recovery_choice.text = "Derelict recovery · prototype"
-	derelict_recovery_choice.tooltip_text = "For four charted + two uncharted systems only. After exterior inspection, hold 100–150 m at matched speed for 30 seconds to recover one canister. No retrieval animation. Sell it explicitly at Origin; loss or sale leaves the source depleted."
+	derelict_recovery_choice.tooltip_text = "For either uncharted exploration profile. After exterior inspection, hold 100–150 m at matched speed for 30 seconds to recover one canister. Sell it explicitly at Origin; loss or sale leaves the source depleted."
 	derelict_recovery_choice.disabled = true
 	column.add_child(derelict_recovery_choice)
 	network_choice.item_selected.connect(func(index: int):
-		derelict_recovery_choice.disabled = index != 3
-		if index != 3: derelict_recovery_choice.button_pressed = false)
+		derelict_recovery_choice.disabled = index not in [3, 4]
+		if index not in [3, 4]: derelict_recovery_choice.button_pressed = false)
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -184,7 +185,7 @@ func begin_new() -> void:
 		seed.grab_focus()
 		return
 	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed, "derelict_recovery": network_choice.selected == 3 and derelict_recovery_choice.button_pressed})
+	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "frontier": network_choice.selected == 4, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed, "derelict_recovery": network_choice.selected in [3, 4] and derelict_recovery_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return

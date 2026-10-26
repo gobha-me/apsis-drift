@@ -43,9 +43,9 @@ auto roundtrip(const FreedomKnowledge& k, SimulationTick tick)
 auto chart(const FreedomKnowledge& k, SimulationTick tick)
     -> UniverseNavigationView {
   // Labelled metadata owner for this pure chart test, not a flown departure.
-  // Six-node selection keeps the original authenticated Home pose/catalog.
+  // Selected network keeps the original authenticated Home pose/catalog.
   auto owner = need(make_freedom_network_new_game_document(kSeed));
-  owner.network->version = kFreedomUnchartedSystemNetworkVersion;
+  owner.network->version = freedom_knowledge_network_version(k.recipe.version);
   owner.state.tick = tick;
   const FreedomResources resources{
       1, owner.state.craft, {kWayfarerFrameId, kWayfarerFrameVersion}, tick};
@@ -305,11 +305,199 @@ auto search_sequence() -> void {
           "or visit");
   }
 }
+auto outer_search() -> void {
+  const auto network = need(generate_freedom_system_network(
+      kSeed, kFreedomOuterSystemNetworkVersion));
+  const auto craft = need(derive_freedom_craft_identity(kSeed, 0));
+  const auto initial = need(
+      make_freedom_starting_knowledge(kSeed, kFreedomOuterKnowledgeVersion));
+  const auto legacy = need(make_freedom_starting_knowledge(
+      kSeed, kFreedomUnchartedKnowledgeVersion));
+  check(
+      initial.recipe.chart == 5 && initial.star_search &&
+          initial.star_search->version == 2 &&
+          initial.star_search->completed.empty() &&
+          chart(initial, 0).destinations.size() == 4,
+      "Outer profile selects chart5/search2 while granting only four anchors");
+  for (const auto& entry : initial.entries)
+    for (std::size_t i = 4; i < network.nodes.size(); ++i)
+      check(
+          entry.subject.system != network.nodes[i].system,
+          "Outer starting chart contains no hidden system or planetary facts");
+  const auto frozen = need(encode_freedom_knowledge_json(initial, 0));
+  for (unsigned read = 0; read < 3; ++read) {
+    check(!need(freedom_star_search_signal_available(
+              initial, network.nodes[0].system, 0)) &&
+              !need(freedom_star_search_signal_available(
+                  initial, network.nodes[1].system, 0)) &&
+              need(freedom_star_search_signal_available(
+                  initial, network.nodes[2].system, 0)) &&
+              need(freedom_star_search_signal_available(
+                  initial, network.nodes[3].system, 0)) &&
+              need(encode_freedom_knowledge_json(initial, 0)) == frozen,
+          "Only waypoint anchors have an in-reach unknown signal; repeated "
+          "preview grants no facts and does not mutate canonical Save bytes");
+  }
+  check(need(freedom_star_search_signal_available(
+            legacy, network.nodes[0].system, 0)) &&
+            !begin_freedom_star_search(initial, network.nodes[0].system, craft,
+                                       0),
+        "The six-node profile keeps its global search; outer Home has no "
+        "in-reach sensor fix and cannot begin a fabricated acquisition");
+  // Hearsay is explicitly unbounded and remains no navigation evidence. It is
+  // distinct from sensor reach, even though both queries share Home's owner.
+  const auto rumor =
+      need(offer_freedom_station_stellar_lead(initial, craft, 0));
+  const auto old_rumor =
+      need(offer_freedom_station_stellar_lead(legacy, craft, 0));
+  auto noted = need(receive_freedom_station_stellar_lead(initial, rumor, 0));
+  check(rumor.target == old_rumor.target && noted.entries == initial.entries &&
+            need(freedom_station_stellar_lead_status(noted, 0)) ==
+                FreedomStationStellarLeadStatus::unverified &&
+            !need(freedom_star_search_signal_available(
+                noted, network.nodes[0].system, 0)),
+        "Retaining an out-of-reach attendant report neither grants nor "
+        "extends a sensor fix");
+  noted = roundtrip(noted, 0);
+  const auto waypoint = network.nodes[2].system;
+  auto live = need(begin_freedom_star_search(noted, waypoint, craft, 10));
+  const auto first = live.star_search->active->target;
+  const auto first_node =
+      need(find_freedom_system_network_node(network, first));
+  const auto route_a = need(resolve_freedom_system_network_route(
+      network, waypoint, network.nodes[4].system));
+  const auto route_b = need(resolve_freedom_system_network_route(
+      network, waypoint, network.nodes[5].system));
+  const auto expected_first =
+      std::pair{route_a.squared_distance_light_seconds,
+                route_a.destination.value} <
+              std::pair{route_b.squared_distance_light_seconds,
+                        route_b.destination.value}
+          ? route_a.destination
+          : route_b.destination;
+  check(first == expected_first && first_node.ordinal >= 4 &&
+            first_node.ordinal < 6 && live.entries == noted.entries,
+        "Ranged acquisition filters outer nodes before nearest-distance/ID "
+        "selection and grants no early target facts");
+  for (unsigned fault = 0; fault < 4; ++fault) {
+    auto bad = live;
+    auto& acquisition = *bad.star_search->active;
+    if (fault == 0) acquisition.source = network.nodes[0].system;
+    if (fault == 1) acquisition.target = network.nodes[6].system;
+    // Remain future at both the read tick10 and attempted advance tick11.
+    if (fault == 2) acquisition.last_tick = 12;
+    if (fault == 3) acquisition.acquired_ticks = kFreedomStarSearchTicks;
+    check(!validate_freedom_knowledge(bad, 10) &&
+              !freedom_star_search_signal_available(bad, waypoint, 10) &&
+              !advance_freedom_star_search(bad, waypoint, craft, 11, true),
+          "Active ranged target/source, future clock and counter corruption "
+          "cannot become a different acquisition");
+  }
+  SimulationTick tick{10};
+  live =
+      need(advance_freedom_star_search(live, waypoint, craft, ++tick, false));
+  check(live.star_search->active->acquired_ticks == 0 &&
+            live.star_search->active->target == first &&
+            need(advance_freedom_star_search(live, waypoint, craft, tick,
+                                             true)) == live,
+        "Held and duplicate ticks retain one immutable ranged target");
+  // Pure acquisition-source fixtures: these known-source changes are not a
+  // flown waypoint/outer voyage. Native travel owns that later proof.
+  for (std::uint32_t i = 0; i < kFreedomStarSearchTicks; ++i) {
+    live =
+        need(advance_freedom_star_search(live, waypoint, craft, ++tick, true));
+    if (i == 599) live = roundtrip(live, tick);
+  }
+  const auto first_complete = live;
+  const auto other_hidden = first == network.nodes[4].system
+                                ? network.nodes[5].system
+                                : network.nodes[4].system;
+  check(!need(freedom_star_search_signal_available(
+            live, network.nodes[0].system, tick)) &&
+            !need(freedom_star_search_signal_available(live, other_hidden,
+                                                       tick)) &&
+            need(freedom_star_search_signal_available(live, first, tick)) &&
+            !begin_freedom_star_search(live, other_hidden, craft, tick),
+        "Completed discovery admits its source for onward search, not the "
+        "remaining unknown source or an out-of-reach Home fix");
+  live = need(begin_freedom_star_search(live, first, craft, tick));
+  const auto outer = live.star_search->active->target;
+  const auto expected_outer =
+      network.nodes[first_node.ordinal == 4 ? 6 : 7].system;
+  check(outer == expected_outer &&
+            live.star_search->completed ==
+                first_complete.star_search->completed &&
+            !need(query_freedom_knowledge(live, subject(outer),
+                                          KnowledgeFact::identity_type, tick)),
+        "An acquired frontier source chooses its reachable outer contact "
+        "without a premature name or location");
+  for (std::uint32_t i = 0; i < kFreedomStarSearchTicks; ++i)
+    live = need(advance_freedom_star_search(live, first, craft, ++tick, true));
+  live = roundtrip(live, tick);
+  const auto identity = need(query_freedom_knowledge(
+      live, subject(outer), KnowledgeFact::identity_type, tick));
+  const auto expected_name =
+      first_node.ordinal == 4 ? "Outer frontier A" : "Outer frontier B";
+  check(identity &&
+            std::get<KnownIdentity>(identity->value).name == expected_name &&
+            chart(live, tick).destinations.size() == 6 &&
+            !need(query_freedom_knowledge(live, subject(outer),
+                                          KnowledgeFact::presence, tick)) &&
+            !need(freedom_star_search_signal_available(live, outer, tick)),
+        "Only completed outer acquisition reveals its bounded authoritative "
+        "name; source exhaustion reveals no remote count or invented visit");
+  for (unsigned fault = 0; fault < 9; ++fault) {
+    auto bad = live;
+    switch (fault) {
+      case 0: bad.star_search->version = 1; break;
+      case 1: bad.recipe.chart = 4; break;
+      case 2: bad.recipe.physical_catalog = 1; break;
+      case 3:
+        bad.star_search->completed[0].source = network.nodes[0].system;
+        break;
+      case 4:
+        bad.star_search->completed[1].source = network.nodes[0].system;
+        break;
+      case 5: bad.star_search->completed[1].target = other_hidden; break;
+      case 6: bad.star_search->completed[1].completed_tick = tick + 1; break;
+      case 7:
+        bad.star_search->completed.push_back(
+            bad.star_search->completed.front());
+        break;
+      case 8: bad.star_search->completed[1].craft = StarterCraftId{}; break;
+      default: break;
+    }
+    const auto snapshot = bad;
+    check(!validate_freedom_knowledge(bad, tick) &&
+              !encode_freedom_knowledge_json(bad, tick) &&
+              !freedom_star_search_signal_available(bad, waypoint, tick) &&
+              !begin_freedom_star_search(bad, waypoint, craft, tick) &&
+              bad == snapshot,
+          "Version, recipe, ranged history, future, duplicate and craft "
+          "corruptions refuse without rewriting the snapshot");
+  }
+  check(!freedom_star_search_signal_available(initial, SystemId{}, 0) &&
+            !freedom_star_search_signal_available(
+                initial, waypoint, std::numeric_limits<SimulationTick>::max()),
+        "Malformed source or unrepresentable time refuses the lightweight "
+        "preview");
+  auto missing = initial;
+  missing.star_search.reset();
+  auto too_many = live;
+  while (too_many.star_search->completed.size() <= 4)
+    too_many.star_search->completed.push_back(
+        live.star_search->completed.front());
+  check(!freedom_star_search_signal_available(missing, waypoint, tick) &&
+            !freedom_star_search_signal_available(too_many, waypoint, tick) &&
+            !validate_freedom_knowledge(too_many, tick),
+        "Missing selected state or more than four records fails closed");
+}
 } // namespace
 int main() {
   try {
     initial_and_legacy();
     search_sequence();
+    outer_search();
   } catch (const std::exception& error) {
     ++failures;
     std::cerr << error.what() << '\n';

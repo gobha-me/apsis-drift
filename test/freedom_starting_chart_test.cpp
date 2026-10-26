@@ -4,6 +4,7 @@
 #include <array>
 #include <iostream>
 #include <limits>
+#include <vector>
 
 namespace {
 using namespace apsis_drift;
@@ -173,10 +174,63 @@ auto boundaries() -> void {
           "Wrong owner, unsupported ledger or over-capacity refuses");
   }
 }
+
+auto acquired_network_chart() -> void {
+  const Seed seed{42};
+  for (const auto version : std::array{kFreedomUnchartedSystemNetworkVersion,
+                                       kFreedomOuterSystemNetworkVersion}) {
+    const auto network = generate_freedom_system_network(seed, version);
+    auto owner = make_freedom_new_game_document(seed);
+    owner.network = FreedomNetworkSelection{version};
+    owner.derelicts = FreedomDerelictSelection{};
+    owner.state.tick = 120;
+    const auto encoded = encode_freedom_save_document_json(owner);
+    check(network && encoded &&
+              decode_freedom_save_document_json(*encoded) == owner,
+          "Both uncharted profiles retain explicit origin and derelict "
+          "selection");
+    if (!network || !encoded) continue;
+    std::vector<SystemId> acquired;
+    acquired.reserve(kFreedomSystemNetworkSize + 1);
+    for (std::size_t i = 0; i < kFreedomSystemNetworkSize; ++i)
+      acquired.push_back(network->nodes[i].system);
+    const auto ledger = resources(seed, 3);
+    const auto initial =
+        resolve_freedom_network_chart(*network, network->nodes.front().system,
+                                      ledger, true, &owner, acquired);
+    check(initial && initial->destinations.size() == acquired.size() &&
+              std::ranges::all_of(initial->destinations,
+                                  [&](const auto& row) {
+                                    return std::ranges::find(acquired,
+                                                             row.system) !=
+                                           acquired.end();
+                                  }),
+          "Generated hidden systems never appear without an acquired fix");
+    acquired.push_back(network->nodes.back().system);
+    const auto expanded =
+        resolve_freedom_network_chart(*network, network->nodes.front().system,
+                                      ledger, true, &owner, acquired);
+    check(expanded && expanded->destinations.size() == acquired.size() &&
+              expanded->destinations.back().system == acquired.back() &&
+              expanded->destinations.back().selectable &&
+              ledger == resources(seed, 3),
+          "One admitted fix exposes only its own destination without spending "
+          "fuel");
+    auto mismatched = owner;
+    mismatched.network->version = version == kFreedomOuterSystemNetworkVersion
+                                      ? kFreedomUnchartedSystemNetworkVersion
+                                      : kFreedomOuterSystemNetworkVersion;
+    check(!resolve_freedom_network_chart(*network,
+                                         network->nodes.front().system, ledger,
+                                         true, &mismatched, acquired),
+          "Chart owner cannot silently substitute another network recipe");
+  }
+}
 } // namespace
 
 auto main() -> int {
   boundaries();
+  acquired_network_chart();
   for (const Seed seed : std::array{Seed{0}, Seed{42}, Seed{UINT64_MAX}})
     chart(seed);
   for (std::uint64_t seed = 1; seed <= 64; ++seed)

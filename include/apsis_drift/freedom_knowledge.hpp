@@ -19,8 +19,12 @@ inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomNetworkKnowledgeVersion{4};
 inline constexpr std::uint32_t kFreedomPlanetaryKnowledgeVersion{5};
 inline constexpr std::uint32_t kFreedomUnchartedKnowledgeVersion{6};
+inline constexpr std::uint32_t kFreedomOuterKnowledgeVersion{7};
+inline constexpr std::uint32_t kFreedomOuterStartingChartVersion{5};
 inline constexpr std::uint32_t kFreedomUnchartedStartingChartVersion{4};
 inline constexpr std::uint32_t kFreedomStarSearchVersion{1};
+inline constexpr std::uint32_t kFreedomRangedStarSearchVersion{2};
+inline constexpr std::uint64_t kFreedomOuterSearchRangeDivisor{2};
 inline constexpr std::uint32_t kFreedomStarSearchTicks{1200};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::uint32_t kFreedomPlanetaryStartingChartVersion{3};
@@ -28,22 +32,46 @@ inline constexpr std::uint32_t kFreedomPlanetaryStartingChartVersion{3};
     std::uint32_t version) -> bool {
   return version == kFreedomNetworkKnowledgeVersion ||
          version == kFreedomPlanetaryKnowledgeVersion ||
-         version == kFreedomUnchartedKnowledgeVersion;
+         version == kFreedomUnchartedKnowledgeVersion ||
+         version == kFreedomOuterKnowledgeVersion;
 }
 [[nodiscard]] constexpr auto freedom_knowledge_has_planetary_chart(
     std::uint32_t version) -> bool {
   return version == kFreedomPlanetaryKnowledgeVersion ||
-         version == kFreedomUnchartedKnowledgeVersion;
+         version == kFreedomUnchartedKnowledgeVersion ||
+         version == kFreedomOuterKnowledgeVersion;
 }
 [[nodiscard]] constexpr auto freedom_knowledge_network_version(
     std::uint32_t version) -> std::uint32_t {
-  return version == kFreedomUnchartedKnowledgeVersion ? 2U : 1U;
+  return version == kFreedomOuterKnowledgeVersion       ? 3U
+         : version == kFreedomUnchartedKnowledgeVersion ? 2U
+                                                        : 1U;
 }
 [[nodiscard]] constexpr auto freedom_knowledge_chart_version(
     std::uint32_t version) -> std::uint32_t {
-  return version == kFreedomUnchartedKnowledgeVersion   ? 4U
+  return version == kFreedomOuterKnowledgeVersion       ? 5U
+         : version == kFreedomUnchartedKnowledgeVersion ? 4U
          : version == kFreedomPlanetaryKnowledgeVersion ? 3U
                                                         : 2U;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_has_star_search(
+    std::uint32_t version) -> bool {
+  return version == kFreedomUnchartedKnowledgeVersion ||
+         version == kFreedomOuterKnowledgeVersion;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_star_search_version(
+    std::uint32_t version) -> std::uint32_t {
+  return version == kFreedomOuterKnowledgeVersion
+             ? kFreedomRangedStarSearchVersion
+         : version == kFreedomUnchartedKnowledgeVersion
+             ? kFreedomStarSearchVersion
+             : 0U;
+}
+[[nodiscard]] constexpr auto freedom_knowledge_star_search_limit(
+    std::uint32_t version) -> std::size_t {
+  return version == kFreedomOuterKnowledgeVersion       ? 4U
+         : version == kFreedomUnchartedKnowledgeVersion ? 2U
+                                                        : 0U;
 }
 inline constexpr std::uint32_t kFreedomSurfaceMarkerVersion{1};
 inline constexpr std::uint32_t kFreedomMoonSurfaceMarkerVersion{2};
@@ -280,7 +308,8 @@ struct FreedomStarSearchRecord {
 struct FreedomStarSearchState {
   std::uint32_t version{kFreedomStarSearchVersion};
   std::optional<FreedomStarSearchAcquisition> active;
-  // Acquisition order, at most two records; never a generated catalog dump.
+  // Acquisition order: at most two legacy or four ranged records; no catalog
+  // dump.
   std::vector<FreedomStarSearchRecord> completed;
   friend auto operator==(const FreedomStarSearchState&,
                          const FreedomStarSearchState&) -> bool = default;
@@ -463,6 +492,14 @@ struct FreedomKnownPlanetRow {
 [[nodiscard]] auto freedom_station_stellar_lead_status(const FreedomKnowledge&,
                                                        SimulationTick)
     -> std::expected<FreedomStationStellarLeadStatus, FreedomKnowledgeError>;
+// Lightweight signal preview for an already admitted session snapshot. This is
+// not a save validator or jump authorization; commands validate the full
+// ledger. Regenerates bounded system anchors only, never physical catalogs. No
+// target ID or count is returned to presentation.
+[[nodiscard]] auto freedom_star_search_signal_available(const FreedomKnowledge&,
+                                                        SystemId source,
+                                                        SimulationTick now)
+    -> std::expected<bool, FreedomKnowledgeError>;
 [[nodiscard]] auto begin_freedom_star_search(const FreedomKnowledge&, SystemId,
                                              StarterCraftId, SimulationTick)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;

@@ -9,7 +9,7 @@
 #include <string>
 
 namespace apsis_drift {
-inline constexpr std::size_t kNativeKnownChartMapCapacity{6};
+inline constexpr std::size_t kNativeKnownChartMapCapacity{8};
 struct NativeKnownChartMapNode {
   SystemId system;
   std::string name;

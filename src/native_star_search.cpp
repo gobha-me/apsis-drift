@@ -2,12 +2,13 @@
 #include "apsis_drift/save_file.hpp"
 
 #include <cmath>
+#include <memory>
 
 namespace apsis_drift {
 auto NativeFreedomFlightSession::star_search_conditions() const
     -> std::expected<void, std::string> {
   if (!knowledge_ ||
-      knowledge_->recipe.version != kFreedomUnchartedKnowledgeVersion ||
+      !freedom_knowledge_has_star_search(knowledge_->recipe.version) ||
       !knowledge_->star_search)
     return std::unexpected{"This journey has no uncharted-region search"};
   if (recovery_pending())
@@ -46,6 +47,36 @@ auto NativeFreedomFlightSession::star_search_view() const
   view.completed = state.completed.size();
   if (state.active) view.acquired_ticks = state.active->acquired_ticks;
   const auto ready = star_search_conditions();
+  if (knowledge_->recipe.version == kFreedomOuterKnowledgeVersion) {
+    view.version = 2;
+    const auto reach =
+        generate_first_universe_route(document_.origin.recipe.universe_seed)
+            .distance_light_seconds /
+        kFreedomOuterSearchRangeDivisor;
+    const std::string rule =
+        " Sensor reach: " + std::to_string(reach) +
+        " light-seconds between system anchors; travel to another known "
+        "system to search from there.";
+    if (!ready)
+      view.note = ready.error();
+    else if (view.active)
+      view.note = "Acquiring a stellar navigation fix";
+    else {
+      const auto signal = freedom_star_search_signal_available(
+          *knowledge_, system_.catalog.id, document_.flight.tick);
+      view.can_begin = signal && *signal &&
+                       view.completed < freedom_knowledge_star_search_limit(
+                                            knowledge_->recipe.version);
+      view.note =
+          !signal ? "Search unavailable: current signal reference could not be "
+                    "read."
+          : view.can_begin
+              ? "Ready: search for ten seconds in ordinary space flight."
+              : "No unacquired stellar fix is within sensor reach here.";
+    }
+    view.note += rule;
+    return view;
+  }
   view.can_begin = ready.has_value() && !view.active && view.completed < 2;
   if (view.completed == 2)
     view.note = "No further stellar contacts detected in this region";
@@ -65,13 +96,13 @@ auto NativeFreedomFlightSession::begin_star_search()
                                         document_.origin.state.craft,
                                         document_.flight.tick);
   if (!next) return std::unexpected{"Stellar acquisition source refused"};
-  auto candidate = *this;
-  candidate.knowledge_ = std::move(*next);
-  const auto saved = candidate.player_save_document();
+  auto candidate = std::make_unique<NativeFreedomFlightSession>(*this);
+  candidate->knowledge_ = std::move(*next);
+  const auto saved = candidate->player_save_document();
   if (!saved) return std::unexpected{saved.error()};
   if (const auto encoded = encode_native_save_document_json(*saved); !encoded)
     return std::unexpected{encoded.error().detail};
-  *this = std::move(candidate);
+  *this = std::move(*candidate);
   return {};
 }
 auto NativeFreedomFlightSession::cancel_star_search()

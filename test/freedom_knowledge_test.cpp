@@ -1147,7 +1147,7 @@ auto planetary_knowledge() -> void {
         "exploration history");
   for (std::uint32_t version = 0; version < 8; ++version)
     check(freedom_knowledge_uses_network(version) ==
-              (version == 4 || version == 5 || version == 6),
+              (version == 4 || version == 5 || version == 6 || version == 7),
           "Network recipe predicate admits only explicit supported network "
           "recipes");
   for (const auto& entry : initial.entries)
@@ -1637,6 +1637,231 @@ auto station_stellar_lead() -> void {
         "Only separately admitted physical system-presence evidence yields "
         "Visited; sensor confirmation and note remain distinct");
 }
+auto outer_search_knowledge() -> void {
+  const Seed seed{42};
+  const auto craft = need(derive_freedom_craft_identity(seed, 0));
+  const auto network = need(
+      generate_freedom_system_network(seed, kFreedomOuterSystemNetworkVersion));
+  auto knowledge = need(
+      make_freedom_starting_knowledge(seed, kFreedomOuterKnowledgeVersion));
+  const auto initial = need(encode_freedom_knowledge_json(knowledge, 0));
+  check(knowledge.recipe.version == 7 && knowledge.recipe.chart == 5 &&
+            knowledge.recipe.topology == 2 &&
+            knowledge.recipe.world_domain == 2 && knowledge.star_search &&
+            knowledge.star_search->version == 2 &&
+            !knowledge.star_search->active &&
+            knowledge.star_search->completed.empty() &&
+            need(decode_freedom_knowledge_json(initial, 0)) == knowledge,
+        "Outer profile explicitly selects chart5/search2 and decodes the "
+        "stored acquisition version rather than its legacy default");
+  std::size_t systems{};
+  for (const auto& item : need(known_freedom_subjects(knowledge, 0))) {
+    if (item.kind == KnowledgeSubjectKind::system) ++systems;
+    check(std::ranges::any_of(
+              network.nodes.begin(), network.nodes.begin() + 4,
+              [&](const auto& node) { return node.system == item.system; }),
+          "Outer starting knowledge reveals no hidden-system subject");
+  }
+  // Only an initialized typed chart owner: no physical voyage is claimed.
+  auto owner = need(make_freedom_network_new_game_document(seed));
+  owner.network->version = kFreedomOuterSystemNetworkVersion;
+  const FreedomResources fuel{
+      1, craft, {kWayfarerFrameId, kWayfarerFrameVersion}, 0};
+  need(validate_freedom_save_document(owner));
+  const auto chart = need(resolve_freedom_knowledge_chart(
+      knowledge, network.nodes.front().system, fuel, true, &owner));
+  check(systems == 4 && chart.destinations.size() == 4,
+        "Eight generated anchors grant only the original four chart rows");
+  for (std::size_t i = 0; i < network.nodes.size(); ++i) {
+    const auto& node = network.nodes[i];
+    check(std::ranges::any_of(chart.destinations,
+                              [&](const auto& row) {
+                                return row.system == node.system;
+                              }) == (i < 4),
+          "Chart admission depends on known facts, not hidden network size");
+    if (i < 4) continue;
+    const auto system =
+        need(resolve_freedom_network_system(network, node.system));
+    for (const auto& planet : system.catalog.planets)
+      for (const auto fact :
+           {KnowledgeFact::identity_type, KnowledgeFact::location,
+            KnowledgeFact::physical, KnowledgeFact::presence})
+        check(!need(query_freedom_knowledge(knowledge,
+                                            {KnowledgeSubjectKind::planet,
+                                             node.system,
+                                             planet.descriptor.id.value},
+                                            fact, 0)),
+              "Uncharted local bodies are absent from the initial ledger");
+  }
+  check(!need(freedom_star_search_signal_available(
+            knowledge, network.nodes.front().system, 0)) &&
+            need(encode_freedom_knowledge_json(knowledge, 0)) == initial,
+        "No Home signal preview grants hidden anchors or changes bytes");
+
+  SimulationTick now{};
+  const auto acquire = [&](SystemId source) {
+    const auto previous = knowledge.star_search->completed;
+    knowledge = need(begin_freedom_star_search(knowledge, source, craft, now));
+    const auto target = knowledge.star_search->active->target;
+    const auto active = need(encode_freedom_knowledge_json(knowledge, now));
+    check(need(decode_freedom_knowledge_json(active, now)) == knowledge,
+          "Active search2 and its complete acquisition owner roundtrip");
+    for (std::uint32_t tick = 0; tick < kFreedomStarSearchTicks; ++tick) {
+      ++now;
+      knowledge = need(
+          advance_freedom_star_search(knowledge, source, craft, now, true));
+    }
+    const auto text = need(encode_freedom_knowledge_json(knowledge, now));
+    check(!knowledge.star_search->active &&
+              knowledge.star_search->version == 2 &&
+              knowledge.star_search->completed.size() == previous.size() + 1 &&
+              std::equal(previous.begin(), previous.end(),
+                         knowledge.star_search->completed.begin()) &&
+              knowledge.star_search->completed.back().target == target &&
+              need(decode_freedom_knowledge_json(text, now)) == knowledge &&
+              need(encode_freedom_knowledge_json(
+                  need(decode_freedom_knowledge_json(text, now)), now)) == text,
+          "Actual1200 pure-provider intervals append one immutable fix and "
+          "preserve exact canonical Continue bytes");
+    return target;
+  };
+  const auto first_hidden = acquire(network.nodes[2].system);
+  check(first_hidden == network.nodes[4].system ||
+            first_hidden == network.nodes[5].system,
+        "A known Waypoint first earns an original uncharted anchor");
+  const auto first_outer = acquire(first_hidden);
+  check(first_outer == network.nodes[6].system ||
+            first_outer == network.nodes[7].system,
+        "The acquired hidden anchor is an authenticated source for outer "
+        "frontier acquisition");
+  const auto second_hidden = acquire(network.nodes[2].system);
+  const auto second_outer = acquire(second_hidden);
+  check(second_hidden != first_hidden &&
+            (second_hidden == network.nodes[4].system ||
+             second_hidden == network.nodes[5].system) &&
+            second_outer != first_outer &&
+            (second_outer == network.nodes[6].system ||
+             second_outer == network.nodes[7].system) &&
+            knowledge.star_search->completed.size() == 4,
+        "Both earned branches fill the finite four-fix ledger without "
+        "fabricated pose, visit or acquisition history");
+  const auto complete = need(encode_freedom_knowledge_json(knowledge, now));
+  check(!begin_freedom_star_search(knowledge, network.nodes[2].system, craft,
+                                   now) &&
+            need(encode_freedom_knowledge_json(knowledge, now)) == complete,
+        "Exhausted search2 refuses without changing completed records");
+
+  // Optional metadata remains at its existing independent field versions.
+  // These are explicit empty policies, not collections, earnings or visits.
+  auto metadata = knowledge;
+  metadata.surface_marker = FreedomSurfaceMarkerState{};
+  metadata.surface_landmarks = FreedomSurfaceLandmarkState{};
+  metadata.moon_surface_landmarks = FreedomMoonSurfaceLandmarkState{};
+  metadata.orbital_surveys = FreedomOrbitalSurveyState{};
+  metadata.field_samples = FreedomFieldSampleState{
+      kFreedomNetworkFieldSamplesVersion, craft, {}, {}};
+  metadata.survey_commissions = SurveyCommissionAccount{};
+  metadata.paid_operations =
+      need(make_paid_operations(PaidIncomeCounts{}, now, 0));
+  metadata.charted_arrivals = FreedomChartedArrivalSelection{};
+  metadata.derelicts = FreedomDerelictState{};
+  metadata.derelict_recovery = FreedomDerelictRecoveryState{};
+  const auto lead = need(offer_freedom_station_stellar_lead(
+      need(
+          make_freedom_starting_knowledge(seed, kFreedomOuterKnowledgeVersion)),
+      craft, now));
+  const auto noted = need(receive_freedom_station_stellar_lead(
+      need(
+          make_freedom_starting_knowledge(seed, kFreedomOuterKnowledgeVersion)),
+      lead, now));
+  const auto note_text = need(encode_freedom_knowledge_json(noted, now));
+  check(need(decode_freedom_knowledge_json(note_text, now)) == noted &&
+            noted.entries == need(make_freedom_starting_knowledge(
+                                      seed, kFreedomOuterKnowledgeVersion))
+                                 .entries,
+        "Outer station hearsay retains its independent unbounded offer and "
+        "grants no sensor facts");
+  const auto metadata_text = need(encode_freedom_knowledge_json(metadata, now));
+  const auto metadata_json = Json::parse(metadata_text);
+  check(need(decode_freedom_knowledge_json(metadata_text, now)) == metadata &&
+            metadata_json["star_search"]["version"] == 2U &&
+            metadata_json["field_samples"]["version"] ==
+                kFreedomNetworkFieldSamplesVersion &&
+            metadata_json["paid_operations"]["version"] == 1U &&
+            metadata_json["derelict_recovery"]["version"] == 1U &&
+            metadata_json["survey_commissions"]["version"] == 1U,
+        "Knowledge7 composes existing optional policies without changing "
+        "their field versions or closed JSON shapes");
+
+  for (unsigned problem = 0; problem < 21; ++problem) {
+    auto bad = Json::parse(complete);
+    switch (problem) {
+      case 0: bad["recipe"]["version"] = UINT64_MAX; break;
+      case 1: bad["recipe"]["chart"] = 4U; break;
+      case 2: bad["star_search"]["version"] = 1U; break;
+      case 3: bad["star_search"]["version"] = 3U; break;
+      case 4: bad["star_search"]["version"] = 2.0; break;
+      case 5: bad["star_search"]["version"] = -1; break;
+      case 6: bad["star_search"]["version"] = UINT64_MAX; break;
+      case 7: bad["star_search"] = nullptr; break;
+      case 8: bad.erase("star_search"); break;
+      case 9: bad["star_search"]["hidden_count"] = 4U; break;
+      case 10: bad["automatic_chart"] = true; break;
+      case 11:
+        bad["star_search"]["completed"].push_back(
+            bad["star_search"]["completed"][0]);
+        break;
+      case 12:
+        std::swap(bad["star_search"]["completed"][0],
+                  bad["star_search"]["completed"][1]);
+        break;
+      case 13:
+        bad["star_search"]["completed"][1]["source"] =
+            network.nodes[7].system.value;
+        break;
+      case 14:
+        bad["star_search"]["completed"][0]["completed_tick"] = now + 1;
+        break;
+      case 15: bad["star_search"]["completed"][0]["craft"] = 0U; break;
+      case 16: bad["star_search"]["completed"][0]["started_tick"] = 0.0; break;
+      case 17: bad["recipe"]["version"] = 6U; break;
+      case 18: bad["star_search"]["active"] = true; break;
+      case 19: bad["recipe"]["world_domain"] = 1U; break;
+      case 20: bad["recipe"]["chart"] = UINT64_MAX; break;
+    }
+    check(!decode_freedom_knowledge_json(bad.dump(), now),
+          "Closed search2 rejects malformed numeric/owner/history/profile "
+          "joins before admitting metadata");
+  }
+  auto legacy = need(make_freedom_starting_knowledge(seed, 6));
+  const auto legacy_bytes = need(encode_freedom_knowledge_json(legacy, 0));
+  auto legacy_bad = Json::parse(legacy_bytes);
+  legacy_bad["star_search"]["version"] = 2U;
+  check(!decode_freedom_knowledge_json(legacy_bad.dump(), 0) &&
+            need(decode_freedom_knowledge_json(legacy_bytes, 0)) == legacy &&
+            need(encode_freedom_knowledge_json(legacy, 0)) == legacy_bytes &&
+            Json::parse(legacy_bytes)["star_search"]["version"] == 1U,
+        "Knowledge6 remains search1 and retains identical historical bytes");
+  legacy_bad = Json::parse(legacy_bytes);
+  legacy_bad["star_search"]["completed"] = Json::array();
+  const auto completed_json = Json::parse(complete);
+  for (unsigned i = 0; i < 3; ++i)
+    legacy_bad["star_search"]["completed"].push_back(
+        completed_json["star_search"]["completed"][i]);
+  check(
+      !decode_freedom_knowledge_json(legacy_bad.dump(), now),
+      "Legacy search1 keeps its two-record cap even when search2 admits four");
+  auto too_many = completed_json;
+  too_many["entries"] = Json::array();
+  const auto initial_json = Json::parse(initial);
+  for (std::size_t i = 0; i <= kMaximumFreedomUnchartedKnowledgeFacts; ++i)
+    too_many["entries"].push_back(initial_json["entries"][0]);
+  check(
+      !decode_freedom_knowledge_json(too_many.dump(), now) &&
+          !decode_freedom_knowledge_json(
+              std::string(kMaximumFreedomNetworkKnowledgeBytes + 1, ' '), now),
+      "Outer knowledge preserves the existing384-fact and262144-byte caps");
+}
 } // namespace
 
 auto main() -> int {
@@ -1652,6 +1877,7 @@ auto main() -> int {
     network_knowledge();
     planetary_knowledge();
     station_stellar_lead();
+    outer_search_knowledge();
     invalid_inputs();
     surface_marker_metadata();
     moon_surface_marker_metadata();

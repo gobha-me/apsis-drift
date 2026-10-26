@@ -88,15 +88,21 @@ auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
   const auto original_seed =
       derive_seed(universe_seed, SeedDomain::freedom_system_network,
                   kFreedomSystemNetworkVersion);
+  const auto uncharted_seed =
+      derive_seed(universe_seed, SeedDomain::freedom_uncharted_systems,
+                  kFreedomUnchartedSystemNetworkVersion);
   const auto seed =
-      version == kFreedomSystemNetworkVersion
-          ? original_seed
-          : derive_seed(universe_seed, SeedDomain::freedom_uncharted_systems,
-                        kFreedomUnchartedSystemNetworkVersion);
+      version == kFreedomSystemNetworkVersion ? original_seed
+      : version == kFreedomUnchartedSystemNetworkVersion
+          ? uncharted_seed
+          : derive_seed(universe_seed, SeedDomain::freedom_outer_systems,
+                        kFreedomOuterSystemNetworkVersion);
   FreedomSystemNetwork result{version, universe_seed, seed, {}};
   result.nodes.resize(version == kFreedomSystemNetworkVersion
                           ? kFreedomSystemNetworkSize
-                          : kFreedomUnchartedSystemNetworkSize);
+                      : version == kFreedomUnchartedSystemNetworkVersion
+                          ? kFreedomUnchartedSystemNetworkSize
+                          : kFreedomOuterSystemNetworkSize);
   result.nodes[0] = {0, legacy.origin_system_seed, legacy.origin_system,
                      route.origin_position};
   result.nodes[1] = {1, legacy.target_system_seed, legacy.target_system,
@@ -105,16 +111,23 @@ auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
   const auto h = static_cast<std::int64_t>(route.distance_light_seconds / 2);
   const auto q = static_cast<std::int64_t>(route.distance_light_seconds / 4);
   for (std::uint32_t ordinal = 2; ordinal < result.nodes.size(); ++ordinal) {
-    const auto system_seed =
-        derive_seed(ordinal < kFreedomSystemNetworkSize ? original_seed : seed,
-                    SeedDomain::system, ordinal);
+    const auto system_seed = derive_seed(
+        ordinal < kFreedomSystemNetworkSize            ? original_seed
+        : ordinal < kFreedomUnchartedSystemNetworkSize ? uncharted_seed
+                                                       : seed,
+        SeedDomain::system, ordinal);
     const std::int64_t side = ordinal % 2 == 0 ? 1 : -1;
     const auto perpendicular =
         frame[ordinal < kFreedomSystemNetworkSize ? 1 : 2];
+    const auto along = ordinal < kFreedomUnchartedSystemNetworkSize ? h : h + q;
+    const auto across = ordinal < kFreedomUnchartedSystemNetworkSize ? q : h;
     const UniversePositionMetres point{
-        (h * frame[0].x + side * q * perpendicular.x) * kMetresPerLightSecond,
-        (h * frame[0].y + side * q * perpendicular.y) * kMetresPerLightSecond,
-        (h * frame[0].z + side * q * perpendicular.z) * kMetresPerLightSecond};
+        (along * frame[0].x + side * across * perpendicular.x) *
+            kMetresPerLightSecond,
+        (along * frame[0].y + side * across * perpendicular.y) *
+            kMetresPerLightSecond,
+        (along * frame[0].z + side * across * perpendicular.z) *
+            kMetresPerLightSecond};
     result.nodes[ordinal] = {ordinal, system_seed, SystemId{system_seed.value},
                              point};
   }
@@ -131,6 +144,11 @@ auto generate_freedom_system_network(Seed universe_seed, std::uint32_t version)
   // H-A/H-B/N-A/N-B <D, A-B<=D/2, and H-N==D. Recipe2's remaining-axis
   // nodes have the same h/+/-q offsets: their mutual links are2q, and links
   // across the two perpendicular axes are sqrt(2)*q. Thus all15 remain<=D.
+  // Recipe3 appends C+/C- at (h+q)e +/-h*r. H-C squared is at most
+  // (3D/4)^2+(D/2)^2 <D^2; N-C is bounded by (D-h)^2+h^2 <=D^2.
+  // Links to the old perpendicular-axis nodes have squares2q^2+h^2 or
+  // q^2+(h+/-q)^2, each <=D^2; C+-C- is2h<=D. These bounds use the
+  // integer floors h and q, so all28 links retain the old ceil bound.
   // The minimum D>=172800ls also separates all nodes beyond two local systems.
   return result;
 }
@@ -140,7 +158,9 @@ auto validate_freedom_system_network(const FreedomSystemNetwork& network)
     return std::unexpected{Error::unsupported_version};
   const auto size = network.version == kFreedomSystemNetworkVersion
                         ? kFreedomSystemNetworkSize
-                        : kFreedomUnchartedSystemNetworkSize;
+                    : network.version == kFreedomUnchartedSystemNetworkVersion
+                        ? kFreedomUnchartedSystemNetworkSize
+                        : kFreedomOuterSystemNetworkSize;
   if (network.nodes.size() != size)
     return std::unexpected{Error::invalid_network};
   const auto expected =

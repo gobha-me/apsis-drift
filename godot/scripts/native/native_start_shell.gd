@@ -310,12 +310,12 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	match options.mode:
 		"recovery": staged = owner.stage_freedom_recovery()
 		"new_game":
-			var chart_kind := 3 if options.get("uncharted", false) else 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0
+			var chart_kind := 4 if options.get("frontier", false) else 3 if options.get("uncharted", false) else 2 if options.get("planetary", false) else 1 if options.get("network", false) else 0
 			if options.get("derelict_recovery", false):
-				if chart_kind != 3:
-					error = "Derelict recovery requires four charted + two uncharted systems"
+				if chart_kind not in [3, 4]:
+					error = "Derelict recovery requires an uncharted exploration profile"
 					return false
-				staged = owner.stage_freedom_derelict_recovery_new_game(options.value, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0, options.get("origin_service", false))
+				staged = owner.stage_freedom_chart_derelict_recovery_new_game(options.value, chart_kind, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0, options.get("origin_service", false)) if chart_kind == 4 else owner.stage_freedom_derelict_recovery_new_game(options.value, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0, options.get("origin_service", false))
 			elif options.get("origin_service", false):
 				staged = owner.stage_freedom_origin_assistance_new_game(options.value, chart_kind, 2 if options.get("drive_strain", false) else 1 if options.get("drive_recovery", false) else 0)
 			elif options.get("drive_strain", false):
@@ -323,7 +323,7 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 			elif options.get("drive_recovery", false):
 				staged = owner.stage_freedom_jump_recovery_new_game(options.value, chart_kind)
 			else:
-				staged = owner.stage_freedom_uncharted_network_new_game(options.value) if chart_kind == 3 else owner.stage_freedom_planetary_network_new_game(options.value) if chart_kind == 2 else owner.stage_freedom_network_new_game(options.value) if chart_kind == 1 else owner.stage_freedom_new_game(options.value)
+				staged = owner.stage_freedom_frontier_network_new_game(options.value) if chart_kind == 4 else owner.stage_freedom_uncharted_network_new_game(options.value) if chart_kind == 3 else owner.stage_freedom_planetary_network_new_game(options.value) if chart_kind == 2 else owner.stage_freedom_network_new_game(options.value) if chart_kind == 1 else owner.stage_freedom_new_game(options.value)
 		"profile": staged = owner.stage_freedom_profile(options.value)
 		"continue": staged = owner.stage_freedom_continue(options.value)
 		_:

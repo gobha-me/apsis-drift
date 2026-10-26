@@ -227,7 +227,7 @@ auto ownership_and_refusals() -> void {
         "Original Home/neighbor physical catalogs are exact, without carrier "
         "conversion");
   check(!generate_freedom_system_network(seed, 0) &&
-            !generate_freedom_system_network(seed, 3) &&
+            !generate_freedom_system_network(seed, 4) &&
             !generate_freedom_system_network(
                 seed, std::numeric_limits<std::uint32_t>::max()),
         "Unsupported topology versions refuse before any adoption");
@@ -428,10 +428,11 @@ auto uncharted_ownership_and_refusals() -> void {
   check(freedom_system_network_version_supported(1) &&
             freedom_system_network_version_supported(2) &&
             !freedom_system_network_version_supported(0) &&
-            !freedom_system_network_version_supported(3) &&
+            freedom_system_network_version_supported(3) &&
+            !freedom_system_network_version_supported(4) &&
             !freedom_system_network_version_supported(
                 std::numeric_limits<std::uint32_t>::max()),
-        "Only explicit topology versions1/2 are supported");
+        "Only explicit topology versions1/2/3 are supported");
   for (unsigned damage = 0; damage < 14; ++damage) {
     auto bad = network;
     switch (damage) {
@@ -480,6 +481,229 @@ auto uncharted_ownership_and_refusals() -> void {
                   network, network.nodes[0].system, id),
           "Six-node consumers refuse zero and foreign system ownership");
 }
+
+auto outer_geometry(Seed seed) -> void {
+  const auto prior = need(generate_freedom_system_network(seed, 2));
+  const auto network = need(generate_freedom_system_network(seed, 3));
+  const auto route = generate_first_universe_route(seed);
+  check(network.nodes.size() == 8 && prior.nodes.size() == 6,
+        "Outer recipe appends exactly two nodes to the original six");
+  if (network.nodes.size() != 8 || prior.nodes.size() != 6) return;
+  check(network.version == kFreedomOuterSystemNetworkVersion &&
+            network.universe_seed == seed &&
+            network.network_seed ==
+                derive_seed(seed, SeedDomain::freedom_outer_systems, 3) &&
+            network.network_seed != prior.network_seed &&
+            network == need(generate_freedom_system_network(seed, 3)) &&
+            validate_freedom_system_network(network).has_value(),
+        "Outer generation is explicit, independently seeded and canonical");
+  check(
+      std::equal(prior.nodes.begin(), prior.nodes.end(), network.nodes.begin()),
+      "Outer recipe retains all six complete old node records exactly");
+  const std::array<std::int64_t, 3> old{route.destination_position.x,
+                                        route.destination_position.y,
+                                        route.destination_position.z};
+  const auto axis = static_cast<std::size_t>(
+      std::ranges::find_if(old, [](auto value) { return value != 0; }) -
+      old.begin());
+  check(axis < 3, "Outer source has a genuine signed cardinal route");
+  if (axis >= 3) return;
+  const auto perpendicular = (axis + 2) % 3;
+  const auto h = route.distance_light_seconds / 2;
+  const auto q = route.distance_light_seconds / 4;
+  const auto reach_square = h * h;
+  std::size_t links{};
+  for (std::size_t i = 0; i < network.nodes.size(); ++i) {
+    const auto& node = network.nodes[i];
+    check(node.ordinal == i && node.system.value != 0 &&
+              node.system.value == node.system_seed.value &&
+              need(find_freedom_system_network_node(network, node.system)) ==
+                  node,
+          "All eight canonical identities retain owned lookup");
+    if (i >= 6) {
+      std::array<std::int64_t, 3> expected{};
+      const auto along =
+          static_cast<std::int64_t>(h + q) * kMetresPerLightSecond;
+      const auto side = static_cast<std::int64_t>(h) * kMetresPerLightSecond;
+      expected[axis] = old[axis] < 0 ? -along : along;
+      expected[perpendicular] = i == 6 ? side : -side;
+      check(node.system_seed ==
+                    derive_seed(network.network_seed, SeedDomain::system, i) &&
+                node.position == UniversePositionMetres{expected[0],
+                                                        expected[1],
+                                                        expected[2]},
+            "Independent axis-index oracle authenticates the outer anchor and "
+            "seed");
+    }
+    check(!resolve_freedom_system_network_route(network, node.system,
+                                                node.system),
+          "Outer recipe still refuses same-system travel");
+    for (std::size_t j = i + 1; j < network.nodes.size(); ++j) {
+      ++links;
+      const auto& other = network.nodes[j];
+      check(node.system != other.system &&
+                node.system_seed != other.system_seed &&
+                node.position != other.position,
+            "Outer IDs, seeds and anchors have no aliases");
+      const auto actual = need(resolve_freedom_system_network_route(
+          network, node.system, other.system));
+      const auto reverse = need(resolve_freedom_system_network_route(
+          network, other.system, node.system));
+      const UniversePositionMetres delta{other.position.x - node.position.x,
+                                         other.position.y - node.position.y,
+                                         other.position.z - node.position.z};
+      const std::array metres{absolute(delta.x), absolute(delta.y),
+                              absolute(delta.z)};
+      std::uint64_t squared_ls{};
+      for (const auto component : metres) {
+        check(component % kMetresPerLightSecond == 0,
+              "Outer displacement stays on integer light-seconds");
+        const auto ls = component / kMetresPerLightSecond;
+        squared_ls += ls * ls;
+      }
+      check(actual.displacement == delta &&
+                reverse.displacement ==
+                    UniversePositionMetres{-delta.x, -delta.y, -delta.z} &&
+                actual.squared_distance_light_seconds == squared_ls &&
+                reverse.squared_distance_light_seconds == squared_ls &&
+                actual.distance_metres == reverse.distance_metres &&
+                squared_ls > 0 &&
+                squared_ls <= route.distance_light_seconds *
+                                  route.distance_light_seconds &&
+                actual.distance_metres <= route.distance_metres &&
+                actual.distance_metres <= kFreedomJumpRatedMetres &&
+                actual.distance_metres >
+                    2 * static_cast<std::uint64_t>(kLocalSystemBoundaryMetres),
+            "All28 outer anchor links are exact, separated, symmetric and "
+            "within the original drive bound");
+      const auto target = sum_squares(metres);
+      check(!less(sum_squares({actual.distance_metres, 0, 0}), target) &&
+                less(sum_squares({actual.distance_metres - 1, 0, 0}), target),
+            "Independent schoolbook oracle certifies the outer integer metre "
+            "ceiling");
+      if (j < 6)
+        check(actual == need(resolve_freedom_system_network_route(
+                            prior, node.system, other.system)),
+              "All15 old complete route records remain exact under the outer "
+              "recipe");
+    }
+  }
+  check(links == 28 && prior == need(generate_freedom_system_network(seed, 2)),
+        "Outer route reads preserve all original six-node truth");
+  const auto distance_square = [&](std::size_t from, std::size_t to) {
+    return need(resolve_freedom_system_network_route(network,
+                                                     network.nodes[from].system,
+                                                     network.nodes[to].system))
+        .squared_distance_light_seconds;
+  };
+  for (std::size_t outer = 6; outer < 8; ++outer) {
+    for (std::size_t known = 0; known < 4; ++known)
+      check(distance_square(known, outer) > reach_square,
+            "No originally charted system can acquire an outer contact at the "
+            "proposed reach");
+    const auto same_side = outer - 2;
+    const auto opposite_side = same_side == 4 ? 5U : 4U;
+    check(distance_square(same_side, outer) <= reach_square &&
+              distance_square(opposite_side, outer) > reach_square,
+          "Each outer contact is geometrically in reach only from its matching "
+          "hidden frontier");
+  }
+  for (const auto waypoint : {2U, 3U})
+    for (const auto hidden : {4U, 5U})
+      check(distance_square(waypoint, hidden) <= reach_square &&
+                distance_square(0, hidden) > reach_square,
+            "Charted waypoints support the discovery chain without a Home "
+            "acquisition shortcut");
+}
+auto outer_ownership_and_refusals() -> void {
+  const auto network = need(generate_freedom_system_network(Seed{42}, 3));
+  const auto prior = need(generate_freedom_system_network(Seed{42}, 2));
+  for (const auto& node : network.nodes) {
+    const auto physical =
+        need(resolve_freedom_network_system(network, node.system, 2));
+    check(
+        physical.catalog.id == node.system && physical.generator_version == 2 &&
+            validate_local_system(physical).has_value(),
+        "Outer lookup resolves actual authoritative generated body ownership");
+    if (node.ordinal < 6)
+      check(physical ==
+                need(resolve_freedom_network_system(prior, node.system, 2)),
+            "All six original physical catalogs are unchanged, not just anchor "
+            "labels");
+    else
+      check(physical ==
+                need(generate_physical_local_system(node.system_seed, 2)),
+            "Both new physical catalogs use their independently derived system "
+            "seeds");
+    check(!resolve_freedom_network_system(network, node.system, 0),
+          "Outer selection cannot authorize an unsupported physical recipe");
+  }
+  for (unsigned damage = 0; damage < 12; ++damage) {
+    auto bad = network;
+    switch (damage) {
+      case 0: bad.version = 0; break;
+      case 1: bad.version = 4; break;
+      case 2: bad.nodes.resize(6); break;
+      case 3: bad.nodes.push_back(bad.nodes.back()); break;
+      case 4: ++bad.network_seed.value; break;
+      case 5: bad.nodes[6].ordinal = 7; break;
+      case 6: bad.nodes[6].system = SystemId{0}; break;
+      case 7: ++bad.nodes[6].system_seed.value; break;
+      case 8: bad.nodes[6].position = bad.nodes[0].position; break;
+      case 9: bad.nodes[7].system = bad.nodes[6].system; break;
+      case 10:
+        bad.nodes[6].position.x = std::numeric_limits<std::int64_t>::min();
+        break;
+      case 11:
+        bad.nodes[7].position.z = std::numeric_limits<std::int64_t>::max();
+        break;
+    }
+    const auto frozen = bad;
+    check(!validate_freedom_system_network(bad) &&
+              !find_freedom_system_network_node(bad, network.nodes[0].system) &&
+              !resolve_freedom_network_system(bad, network.nodes[0].system) &&
+              !resolve_freedom_system_network_route(
+                  bad, network.nodes[0].system, network.nodes[1].system) &&
+              bad == frozen,
+          "Malformed outer context refuses before old-node lookup or "
+          "coordinate arithmetic");
+  }
+  const auto foreign =
+      need(generate_freedom_system_network(Seed{43}, 3)).nodes[6].system;
+  for (const auto id : {SystemId{0}, foreign})
+    check(!find_freedom_system_network_node(network, id) &&
+              !resolve_freedom_network_system(network, id) &&
+              !resolve_freedom_system_network_route(
+                  network, network.nodes[0].system, id),
+          "Outer consumers refuse zero or foreign owner IDs");
+  check(!find_freedom_system_network_node(prior, network.nodes[6].system) &&
+            !resolve_freedom_system_network_route(prior, prior.nodes[0].system,
+                                                  network.nodes[6].system),
+        "The six-node recipe cannot silently expand into an outer system");
+}
+auto outer_axis_and_floor_coverage() -> void {
+  std::array<bool, 24> covered{};
+  for (std::uint64_t value = 0;
+       value < 4096 && !std::ranges::all_of(
+                           covered, [](bool v) { return v; });
+       ++value) {
+    const auto route = generate_first_universe_route(Seed{value});
+    const auto tag = static_cast<std::size_t>(route.direction) * 4 +
+                     route.distance_light_seconds % 4;
+    check(
+        tag < covered.size(),
+        "Outer coverage indexes only a supported signed axis and floor class");
+    if (tag >= covered.size()) return;
+    if (!covered[tag]) {
+      covered[tag] = true;
+      outer_geometry(Seed{value});
+    }
+  }
+  check(std::ranges::all_of(covered, [](bool v) { return v; }),
+        "Outer geometry covers all six signed directions and all four "
+        "integer-floor classes");
+}
+
 } // namespace
 int main() {
   try {
@@ -491,6 +715,11 @@ int main() {
     for (std::uint64_t value = 100; value < 164; ++value)
       geometry(Seed{value}, false);
     uncharted_ownership_and_refusals();
+    outer_ownership_and_refusals();
+    outer_axis_and_floor_coverage();
+    for (const auto value : {std::uint64_t{0}, std::uint64_t{42},
+                             std::numeric_limits<std::uint64_t>::max()})
+      outer_geometry(Seed{value});
     for (const auto value : std::array<std::uint64_t, 8>{
              0, 1, 4, 7, 42, 123, 2048,
              std::numeric_limits<std::uint64_t>::max()})

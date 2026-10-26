@@ -333,6 +333,10 @@ class FreedomBridge : public godot::RefCounted {
                         "universe_seed"),
         &FreedomBridge::stage_freedom_uncharted_network_new_game);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_frontier_network_new_game",
+                        "universe_seed"),
+        &FreedomBridge::stage_freedom_frontier_network_new_game);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_planetary_network_new_game",
                         "universe_seed"),
         &FreedomBridge::stage_freedom_planetary_network_new_game);
@@ -483,6 +487,11 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("stage_freedom_derelict_recovery_new_game",
                         "universe_seed", "drive_kind", "origin_service"),
         &FreedomBridge::stage_freedom_derelict_recovery_new_game);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_chart_derelict_recovery_new_game",
+                        "universe_seed", "chart_kind", "drive_kind",
+                        "origin_service"),
+        &FreedomBridge::stage_freedom_chart_derelict_recovery_new_game);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_origin_repair"),
                                 &FreedomBridge::get_freedom_origin_repair);
     godot::ClassDB::bind_method(
@@ -918,6 +927,36 @@ class FreedomBridge : public godot::RefCounted {
     return stage_freedom_new_game_selection(universe_seed,
                                             native_uncharted_network_new_game);
   }
+  auto stage_freedom_frontier_network_new_game(
+      const godot::String& universe_seed) -> bool {
+    return stage_freedom_new_game_selection(universe_seed,
+                                            native_frontier_network_new_game);
+  }
+  auto stage_freedom_chart_derelict_recovery_new_game(
+      const godot::String& universe_seed, const godot::Variant& chart,
+      const godot::Variant& drive, const godot::Variant& service) -> bool {
+    if (chart.get_type() != godot::Variant::INT ||
+        drive.get_type() != godot::Variant::INT ||
+        service.get_type() != godot::Variant::BOOL) {
+      last_error = "Derelict recovery requires integer chart/drive choices and "
+                   "a boolean service choice";
+      return false;
+    }
+    const auto chart_kind = static_cast<std::int64_t>(chart);
+    const auto drive_kind = static_cast<std::int64_t>(drive);
+    if ((chart_kind != 3 && chart_kind != 4) || drive_kind < 0 ||
+        drive_kind > 2) {
+      last_error = "Unsupported discoverable chart or drive choice";
+      return false;
+    }
+    return stage_freedom_new_game_selection(
+        universe_seed, [chart_kind, drive_kind,
+                        selected = static_cast<bool>(service)](Seed seed) {
+          return native_derelict_recovery_new_game(
+              seed, static_cast<std::uint32_t>(chart_kind),
+              static_cast<std::uint32_t>(drive_kind), selected);
+        });
+  }
   auto stage_freedom_derelict_recovery_new_game(
       const godot::String& universe_seed, const godot::Variant& drive,
       const godot::Variant& service) -> bool {
@@ -946,10 +985,14 @@ class FreedomBridge : public godot::RefCounted {
   }
   auto stage_freedom_jump_recovery_new_game(const godot::String& universe_seed,
                                             std::int64_t chart_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 3) {
+    if (chart_kind < 0 || chart_kind > 4) {
       last_error = "Unsupported starting chart choice";
       return false;
     }
+    if (chart_kind == 4)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_recovery_new_game(seed, 4); });
     if (chart_kind == 3)
       return stage_freedom_new_game_selection(
           universe_seed,
@@ -968,10 +1011,14 @@ class FreedomBridge : public godot::RefCounted {
   }
   auto stage_freedom_jump_strain_new_game(const godot::String& universe_seed,
                                           std::int64_t chart_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 3) {
+    if (chart_kind < 0 || chart_kind > 4) {
       last_error = "Unsupported starting chart choice";
       return false;
     }
+    if (chart_kind == 4)
+      return stage_freedom_new_game_selection(
+          universe_seed,
+          +[](Seed seed) { return native_jump_strain_new_game(seed, 4); });
     if (chart_kind == 3)
       return stage_freedom_new_game_selection(
           universe_seed,
@@ -991,7 +1038,7 @@ class FreedomBridge : public godot::RefCounted {
   auto stage_freedom_origin_assistance_new_game(
       const godot::String& universe_seed, std::int64_t chart_kind,
       std::int64_t drive_kind) -> bool {
-    if (chart_kind < 0 || chart_kind > 3 || drive_kind < 0 || drive_kind > 2) {
+    if (chart_kind < 0 || chart_kind > 4 || drive_kind < 0 || drive_kind > 2) {
       last_error = "Unsupported starting chart or drive choice";
       return false;
     }
@@ -3340,6 +3387,7 @@ class FreedomBridge : public godot::RefCounted {
       -> godot::Dictionary {
     const auto view = session.star_search_view();
     godot::Dictionary result;
+    if (view.version == 2) result["version"] = 2;
     result["selected"] = view.selected;
     result["active"] = view.active;
     result["can_begin"] = view.can_begin;
@@ -4265,7 +4313,9 @@ class FreedomBridge : public godot::RefCounted {
   auto get_freedom_known_chart_map() const -> godot::Dictionary {
     if (!saved_flight) return {};
     const auto view = require(saved_flight->session.known_chart_map_view());
-    if (view.node_count > view.nodes.size())
+    const auto capacity = view.version == 2 ? 8U : view.version == 1 ? 6U : 0U;
+    if (!capacity || view.node_count > capacity ||
+        view.node_count > view.nodes.size())
       throw std::invalid_argument("Known chart map exceeds its node bound");
     godot::Dictionary packet;
     packet["version"] = static_cast<std::int64_t>(view.version);
