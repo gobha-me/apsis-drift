@@ -125,7 +125,7 @@ func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, out
 		await process_frame
 		await process_frame
 		check(view.crew_open() and view.paused and view.crew_reader.readable_theme.default_font_size >= 20, "Crew reader resize lost paused readable modal")
-		for button in view.crew_reader.topics + [view.crew_reader.keep, view.crew_reader.back]:
+		for button in view.crew_reader.topics + [view.crew_reader.keep] + view.crew_reader.services + [view.crew_reader.back]:
 			if not button.visible: continue
 			button.grab_focus()
 			await process_frame
@@ -327,6 +327,79 @@ func earned_contact_topics(shell: Control, owner: Variant, phases: String, asset
 		file.store_string(JSON.stringify({"schema": "apsis.crew-earned-contact-native/1", "completed": failures == 0, "rows": rows, "scope": "Actual earned contact/inspection retained by classified recovery, real facing ticks and paused input/read/Continue; no new facts, NPC memory or manual-controller acceptance"}, "\t") + "\n")
 		file.close()
 
+func service_interactions(shell: Control, owner: Variant, phases: String, assets: String, output: String) -> void:
+	# A real planetary-chart station Save, already facing the attendant. The
+	# existing office owns all work, sales and financial commands after entry.
+	var source := phases.path_join("lead-station.json")
+	var rows: Array = []
+	for gesture in ["keyboard", "mouse", "pad"]:
+		if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Service entry Continue refused: " + gesture): return
+		var view: Control = shell.current_view
+		view.set_process(false)
+		view.set_process_input(false)
+		view.preferences_provider.persist = false
+		view.observe_neutral_controls()
+		view.resume_requested()
+		view.request_crew_conversation()
+		var historical := save(owner, output.path_join("services-" + gesture + "-historical.json"))
+		if not check(view.crew_open() and not view.crew_reader.services[0].disabled and view.crew_reader.services[1].disabled, "Historical condition-free journey lost office access or invented repair support"): return
+		view.crew_reader.services[1].pressed.emit()
+		check(view.crew_open() and not view.origin_repair_open() and save(owner, output.path_join("services-" + gesture + "-unavailable.json")) == historical, "Unavailable historical repair changed the Save or opened service")
+		view.close_crew_conversation()
+		# Explicit public mode selection on a test clone supplies a genuine
+		# pristine condition owner. It is not a flown damage/repair claim.
+		if not check(owner.enable_freedom_impact_consequences(), "Public condition selection refused for service clone"): return
+		view.update_view()
+		if gesture == "pad":
+			Input.joy_connection_changed.emit(0, true)
+			pad(view, 0, JOY_BUTTON_START, true)
+			pad(view, 0, JOY_BUTTON_START, false)
+		var baseline := save(owner, output.path_join("services-" + gesture + "-initial.json"))
+		for service in ["office", "repair"]:
+			var prefix := output.path_join("services-" + gesture + "-" + service)
+			view.observe_neutral_controls()
+			view.resume_requested()
+			key(view, KEY_E, true)
+			key(view, KEY_E, false)
+			if not check(view.crew_open() and view.paused, "Service conversation did not open: " + service): return
+			var button: Button = view.crew_reader.services[0 if service == "office" else 1]
+			if not check(not button.disabled, "Actual supported station service disabled: " + service): return
+			key(view, KEY_W, true)
+			button.pressed.emit()
+			key(view, KEY_W, false)
+			view.save_dialog.show()
+			button.pressed.emit()
+			view.save_dialog.hide()
+			view.journey_dialog_open = true
+			button.pressed.emit()
+			view.journey_dialog_open = false
+			view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+			button.pressed.emit()
+			view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+			view.open_crew_service("unknown")
+			check(view.crew_open() and not view.commissions_open() and not view.origin_repair_open() and save(owner, prefix + "-guarded.json") == baseline, "Service entry bypassed demand/focus/modal guards: " + service)
+			button.grab_focus()
+			if gesture == "mouse": await mouse_topic(button)
+			elif gesture == "pad":
+				pad(view, 0, JOY_BUTTON_A, true)
+				pad(view, 0, JOY_BUTTON_A, false)
+			else:
+				key(view, KEY_ENTER, true)
+				key(view, KEY_ENTER, false)
+			var opened: bool = view.commissions_open() if service == "office" else view.origin_repair_open()
+			check(opened and not view.crew_open() and view.paused and not view.mouse_look.active and save(owner, prefix + "-opened.json") == baseline, "Service entry changed journey or failed exclusive paused routing: " + service + "/" + gesture)
+			if not opened: return
+			if service == "office": view.close_survey_commissions()
+			else: view.close_origin_repair()
+			var return_button: Button = view.commissions_button if service == "office" else view.origin_repair_button
+			check(view.paused and not view.crew_open() and not view.commissions_open() and not view.origin_repair_open() and not view.controls_armed and return_button.has_focus() and save(owner, prefix + "-closed.json") == baseline, "Service Back lost paused focus or changed Save: " + service)
+			rows.append({"gesture": gesture, "service": service, "save_sha256": FileAccess.get_sha256(prefix + "-closed.json")})
+		if gesture == "pad": Input.joy_connection_changed.emit(0, false)
+	var file := FileAccess.open(output.path_join("services.json"), FileAccess.WRITE)
+	if check(file != null, "Service entry report unavailable"):
+		file.store_string(JSON.stringify({"schema": "apsis.crew-service-entry/1", "completed": failures == 0, "rows": rows}, "\t") + "\n")
+		file.close()
+
 func knowledge_in(document: Variant) -> Dictionary:
 	var value: Variant = document
 	for depth in 16:
@@ -479,6 +552,8 @@ func run() -> void:
 	shell.presentation_only = true
 	root.add_child(shell)
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	await service_interactions(shell, owner, derelict_phases, assets, output)
+	if failures != 0: shell.free(); quit(1); return
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Crew source Continue failed: " + shell.error): shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	view.set_process(false)

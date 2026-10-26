@@ -468,6 +468,7 @@ func build_ui() -> void:
 	crew_reader = CrewConversation.new()
 	crew_reader.topic_requested.connect(select_crew_topic)
 	crew_reader.keep_requested.connect(keep_station_lead)
+	crew_reader.service_requested.connect(open_crew_service)
 	crew_reader.back_requested.connect(close_crew_conversation)
 	add_child(crew_reader)
 	save_dialog.canceled.connect(save_canceled)
@@ -956,9 +957,35 @@ func request_crew_conversation(allow_pending := true) -> void:
 	crew_feedback = ""
 	pause_controls("Talking with " + str(packet.name) + ". The journey stays paused.")
 	crew_reader.open(packet)
+	refresh_crew_services()
 	crew_actor.bubble.hide()
 	boarding_prompt.hide()
 	refresh_hud()
+
+func refresh_crew_services() -> void:
+	var office: Variant = bridge.get_freedom_survey_commissions(commissions_view.requested_kind)
+	var office_valid: bool = SurveyCommissions.valid_packet(office) and office.tick == state.tick
+	crew_reader.set_service("office", office_valid and office.supported and office.at_origin, str(office.note) if office_valid else "Current office response is unavailable.")
+	var repair: Variant = bridge.get_freedom_origin_repair()
+	var repair_valid: bool = OriginRepair.valid_packet(repair) and repair.tick == state.tick
+	crew_reader.set_service("repair", repair_valid and repair.supported and repair.at_origin, str(repair.note) if repair_valid else "Current repair response is unavailable.")
+
+func open_crew_service(service: String) -> void:
+	if service not in ["office", "repair"] or not crew_open() or not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or commissions_open() or origin_repair_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral(): return
+	# Conversation entry is no authority for a later service action. Recheck the
+	# actual actor and quote before replacing this modal with an existing reader.
+	var crew: Variant = bridge.get_freedom_station_crew()
+	if not StationCrew.valid_packet(crew, state) or not crew.available: return
+	refresh_crew_services()
+	for button in crew_reader.services:
+		if button.get_meta("service") == service and button.disabled: return
+	crew_reader.clear_lead()
+	crew_reader.hide()
+	if service == "office": open_survey_commissions()
+	else: open_origin_repair()
+	if not commissions_open() and not origin_repair_open():
+		crew_reader.show()
+		crew_reader.back.grab_focus()
 
 func select_crew_topic(id: int) -> void:
 	if not crew_open() or commissions_open() or origin_repair_open() or not paused or not focused or journey_dialog_open or save_dialog.visible or not error.is_empty(): return

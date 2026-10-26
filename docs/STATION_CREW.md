@@ -15,6 +15,14 @@ does not force an extra simulation tick or relax C++ eligibility.
 The conversation reader pauses the journey;
 closing it returns to paused controls, with an explicit neutral Resume.
 
+**Survey office · work and sales** and **Origin hull repair** open the existing
+station service screens directly from the conversation. The office contains
+commission work, specimen and salvage sales, and paid-operation terms. Opening
+a service only reviews it; accepting work, selling, enrolling or repairing still
+requires its separate confirmation. Services unavailable in an older journey
+are disabled with an explanation. Back returns to paused controls, and the
+original pause-menu entries remain available.
+
 C++ supplies the station-qualified crew identity, fixed pose, interaction
 eligibility, authored topics and clock-derived remark selection. Godot presents
 the four-view pixel artwork, text and input. The crew has no independent
