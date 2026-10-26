@@ -9,10 +9,21 @@ charts, fuel service and movement rules.
 ## Orbital commissions
 
 At Origin, pause and open **Survey commissions**. Review the already-charted
-remote planet and select **Accept commission**. Fly to that planet and maintain
-a stable bound orbit above its atmosphere, within two planet radii of its
-centre. The prototype target is the first planet in **Nearby system**; select
-that system in Navigation chart to arrive at the commissioned planet. Thirty seconds of new qualifying flight acquires the measurement.
+remote planet and select **Accept commission**. Nearby's primary remains the
+ordinary offer. If the primary planet of **Waypoint A** is already known by
+identity and location, the office also lets you review that destination. Choosing
+it displays its own full terms and named Origin → target → Origin route; it
+changes no navigation selection, observations or saved work. Choose the matching
+system separately in Navigation chart.
+
+The displayed two-charge plan and current shortfall are information. Zero or one
+carried charge does not block acceptance; existing free replenishment or an
+eligible paid retainer remains available. This jump budget does not promise
+flight fuel, orbital insertion, landing, deadline completion or profit.
+
+Fly to the accepted planet and maintain a stable bound orbit above its
+atmosphere, within two planet radii of its centre. Thirty seconds of new
+qualifying flight acquires the measurement.
 The scanner does not steer or establish an orbit. Partial progress holds when
 conditions become unsuitable. During flight, the HUD shows progress in seconds
 and the actual submission time remaining, including when the report is ready.
@@ -72,8 +83,9 @@ seeds or final price balance. This bounded scope is
 The standing offer rolls over at the next absolute game-hour boundary. An
 explicit acceptance reserves its quoted reward for **four game hours** from
 acceptance. Submission at or after the deadline pays nothing. An expired
-commission can be explicitly replaced at Origin, or abandoned there without
-payment. Existing exploration observations remain; replacing the job discards
+orbital commission can be explicitly renewed for the same target at Origin,
+or abandoned there without payment. Any existing job, expired or not, locks its
+destination and kind; abandon it before choosing a different target or kind. Existing exploration observations remain; replacing the job discards
 that job's expired measurement. Another fresh commission is available after
 payout or abandonment, including within the same offer hour.
 
@@ -97,8 +109,13 @@ separate account metadata, outside its sensor-fact entries. It retains one
 active job, a monotonic sequence, a bounded lifetime paid count and the latest
 paid receipt. Earned credits are exactly the count multiplied by the version1
 reward; no separate mutable wallet or unbounded payment history is required.
-The target is the existing first charted neighboring planet. An unknown planet
-is never revealed to manufacture a commission.
+Version 1 retains the fixed Nearby primary target. Geological work uses version
+2. Explicit acceptance of the admitted Waypoint primary selects version 3, with
+an explicit per-job target policy; later Nearby or geological work retains that
+version. Merely browsing, reading or loading promotes nothing. Existing absent,
+version-1 and version-2 bytes and meanings remain unchanged. Mixed receipt
+history retains its literal target and proof. An unknown planet is never
+revealed to manufacture a commission.
 
 Ordinary jumps retain the job. Save/Continue retains its terms, progress,
 earnings and receipt. Standard replacement preserves the account and accepted
@@ -122,8 +139,11 @@ claim of uninterrupted manual ascent, orbital handling or docking.
 Native checks use the actual paused office in station and flight, retained
 complete-save comparisons and Continue. Automated checks do not establish
 manual handling, final scanner pacing or typical procedural-start viability.
+The additional [destination-choice scope](https://github.com/gobha-me/apsis-drift/issues/720)
+uses labelled transaction/orbit boundaries for its alternative-target checks;
+those checks do not establish an uninterrupted Waypoint earning trip.
 The separate [ordinary paid-survey reference](FREEDOM_ENDURANCE.md#ordinary-paid-survey-reference)
-measures a fully flown seed 42 paid trip with a positive operating cash
+measures a fully flown seed 42 Nearby paid trip with a positive operating cash
 change after restoration. It is a C++ test-pilot reference; broader balance,
 failed/delayed work and player review remain open.
 

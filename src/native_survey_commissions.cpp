@@ -1,28 +1,75 @@
 #include "apsis_drift/native_flight_session.hpp"
 
+#include "apsis_drift/freedom_jump_targeting.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
+
 #include "apsis_drift/save_file.hpp"
 
 #include <algorithm>
 
 namespace apsis_drift {
 namespace {
-auto target_name(const FreedomKnowledge& knowledge, SystemId system,
-                 PlanetId planet, SimulationTick tick) -> std::string {
+auto known_name(const FreedomKnowledge& knowledge, KnowledgeSubject subject,
+                SimulationTick tick) -> std::string {
   const auto identity = query_freedom_knowledge(
-      knowledge, {KnowledgeSubjectKind::planet, system, planet.value},
-      KnowledgeFact::identity_type, tick);
-  const auto location = query_freedom_knowledge(
-      knowledge, {KnowledgeSubjectKind::planet, system, planet.value},
-      KnowledgeFact::location, tick);
-  if (!identity || !*identity || !location || !*location) return {};
+      knowledge, subject, KnowledgeFact::identity_type, tick);
+  const auto location = query_freedom_knowledge(knowledge, subject,
+                                                KnowledgeFact::location, tick);
+  if (!identity || !*identity || !location || !*location ||
+      (**identity).provenance.level < NavigationKnowledgeLevel::resolved ||
+      (**location).provenance.level < NavigationKnowledgeLevel::resolved)
+    return {};
   if (const auto* named = std::get_if<KnownIdentity>(&(**identity).value))
     return named->name;
   return {};
 }
+auto target_name(const FreedomKnowledge& knowledge, SystemId system,
+                 PlanetId planet, SimulationTick tick) -> std::string {
+  return known_name(knowledge,
+                    {KnowledgeSubjectKind::planet, system, planet.value}, tick);
+}
 } // namespace
 
+auto NativeFreedomFlightSession::survey_commission_offers() const
+    -> std::expected<NativeSurveyCommissionOffersView, std::string> {
+  NativeSurveyCommissionOffersView view;
+  view.tick = document_.flight.tick;
+  view.note = "Select identified charted orbital work at Origin. Existing work "
+              "must be abandoned before changing destination.";
+  if (!knowledge_ || !resources_ || !document_.origin.network ||
+      !freedom_knowledge_has_planetary_chart(knowledge_->recipe.version))
+    return view;
+  if (!validate_freedom_knowledge(*knowledge_, view.tick))
+    return std::unexpected{"Commission knowledge is invalid"};
+  const auto network = generate_freedom_system_network(
+      document_.origin.recipe.universe_seed, document_.origin.network->version);
+  if (!network || network->nodes.size() < 3)
+    return std::unexpected{"Commission network is unavailable"};
+  for (const auto ordinal : {1U, 2U}) {
+    const auto system = network->nodes[ordinal].system;
+    const auto system_name = known_name(
+        *knowledge_, {KnowledgeSubjectKind::system, system, system.value},
+        view.tick);
+    if (system_name.empty()) continue;
+    const auto physical = resolve_freedom_network_system(
+        *network, system, knowledge_->recipe.physical_catalog);
+    if (!physical || physical->catalog.planets.empty())
+      return std::unexpected{"Commission body is unavailable"};
+    const auto planet = physical->catalog.planets.front().descriptor.id;
+    const auto body_name = target_name(*knowledge_, system, planet, view.tick);
+    if (body_name.empty()) continue;
+    const auto route = commission_return_charge_view(system);
+    if (!route) return std::unexpected{route.error()};
+    if (!route->available || route->leg_count != 2) continue;
+    view.offers[view.offer_count++] = {BodyTarget{system, body_id(planet)},
+                                       system_name, body_name, *route};
+  }
+  return view;
+}
+
 auto NativeFreedomFlightSession::survey_commission_view(
-    SurveyCommissionKind requested_kind) const
+    SurveyCommissionKind requested_kind,
+    std::optional<BodyTarget> requested_target) const
     -> std::expected<NativeSurveyCommissionView, std::string> {
   if (requested_kind != SurveyCommissionKind::orbital &&
       requested_kind != SurveyCommissionKind::geological)
@@ -42,17 +89,40 @@ auto NativeFreedomFlightSession::survey_commission_view(
   if (auto valid = validate_survey_commissions(account, view.tick); !valid)
     return std::unexpected{valid.error()};
   if (account.active) view.kind = account.active->kind;
-  const auto target =
-      view.kind == SurveyCommissionKind::geological
-          ? generate_physical_origin_system(
-                document_.origin.recipe.universe_seed,
-                knowledge_->recipe.physical_catalog)
-          : generate_physical_local_system(ids.target_system_seed,
-                                           knowledge_->recipe.physical_catalog);
-  if (!target || target->catalog.planets.empty())
-    return std::unexpected{"Commission destination is unavailable"};
-  view.system = target->catalog.id;
-  view.planet = target->catalog.planets.front().descriptor.id;
+  if (account.active) {
+    view.system = account.active->system;
+    view.planet = account.active->planet;
+    if (requested_target &&
+        *requested_target != BodyTarget{view.system, body_id(view.planet)})
+      return std::unexpected{
+          "Abandon existing work before changing destination"};
+  } else if (requested_target) {
+    if (view.kind != SurveyCommissionKind::orbital)
+      return std::unexpected{
+          "Explicit destinations apply only to orbital work"};
+    const auto offers = survey_commission_offers();
+    if (!offers) return std::unexpected{offers.error()};
+    bool admitted = false;
+    for (std::uint32_t i = 0; i < offers->offer_count; ++i)
+      if (offers->offers[i].target == *requested_target) admitted = true;
+    if (!admitted)
+      return std::unexpected{
+          "Select an admitted charted commission destination"};
+    view.system = requested_target->system;
+    view.planet = PlanetId{requested_target->body.value};
+  } else {
+    const auto target =
+        view.kind == SurveyCommissionKind::geological
+            ? generate_physical_origin_system(
+                  document_.origin.recipe.universe_seed,
+                  knowledge_->recipe.physical_catalog)
+            : generate_physical_local_system(
+                  ids.target_system_seed, knowledge_->recipe.physical_catalog);
+    if (!target || target->catalog.planets.empty())
+      return std::unexpected{"Commission destination is unavailable"};
+    view.system = target->catalog.id;
+    view.planet = target->catalog.planets.front().descriptor.id;
+  }
   view.body_name =
       target_name(*knowledge_, view.system, view.planet, view.tick);
   if (view.body_name.empty()) {
@@ -117,7 +187,8 @@ auto NativeFreedomFlightSession::survey_commission_view(
     view.can_submit = view.at_origin && view.completed && !view.expired;
     if (view.expired)
       view.note = "Submission deadline passed; this commission pays nothing. "
-                  "At Origin, explicitly replace it with a new commission. "
+                  "At Origin, renew this destination or abandon it before "
+                  "choosing different work. "
                   "Your exploration observations are retained.";
     else if (job.kind == SurveyCommissionKind::geological)
       view.note = view.completed
@@ -148,10 +219,19 @@ auto NativeFreedomFlightSession::survey_commission_view(
     view.note = "Standing request: record 30 new seconds in a stable orbit "
                 "at this remote planet, then return to Origin and submit. "
                 "Reward: 100 prototype credits; reservation: four game hours.";
+    if (requested_target && view.system != ids.target_system)
+      view.note =
+          "Standing request at " + view.body_name +
+          ": record 30 new seconds in a stable orbit, then return to Origin "
+          "and submit. "
+          "Reward: 100 prototype credits; reservation: four game hours.";
   }
   if (view.at_origin && offer_until)
     view.can_accept = (view.kind == SurveyCommissionKind::geological
                            ? apsis_drift::accept_geological_survey_commission(
+                                 account, view.system, view.planet, view.tick)
+                       : view.system != ids.target_system
+                           ? apsis_drift::accept_targeted_survey_commission(
                                  account, view.system, view.planet, view.tick)
                            : apsis_drift::accept_survey_commission(
                                  account, view.system, view.planet, view.tick))
@@ -201,7 +281,17 @@ auto NativeFreedomFlightSession::commit_survey_commission_account(
 auto NativeFreedomFlightSession::accept_survey_commission(
     SimulationTick offer_until, std::uint32_t sequence)
     -> std::expected<void, std::string> {
-  const auto view = survey_commission_view();
+  if (!knowledge_) return std::unexpected{"No selected commission knowledge"};
+  const auto ids = generate_first_intersystem_identities(
+      document_.origin.recipe.universe_seed);
+  const auto nearby = generate_physical_local_system(
+      ids.target_system_seed, knowledge_->recipe.physical_catalog);
+  if (!nearby || nearby->catalog.planets.empty())
+    return std::unexpected{"Nearby commission target is unavailable"};
+  const auto view = survey_commission_view(
+      SurveyCommissionKind::orbital,
+      BodyTarget{nearby->catalog.id,
+                 body_id(nearby->catalog.planets.front().descriptor.id)});
   if (!view) return std::unexpected{view.error()};
   if (view->kind != SurveyCommissionKind::orbital || !view->can_accept ||
       offer_until != view->offer_until)
@@ -212,6 +302,30 @@ auto NativeFreedomFlightSession::accept_survey_commission(
     return std::unexpected{"The displayed commission offer is stale"};
   auto next = apsis_drift::accept_survey_commission(
       account, view->system, view->planet, document_.flight.tick);
+  if (!next) return std::unexpected{next.error()};
+  return commit_survey_commission_account(*next);
+}
+
+auto NativeFreedomFlightSession::accept_survey_commission_target(
+    BodyTarget target, SimulationTick offer_until, std::uint32_t sequence)
+    -> std::expected<void, std::string> {
+  const auto view =
+      survey_commission_view(SurveyCommissionKind::orbital, target);
+  if (!view) return std::unexpected{view.error()};
+  if (view->kind != SurveyCommissionKind::orbital || !view->can_accept ||
+      view->offer_until != offer_until || view->offer_sequence != sequence ||
+      BodyTarget{view->system, body_id(view->planet)} != target)
+    return std::unexpected{
+        "Review current target-bound orbital terms at Origin"};
+  const auto account =
+      knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
+  const auto ids = generate_first_intersystem_identities(
+      document_.origin.recipe.universe_seed);
+  auto next = target.system == ids.target_system
+                  ? apsis_drift::accept_survey_commission(
+                        account, view->system, view->planet, view->tick)
+                  : apsis_drift::accept_targeted_survey_commission(
+                        account, view->system, view->planet, view->tick);
   if (!next) return std::unexpected{next.error()};
   return commit_survey_commission_account(*next);
 }

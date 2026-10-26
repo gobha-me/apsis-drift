@@ -1,6 +1,7 @@
 #include "derelict_recovery_test_support.hpp"
 
 #include "apsis_drift/freedom_knowledge_save.hpp"
+#include "apsis_drift/freedom_system_network.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -26,6 +27,30 @@ auto stable(const FreedomKnowledge& knowledge, SimulationTick tick)
             need(encode_freedom_knowledge_json(decoded, tick)) == text,
         "Knowledge metadata must roundtrip with byte stability");
   return text;
+}
+auto station_income_fixture(const FreedomKnowledge& knowledge,
+                            SimulationTick tick)
+    -> std::unique_ptr<NativeFreedomFlightSession> {
+  // Explicit same-craft station/financial metadata fixture, not a flown return.
+  auto saved = std::make_unique<NativeSaveDocument>(std::move(
+      need(native_derelict_recovery_new_game({42}, 0, false)).document));
+  auto& mapped = std::get<FreedomKnowledgeSaveDocument>(*saved);
+  mapped.knowledge = knowledge;
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(mapped.voyage.voyage.base);
+  auto& flight = assembly.journey.voyage.flight;
+  const auto owner = need(generate_physical_origin_system({42}, 2));
+  const auto station = generate_origin_station({42});
+  const auto geometry = need(origin_station_geometry(station));
+  flight.flight = need(release_origin_port(
+      owner, station, geometry,
+      {geometry.version, assembly.journey.voyage.docking.target,
+       flight.flight.craft, tick}));
+  flight.origin.state.tick = tick;
+  mapped.voyage.resources.tick = tick;
+  return std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_select_save_document(std::move(*saved))))));
 }
 auto historical() -> void {
   for (std::uint32_t recipe = 1; recipe <= 6; ++recipe) {
@@ -58,7 +83,7 @@ auto historical() -> void {
                 "settled_canister_count"),
         "Legacy paid-v1 retains exactly its nine fields");
 }
-auto legacy_specimen_income() -> void {
+auto specimen_income_metadata() -> FreedomKnowledge {
   // Identity-only metadata, using the established bounded shell/cell fixture.
   // This is not a physical exposure inspection, collection or buyer command.
   auto knowledge = need(make_freedom_starting_knowledge({42}, 5));
@@ -99,6 +124,10 @@ auto legacy_specimen_income() -> void {
       FreedomSpecimenSalesAccount{1, 1, {craft, 9, {*record}}};
   knowledge.paid_operations =
       need(make_paid_operations(PaidIncomeCounts{0, 1, 0}, 10, 0));
+  return knowledge;
+}
+auto legacy_specimen_income() -> void {
+  const auto knowledge = specimen_income_metadata();
   const auto text = stable(knowledge, 10);
   const auto account = Json::parse(text)["paid_operations"];
   check(account.size() == 10 && account["version"] == 2 &&
@@ -238,6 +267,116 @@ auto retrieval_and_codecs() -> void {
             sold["paid_operations"]["settled_specimen_count"] == 0 &&
             sold["paid_operations"]["settled_canister_count"] == 1,
         "Paid-v3 requires exactly eleven fields including zero specimen count");
+  {
+    // Explicit composite historical-income metadata; no claim of a second
+    // physical collection, return voyage or earned profit. Each underlying
+    // sample/canister source still passes the full knowledge admission.
+    auto all = claimed;
+    const auto specimens = specimen_income_metadata();
+    all.surface_landmarks = specimens.surface_landmarks;
+    all.field_samples = specimens.field_samples;
+    all.specimen_sales = specimens.specimen_sales;
+    const auto network = need(generate_freedom_system_network({42}, 2));
+    const auto waypoint = need(
+        resolve_freedom_network_system(network, network.nodes[2].system, 2));
+    all.survey_commissions = need(accept_targeted_survey_commission(
+        {}, waypoint.catalog.id, waypoint.catalog.planets.front().descriptor.id,
+        completion_tick));
+    all.paid_operations = need(
+        make_paid_operations(PaidIncomeCounts{0, 1, 1}, completion_tick, 0));
+    const auto selected = stable(all, completion_tick);
+    check(Json::parse(selected)["paid_operations"]["settled_specimen_count"] ==
+                  1 &&
+              Json::parse(
+                  selected)["paid_operations"]["settled_canister_count"] == 1,
+          "Alternative acceptance must retain both existing non-survey income "
+          "witnesses");
+    for (SimulationTick step = 1; step <= kSurveyCommissionMeasurementTicks;
+         ++step)
+      all.survey_commissions = need(advance_survey_commission(
+          *all.survey_commissions, live->document().origin.state.craft,
+          completion_tick + step, true));
+    const auto submitted = completion_tick + kSurveyCommissionMeasurementTicks;
+    all.survey_commissions =
+        need(submit_survey_commission(*all.survey_commissions, 1, submitted));
+    all.paid_operations = need(settle_paid_survey_income(
+        *all.paid_operations, PaidIncomeCounts{1, 1, 1}, submitted, 0));
+    const auto joined = Json::parse(stable(all, submitted));
+    check(joined["survey_commissions"]["version"] == 3 &&
+              joined["paid_operations"]["settled_paid_count"] == 1 &&
+              joined["paid_operations"]["settled_specimen_count"] == 1 &&
+              joined["paid_operations"]["settled_canister_count"] == 1 &&
+              need(paid_operations_cash(*all.paid_operations,
+                                        PaidIncomeCounts{1, 1, 1})) == 420,
+          "Chosen payout joins all three real-source counters under the "
+          "unchanged closed paid-v3 codec");
+    // Exercise the actual Session transaction seams with these disclosed
+    // historical-income/zero-cash boundaries. No new measurement is claimed.
+    auto station_knowledge = all;
+    station_knowledge.survey_commissions.reset();
+    station_knowledge.paid_operations =
+        need(make_paid_operations(PaidIncomeCounts{0, 1, 1}, submitted, 0));
+    station_knowledge.paid_operations->spent_credits = 340;
+    auto customer = station_income_fixture(station_knowledge, submitted);
+    const BodyTarget target{
+        waypoint.catalog.id,
+        body_id(waypoint.catalog.planets.front().descriptor.id)};
+    const auto offer = need(customer->survey_commission_view(
+        SurveyCommissionKind::orbital, target));
+    need(customer->accept_survey_commission_target(target, offer.offer_until,
+                                                   offer.offer_sequence));
+    {
+      auto deficit =
+          std::make_unique<NativeSaveDocument>(need(customer->save_document()));
+      auto& d = std::get<FreedomKnowledgeSaveDocument>(*deficit);
+      d.voyage.resources.jump_charges = 0;
+      d.voyage.resources.flight_quanta = 0;
+      customer = std::make_unique<NativeFreedomFlightSession>(
+          need(NativeFreedomFlightSession::open(
+              need(native_select_save_document(std::move(*deficit))))));
+    }
+    const auto support = need(customer->paid_operations_view());
+    check(support.can_retainer, "Three-income source joins must not gate a "
+                                "zero-charge chosen-job retainer");
+    need(customer->request_paid_retainer(support.token));
+    auto ready_knowledge = *customer->knowledge();
+    for (SimulationTick step = 1; step <= kSurveyCommissionMeasurementTicks;
+         ++step)
+      ready_knowledge.survey_commissions = need(advance_survey_commission(
+          *ready_knowledge.survey_commissions,
+          customer->document().origin.state.craft, submitted + step, true));
+    customer = station_income_fixture(
+        ready_knowledge, submitted + kSurveyCommissionMeasurementTicks);
+    need(customer->submit_survey_commission(1));
+    check(customer->knowledge()->paid_operations->settled_paid_count == 1 &&
+              customer->knowledge()->paid_operations->settled_specimen_count ==
+                  1 &&
+              customer->knowledge()->paid_operations->settled_canister_count ==
+                  1 &&
+              customer->knowledge()->specimen_sales ==
+                  station_knowledge.specimen_sales &&
+              customer->knowledge()->derelict_recovery ==
+                  station_knowledge.derelict_recovery,
+          "Actual chosen acceptance/support/payout must preserve specimen and "
+          "canister source receipts");
+    const auto retired = std::make_unique<FreedomRecoverySaveDocument>(
+        need(customer->recovery_document()));
+    need(customer->record_loss(
+        FreedomLossCause::recoverable_destruction,
+        customer->document().origin.state.craft,
+        customer->document().flight.tick,
+        need(freedom_recovery_source_checksum(retired->voyage))));
+    need(customer->complete_recovery());
+    check(customer->knowledge()->paid_operations->settled_paid_count == 1 &&
+              customer->knowledge()->paid_operations->settled_specimen_count ==
+                  1 &&
+              customer->knowledge()->paid_operations->settled_canister_count ==
+                  1 &&
+              need(paid_operations_cash(*customer->knowledge()->paid_operations,
+                                        PaidIncomeCounts{1, 1, 1})) == 0,
+          "Actual replacement retains all three income counts with the "
+          "existing insurance/retainer ordering");
+  }
   for (unsigned fault = 0; fault < 10; ++fault) {
     auto bad = sold;
     switch (fault) {

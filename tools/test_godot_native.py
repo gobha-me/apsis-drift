@@ -925,6 +925,14 @@ def main(argv=None):
                for name in arrival_required):
             print(f"FAIL incomplete charted arrival fixtures: {log}", flush=True)
             return 1
+        destination_required = ("station", "station-accepted", "seated", "zero-charge",
+                                "accepted", "supported", "partial", "ready", "origin",
+                                "paid", "expired", "renewed", "manifest")
+        if any(not (phases / "commission-destinations" / (name + ".json")).is_file()
+               or (phases / "commission-destinations" / (name + ".json")).stat().st_size == 0
+               for name in destination_required):
+            print(f"FAIL incomplete commission destination fixtures: {log}", flush=True)
+            return 1
         if not paid_recovery_reference_complete(phases):
             print(f"FAIL incomplete paid recovery reference fixtures: {log}", flush=True)
             return 1

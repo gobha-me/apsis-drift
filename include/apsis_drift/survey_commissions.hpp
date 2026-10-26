@@ -14,7 +14,12 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kSurveyCommissionVersion{1};
 inline constexpr std::uint32_t kGeologicalSurveyCommissionVersion{2};
+inline constexpr std::uint32_t kChosenTargetSurveyCommissionVersion{3};
 enum class SurveyCommissionKind : std::uint8_t { orbital = 1, geological = 2 };
+enum class SurveyCommissionTargetPolicy : std::uint8_t {
+  legacy = 1,
+  charted_waypoint = 2
+};
 inline constexpr std::uint32_t kSurveyCommissionMeasurementTicks{3600};
 inline constexpr SimulationTick kSurveyCommissionHourTicks{432'000};
 inline constexpr SimulationTick kSurveyCommissionReservationTicks{
@@ -38,6 +43,8 @@ struct SurveyCommission {
   SimulationTick accepted_tick{}, deadline_tick{};
   std::optional<SurveyCommissionMeasurement> measurement;
   SurveyCommissionKind kind{SurveyCommissionKind::orbital};
+  SurveyCommissionTargetPolicy target_policy{
+      SurveyCommissionTargetPolicy::legacy};
   friend auto operator==(const SurveyCommission&, const SurveyCommission&)
       -> bool = default;
 };
@@ -76,6 +83,9 @@ struct SurveyCommissionAccount {
                                             SimulationTick now)
     -> std::expected<SurveyCommissionAccount, std::string>;
 [[nodiscard]] auto accept_geological_survey_commission(
+    const SurveyCommissionAccount&, SystemId, PlanetId, SimulationTick now)
+    -> std::expected<SurveyCommissionAccount, std::string>;
+[[nodiscard]] auto accept_targeted_survey_commission(
     const SurveyCommissionAccount&, SystemId, PlanetId, SimulationTick now)
     -> std::expected<SurveyCommissionAccount, std::string>;
 // Call once after an ordinary committed flight interval. Repeating the same

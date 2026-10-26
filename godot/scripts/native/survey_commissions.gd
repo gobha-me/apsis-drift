@@ -24,6 +24,10 @@ var recovery_sale_packet: Dictionary = {}
 
 var packet: Dictionary = {}
 var requested_kind := 1
+const ReturnCharge = preload("res://scripts/native/native_return_charge_check.gd")
+var requested_target: Dictionary = {}
+var offers_packet: Dictionary = {}
+var destination_buttons: Array[Button] = []
 var orbital_button: Button
 var geological_button: Button
 var accept_button: Button
@@ -100,6 +104,42 @@ static func valid_packet(value: Variant) -> bool:
 		if value.system_id == "0" or value.planet_id == "0" or value.body_name.is_empty(): return false
 	return true
 
+static func valid_offers(value: Variant) -> bool:
+	if not value is Dictionary or value.size() != 4 or not value.get("version") is int or value.version != 1 or not decimal(value.get("tick")): return false
+	if not ReturnCharge.bounded_text(value.get("note"), 1024) or not value.get("offers") is Array or value.offers.size() > 2: return false
+	var seen: Dictionary = {}
+	for row: Variant in value.offers:
+		if not row is Dictionary or row.size() != 5: return false
+		for field in ["system_id", "planet_id"]:
+			if not decimal(row.get(field)) or row[field] == "0": return false
+		if not ReturnCharge.bounded_text(row.get("system_name"), 256) or not ReturnCharge.bounded_text(row.get("body_name"), 512): return false
+		if not ReturnCharge.valid_packet(row.get("route")) or row.route.tick != value.tick: return false
+		if row.route.available and (row.route.required_charges != 2 or row.route.legs[0].destination_id != row.system_id or row.route.legs[1].destination_id != row.route.legs[0].source_id): return false
+		var identity: String = row.system_id + "/" + row.planet_id
+		if seen.has(identity): return false
+		seen[identity] = true
+	return true
+
+func query(bridge: Variant) -> Variant:
+	if requested_kind == 1 and not requested_target.is_empty():
+		return bridge.get_freedom_survey_commissions_for_target(requested_target.system_id, requested_target.planet_id)
+	return bridge.get_freedom_survey_commissions(requested_kind)
+
+func refresh_offers(value: Variant) -> void:
+	offers_packet = value.duplicate(true) if valid_offers(value) else {}
+	refresh(packet)
+
+func request_destination(index: int) -> void:
+	action_requested.emit("choose_destination_" + str(index))
+
+func choose_target(index: int, bridge: Variant) -> void:
+	if packet.is_empty() or packet.sequence != 0 or requested_kind != 1 or offers_packet.is_empty() or index < 0 or index >= offers_packet.offers.size(): return
+	var row: Dictionary = offers_packet.offers[index]
+	requested_target = {"system_id": row.system_id, "planet_id": row.planet_id}
+	var quote: Variant = query(bridge)
+	refresh(quote if valid_packet(quote) and quote.tick == offers_packet.tick and quote.system_id == row.system_id and quote.planet_id == row.planet_id and quote.body_name == row.body_name else {})
+	back.grab_focus()
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var shade := ColorRect.new()
@@ -137,6 +177,11 @@ func _ready() -> void:
 	geological_button.text = "Choose geological specimen work"
 	geological_button.pressed.connect(func(): action_requested.emit("choose_geological"))
 	column.add_child(geological_button)
+	for index in 2:
+		var destination := Button.new()
+		destination.pressed.connect(request_destination.bind(index))
+		column.add_child(destination)
+		destination_buttons.append(destination)
 	accept_button = Button.new()
 	accept_button.text = "Accept commission · 100 credits"
 	accept_button.pressed.connect(func(): action_requested.emit("accept"))
@@ -186,7 +231,7 @@ func layout_reader() -> void:
 	var pixels := Vector2(get_window().size)
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	readable_theme.default_font_size = ceili(20 * scale)
-	for button in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
+	for button in [orbital_button, geological_button, destination_buttons[0], destination_buttons[1], accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		button.custom_minimum_size.y = ceili(44 * scale)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -206,11 +251,25 @@ func open(value: Dictionary) -> void:
 func refresh(value: Dictionary) -> void:
 	var focused := get_viewport().gui_get_focus_owner()
 	packet = value.duplicate(true) if valid_packet(value) else {}
-	if not packet.is_empty(): requested_kind = packet.get("kind", 1)
+	if not packet.is_empty():
+		requested_kind = packet.get("kind", 1)
+		if packet.sequence != 0: requested_target.clear()
+	var offers: Array = offers_packet.get("offers", []) if not packet.is_empty() and offers_packet.get("tick") == packet.tick else []
+	for index in destination_buttons.size():
+		var button: Button = destination_buttons[index]
+		button.visible = requested_kind == 1 and index < offers.size()
+		button.disabled = packet.is_empty() or packet.sequence != 0
+		if button.visible:
+			var row: Dictionary = offers[index]
+			button.text = "Survey destination · " + row.system_name + " / " + row.body_name
+			button.disabled = button.disabled or (packet.system_id == row.system_id and packet.planet_id == row.planet_id)
+			button.tooltip_text = "Abandon existing work before changing its destination." if packet.sequence != 0 else "Review this destination's full terms; browsing spends nothing and changes no navigation."
 	orbital_button.disabled = packet.is_empty() or packet.sequence != 0 or requested_kind == 1
 	geological_button.disabled = packet.is_empty() or packet.sequence != 0 or requested_kind == 2
 	var geological: bool = requested_kind == 2
 	accept_button.text = "Accept geological commission · 100 credits" if geological else "Accept commission · 100 credits"
+	if not packet.is_empty() and packet.sequence != 0 and packet.expired:
+		accept_button.text = "Renew same-target commission · 100 credits"
 	submit_button.text = "Deliver named specimen · consume one · 100 credits" if geological else "Submit completed report"
 	accept_button.disabled = packet.is_empty() or not packet.can_accept
 	submit_button.disabled = packet.is_empty() or not packet.can_submit
@@ -230,6 +289,10 @@ func refresh(value: Dictionary) -> void:
 		if not sale_packet.is_empty() and sale_packet.supported: lines.append("Historical gross specimen earnings: " + sale_packet.earned_credits)
 		if not recovery_sale_packet.is_empty() and recovery_sale_packet.supported: lines.append("Historical gross canister earnings: " + recovery_sale_packet.earned_credits)
 		if not packet.body_name.is_empty(): lines.append("Target: " + packet.body_name)
+		if not geological:
+			for row: Dictionary in offers:
+				if row.system_id == packet.system_id and row.planet_id == packet.planet_id:
+					lines.append(ReturnCharge.text(row.route) + "\nCharge shortfall is information, not an acceptance gate. No fuel, insertion, deadline or profit guarantee.")
 		if packet.sequence != 0:
 			if geological:
 				lines.append("Commission #%d · %s\nDelivery due at ship time %s · Time left: %s." % [packet.sequence, "fresh specimen carried" if packet.completed else "fresh physical specimen required", clock_text(packet.deadline_tick), remaining_text(packet.deadline_tick, packet.tick)])
@@ -241,7 +304,7 @@ func refresh(value: Dictionary) -> void:
 		lines.append(packet.note)
 		if not packet.last_payment.is_empty(): lines.append("Latest report paid: 100 credits. Receipt retained.")
 		details.text = "\n\n".join(lines)
-	if focused in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
+	if focused in [orbital_button, geological_button, destination_buttons[0], destination_buttons[1], accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and (not focused.visible or focused.disabled): back.grab_focus()
 
 func navigate(direction: int) -> void:
 	if recovery_sale_open():
@@ -254,7 +317,7 @@ func navigate(direction: int) -> void:
 		paid_view.navigate(direction)
 		return
 	var buttons: Array[Button] = []
-	for button in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
+	for button in [orbital_button, geological_button, destination_buttons[0], destination_buttons[1], accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back]:
 		if button.visible and not button.disabled: buttons.append(button)
 	var index := buttons.find(get_viewport().gui_get_focus_owner())
 	buttons[posmod(index + direction, buttons.size())].grab_focus()
@@ -270,7 +333,7 @@ func accept() -> void:
 		paid_view.accept()
 		return
 	var target := get_viewport().gui_get_focus_owner()
-	if target in [orbital_button, geological_button, accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
+	if target in [orbital_button, geological_button, destination_buttons[0], destination_buttons[1], accept_button, submit_button, abandon_button, paid_button, sale_button, recovery_sale_button, back] and target.visible and not target.disabled: target.pressed.emit()
 
 func paid_open() -> bool:
 	return is_instance_valid(paid_view) and paid_view.visible

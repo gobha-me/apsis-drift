@@ -113,6 +113,10 @@ auto bounded_nesting(std::string_view text) -> bool {
   }
   return !depth && !quoted;
 }
+auto extended_commission_version(std::uint32_t version) -> bool {
+  return version == kGeologicalSurveyCommissionVersion ||
+         version == kChosenTargetSurveyCommissionVersion;
+}
 auto commission_json(const SurveyCommission& commission, std::uint32_t version)
     -> Json {
   Json measurement = nullptr;
@@ -129,17 +133,23 @@ auto commission_json(const SurveyCommission& commission, std::uint32_t version)
               {"accepted_tick", commission.accepted_tick},
               {"deadline_tick", commission.deadline_tick},
               {"measurement", std::move(measurement)}};
-  if (version == kGeologicalSurveyCommissionVersion)
+  if (extended_commission_version(version))
     result["kind"] = static_cast<unsigned>(commission.kind);
+  if (version == kChosenTargetSurveyCommissionVersion)
+    result["target_policy"] = static_cast<unsigned>(commission.target_policy);
   return result;
 }
 auto commission_value(const Json& j, std::uint32_t version)
     -> std::expected<SurveyCommission, SaveSchemaError> {
-  const bool extended = version == kGeologicalSurveyCommissionVersion;
-  if (!(extended ? fields(j, {"sequence", "system", "planet", "accepted_tick",
-                              "deadline_tick", "measurement", "kind"})
-                 : fields(j, {"sequence", "system", "planet", "accepted_tick",
-                              "deadline_tick", "measurement"})) ||
+  const bool extended = extended_commission_version(version);
+  const bool chosen = version == kChosenTargetSurveyCommissionVersion;
+  if (!(chosen     ? fields(j, {"sequence", "system", "planet", "accepted_tick",
+                                "deadline_tick", "measurement", "kind",
+                                "target_policy"})
+        : extended ? fields(j, {"sequence", "system", "planet", "accepted_tick",
+                                "deadline_tick", "measurement", "kind"})
+                   : fields(j, {"sequence", "system", "planet", "accepted_tick",
+                                "deadline_tick", "measurement"})) ||
       !unsigned_fields(j, {"sequence", "system", "planet", "accepted_tick",
                            "deadline_tick"}) ||
       j["sequence"] > std::numeric_limits<std::uint32_t>::max())
@@ -157,6 +167,13 @@ auto commission_value(const Json& j, std::uint32_t version)
       return std::unexpected{failure("invalid commission kind")};
     commission.kind =
         static_cast<SurveyCommissionKind>(j["kind"].get<unsigned>());
+  }
+  if (chosen) {
+    if (!j["target_policy"].is_number_unsigned() || j["target_policy"] < 1U ||
+        j["target_policy"] > 2U)
+      return std::unexpected{failure("invalid commission target policy")};
+    commission.target_policy = static_cast<SurveyCommissionTargetPolicy>(
+        j["target_policy"].get<unsigned>());
   }
   if (!j["measurement"].is_null()) {
     const auto& m = j["measurement"];
@@ -486,7 +503,7 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
       latest = {{"commission", commission_json(account.latest_paid->commission,
                                                account.version)},
                 {"submitted_tick", account.latest_paid->submitted_tick}};
-      if (account.version == kGeologicalSurveyCommissionVersion) {
+      if (extended_commission_version(account.version)) {
         Json specimen = nullptr;
         if (account.latest_paid->delivered_specimen) {
           auto encoded =
@@ -505,7 +522,7 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
                        ? commission_json(*account.active, account.version)
                        : Json(nullptr)},
         {"latest_paid", std::move(latest)}};
-    if (account.version == kGeologicalSurveyCommissionVersion)
+    if (extended_commission_version(account.version))
       root["survey_commissions"]["geological_paid_count"] =
           account.geological_paid_count;
   }
@@ -925,13 +942,14 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     if (!network || !freedom_knowledge_has_planetary_chart(k.recipe.version) ||
         !unsigned_fields(account, {"version", "next_sequence", "paid_count"}) ||
         (account["version"] != kSurveyCommissionVersion &&
-         account["version"] != kGeologicalSurveyCommissionVersion) ||
+         account["version"] != kGeologicalSurveyCommissionVersion &&
+         account["version"] != kChosenTargetSurveyCommissionVersion) ||
         account["next_sequence"] > std::numeric_limits<std::uint32_t>::max() ||
         account["paid_count"] > std::numeric_limits<std::uint32_t>::max())
       return std::unexpected{failure("invalid survey commission account")};
     SurveyCommissionAccount state;
     state.version = account["version"].get<std::uint32_t>();
-    const bool extended = state.version == kGeologicalSurveyCommissionVersion;
+    const bool extended = extended_commission_version(state.version);
     if (!(extended ? fields(account,
                             {"version", "next_sequence", "paid_count", "active",
                              "latest_paid", "geological_paid_count"})

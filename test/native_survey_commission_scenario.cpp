@@ -568,6 +568,259 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   }
   std::cout << "Survey commissions: " << checks << " checks, 0 failures\n";
 }
+// A bounded destination extension, appended after both historical scenarios.
+// Only the noted stores/clock/pose boundaries are initialized; commands,
+// boarding, charged handoffs, acquisition and settlement remain authoritative.
+auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
+    -> void {
+  std::optional<std::filesystem::path> output;
+  if (root) {
+    output = *root / "commission-destinations";
+    std::filesystem::create_directories(*output);
+  }
+  Json phases = Json::array();
+  auto session = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_planetary_network_new_game({42})))));
+  const auto initial = bytes(*session);
+  const auto offers = need(session->survey_commission_offers());
+  check(offers.offer_count == 2 && !session->knowledge()->survey_commissions &&
+            offers.offers[0].target != offers.offers[1].target,
+        "Station must expose exactly two distinct earned chart destinations");
+  const auto nearby = offers.offers[0].target;
+  const auto waypoint = offers.offers[1].target;
+  const auto quote = need(
+      session->survey_commission_view(SurveyCommissionKind::orbital, waypoint));
+  for (std::uint32_t i = 0; i < offers.offer_count; ++i) {
+    const auto& row = offers.offers[i];
+    check(row.route.available && row.route.leg_count == 2 &&
+              row.route.required_charges == 2 &&
+              row.route.legs[0].destination == row.target.system &&
+              row.route.legs[1].destination == row.route.legs[0].source &&
+              !row.system_name.empty() && !row.body_name.empty(),
+          "Offer must disclose two existing named Origin return legs");
+  }
+  check(
+      quote.can_accept && quote.system == waypoint.system &&
+          quote.planet.value == waypoint.body.value &&
+          quote.body_name == offers.offers[1].body_name &&
+          need(session->survey_commission_view()).system == nearby.system &&
+          bytes(*session) == initial,
+      "Chosen quote must name its actual planet without selecting an account");
+  checkpoint(*session, output, "station", phases);
+  auto station = std::make_unique<NativeFreedomFlightSession>(reopen(*session));
+  need(station->accept_survey_commission_target(waypoint, quote.offer_until,
+                                                quote.offer_sequence));
+  checkpoint(*station, output, "station-accepted", phases);
+  // A separate initialized deadline branch preserves the actual accepted terms.
+  auto expired =
+      std::make_unique<NativeFreedomFlightSession>(deadline_station(*station));
+  const auto renewal = need(
+      expired->survey_commission_view(SurveyCommissionKind::orbital, waypoint));
+  const auto expired_bytes = bytes(*expired);
+  check(renewal.sequence == quote.offer_sequence && renewal.expired &&
+            renewal.can_abandon && renewal.can_accept &&
+            need(expired->survey_commission_view()) == renewal &&
+            !expired->survey_commission_view(SurveyCommissionKind::orbital,
+                                             nearby) &&
+            !expired->accept_survey_commission_target(
+                nearby, renewal.offer_until, renewal.offer_sequence) &&
+            !expired->accept_survey_commission(renewal.offer_until,
+                                               renewal.offer_sequence) &&
+            !expired->accept_geological_survey_commission(
+                renewal.offer_until, renewal.offer_sequence) &&
+            bytes(*expired) == expired_bytes,
+        "Expired work must remain visible and locked to its original "
+        "kind/target");
+  checkpoint(*expired, output, "expired", phases);
+  need(expired->accept_survey_commission_target(waypoint, renewal.offer_until,
+                                                renewal.offer_sequence));
+  check(need(expired->survey_commission_view()).sequence == 2 &&
+            need(expired->survey_commission_view()).acquired_ticks == 0 &&
+            expired->knowledge()->survey_commissions->version == 3,
+        "Same-target expired renewal requires a new serial and fresh work");
+  checkpoint(*expired, output, "renewed", phases);
+  need(expired->abandon_survey_commission(2));
+  const auto geo =
+      need(expired->survey_commission_view(SurveyCommissionKind::geological));
+  need(expired->accept_geological_survey_commission(geo.offer_until,
+                                                    geo.offer_sequence));
+  check(
+      expired->knowledge()->survey_commissions->version == 3 &&
+          expired->knowledge()->survey_commissions->active->kind ==
+              SurveyCommissionKind::geological,
+      "Later geological acceptance must not downgrade a chosen-target ledger");
+  for (unsigned tick = 0; tick < 1194; ++tick)
+    need(session->advance_walk({0, -1, 0}));
+  need(session->begin_boarding());
+  for (SimulationTick tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    need(session->advance_walk({}));
+  check(need(session->survey_commission_offers()).offer_count == 2,
+        "Seated Origin must retain both read-only destination choices");
+  checkpoint(*session, output, "seated", phases);
+  for (const std::uint32_t carried : {1U, 2U, 3U}) {
+    auto altered =
+        std::make_unique<NativeSaveDocument>(need(session->save_document()));
+    std::get<FreedomKnowledgeSaveDocument>(*altered)
+        .voyage.resources.jump_charges = carried;
+    auto budget = std::make_unique<NativeFreedomFlightSession>(
+        need(NativeFreedomFlightSession::open(
+            need(native_select_save_document(std::move(*altered))))));
+    const auto plans = need(budget->survey_commission_offers());
+    check(plans.offer_count == 2 &&
+              plans.offers[1].route.jump_charges == carried &&
+              plans.offers[1].route.charge_shortfall ==
+                  (carried < 2 ? 2 - carried : 0) &&
+              need(budget->survey_commission_view(SurveyCommissionKind::orbital,
+                                                  waypoint))
+                  .can_accept,
+          "One/two/three carried charges change only the disclosed shortfall, "
+          "not acceptance");
+  }
+  {
+    // Initialized store deficit tests access, not flown consumption.
+    auto depleted =
+        std::make_unique<NativeSaveDocument>(need(session->save_document()));
+    std::get<FreedomKnowledgeSaveDocument>(*depleted)
+        .voyage.resources.jump_charges = 0;
+    session = std::make_unique<NativeFreedomFlightSession>(
+        need(NativeFreedomFlightSession::open(
+            need(native_select_save_document(std::move(*depleted))))));
+  }
+  const auto empty_offer = need(session->survey_commission_offers());
+  const auto empty_quote = need(
+      session->survey_commission_view(SurveyCommissionKind::orbital, waypoint));
+  check(empty_offer.offer_count == 2 &&
+            empty_offer.offers[1].route.jump_charges == 0 &&
+            empty_offer.offers[1].route.charge_shortfall == 2 &&
+            empty_quote.can_accept,
+        "Current charge shortfall must be disclosed without gating acceptance");
+  checkpoint(*session, output, "zero-charge", phases);
+  const auto before = bytes(*session);
+  check(
+      !session->accept_survey_commission_target(
+          waypoint, empty_quote.offer_until - 1, empty_quote.offer_sequence) &&
+          !session->accept_survey_commission_target(
+              waypoint, empty_quote.offer_until,
+              empty_quote.offer_sequence + 1) &&
+          !session->accept_survey_commission_target(
+              {waypoint.system, BodyId{1, BodyKind::moon, waypoint.body.value}},
+              empty_quote.offer_until, empty_quote.offer_sequence) &&
+          bytes(*session) == before,
+      "Stale or foreign target-bound confirmations must leave the whole Save "
+      "unchanged");
+  need(session->accept_survey_commission_target(
+      waypoint, empty_quote.offer_until, empty_quote.offer_sequence));
+  check(need(session->survey_commission_view()) ==
+                need(session->survey_commission_view(
+                    SurveyCommissionKind::orbital, waypoint)) &&
+            !session->survey_commission_view(SurveyCommissionKind::orbital,
+                                             nearby),
+        "Active default and matching-target readers must show identical "
+        "accepted work");
+  checkpoint(*session, output, "accepted", phases);
+  {
+    auto customer =
+        std::make_unique<NativeFreedomFlightSession>(reopen(*session));
+    const auto enrollment = need(customer->paid_operations_view());
+    need(customer->enable_paid_operations(enrollment.token));
+    // Explicit insolvent financial/store boundary, not earned voyage debt.
+    auto poor =
+        std::make_unique<NativeSaveDocument>(need(customer->save_document()));
+    auto& knowledge = std::get<FreedomKnowledgeSaveDocument>(*poor);
+    knowledge.knowledge.paid_operations->spent_credits = 200;
+    knowledge.knowledge.paid_operations->operating_tab = 200;
+    knowledge.voyage.resources.flight_quanta = 0;
+    customer = std::make_unique<NativeFreedomFlightSession>(
+        need(NativeFreedomFlightSession::open(
+            need(native_select_save_document(std::move(*poor))))));
+    const auto support = need(customer->paid_operations_view());
+    check(support.can_retainer && support.cash == 0,
+          "Zero-charge chosen-target work must retain the existing paid "
+          "retainer");
+    need(customer->request_paid_retainer(support.token));
+    check(customer->resources()->jump_charges == 3 &&
+              customer->knowledge()->survey_commissions ==
+                  session->knowledge()->survey_commissions,
+          "Paid support must preserve chosen terms and measurement history");
+    (void)reopen(*customer);
+  }
+  need(session->replenish_resources());
+  checkpoint(*session, output, "supported", phases);
+  need(session->release_port());
+  *session = home_space(std::move(*session));
+  need(session->set_assistance(false));
+  // The wrong commissioned body cannot acquire progress, even during real
+  // ticks.
+  need(session->advance({}));
+  check(need(session->survey_commission_view()).acquired_ticks == 0,
+        "Origin flight cannot remotely fulfill the Waypoint measurement");
+  charged_leg(*session, waypoint.system);
+  *session = measurement_orbit(*session);
+  for (unsigned tick = 0; tick < 600; ++tick)
+    need(session->advance({}));
+  check(need(session->survey_commission_view()).acquired_ticks == 600,
+        "Chosen destination must count exactly six hundred genuine intervals");
+  checkpoint(*session, output, "partial", phases);
+  auto peer = std::make_unique<NativeFreedomFlightSession>(reopen(*session));
+  auto replacement =
+      std::make_unique<NativeFreedomFlightSession>(recovered(reopen(*session)));
+  check(
+      !replacement->knowledge()->survey_commissions->active->measurement &&
+          replacement->knowledge()->survey_commissions->active->target_policy ==
+              SurveyCommissionTargetPolicy::charted_waypoint,
+      "Replacement must clear unfinished old-craft work and retain chosen "
+      "terms");
+  for (unsigned tick = 600; tick < kSurveyCommissionMeasurementTicks; ++tick) {
+    need(session->advance({}));
+    need(peer->advance({}));
+  }
+  check(bytes(*session) == bytes(*peer) &&
+            need(session->survey_commission_view()).completed &&
+            !need(session->survey_commission_view()).can_submit,
+        "Partial Continue must converge on fresh completion without remote "
+        "payout");
+  checkpoint(*session, output, "ready", phases);
+  replacement =
+      std::make_unique<NativeFreedomFlightSession>(recovered(reopen(*session)));
+  check(replacement->knowledge()->survey_commissions->active ==
+                session->knowledge()->survey_commissions->active &&
+            need(replacement->survey_commission_view()).can_submit,
+        "Completed chosen report must survive replacement with its original "
+        "craft");
+  need(replacement->submit_survey_commission(1));
+  check(need(replacement->survey_commission_view()).earnings == 100,
+        "Completed chosen report must remain claimable after recovery");
+  const auto home = offers.offers[1].route.legs[1].destination;
+  charged_leg(*session, home);
+  *session = home_port(*session);
+  checkpoint(*session, output, "origin", phases);
+  need(session->submit_survey_commission(1));
+  const auto paid = bytes(*session);
+  check(need(session->survey_commission_view()).earnings == 100 &&
+            !session->submit_survey_commission(1) && bytes(*session) == paid,
+        "Chosen report must pay exactly once at the actual attached Origin "
+        "owner");
+  checkpoint(*session, output, "paid", phases);
+  if (output) {
+    const Json manifest{
+        {"schema", "apsis.commission-destinations-scenario/1"},
+        {"scope",
+         "Actual station walk/boarding; explicit zero-charge and "
+         "deadline-clock fixtures; actual acceptance, free service, two "
+         "charged system jumps, 3600 qualifying intervals and capture/payment. "
+         "Home-space, circular measurement orbit and final port pose are "
+         "initialized at unchanged ticks, not a continuously flown route, "
+         "profit, fuel or deadline viability claim."},
+        {"nearby_system", std::to_string(nearby.system.value)},
+        {"waypoint_system", std::to_string(waypoint.system.value)},
+        {"waypoint_planet", std::to_string(waypoint.body.value)},
+        {"phases", phases}};
+    std::ofstream file{*output / "manifest.json"};
+    file << manifest.dump(2) << '\n';
+    check(static_cast<bool>(file), "Destination manifest write failed");
+  }
+}
 auto run_native_survey_commission_scenario(
     const std::optional<std::filesystem::path>& output) -> void {
   run_commission_scenario(output, false);
@@ -577,6 +830,7 @@ auto run_native_survey_commission_scenario(
     std::filesystem::create_directories(*paid_output);
   }
   run_commission_scenario(paid_output, true);
+  run_destination_scenario(output);
 }
 
 namespace paid_recovery_reference {

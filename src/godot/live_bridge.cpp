@@ -533,6 +533,17 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::get_freedom_survey_commissions,
         godot::Variant{std::int64_t{1}});
     godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_survey_commission_offers"),
+        &FreedomBridge::get_freedom_survey_commission_offers);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_survey_commissions_for_target",
+                        "system_id", "planet_id"),
+        &FreedomBridge::get_freedom_survey_commissions_for_target);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("accept_freedom_survey_commission_target",
+                        "offer_until", "sequence", "system_id", "planet_id"),
+        &FreedomBridge::accept_freedom_survey_commission_target);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("accept_freedom_survey_commission", "offer_until",
                         "sequence"),
         &FreedomBridge::accept_freedom_survey_commission);
@@ -2021,6 +2032,39 @@ class FreedomBridge : public godot::RefCounted {
       return session.accept_survey_commission(*tick, *number);
     });
   }
+  static auto commission_target(const godot::Variant& system,
+                                const godot::Variant& planet)
+      -> std::optional<BodyTarget> {
+    if (system.get_type() != godot::Variant::STRING ||
+        planet.get_type() != godot::Variant::STRING)
+      return std::nullopt;
+    const auto system_word = identity_word(static_cast<godot::String>(system));
+    const auto planet_word = identity_word(static_cast<godot::String>(planet));
+    if (!system_word || !*system_word || !planet_word || !*planet_word)
+      return std::nullopt;
+    return BodyTarget{SystemId{*system_word}, body_id(PlanetId{*planet_word})};
+  }
+  auto accept_freedom_survey_commission_target(const godot::Variant& until,
+                                               const godot::Variant& sequence,
+                                               const godot::Variant& system,
+                                               const godot::Variant& planet)
+      -> bool {
+    const auto number = commission_sequence(sequence);
+    const auto target = commission_target(system, planet);
+    if (!number || !target || until.get_type() != godot::Variant::STRING) {
+      last_error =
+          "Commission target and terms require canonical decimal strings";
+      return false;
+    }
+    const auto tick = identity_word(static_cast<godot::String>(until));
+    if (!tick) {
+      last_error = "Commission expiry requires a canonical decimal string";
+      return false;
+    }
+    return change_freedom_port([&](NativeFreedomFlightSession& session) {
+      return session.accept_survey_commission_target(*target, *tick, *number);
+    });
+  }
   auto submit_freedom_survey_commission(const godot::Variant& sequence)
       -> bool {
     const auto number = commission_sequence(sequence);
@@ -3371,52 +3415,86 @@ class FreedomBridge : public godot::RefCounted {
     result["note"] = godot::String{view->note.c_str()};
     return result;
   }
-  auto get_freedom_survey_commissions(const godot::Variant& kind) const
+  static auto project_survey_commission(const NativeSurveyCommissionView& view)
       -> godot::Dictionary {
     godot::Dictionary result;
-    if (!saved_flight) return result;
-    if (kind.get_type() != godot::Variant::INT) return result;
-    const auto number = static_cast<std::int64_t>(kind);
-    if (number != 1 && number != 2) return result;
-    const auto view = saved_flight->session.survey_commission_view(
-        static_cast<SurveyCommissionKind>(number));
-    if (!view) return result;
     const auto decimal = [](std::uint64_t value) {
       return godot::String{std::to_string(value).c_str()};
     };
-    const bool geological = view->kind == SurveyCommissionKind::geological;
+    const bool geological = view.kind == SurveyCommissionKind::geological;
     result["version"] = geological ? 2 : 1;
     if (geological) {
       result["kind"] = 2;
-      result["specimen"] = godot::String{view->specimen.c_str()};
-      result["submission_token"] =
-          godot::String{view->submission_token.c_str()};
+      result["specimen"] = godot::String{view.specimen.c_str()};
+      result["submission_token"] = godot::String{view.submission_token.c_str()};
     }
-    result["supported"] = view->supported;
-    result["selected"] = view->selected;
-    result["at_origin"] = view->at_origin;
-    result["can_accept"] = view->can_accept;
-    result["can_submit"] = view->can_submit;
-    result["can_abandon"] = view->can_abandon;
-    result["completed"] = view->completed;
-    result["expired"] = view->expired;
-    result["sequence"] = static_cast<std::int64_t>(view->sequence);
-    result["offer_sequence"] = static_cast<std::int64_t>(view->offer_sequence);
-    result["acquired_ticks"] = static_cast<std::int64_t>(view->acquired_ticks);
+    result["supported"] = view.supported;
+    result["selected"] = view.selected;
+    result["at_origin"] = view.at_origin;
+    result["can_accept"] = view.can_accept;
+    result["can_submit"] = view.can_submit;
+    result["can_abandon"] = view.can_abandon;
+    result["completed"] = view.completed;
+    result["expired"] = view.expired;
+    result["sequence"] = static_cast<std::int64_t>(view.sequence);
+    result["offer_sequence"] = static_cast<std::int64_t>(view.offer_sequence);
+    result["acquired_ticks"] = static_cast<std::int64_t>(view.acquired_ticks);
     result["required_ticks"] = static_cast<std::int64_t>(
         geological ? 0 : kSurveyCommissionMeasurementTicks);
     result["reward_credits"] =
         static_cast<std::int64_t>(kSurveyCommissionRewardCredits);
-    result["tick"] = decimal(view->tick);
-    result["offer_until"] = decimal(view->offer_until);
-    result["accepted_tick"] = decimal(view->accepted_tick);
-    result["deadline_tick"] = decimal(view->deadline_tick);
-    result["earnings"] = decimal(view->earnings);
-    result["system_id"] = decimal(view->system.value);
-    result["planet_id"] = decimal(view->planet.value);
-    result["body_name"] = godot::String{view->body_name.c_str()};
+    result["tick"] = decimal(view.tick);
+    result["offer_until"] = decimal(view.offer_until);
+    result["accepted_tick"] = decimal(view.accepted_tick);
+    result["deadline_tick"] = decimal(view.deadline_tick);
+    result["earnings"] = decimal(view.earnings);
+    result["system_id"] = decimal(view.system.value);
+    result["planet_id"] = decimal(view.planet.value);
+    result["body_name"] = godot::String{view.body_name.c_str()};
+    result["note"] = godot::String{view.note.c_str()};
+    result["last_payment"] = godot::String{view.last_payment.c_str()};
+    return result;
+  }
+  auto get_freedom_survey_commissions(const godot::Variant& kind) const
+      -> godot::Dictionary {
+    if (!saved_flight || kind.get_type() != godot::Variant::INT) return {};
+    const auto number = static_cast<std::int64_t>(kind);
+    if (number != 1 && number != 2) return {};
+    const auto view = saved_flight->session.survey_commission_view(
+        static_cast<SurveyCommissionKind>(number));
+    return view ? project_survey_commission(*view) : godot::Dictionary{};
+  }
+  auto get_freedom_survey_commissions_for_target(
+      const godot::Variant& system, const godot::Variant& planet) const
+      -> godot::Dictionary {
+    const auto target = commission_target(system, planet);
+    if (!saved_flight || !target) return {};
+    const auto view = saved_flight->session.survey_commission_view(
+        SurveyCommissionKind::orbital, *target);
+    return view ? project_survey_commission(*view) : godot::Dictionary{};
+  }
+  auto get_freedom_survey_commission_offers() const -> godot::Dictionary {
+    if (!saved_flight) return {};
+    const auto view = saved_flight->session.survey_commission_offers();
+    if (!view || view->offer_count > view->offers.size()) return {};
+    godot::Dictionary result;
+    result["version"] = static_cast<std::int64_t>(view->version);
+    result["tick"] = godot::String{std::to_string(view->tick).c_str()};
     result["note"] = godot::String{view->note.c_str()};
-    result["last_payment"] = godot::String{view->last_payment.c_str()};
+    godot::Array rows;
+    for (std::uint32_t i = 0; i < view->offer_count; ++i) {
+      const auto& offer = view->offers[i];
+      godot::Dictionary row;
+      row["system_id"] =
+          godot::String{std::to_string(offer.target.system.value).c_str()};
+      row["planet_id"] =
+          godot::String{std::to_string(offer.target.body.value).c_str()};
+      row["system_name"] = godot::String{offer.system_name.c_str()};
+      row["body_name"] = godot::String{offer.body_name.c_str()};
+      row["route"] = project_return_charge(offer.route);
+      rows.append(row);
+    }
+    result["offers"] = rows;
     return result;
   }
   static auto project_commission_progress(
@@ -4424,9 +4502,8 @@ class FreedomBridge : public godot::RefCounted {
     packet["nodes"] = nodes;
     return packet;
   }
-  auto get_freedom_return_charge_check() const -> godot::Dictionary {
-    if (!saved_flight) return {};
-    const auto view = require(saved_flight->session.return_charge_view());
+  static auto project_return_charge(const NativeReturnChargeView& view)
+      -> godot::Dictionary {
     godot::Dictionary packet;
     packet["version"] = static_cast<std::int64_t>(view.version);
     packet["available"] = view.available;
@@ -4454,6 +4531,11 @@ class FreedomBridge : public godot::RefCounted {
     packet["legs"] = legs;
     packet["note"] = godot::String{view.note.c_str()};
     return packet;
+  }
+  auto get_freedom_return_charge_check() const -> godot::Dictionary {
+    return saved_flight ? project_return_charge(require(
+                              saved_flight->session.return_charge_view()))
+                        : godot::Dictionary{};
   }
   auto get_freedom_derelict_recovery() const -> godot::Dictionary {
     return saved_flight ? project_derelict_recovery(saved_flight->session)

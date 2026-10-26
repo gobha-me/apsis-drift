@@ -133,6 +133,38 @@ func progress_matches_office(owner: Variant, packet: Dictionary) -> bool:
 		return progress.get("version") == 2 and progress.ready == packet.completed and progress.expired == packet.expired and progress.remaining_ticks == remaining
 	return progress.remaining_ticks == remaining and progress.active == (packet.sequence != 0) and progress.completed == packet.completed and progress.expired == packet.expired and progress.acquired_ticks == packet.acquired_ticks
 
+func offer_packet_controls(owner: Variant, output: String) -> void:
+	var before: PackedByteArray = save(owner, output.path_join("offers-query-before.json"))
+	var offers: Dictionary = owner.get_freedom_survey_commission_offers()
+	if not check(Office.valid_offers(offers), "actual closed destination offers packet refused"): return
+	for field in offers:
+		var bad: Dictionary = offers.duplicate(true)
+		bad.erase(field)
+		check(not Office.valid_offers(bad), "missing offers field accepted: " + str(field))
+	for change in [{"extra": true}, {"version": 1.0}, {"version": 2}, {"tick": "01"}, {"note": ""}, {"note": "x".repeat(1025)}, {"offers": {}}, {"offers": [1]}]:
+		var bad: Dictionary = offers.duplicate(true)
+		bad.merge(change, true)
+		check(not Office.valid_offers(bad), "malformed destination offers accepted: " + str(change.keys()))
+	if not offers.offers.is_empty():
+		var row: Dictionary = offers.offers[0]
+		var quote: Dictionary = owner.get_freedom_survey_commissions_for_target(row.system_id, row.planet_id)
+		check(Office.valid_packet(quote) and quote.size() == 24 and quote.system_id == row.system_id and quote.planet_id == row.planet_id and quote.body_name == row.body_name, "targeted quote differs from its admitted destination")
+		for field in row:
+			var bad: Dictionary = offers.duplicate(true)
+			bad.offers[0].erase(field)
+			check(not Office.valid_offers(bad), "missing destination row field accepted: " + str(field))
+		for change in [{"extra": 0}, {"system_id": 1}, {"system_id": "0"}, {"planet_id": "01"}, {"planet_id": "18446744073709551616"}, {"system_name": ""}, {"body_name": false}, {"route": {} }]:
+			var bad: Dictionary = offers.duplicate(true)
+			bad.offers[0].merge(change, true)
+			check(not Office.valid_offers(bad), "malformed destination row accepted: " + str(change.keys()))
+		var repeated: Dictionary = offers.duplicate(true)
+		repeated.offers = [row, row]
+		check(not Office.valid_offers(repeated), "duplicate destination identity accepted")
+		for value in [null, true, 1, 1.0, NAN, INF, "", "0", "01", "-1", "18446744073709551616", [], {}]:
+			check(owner.get_freedom_survey_commissions_for_target(value, row.planet_id).is_empty() and owner.get_freedom_survey_commissions_for_target(row.system_id, value).is_empty(), "noncanonical destination Variant exposed a quote")
+			check(not owner.accept_freedom_survey_commission_target(quote.offer_until, str(quote.offer_sequence), value, row.planet_id) and not owner.accept_freedom_survey_commission_target(quote.offer_until, str(quote.offer_sequence), row.system_id, value), "noncanonical destination Variant accepted work")
+	check(save(owner, output.path_join("offers-query-after.json")) == before, "offer reads/malformed targeted commands changed the complete Save")
+
 func malformed_commands(owner: Variant, packet: Dictionary, output: String) -> void:
 	var before := save(owner, output.path_join("arguments-before.json"))
 	for value in [null, 1, 1.0, NAN, INF, "", "01", "-1", "1.0", "4294967296", [], {}]:
@@ -288,6 +320,160 @@ func run_geological(tree: SceneTree, fixtures: String, assets: String, output: S
 	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
 	if check(file != null, "geological report unavailable"): file.store_string(JSON.stringify(report, "\t") + "\n")
 
+func destination_index(page: Control, quote: Dictionary) -> int:
+	for index in page.offers_packet.get("offers", []).size():
+		var row: Dictionary = page.offers_packet.offers[index]
+		if row.system_id == quote.system_id and row.planet_id == quote.planet_id: return index
+	return -1
+
+func activate_destination(tree: SceneTree, page: Control, button: Button, pad_device := -1) -> void:
+	button.grab_focus()
+	page.scroll.ensure_control_visible(button)
+	await tree.process_frame
+	check(button.has_focus() and button.is_visible_in_tree() and not button.disabled, "destination action cannot receive keyboard/controller focus")
+	for down in [true, false]:
+		if pad_device < 0: key(KEY_ENTER, down)
+		else:
+			var event := InputEventJoypadButton.new()
+			event.device = pad_device
+			event.button_index = JOY_BUTTON_A
+			event.pressed = down
+			Input.parse_input_event(event)
+			Input.flush_buffered_events()
+		await tree.process_frame
+
+func run_destinations(tree: SceneTree, fixtures: String, assets: String, output: String) -> void:
+	if not check(DirAccess.make_dir_recursive_absolute(output) == OK, "destination witness directory unavailable"): return
+	var originals: Dictionary = {}
+	for name in ["station", "station-accepted", "seated", "zero-charge", "accepted", "supported", "partial", "ready", "origin", "paid", "expired", "renewed"]:
+		originals[name] = FileAccess.get_file_as_bytes(fixtures.path_join(name + ".json"))
+		check(not originals[name].is_empty(), "destination C++ phase missing: " + name)
+	if failures: return
+	var backend: Variant = restore(fixtures.path_join("station-accepted.json"))
+	if backend == null: return
+	var target: Dictionary = backend.get_freedom_survey_commissions()
+	backend = null
+	var shell: Control = host(tree, fixtures.path_join("station.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var owner: Variant = shell.bridge
+	view.open_survey_commissions()
+	var page: Control = reader(view)
+	var index: int = destination_index(page, target)
+	if not check(view is WalkView and page.visible and page.offers_packet.offers.size() == 2 and index >= 0, "actual station did not expose the two admitted destinations"):
+		shell.free(); return
+	var initial_quote: Dictionary = page.packet.duplicate(true)
+	refused_ui(view, owner, "choose_destination_" + str(index), output, "choice-guarded")
+	await activate_destination(tree, page, page.destination_buttons[index])
+	check(page.packet == owner.get_freedom_survey_commissions_for_target(target.system_id, target.planet_id) and page.packet != initial_quote and target.body_name in page.details.text and page.offers_packet.offers[index].system_name in page.details.text and save(owner, output.path_join("station-choice.json")) == originals.station, "keyboard choice did not display its own full target quote/route purely")
+	var window: Vector2i = tree.root.size
+	check(tree.root.content_scale_size == Vector2i(1920, 1080) and tree.root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "destination layout lost actual project stretch")
+	for pixels in [Vector2i(640, 450), Vector2i(1280, 720)]:
+		tree.root.size = pixels
+		for frame in 4: await tree.process_frame
+		page.accept_button.grab_focus()
+		page.scroll.ensure_control_visible(page.accept_button)
+		for frame in 2: await tree.process_frame
+		var bounds := Rect2(Vector2.ZERO, Vector2(pixels)).grow(1)
+		var button_rect: Rect2 = tree.root.get_final_transform() * page.accept_button.get_global_rect()
+		check(bounds.encloses(button_rect) and button_rect.size.y >= 44, "destination confirmation is unreadable/offscreen at " + str(pixels))
+	tree.root.size = window
+	for frame in 3: await tree.process_frame
+	view.open_paid_operations()
+	check(page.paid_open(), "existing paid reader became unreachable while browsing a destination")
+	page.close_paid()
+	check(page.packet.system_id == target.system_id and page.packet.planet_id == target.planet_id and target.body_name in page.details.text, "child-service return replaced the chosen quote with Nearby")
+	page.back.pressed.emit()
+	check(save(owner, output.path_join("station-back.json")) == originals.station and view.paused, "destination Back changed full Save or resumed")
+	view.open_survey_commissions()
+	page = reader(view)
+	check(page.requested_target.is_empty() and page.packet == owner.get_freedom_survey_commissions(page.requested_kind) and page.packet == initial_quote and save(owner, output.path_join("station-reopened.json")) == originals.station, "top-level reopen retained a transient destination proposal or changed the complete Save")
+	await activate_destination(tree, page, page.destination_buttons[index])
+	check(page.packet.system_id == target.system_id and page.packet.planet_id == target.planet_id, "explicit reselection after reopen did not restore the reviewed target")
+	await activate_destination(tree, page, page.accept_button)
+	check(save(owner, output.path_join("station-accepted-ui.json")) == originals["station-accepted"] and page.packet.sequence != 0 and page.requested_target.is_empty(), "station target acceptance differs from complete C++ oracle")
+	for button: Button in page.destination_buttons: check(button.disabled, "active destination remains changeable")
+	check(page.orbital_button.disabled and page.geological_button.disabled, "active kind remains changeable")
+	view.survey_commission_command("choose_geological")
+	view.survey_commission_command("choose_destination_" + str(1 - index))
+	check(save(owner, output.path_join("active-locked.json")) == originals["station-accepted"], "active destination/kind switch changed the complete owner")
+	shell.free(); owner = null
+	await tree.process_frame
+
+	shell = host(tree, fixtures.path_join("zero-charge.json"), assets)
+	if shell == null: return
+	view = shell.current_view; owner = shell.bridge
+	view.open_survey_commissions(); page = reader(view)
+	index = destination_index(page, target)
+	if not check(view is FlightView and index >= 0 and page.offers_packet.offers[index].route.jump_charges == 0 and page.offers_packet.offers[index].route.charge_shortfall == 2, "initialized zero-charge source lost its actual shortfall"):
+		shell.free(); return
+	var old_device: int = view.player_input.device
+	var old_pads: Dictionary = view.player_input.available_pads.duplicate()
+	view.player_input.device = 2; view.player_input.available_pads[2] = true; view.player_input.install()
+	page.destination_buttons[index].grab_focus()
+	for down in [true, false]:
+		var foreign := InputEventJoypadButton.new()
+		foreign.device = 3; foreign.button_index = JOY_BUTTON_A; foreign.pressed = down
+		Input.parse_input_event(foreign); Input.flush_buffered_events()
+		await tree.process_frame
+	check(page.requested_target.is_empty() and save(owner, output.path_join("foreign-pad.json")) == originals["zero-charge"], "foreign pad selected or accepted a destination")
+	await activate_destination(tree, page, page.destination_buttons[index], 2)
+	view.player_input.device = old_device; view.player_input.available_pads = old_pads; view.player_input.install()
+	check(page.packet.system_id == target.system_id and page.packet.planet_id == target.planet_id and page.packet.can_accept and not page.accept_button.disabled and "SHORT 2" in page.details.text, "zero charges became an acceptance gate or selected quote was lost")
+	var reviewed: Dictionary = page.packet.duplicate(true)
+	page.packet.system_id = "1"
+	await tree.process_frame
+	page.accept_button.pressed.emit()
+	check(page.packet == reviewed and save(owner, output.path_join("stale-quote-refused.json")) == originals["zero-charge"], "stale target confirmation accepted instead of refreshing complete terms")
+	await tree.process_frame
+	page.accept_button.pressed.emit()
+	check(save(owner, output.path_join("zero-accepted-ui.json")) == originals.accepted, "zero-charge flight acceptance differs from actual C++ result")
+	page.back.pressed.emit()
+	view.service_button.pressed.emit()
+	check(save(owner, output.path_join("supported-ui.json")) == originals.supported, "existing free replenishment became unavailable after zero-charge acceptance")
+	shell.free(); owner = null
+	await tree.process_frame
+
+	for phase in ["partial", "ready", "seated"]:
+		backend = restore(fixtures.path_join(phase + ".json"))
+		if backend == null: return
+		var quote: Dictionary = backend.get_freedom_survey_commissions()
+		check(Office.valid_packet(quote) and save(backend, output.path_join(phase + "-continued.json")) == originals[phase], "destination phase Continue/read changed full Save: " + phase)
+		if phase != "seated": check(quote.system_id == target.system_id and quote.planet_id == target.planet_id and quote.acquired_ticks == (600 if phase == "partial" else 3600), "target acquisition or literal accepted terms changed")
+		backend = null
+
+	shell = host(tree, fixtures.path_join("expired.json"), assets)
+	if shell == null: return
+	view = shell.current_view; owner = shell.bridge
+	view.open_survey_commissions(); page = reader(view)
+	var expired: Dictionary = owner.get_freedom_survey_commissions()
+	check(page.packet == expired and expired.sequence != 0 and expired.expired and expired.can_abandon and expired.can_accept and owner.get_freedom_survey_commissions_for_target(expired.system_id, expired.planet_id) == expired, "expired matching read replaced accepted terms with a fresh proposal")
+	for button: Button in page.destination_buttons: check(button.disabled, "expired destination became changeable")
+	view.survey_commission_command("choose_geological")
+	check(save(owner, output.path_join("expired-locked.json")) == originals.expired, "expired kind change bypassed explicit abandonment")
+	await tree.process_frame
+	page.accept_button.pressed.emit()
+	check(save(owner, output.path_join("renewed-ui.json")) == originals.renewed, "same-target renewal differs from complete C++ oracle")
+	shell.free(); owner = null
+	await tree.process_frame
+
+	shell = host(tree, fixtures.path_join("origin.json"), assets)
+	if shell == null: return
+	view = shell.current_view; owner = shell.bridge
+	view.open_survey_commissions(); page = reader(view)
+	check(page.packet.completed and page.packet.can_submit and page.packet.system_id == target.system_id and page.packet.planet_id == target.planet_id, "returned report lost actual selected target/submission")
+	await tree.process_frame
+	page.submit_button.pressed.emit()
+	check(save(owner, output.path_join("paid-ui.json")) == originals.paid, "destination report payment differs from actual C++ oracle")
+	page.submit_button.pressed.emit()
+	check(save(owner, output.path_join("duplicate-paid.json")) == originals.paid, "destination report paid twice")
+	shell.free(); owner = null
+	await tree.process_frame
+	for phase in originals: check(FileAccess.get_file_as_bytes(fixtures.path_join(phase + ".json")) == originals[phase], "destination presentation rewrote producer source: " + phase)
+	var report: Dictionary = {"schema": "apsis.commission-destinations-native/1", "completed": failures == 0, "failures": failures, "cpp_phases": originals.size(), "scope": "Actual station and seated hosts; strict target-bound quote/confirmation, keyboard/selected-pad choice, full C++ acceptance/renewal/service/payout Save parity. Sources label initialized zero-charge, orbit, deadline and return-port boundaries; not an uninterrupted Waypoint earning trip, manual/hardware or viability proof."}
+	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
+	if check(file != null, "destination report unavailable"): file.store_string(JSON.stringify(report, "\t") + "\n")
+
 func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> int:
 	if not check(DirAccess.make_dir_recursive_absolute(output) == OK, "witness directory unavailable"): return failures
 	var originals := {}
@@ -301,6 +487,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	packet_controls(packet)
 	geological_packet_controls(backend, output)
 	malformed_commands(backend, packet, output)
+	offer_packet_controls(backend, output)
 	backend = null
 	if failures: return failures
 
@@ -439,6 +626,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	backend = null
 	for phase in originals:
 		check(FileAccess.get_file_as_bytes(fixtures.path_join(phase + ".json")) == originals[phase], "presentation rewrote C++ source fixture: " + phase)
+	if not failures: await run_destinations(tree, fixtures.path_join("commission-destinations"), assets, output.get_base_dir().path_join("commission-destinations"))
 	if not failures: await run_geological(tree, fixtures.path_join("geological-commissions"), assets, output.get_base_dir().path_join("geological-commissions"))
 	var report := {"schema": "apsis.survey-commissions-native/1", "completed": failures == 0, "failures": failures, "witnesses": witnesses, "scope": "Actual station/flight Shell Continue, paused office commands, malformed/held/modal/device refusal, full C++ Save parity and one committed completion interval. Source scenario uses explicitly initialized home-space, remote orbit and home-port poses with actual charged jumps; not uninterrupted flown/manual/hardware/performance acceptance."}
 	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)

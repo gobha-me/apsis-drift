@@ -370,6 +370,46 @@ auto repair_expense() -> void {
   check(!purchase_paid_service(opening, counts, start, generation, 86),
         "The separate repair purchase leaves the existing fuel cap unchanged");
 }
+auto survey_with_all_income_counts() -> void {
+  // Explicit initialized accounting boundary, not a flown/earned profit claim.
+  const PaidIncomeCounts before_counts{1, 2, 1};
+  auto account = need(make_paid_operations(before_counts, 0, 0));
+  account.spent_credits = 480;
+  account.operating_tab = 30;
+  account.recovery_due = 100;
+  const auto supported = need(fund_paid_retainer(account, before_counts, 0, 0,
+                                                 2, 4 * kPaidHourTicks, 85))
+                             .account;
+  check(supported.settled_paid_count == 1 &&
+            supported.settled_specimen_count == 2 &&
+            supported.settled_canister_count == 1 &&
+            supported.operating_tab == 115 &&
+            need(paid_operations_cash(supported, before_counts)) == 0,
+        "Chosen-job retainer accounting must preserve all three settled income "
+        "counts");
+  const PaidIncomeCounts after_counts{2, 2, 1};
+  const auto paid =
+      need(settle_paid_survey_income(supported, after_counts, 3600, 0));
+  check(paid.version == 3 && paid.recovery_due == 0 &&
+            paid.operating_tab == 115 && paid.settled_specimen_count == 2 &&
+            paid.settled_canister_count == 1 &&
+            need(paid_operations_cash(paid, after_counts)) == 0 &&
+            !settle_paid_survey_income(paid, after_counts, 3600, 0) &&
+            !settle_paid_survey_income(supported, {2, 2, 0}, 3600, 0) &&
+            !settle_paid_survey_income(supported, {2, 0, 1}, 3600, 0),
+        "Survey payout pays insurance first once and refuses dropping either "
+        "non-survey income source");
+  const auto replaced = need(charge_paid_recovery(paid, after_counts, 3600, 1));
+  check(replaced.settled_paid_count == 2 &&
+            replaced.settled_specimen_count == 2 &&
+            replaced.settled_canister_count == 1 &&
+            replaced.recovery_due == 100 &&
+            need(charge_paid_recovery(replaced, after_counts, 3600, 1)) ==
+                replaced &&
+            !charge_paid_recovery(replaced, {2, 2, 0}, 3600, 2),
+        "Replacement preserves all three income counters and applies only one "
+        "actual generation fee");
+}
 } // namespace
 auto main() -> int {
   try {
@@ -378,6 +418,7 @@ auto main() -> int {
     operating_support();
     income_and_replacement();
     repair_expense();
+    survey_with_all_income_counts();
   } catch (const std::exception& error) {
     std::cerr << "FAIL: " << error.what() << '\n';
     return 1;
