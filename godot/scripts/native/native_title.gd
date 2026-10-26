@@ -51,6 +51,7 @@ var derelict_recovery_choice: CheckButton
 var busy := false
 var focused := true
 var readable_scale := -1.0
+var choice_help_reveal_pending := false
 # -2 discovers a launch-time owner; a journey return supplies its live selection.
 var initial_controller_device := -2
 
@@ -204,31 +205,49 @@ func add_choice_help(choice: OptionButton) -> Label:
 	help.focus_mode = Control.FOCUS_NONE
 	help.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(help)
-	choice.focus_entered.connect(func(): reveal_choice_help(choice, help))
-	help.resized.connect(func(): reveal_choice_help(choice, help))
+	choice.focus_entered.connect(queue_choice_help_reveal)
+	help.resized.connect(queue_choice_help_reveal)
 	return help
 
 func refresh_chart_help() -> void:
 	chart_help.text = CHART_HELP[network_choice.selected] + "\nPlanetary charts add names and orbits, not surface findings. Paid operations require separate enrollment; accepting work does not enroll you."
-	reveal_choice_help(network_choice, chart_help)
+	queue_choice_help_reveal()
 
 func refresh_drive_help() -> void:
 	drive_help.text = DRIVE_HELP[recovery_choice.selected] + "\nThree starting charges; free replenishment requires Origin docking until explicit paid enrollment. Pause freezes recovery. Continue keeps saved choices."
-	reveal_choice_help(recovery_choice, drive_help)
+	queue_choice_help_reveal()
 
-func reveal_choice_help(choice: OptionButton, help: Label) -> void:
-	# Focus-following runs first; then reveal the selector and wrapped text as a
-	# single block after the container has applied selection/resize changes.
+func queue_choice_help_reveal() -> void:
+	if choice_help_reveal_pending: return
+	choice_help_reveal_pending = true
+	reveal_choice_help.call_deferred()
+
+func reveal_choice_help() -> void:
+	# Coalesce focus, selection and wrapping changes into one settled-layout
+	# correction for the current focus, rather than several stale scroll deltas.
 	await get_tree().process_frame
-	if not panel.visible or not focused or not choice.has_focus() or choice.get_popup().visible: return
-	var viewport := scroll.get_global_rect()
-	var block := choice.get_global_rect().merge(help.get_global_rect())
-	if block.size.y > viewport.size.y:
+	choice_help_reveal_pending = false
+	if not is_inside_tree() or not panel.visible or not focused or busy: return
+	var choice: OptionButton
+	var help: Label
+	if network_choice.has_focus():
+		choice = network_choice
+		help = chart_help
+	elif recovery_choice.has_focus():
+		choice = recovery_choice
+		help = drive_help
+	else: return
+	if choice.get_popup().visible: return
+	# These siblings' content coordinates do not change when ScrollContainer's
+	# scroll value changes ahead of its canvas transform.
+	var top := choice.position.y
+	var bottom := help.position.y + help.size.y
+	if bottom - top > scroll.size.y:
 		scroll.ensure_control_visible(choice)
-	elif block.position.y < viewport.position.y:
-		scroll.scroll_vertical += floori(block.position.y - viewport.position.y)
-	elif block.end.y > viewport.end.y:
-		scroll.scroll_vertical += ceili(block.end.y - viewport.end.y)
+	elif top < scroll.scroll_vertical:
+		scroll.scroll_vertical = floori(top)
+	elif bottom > scroll.scroll_vertical + scroll.size.y:
+		scroll.scroll_vertical = ceili(bottom - scroll.size.y)
 
 func begin_new() -> void:
 	if busy or not focused or chooser.visible or reference.visible or settings_view.visible: return
