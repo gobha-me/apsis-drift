@@ -46,6 +46,73 @@ func held_stick(value: float, device: int = 41) -> void:
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
 
+func check_help_bounds(title: Control, choice: OptionButton, help: Label, pixels: Vector2i) -> void:
+	var bounds: Rect2 = title.scroll.get_global_rect()
+	var detail := "window=%s logical=%s choice=%s scroll=%s selector=%s help=%s" % [pixels, title.size, choice.get_item_text(choice.selected), bounds, choice.get_global_rect(), help.get_global_rect()]
+	check(choice.has_focus() and not choice.get_popup().visible, "Choice help stole focus or opened its popup: " + detail)
+	check(bounds.encloses(choice.get_global_rect()) and bounds.encloses(help.get_global_rect()), "Choice and visible help do not fit together: " + detail)
+	check(help.get_visible_line_count() == help.get_line_count(), "Choice help clipped wrapped text: " + detail)
+	check(help.get_theme_font_size("font_size") * float(pixels.x) / title.size.x >= 18.0, "Choice help shrank physical text: " + detail)
+	check(help.focus_mode == Control.FOCUS_NONE and help.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Choice help became an input control")
+
+func check_choice_help(title: Control, owner: Variant) -> void:
+	var original_size := root.size
+	var original_status: String = title.status.text
+	check("Home and Nearby" in title.chart_help.text and "no recovery cycle" in title.drive_help.text, "Default choice explanations were not initialized")
+	for pixels in [Vector2i(640, 450), Vector2i(1280, 720)]:
+		root.size = pixels
+		await settle()
+		for index in 5:
+			title.network_choice.grab_focus()
+			title.network_choice.select(index)
+			title.network_choice.item_selected.emit(index)
+			await settle()
+			check_help_bounds(title, title.network_choice, title.chart_help, pixels)
+			check(("No remote planetary charts or commission office" in title.chart_help.text) == (index < 2), "Chart help misstated office availability")
+			check(("commissions are available at Origin" in title.chart_help.text) == (index >= 2), "Planetary/search profile lost optional work explanation")
+			check("not surface findings" in title.chart_help.text and "separate enrollment" in title.chart_help.text, "Chart help confused navigation, surface knowledge or paid enrollment")
+			check((not title.derelict_recovery_choice.disabled) == (index in [3, 4]), "Reading chart help changed canister eligibility")
+		for index in 3:
+			title.recovery_choice.grab_focus()
+			title.recovery_choice.select(index)
+			title.recovery_choice.item_selected.emit(index)
+			await settle()
+			check_help_bounds(title, title.recovery_choice, title.drive_help, pixels)
+			check("one charge" in title.drive_help.text and "Pause freezes recovery" in title.drive_help.text, "Drive help changed charge or pause rules")
+			check(("early jumps" in title.drive_help.text) == (index > 0) and ("45–90" in title.drive_help.text) == (index == 2), "Drive help misstated recovery/strain selection")
+		check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and not title.busy and title.status.text == original_status, "Reading choices created a journey or overwrote title status")
+	# Real popup keyboard and selected-controller paths still own selection.
+	title.network_choice.select(0)
+	title.network_choice.item_selected.emit(0)
+	title.network_choice.grab_focus()
+	await settle()
+	await key(KEY_ENTER)
+	check(title.network_choice.get_popup().visible, "Keyboard could not open the chart popup")
+	await key(KEY_DOWN)
+	await key(KEY_ENTER)
+	await settle()
+	check(title.network_choice.selected == 1 and "Four system fixes" in title.chart_help.text, "Keyboard popup did not refresh chart help")
+	check_help_bounds(title, title.network_choice, title.chart_help, root.size)
+	title.recovery_choice.select(0)
+	title.recovery_choice.item_selected.emit(0)
+	title.recovery_choice.grab_focus()
+	await settle()
+	await pad(JOY_BUTTON_A)
+	check(title.recovery_choice.get_popup().visible, "Selected controller could not open the drive popup")
+	await pad(JOY_BUTTON_DPAD_DOWN)
+	await pad(JOY_BUTTON_A)
+	await settle()
+	check(title.recovery_choice.selected == 1 and "45 seconds" in title.drive_help.text, "Selected controller popup did not refresh drive help")
+	check_help_bounds(title, title.recovery_choice, title.drive_help, root.size)
+	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and not title.busy and title.status.text == original_status, "Popup choices committed a journey or overwrote status")
+	title.network_choice.select(0)
+	title.network_choice.item_selected.emit(0)
+	title.recovery_choice.select(0)
+	title.recovery_choice.item_selected.emit(0)
+	root.size = original_size
+	title.new_button.grab_focus()
+	await settle()
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3 or DisplayServer.get_name() != "headless" or AudioServer.get_driver_name() != "Dummy": quit(1); return
@@ -73,6 +140,7 @@ func run() -> void:
 	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 5 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
 	check(title.recovery_choice != null and title.recovery_choice.selected == 0 and title.recovery_choice.item_count == 3 and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive rules changed the default or lost independent keyboard selection")
 	check(title.origin_service_choice != null and not title.origin_service_choice.button_pressed and title.origin_service_choice.focus_mode == Control.FOCUS_ALL, "Fuel service must remain explicit opt-in with keyboard/controller access")
+	await check_choice_help(title, owner)
 	title.open_settings()
 	var settings: Control = title.settings_view
 	title.begin_new()
@@ -316,7 +384,7 @@ func run() -> void:
 	frontier_title.derelict_recovery_choice.button_pressed = true
 	check(frontier_title.network_choice.get_item_text(4) == "Outer frontier: four charted systems" and not frontier_title.derelict_recovery_choice.disabled, "Frontier title label or retrieval composition unavailable")
 	frontier_title.begin_new()
-	check(requests.size() == 1 and requests[0].get("frontier", false) and not requests[0].get("uncharted", true) and requests[0].drive_strain and requests[0].origin_service and requests[0].derelict_recovery, "Title did not dispatch its explicit frontier composition")
+	check(requests.size() == 1 and requests[0] == {"mode": "new_game", "value": "42", "network": true, "planetary": false, "uncharted": false, "frontier": true, "drive_recovery": true, "drive_strain": true, "origin_service": true, "derelict_recovery": true}, "Title help changed its explicit frontier start arguments")
 	if requests.size() == 1:
 		var options: Dictionary = requests[0].duplicate(true)
 		options.assets = args[0]

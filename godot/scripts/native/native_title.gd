@@ -6,6 +6,18 @@ const Controls = preload("res://scripts/ui/player_input.gd")
 const Basics = preload("res://scripts/flight/flight_basics.gd")
 const Settings = preload("res://scripts/ui/control_settings.gd")
 const ProfileBrowser = preload("res://scripts/ui/profile_browser.gd")
+const CHART_HELP = [
+	"Home and Nearby system fixes; local reference bodies remain known. No remote planetary charts or commission office.",
+	"Four system fixes; local reference bodies remain known. No remote planetary charts or commission office.",
+	"Four systems with planet names and orbital locations. Optional orbital and geological commissions are available at Origin.",
+	"Four systems with planetary charts and regional stellar search for further system fixes. Optional commissions are available at Origin.",
+	"Four systems with planetary charts and limited-reach stellar search. Search from charted waypoints for farther contacts. Optional commissions are available at Origin."
+]
+const DRIVE_HELP = [
+	"Standard arrival rules, with no recovery cycle. Each committed jump costs one charge.",
+	"Arrival starts 45 seconds of recovery. Valid early jumps still cost one charge, with up to 2 km of extra arrival uncertainty that fades as recovery clears.",
+	"Arrival recovery lasts 45–90 seconds as unfinished recovery carries forward. Valid early jumps still cost one charge, with up to 2 km of fading extra arrival uncertainty."
+]
 var catalog_owner: Variant
 var catalog_continue_button: Button
 var catalog_load_button: Button
@@ -23,6 +35,8 @@ var seed: LineEdit
 var new_button: Button
 var network_choice: OptionButton
 var recovery_choice: OptionButton
+var chart_help: Label
+var drive_help: Label
 var continue_button: Button
 var reference_button: Button
 var settings_button: Button
@@ -102,6 +116,7 @@ func _ready() -> void:
 	network_choice.tooltip_text = "Planetary charts grant names and orbital locations; surfaces remain unexplored. The original uncharted choice keeps its regional search. Outer frontier starts with four charted systems and a declared limited-reach stellar search; search from charted waypoints for new contacts. Scan local space can find an exterior derelict. Three jump charges; free replenishment requires Origin Station docking. Existing saves retain their charts."
 	network_choice.focus_mode = Control.FOCUS_ALL
 	column.add_child(network_choice)
+	chart_help = add_choice_help(network_choice)
 	var drive_label := Label.new()
 	drive_label.text = "Jump drive"
 	column.add_child(drive_label)
@@ -111,6 +126,7 @@ func _ready() -> void:
 	recovery_choice.add_item("Recovery + temporary strain · 45–90 seconds")
 	recovery_choice.tooltip_text = "Recovery adds up to 2 km arrival uncertainty to early jumps. Temporary strain also carries unfinished recovery into the next cycle, up to 90 seconds. Waiting clears it. Each jump costs one charge. Existing saves keep their drive rules."
 	column.add_child(recovery_choice)
+	drive_help = add_choice_help(recovery_choice)
 	origin_service_choice = CheckButton.new()
 	origin_service_choice.text = "Origin fuel service · prototype"
 	origin_service_choice.tooltip_text = "One service Wayfarer, with finite fuel and jump charges. Request fuel while seated in a supported ship on the home moon. D2 is reserved for it. Existing saves keep their current rules."
@@ -122,7 +138,11 @@ func _ready() -> void:
 	column.add_child(derelict_recovery_choice)
 	network_choice.item_selected.connect(func(index: int):
 		derelict_recovery_choice.disabled = index not in [3, 4]
-		if index not in [3, 4]: derelict_recovery_choice.button_pressed = false)
+		if index not in [3, 4]: derelict_recovery_choice.button_pressed = false
+		refresh_chart_help())
+	recovery_choice.item_selected.connect(func(_index: int): refresh_drive_help())
+	refresh_chart_help()
+	refresh_drive_help()
 	new_button = add_button("New Game", begin_new)
 	catalog_continue_button = add_button("Continue", continue_catalog)
 	continue_button = add_button("Open save file…", open_continue)
@@ -177,6 +197,38 @@ func add_button(text: String, action: Callable) -> Button:
 	button.pressed.connect(action)
 	column.add_child(button)
 	return button
+
+func add_choice_help(choice: OptionButton) -> Label:
+	var help := Label.new()
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	help.focus_mode = Control.FOCUS_NONE
+	help.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(help)
+	choice.focus_entered.connect(func(): reveal_choice_help(choice, help))
+	help.resized.connect(func(): reveal_choice_help(choice, help))
+	return help
+
+func refresh_chart_help() -> void:
+	chart_help.text = CHART_HELP[network_choice.selected] + "\nPlanetary charts add names and orbits, not surface findings. Paid operations require separate enrollment; accepting work does not enroll you."
+	reveal_choice_help(network_choice, chart_help)
+
+func refresh_drive_help() -> void:
+	drive_help.text = DRIVE_HELP[recovery_choice.selected] + "\nThree starting charges; free replenishment requires Origin docking until explicit paid enrollment. Pause freezes recovery. Continue keeps saved choices."
+	reveal_choice_help(recovery_choice, drive_help)
+
+func reveal_choice_help(choice: OptionButton, help: Label) -> void:
+	# Focus-following runs first; then reveal the selector and wrapped text as a
+	# single block after the container has applied selection/resize changes.
+	await get_tree().process_frame
+	if not panel.visible or not focused or not choice.has_focus() or choice.get_popup().visible: return
+	var viewport := scroll.get_global_rect()
+	var block := choice.get_global_rect().merge(help.get_global_rect())
+	if block.size.y > viewport.size.y:
+		scroll.ensure_control_visible(choice)
+	elif block.position.y < viewport.position.y:
+		scroll.scroll_vertical += floori(block.position.y - viewport.position.y)
+	elif block.end.y > viewport.end.y:
+		scroll.scroll_vertical += ceili(block.end.y - viewport.end.y)
 
 func begin_new() -> void:
 	if busy or not focused or chooser.visible or reference.visible or settings_view.visible: return
