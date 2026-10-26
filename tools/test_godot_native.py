@@ -776,7 +776,11 @@ def main(argv=None):
                 [str(phases), "--neighbor", "--commands", "--commission", "--charted-arrivals", "--charted-arrivals"],
                 [str(phases), "--incomplete-commission"],
                 [str(phases), "--neighbor", "--commands", "--incomplete-commission"],
-                [str(phases), "--neighbor", "--commands", "--commission", "--incomplete-commission", "--incomplete-commission"])):
+                [str(phases), "--neighbor", "--commands", "--commission", "--incomplete-commission", "--incomplete-commission"],
+                [str(phases), "--neighbor", "--commands", "--commission-waypoint"],
+                [str(phases), "--neighbor", "--commission", "--commission-waypoint"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--commission-waypoint", "--commission-waypoint"],
+                [str(phases), "--neighbor", "--commands", "--commission", "--commission-waypoint", "--incomplete-commission"])):
             refusal_log = work / f"{name}-refusal-{index}.log"
             code, timed_out, _ = run_logged(
                 [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
