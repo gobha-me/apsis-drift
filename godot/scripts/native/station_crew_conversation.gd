@@ -21,6 +21,7 @@ var column: VBoxContainer
 var header: HBoxContainer
 var backing: StyleBoxFlat
 var displayed_text := ""
+var layout_pending := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -109,6 +110,26 @@ func layout_reader() -> void:
 	for button in [reply_up, reply_down]: button.custom_minimum_size = Vector2.ONE * ceili(44 * scale)
 	response_scroll.custom_minimum_size.y = ceili(64 * scale)
 	scroll.custom_minimum_size.y = ceili(64 * scale)
+	fit_panel(scale)
+	if not layout_pending:
+		layout_pending = true
+		settle_panel_layout.call_deferred()
+
+func settle_panel_layout() -> void:
+	if not is_inside_tree():
+		layout_pending = false
+		return
+	await get_tree().process_frame
+	layout_pending = false
+	if not is_inside_tree(): return
+	var pixels := Vector2(get_window().size)
+	if not pixels.is_finite() or not size.is_finite() or minf(pixels.x, pixels.y) <= 0 or minf(size.x, size.y) <= 0: return
+	# Font/width changes invalidate wrapped minimum sizes asynchronously. The
+	# first size assignment may clamp to an obsolete, taller minimum. Reapply
+	# once after container layout; never shrink text or discard any choices.
+	fit_panel(maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y)))
+
+func fit_panel(scale: float) -> void:
 	# This is a reading card beside the scene, not a screen-sized modal shade.
 	panel.size = Vector2(minf(560 * scale, size.x * 0.44), size.y * 0.8)
 	panel.position = Vector2(size.x - panel.size.x - 16 * scale, (size.y - panel.size.y) * 0.5)
