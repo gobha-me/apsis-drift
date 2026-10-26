@@ -543,8 +543,8 @@ func close_observations() -> void:
 		left_scroll.ensure_control_visible(observations_button)
 		ensure_entry_focus_visible()
 
-func show_surface_reference(text: String, invoking: Button, title := "SURFACE CONDITIONS") -> void:
-	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return
+func show_surface_reference(text: String, invoking: Button, title := "SURFACE CONDITIONS") -> bool:
+	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return false
 	entry_focus_frames = 0
 	surface_reference_invoker = weakref(invoking) if is_instance_valid(invoking) else null
 	surface_reference_view.clear_collection()
@@ -552,11 +552,12 @@ func show_surface_reference(text: String, invoking: Button, title := "SURFACE CO
 	surface_reference_view.reference_title = title
 	menu_margin.hide()
 	surface_reference_view.open()
+	return true
 
-func show_exposure_reference(text: String, invoking: Button, context: Dictionary, command: Callable) -> void:
-	show_surface_reference(text, invoking, "LOCAL EXPOSURE")
-	if not surface_reference_view.visible: return
+func show_exposure_reference(text: String, invoking: Button, context: Dictionary, command: Callable) -> bool:
+	if not show_surface_reference(text, invoking, "LOCAL EXPOSURE"): return false
 	surface_reference_view.configure_collection(context, command)
+	return true
 
 func close_surface_reference() -> void:
 	if not is_instance_valid(surface_reference_view): return

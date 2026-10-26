@@ -95,7 +95,8 @@ transactional metadata actions; Continue and recovery retain both histories.
 After inspecting an exposure, release the interaction control, then explicitly
 choose **Collect hand specimen** in its paused reader while still within eight
 metres on supported ground. Opening or reading the exposure never collects.
-Collection stays in the reader; Back returns to paused Controls. The existing
+Collection stays in the reader with a visible result and current availability
+reason; Back returns to paused Controls. The existing
 Controls collection action also remains available. Both paths work at planetary
 and Moon exposures. Collection adds one specimen to a
 four-slot pouch and records its source in your field notes. It leaves the clock,

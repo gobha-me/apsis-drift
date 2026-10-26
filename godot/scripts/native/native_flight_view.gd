@@ -1450,6 +1450,7 @@ func collect_exposure_sample() -> void:
 	update_view(0.0)
 	refresh_field_samples()
 	refresh_exposure_collection()
+	reader.collection_status.text = reason + "\n" + reader.collect_button.tooltip_text
 	report_action_status(reason)
 	reader.back_button.grab_focus()
 

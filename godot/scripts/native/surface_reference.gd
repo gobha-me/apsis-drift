@@ -4,6 +4,7 @@ extends "res://scripts/flight/flight_basics.gd"
 var reference_text := ""
 var reference_title := "SURFACE CONDITIONS"
 var collect_button: Button
+var collection_status: Label
 var collection_context: Dictionary = {}
 var collection_command: Callable
 var opened_frame := -1
@@ -14,12 +15,20 @@ func _ready() -> void:
 	collect_button = _button(_buttons, "Collect hand specimen", collect)
 	_buttons.move_child(collect_button, 0)
 	collect_button.hide()
+	collection_status = Label.new()
+	collection_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_layout.add_child(collection_status)
+	_layout.move_child(collection_status, _buttons.get_index())
+	collection_status.hide()
 	refresh()
 
 func clear_collection() -> void:
 	collection_context.clear()
 	collection_command = Callable()
 	opening_input_pending = false
+	if is_instance_valid(collection_status):
+		collection_status.text = ""
+		collection_status.hide()
 	if is_instance_valid(collect_button):
 		collect_button.disabled = true
 		collect_button.hide()
@@ -52,6 +61,7 @@ func collect() -> void:
 func refresh_collection(available: bool, reason: String) -> void:
 	collect_button.disabled = not available
 	collect_button.tooltip_text = reason
+	collection_status.text = reason
 
 func refresh() -> void:
 	if not is_instance_valid(heading): return
@@ -63,6 +73,7 @@ func refresh() -> void:
 	previous_button.hide()
 	next_button.hide()
 	if is_instance_valid(collect_button): collect_button.visible = exposure
+	if is_instance_valid(collection_status): collection_status.visible = exposure
 	var other: Control = collect_button if exposure and is_instance_valid(collect_button) else back_button
 	for property in ["focus_neighbor_left", "focus_neighbor_right", "focus_previous", "focus_next"]:
 		back_button.set(property, back_button.get_path_to(other))
@@ -74,6 +85,7 @@ func _process(delta: float) -> void:
 	if is_instance_valid(collect_button) and is_visible_in_tree():
 		collect_button.add_theme_font_size_override("font_size", roundi(24*_readable_scale))
 		collect_button.custom_minimum_size.y = 48*_readable_scale
+		collection_status.add_theme_font_size_override("font_size", roundi(20*_readable_scale))
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree(): return

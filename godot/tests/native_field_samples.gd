@@ -127,7 +127,7 @@ func exposure_guards(tree: SceneTree, view: Control, owner: Variant, reader: Con
 	check(owner.advance_freedom_surface_walk(1.0/120.0, PackedFloat64Array([0, 0, float(state.surface_walk.heading)]), false), "Neutral tick for stale exposure check refused")
 	var advanced: PackedByteArray = save_bytes(owner, "exposure-advanced")
 	reader.collect_button.pressed.emit()
-	check(reader.collect_button.disabled and "earlier state" in reader.collect_button.tooltip_text and save_bytes(owner, "exposure-stale") == advanced, "Stale inspected-owner snapshot collected after a real tick")
+	check(reader.collect_button.disabled and "earlier state" in reader.collection_status.text and save_bytes(owner, "exposure-stale") == advanced, "Stale inspected-owner snapshot collected after a real tick")
 	check(owner.stage_freedom_continue(output.path_join("field-samples-before.json")) and owner.commit_pending_freedom_start(owner.get_pending_freedom_start().candidate_id), "Restore actual baseline after stale-reader check refused")
 	view.state = owner.get_freedom_flight_state()
 	view.update_view(0.0)
@@ -187,6 +187,8 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	await activate.call(view, view.sample_pouch_button, false)
 	var reader: Control = view.controls_menu.surface_reference_view
 	if not check(reader.visible and reader.heading.text == "FIELD SAMPLES" and not reader.collect_button.visible and reader.collection_context.is_empty() and reader.back_button.has_focus() and "No specimens carried" in reader.body.text and save_bytes(owner, "empty-reader") == before, "Empty pouch reader changed saved state or lost readable focus"): return
+	var generic_text: String = reader.body.text
+	check(not view.controls_menu.show_exposure_reference("Wrong exposure", view.landmark_inspect_button, view.exposure_collection_context(initial, site_id), view.collect_exposure_sample) and not reader.collect_button.visible and not reader.collection_status.visible and reader.collection_context.is_empty() and reader.body.text == generic_text, "Refused exposure opening reconfigured a generic reader")
 	view.sample_collect_button.pressed.emit()
 	check(save_bytes(owner, "reader-guard") == before, "Reference modal admitted background collection")
 	reader.back_button.pressed.emit()
@@ -212,7 +214,7 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	var first := save_bytes(owner, "collected")
 	if not check(valid_packet(collected, initial, site_id) and collected.carried[0].tick == initial.tick and collected.journal == collected.carried and first == FileAccess.get_file_as_bytes(expected_path), "Exposure-reader keyboard collection differs from authentic typed direct C++ result"): return
 	check(owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and view.paused and view.sample_collect_button.disabled, "Collection changed clock/actor/craft/resources/facts or left duplicate collection enabled")
-	check(reader.visible and reader.collect_button.disabled and reader.back_button.has_focus(), "Collected exposure did not stay paused with duplicate disabled and Back focus")
+	check(reader.visible and reader.collect_button.disabled and reader.back_button.has_focus() and reader.collection_status.visible and "Specimen collected." in reader.collection_status.text and reader.collect_button.tooltip_text in reader.collection_status.text, "Collected exposure did not stay paused with duplicate disabled and Back focus")
 	reader.back_button.pressed.emit()
 	check(not reader.visible and reader.collection_context.is_empty() and not reader.collect_button.visible and view.landmark_inspect_button.has_focus(), "Exposure Back retained its action or lost invoking focus")
 	reader.process_mode = Node.PROCESS_MODE_INHERIT
@@ -302,10 +304,11 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	check(save_bytes(owner, "mark-replaced") == marked, "Controller same-site Replace changed time, position or first notes")
 	archive.back_button.pressed.emit()
 	check(view.paused and view.controls_menu.observations_button.has_focus(), "Marker archive Back resumed or lost focus")
-	# Restore a carried specimen through the ordinary collection command so the
-	# continuing Moon return route still exercises its existing pouch contract.
-	check(owner.collect_freedom_field_sample(site_id), "Recollection after marking refused")
+	# Preserve positive coverage of the original Controls action too; the new
+	# reader is an additional route, not a replacement for that command.
+	await activate.call(view, view.sample_collect_button, false)
 	var marked_carried := save_bytes(owner, "marked-carried")
+	check(peer.collect_freedom_field_sample(site_id) and peer.save_freedom_as(expected_path) and FileAccess.get_file_as_bytes(expected_path) == marked_carried, "Existing Controls recollection differs from the direct complete-Save result")
 	if not check(shell.select_start(owner, {"mode": "continue", "value": output.path_join("field-samples-marked-carried.json"), "assets": assets}), "Marked retained site Continue refused"): return
 	view = shell.current_view
 	view.set_process(false)
