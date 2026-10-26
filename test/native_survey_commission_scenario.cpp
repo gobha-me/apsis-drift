@@ -635,17 +635,19 @@ auto snapshot(const NativeFreedomFlightSession& session,
   const auto& resources = *session.resources();
   const auto& account = *session.knowledge()->paid_operations;
   const auto& work = *session.knowledge()->survey_commissions;
-  require(view.earnings == 0 && work.paid_count == 0 &&
-              work.geological_paid_count == 0 && !work.latest_paid &&
-              work.active && !work.active->measurement &&
-              work.active->kind == SurveyCommissionKind::orbital &&
-              account.settled_paid_count == 0 &&
-              account.settled_specimen_count == 0 &&
-              account.settled_canister_count == 0 &&
-              account.started_tick == 0 && account.operating_tab == 0 &&
-              bytes(session) == before,
-          "Read or replacement created earnings, another opening grant or "
-          "operating debt");
+  require(
+      view.earnings == 0 && work.paid_count == 0 &&
+          work.geological_paid_count == 0 && !work.latest_paid && work.active &&
+          (!work.active->measurement ||
+           work.active->measurement->acquired_ticks == 0) &&
+          view.acquired_ticks == 0 && !view.completed &&
+          work.active->kind == SurveyCommissionKind::orbital &&
+          account.settled_paid_count == 0 &&
+          account.settled_specimen_count == 0 &&
+          account.settled_canister_count == 0 && account.started_tick == 0 &&
+          account.operating_tab == 0 && bytes(session) == before,
+      "Read or replacement created earnings, another opening grant or "
+      "operating debt");
   return {
       {"file", path.filename().string()},
       {"tick", std::to_string(session.document().flight.tick)},
