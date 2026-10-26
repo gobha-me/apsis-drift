@@ -135,6 +135,27 @@ func exposure_guards(tree: SceneTree, view: Control, owner: Variant, reader: Con
 	reader.back_button.grab_focus()
 	check(save_bytes(owner, "exposure-restored") == before and not reader.collect_button.disabled, "Restoring the exact owner snapshot changed its complete Save")
 
+func check_exposure_layout(tree: SceneTree, reader: Control, owner: Variant, expected: PackedByteArray) -> void:
+	var original_size: Vector2i = tree.root.size
+	check(tree.root.content_scale_size == Vector2i(1920, 1080) and tree.root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "Exposure layout test lost the actual 1920x1080 canvas_items project stretch")
+	for pixels in [Vector2i(640, 450), Vector2i(1280, 720)]:
+		tree.root.size = pixels
+		for frame in 4: await tree.process_frame
+		reader.show_collection_result()
+		for frame in 3: await tree.process_frame
+		var transform: Transform2D = tree.root.get_final_transform()
+		var bounds := Rect2(Vector2.ZERO, Vector2(pixels))
+		var visible_scroll: Rect2 = transform * reader.scroll.get_global_rect()
+		check(bounds.grow(1).encloses(visible_scroll) and visible_scroll.size.y >= 52.0, "Exposure body lost two readable lines at actual project stretch: " + str(pixels) + " scroll=" + str(visible_scroll))
+		for button: Button in [reader.collect_button, reader.back_button]:
+			var physical: Rect2 = transform * button.get_global_rect()
+			check(bounds.grow(1).encloses(physical) and physical.size.y >= 44.0, "Exposure action escaped the usable viewport: " + str(pixels) + " button=" + str(physical))
+		var feedback: Rect2 = transform * reader.collection_status.get_global_rect()
+		check(reader.collection_status.visible and "Specimen collected." in reader.collection_status.text and visible_scroll.grow(1).encloses(feedback), "Fresh collection result did not scroll fully into view: " + str(pixels) + " feedback=" + str(feedback) + " scroll=" + str(visible_scroll))
+		check(save_bytes(owner, "exposure-layout-" + str(pixels.x)) == expected, "Resizing/reading collection feedback changed the complete Save")
+	tree.root.size = original_size
+	for frame in 3: await tree.process_frame
+
 static func saved_knowledge(bytes: PackedByteArray) -> Dictionary:
 	var value: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 	for depth in 16:
@@ -215,6 +236,7 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	if not check(valid_packet(collected, initial, site_id) and collected.carried[0].tick == initial.tick and collected.journal == collected.carried and first == FileAccess.get_file_as_bytes(expected_path), "Exposure-reader keyboard collection differs from authentic typed direct C++ result"): return
 	check(owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and view.paused and view.sample_collect_button.disabled, "Collection changed clock/actor/craft/resources/facts or left duplicate collection enabled")
 	check(reader.visible and reader.collect_button.disabled and reader.back_button.has_focus() and reader.collection_status.visible and "Specimen collected." in reader.collection_status.text and reader.collect_button.tooltip_text in reader.collection_status.text, "Collected exposure did not stay paused with duplicate disabled and Back focus")
+	await check_exposure_layout(tree, reader, owner, first)
 	reader.back_button.pressed.emit()
 	check(not reader.visible and reader.collection_context.is_empty() and not reader.collect_button.visible and view.landmark_inspect_button.has_focus(), "Exposure Back retained its action or lost invoking focus")
 	reader.process_mode = Node.PROCESS_MODE_INHERIT

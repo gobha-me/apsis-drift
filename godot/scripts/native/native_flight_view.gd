@@ -1441,7 +1441,9 @@ func collect_exposure_sample() -> void:
 	# Recheck the pinned owner and C++ reach/pouch/inspection rules immediately
 	# before the existing transactional command. A covered control never acts.
 	refresh_exposure_collection()
-	if reader.collect_button.disabled: return
+	if reader.collect_button.disabled:
+		reader.show_collection_result()
+		return
 	exposure_collection_frame = Engine.get_process_frames()
 	var site_id: String = str(reader.collection_context.site_id)
 	var collected: bool = bridge.collect_freedom_field_sample(site_id)
@@ -1450,7 +1452,7 @@ func collect_exposure_sample() -> void:
 	update_view(0.0)
 	refresh_field_samples()
 	refresh_exposure_collection()
-	reader.collection_status.text = reason + "\n" + reader.collect_button.tooltip_text
+	reader.show_collection_result(reason)
 	report_action_status(reason)
 	reader.back_button.grab_focus()
 

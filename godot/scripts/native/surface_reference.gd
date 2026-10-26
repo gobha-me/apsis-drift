@@ -7,6 +7,7 @@ var collect_button: Button
 var collection_status: Label
 var collection_context: Dictionary = {}
 var collection_command: Callable
+var feedback_scroll_frames := 0
 var opened_frame := -1
 var opening_input_pending := false
 
@@ -15,10 +16,16 @@ func _ready() -> void:
 	collect_button = _button(_buttons, "Collect hand specimen", collect)
 	_buttons.move_child(collect_button, 0)
 	collect_button.hide()
+	# Feedback shares the existing scroll budget with the description. Keeping
+	# it outside the scroller can squeeze the readable body away at 640x450.
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.remove_child(body)
+	scroll.add_child(content)
+	content.add_child(body)
 	collection_status = Label.new()
 	collection_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_layout.add_child(collection_status)
-	_layout.move_child(collection_status, _buttons.get_index())
+	content.add_child(collection_status)
 	collection_status.hide()
 	refresh()
 
@@ -26,6 +33,7 @@ func clear_collection() -> void:
 	collection_context.clear()
 	collection_command = Callable()
 	opening_input_pending = false
+	feedback_scroll_frames = 0
 	if is_instance_valid(collection_status):
 		collection_status.text = ""
 		collection_status.hide()
@@ -63,6 +71,12 @@ func refresh_collection(available: bool, reason: String) -> void:
 	collect_button.tooltip_text = reason
 	collection_status.text = reason
 
+func show_collection_result(result := "") -> void:
+	if not result.is_empty(): collection_status.text = result + "\n" + collect_button.tooltip_text
+	# The changed text needs container layout before it can be brought into
+	# view. Owned frames cannot outlive a rapid Back/Continue transition.
+	feedback_scroll_frames = 2
+
 func refresh() -> void:
 	if not is_instance_valid(heading): return
 	heading.text = reference_title
@@ -86,6 +100,9 @@ func _process(delta: float) -> void:
 		collect_button.add_theme_font_size_override("font_size", roundi(24*_readable_scale))
 		collect_button.custom_minimum_size.y = 48*_readable_scale
 		collection_status.add_theme_font_size_override("font_size", roundi(20*_readable_scale))
+		if feedback_scroll_frames > 0:
+			feedback_scroll_frames -= 1
+			if feedback_scroll_frames == 0: scroll.ensure_control_visible(collection_status)
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree(): return
