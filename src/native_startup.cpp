@@ -372,12 +372,31 @@ auto native_uncharted_network_new_game(Seed universe_seed)
   return native_select_save_document(std::move(start->document));
 }
 
+auto native_frontier_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string> {
+  auto start = native_uncharted_network_new_game(universe_seed);
+  if (!start) return std::unexpected{start.error()};
+  auto& voyage = std::get<FreedomKnowledgeSaveDocument>(start->document);
+  auto& assembly =
+      std::get<FreedomStartingAssemblySaveDocument>(voyage.voyage.voyage.base);
+  assembly.journey.voyage.flight.origin.network =
+      FreedomNetworkSelection{kFreedomOuterSystemNetworkVersion};
+  auto knowledge = make_freedom_starting_knowledge(
+      universe_seed, kFreedomOuterKnowledgeVersion);
+  if (!knowledge) return std::unexpected{"Outer frontier rejected"};
+  knowledge->surface_landmarks = FreedomSurfaceLandmarkState{};
+  knowledge->derelicts = FreedomDerelictState{};
+  voyage.knowledge = std::move(*knowledge);
+  return native_select_save_document(std::move(start->document));
+}
+
 auto native_jump_recovery_new_game(Seed universe_seed, std::uint32_t chart_kind)
     -> std::expected<NativeStartup, std::string> {
-  if (chart_kind > 3)
+  if (chart_kind > 4)
     return std::unexpected{"Unsupported starting chart choice"};
   auto start =
-      chart_kind == 3   ? native_uncharted_network_new_game(universe_seed)
+      chart_kind == 4   ? native_frontier_network_new_game(universe_seed)
+      : chart_kind == 3 ? native_uncharted_network_new_game(universe_seed)
       : chart_kind == 0 ? native_new_game(universe_seed)
       : chart_kind == 1 ? native_network_new_game(universe_seed)
                         : native_planetary_network_new_game(universe_seed);
@@ -404,11 +423,12 @@ auto native_jump_strain_new_game(Seed universe_seed, std::uint32_t chart_kind)
 auto native_origin_assistance_new_game(Seed seed, std::uint32_t chart_kind,
                                        std::uint32_t drive_kind)
     -> std::expected<NativeStartup, std::string> {
-  if (chart_kind > 3 || drive_kind > 2)
+  if (chart_kind > 4 || drive_kind > 2)
     return std::unexpected{"Unsupported assistance chart/drive choice"};
   auto selected =
       drive_kind == 2   ? native_jump_strain_new_game(seed, chart_kind)
       : drive_kind == 1 ? native_jump_recovery_new_game(seed, chart_kind)
+      : chart_kind == 4 ? native_frontier_network_new_game(seed)
       : chart_kind == 3 ? native_uncharted_network_new_game(seed)
       : chart_kind == 2 ? native_planetary_network_new_game(seed)
       : chart_kind == 1 ? native_network_new_game(seed)
@@ -424,10 +444,21 @@ auto native_origin_assistance_new_game(Seed seed, std::uint32_t chart_kind,
 auto native_derelict_recovery_new_game(Seed seed, std::uint32_t drive_kind,
                                        bool origin_service)
     -> std::expected<NativeStartup, std::string> {
+  return native_derelict_recovery_new_game(seed, 3, drive_kind, origin_service);
+}
+
+auto native_derelict_recovery_new_game(Seed seed, std::uint32_t chart_kind,
+                                       std::uint32_t drive_kind,
+                                       bool origin_service)
+    -> std::expected<NativeStartup, std::string> {
+  if (chart_kind != 3 && chart_kind != 4)
+    return std::unexpected{"Recovery requires a discoverable starting chart"};
   if (drive_kind > 2) return std::unexpected{"Unsupported drive choice"};
-  auto selected = drive_kind == 2   ? native_jump_strain_new_game(seed, 3)
-                  : drive_kind == 1 ? native_jump_recovery_new_game(seed, 3)
-                                    : native_uncharted_network_new_game(seed);
+  auto selected =
+      drive_kind == 2   ? native_jump_strain_new_game(seed, chart_kind)
+      : drive_kind == 1 ? native_jump_recovery_new_game(seed, chart_kind)
+      : chart_kind == 4 ? native_frontier_network_new_game(seed)
+                        : native_uncharted_network_new_game(seed);
   if (!selected) return std::unexpected{selected.error()};
   auto* voyage = std::get_if<FreedomKnowledgeSaveDocument>(&selected->document);
   if (!voyage) return std::unexpected{"Unsupported initial recovery voyage"};

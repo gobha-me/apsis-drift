@@ -162,6 +162,52 @@ charges. Fuel service still requires physical Origin docking; no extra station,
 free return, probe, relay, mission or economy is added. This finite prototype
 does not define the eventual universe's size or exploration ceiling.
 
+## Outer frontier
+
+The separate **Outer frontier: four charted systems** New Game profile extends
+the generated region to eight systems. Its original six systems, catalogs and
+routes are identical to the six-system profile for the same seed. Only the two
+outer systems use the appended independent seed domain24. Existing journeys
+retain their generation and discovery rules through Continue.
+
+This profile gives stellar acquisition a declared reach: half the original
+Home–Nearby separation, rounded down to whole light-seconds, measured between
+system anchors. A ten-second search can acquire the nearest unknown contact
+within that reach, with stable system identity breaking distance ties. Range
+filtering happens before selection. A search from Home can have no contact in
+reach even while exploration elsewhere remains possible; the status describes
+local signal availability rather than claiming the universe is exhausted.
+The six-system profile retains its original unrestricted regional search.
+
+The original four anchors and their planetary navigation charts are known at
+start. Search from a charted waypoint to find an old frontier system, then
+travel there to acquire a farther contact. Neither a sensor preview nor the
+station attendant's hearsay grants a hidden name, location, body catalog or
+visit. An acquired fix grants only that system's navigation facts; arrival and
+local observation still earn its planetary knowledge.
+
+For the original integer light-second separation D, define h=floor(D/2) and
+q=floor(D/4). The two outer anchors are `(h+q)e ± h r`, using the existing signed
+main axis e and remaining perpendicular axis r. All 28 system-anchor links
+remain within the existing starter range. The intended discovery loop is
+Home → waypoint → hidden frontier → Home, using the three existing charges and
+retaining an acquired outer fix. Physically replenish at Origin, then
+Home → outer frontier → Home uses two charges. These are possible manual legs,
+not an automatic route, guaranteed safe arrival or free return.
+
+The new selection uses network3, knowledge7/chart5 and search2. Search2 admits
+at most four completed fixes and preserves partial acquisition, source craft,
+source system and ticks. Older save recipes and search1's two-record limit
+remain distinct. Optional drive recovery/strain, Origin service, surveys,
+specimens, paid operations and the existing single derelict compose with the
+new profile; no additional station, loot, fuel pool or upgrade is introduced.
+The presentation receives only admitted chart rows and a boolean signal
+preview, never hidden target identities or the number of remaining contacts.
+
+This bounded region is an exploration increment under
+[#709](https://github.com/gobha-me/apsis-drift/issues/709), not the permanent
+size of the universe or a claim of balanced travel economics.
+
 ## Derelict inspection
 
 New **Four charted + two uncharted systems** journeys explicitly select one

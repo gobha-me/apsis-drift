@@ -26,9 +26,11 @@ struct NativeStartup {
     -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_uncharted_network_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
+[[nodiscard]] auto native_frontier_network_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string>;
 [[nodiscard]] auto native_planetary_network_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
-// Recovery is a drive choice independent of the three starting chart choices.
+// Recovery is a drive choice independent of the selected starting chart.
 [[nodiscard]] auto native_jump_recovery_new_game(Seed universe_seed,
                                                  std::uint32_t chart_kind)
     -> std::expected<NativeStartup, std::string>;
@@ -43,6 +45,13 @@ struct NativeStartup {
 // Explicit chart-3 single-canister recovery selection; old factories stay
 // exact.
 [[nodiscard]] auto native_derelict_recovery_new_game(Seed universe_seed,
+                                                     std::uint32_t drive_kind,
+                                                     bool origin_service)
+    -> std::expected<NativeStartup, std::string>;
+// Explicit chart-aware selection; only the two discoverable profiles support
+// the existing canister. The historical overload retains chart kind 3.
+[[nodiscard]] auto native_derelict_recovery_new_game(Seed universe_seed,
+                                                     std::uint32_t chart_kind,
                                                      std::uint32_t drive_kind,
                                                      bool origin_service)
     -> std::expected<NativeStartup, std::string>;

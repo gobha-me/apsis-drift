@@ -333,7 +333,7 @@ auto validate_composed_travel(const FreedomTravelSaveDocument& d)
     network = *generated;
   }
   const auto system_known_at = [&](SystemId id, SimulationTick tick) {
-    if (knowledge_version != kFreedomUnchartedKnowledgeVersion) return true;
+    if (!freedom_knowledge_has_star_search(knowledge_version)) return true;
     const auto node = find_freedom_system_network_node(*network, id);
     if (!node) return false;
     if (node->ordinal < kFreedomSystemNetworkSize) return true;

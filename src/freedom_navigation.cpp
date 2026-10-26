@@ -60,7 +60,8 @@ auto resolve_freedom_network_chart(const FreedomSystemNetwork& network,
   UniverseNavigationView view{current, {}};
   view.destinations.reserve(network.nodes.size());
   for (const auto& node : network.nodes) {
-    if (network.version == kFreedomUnchartedSystemNetworkVersion &&
+    if ((network.version == kFreedomUnchartedSystemNetworkVersion ||
+         network.version == kFreedomOuterSystemNetworkVersion) &&
         std::ranges::find(acquired, node.system) == acquired.end())
       continue;
     const bool is_current = node.system == current;

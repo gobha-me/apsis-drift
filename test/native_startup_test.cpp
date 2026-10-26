@@ -131,6 +131,103 @@ auto planetary_chart_start(const std::filesystem::path& directory) -> void {
   }
 }
 
+auto frontier_chart_start(const std::filesystem::path& directory) -> void {
+  using namespace apsis_drift;
+  for (const auto seed : {Seed{0}, Seed{42}, Seed{UINT64_MAX}}) {
+    const auto old = native_uncharted_network_new_game(seed);
+    const auto selected = native_frontier_network_new_game(seed);
+    check(old && selected, "discoverable profile startup refused");
+    const auto original = encode_native_save_document_json(old->document);
+    const auto& document =
+        std::get<FreedomKnowledgeSaveDocument>(selected->document);
+    const auto& flight = std::get<FreedomStartingAssemblySaveDocument>(
+                             document.voyage.voyage.base)
+                             .journey.voyage.flight;
+    check(document.knowledge.recipe.version == kFreedomOuterKnowledgeVersion &&
+              document.knowledge.recipe.chart ==
+                  kFreedomOuterStartingChartVersion &&
+              document.knowledge.star_search &&
+              document.knowledge.star_search->version ==
+                  kFreedomRangedStarSearchVersion &&
+              document.knowledge.star_search->completed.empty() &&
+              !document.knowledge.star_search->active &&
+              flight.origin.network ==
+                  FreedomNetworkSelection{kFreedomOuterSystemNetworkVersion} &&
+              flight.origin.derelicts && document.knowledge.derelicts &&
+              document.voyage.resources.jump_charges == 3 &&
+              flight.flight.tick == 0,
+          "outer frontier changed its declared recipes, starting clock or "
+          "charges");
+    auto expected = std::get<FreedomKnowledgeSaveDocument>(old->document);
+    expected.knowledge = document.knowledge;
+    std::get<FreedomStartingAssemblySaveDocument>(expected.voyage.voyage.base)
+        .journey.voyage.flight.origin.network = flight.origin.network;
+    check(expected == document && selected->home_planet == old->home_planet,
+          "outer frontier changed the actual station, craft, attachment or "
+          "resource state");
+    const auto network = generate_freedom_system_network(
+        seed, kFreedomOuterSystemNetworkVersion);
+    const auto subjects = known_freedom_subjects(document.knowledge, 0);
+    check(network && subjects, "outer frontier starting chart refused");
+    for (const auto& item : *subjects)
+      for (std::size_t i = 4; i < network->nodes.size(); ++i)
+        check(item.system != network->nodes[i].system,
+              "outer frontier start exposed an unacquired system or body");
+    const auto path =
+        directory / ("frontier-" + std::to_string(seed.value) + ".json");
+    check(native_save_freedom(*selected, path).has_value(),
+          "outer frontier station Save As refused");
+    const auto before = contents(path);
+    const auto restored = native_continue(path);
+    check(restored && restored->document == selected->document &&
+              contents(path) == before &&
+              encode_native_save_document_json(old->document) == original,
+          "frontier Continue changed its selection, source bytes or older "
+          "profile");
+  }
+}
+
+auto frontier_options() -> void {
+  using namespace apsis_drift;
+  for (std::uint32_t drive = 0; drive <= 2; ++drive) {
+    for (const bool assistance : {false, true}) {
+      const auto selected =
+          native_derelict_recovery_new_game({42}, 4, drive, assistance);
+      check(selected.has_value(),
+            "frontier drive/service/canister composition refused");
+      const auto& voyage =
+          assistance
+              ? std::get<FreedomKnowledgeSaveDocument>(
+                    std::get<FreedomAssistanceSaveDocument>(selected->document)
+                        .voyage)
+              : std::get<FreedomKnowledgeSaveDocument>(selected->document);
+      check(
+          voyage.knowledge.recipe.version == kFreedomOuterKnowledgeVersion &&
+              voyage.knowledge.derelict_recovery &&
+              voyage.voyage.resources.jump_charges == 3 &&
+              voyage.voyage.resources.drive.has_value() == (drive != 0) &&
+              (!drive || voyage.voyage.resources.drive->version ==
+                             (drive == 2 ? kFreedomStrainedDriveRecoveryVersion
+                                         : kFreedomDriveRecoveryVersion)),
+          "frontier option changed drive, charges or explicit canister choice");
+      const auto bytes = encode_native_save_document_json(selected->document);
+      check(bytes &&
+                decode_native_save_document_json(*bytes) == selected->document,
+            "frontier options failed complete strict Save/Continue roundtrip");
+    }
+    check(
+        native_derelict_recovery_new_game({42}, drive, false)->document ==
+            native_derelict_recovery_new_game({42}, 3, drive, false)->document,
+        "historical canister overload changed its chart-three meaning");
+  }
+  check(!native_jump_recovery_new_game({42}, 5) &&
+            !native_jump_strain_new_game({42}, UINT32_MAX) &&
+            !native_origin_assistance_new_game({42}, 5, 0) &&
+            !native_derelict_recovery_new_game({42}, 2, 0, false) &&
+            !native_derelict_recovery_new_game({42}, 4, 3, false),
+        "unsupported frontier option values were accepted");
+}
+
 auto optical_saves(const apsis_drift::FreedomJourneySaveDocument& journey,
                    const apsis_drift::NativeSaveDocument& complete) -> void {
   using namespace apsis_drift;
@@ -287,6 +384,8 @@ auto main() -> int {
              std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(directory);
     planetary_chart_start(directory);
+    frontier_chart_start(directory);
+    frontier_options();
     const auto save = directory / "freedom.json";
     check(write_freedom_save_file_atomically(save, freedom).has_value(),
           "could not write test save");
