@@ -150,7 +150,9 @@ func run() -> void:
 	shell.presentation_only = true
 	root.add_child(shell)
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var direct_start_frame: int = Engine.get_process_frames()
 	check(shell.select_start(bridge, {"mode": "continue", "value": args[1], "assets": args[0]}), "Selected journey could not stage through the ready-view seam")
+	check(Engine.get_process_frames() == direct_start_frame and shell.title_view == null, "Direct startup became asynchronous instead of retaining its atomic ready-view seam")
 	var old: Dictionary = bridge.get_freedom_walk_state()
 	var old_flight: Dictionary = bridge.get_freedom_flight_state()
 	var options := {"mode": "new_game", "value": "42", "assets": args[0] + "-missing"}

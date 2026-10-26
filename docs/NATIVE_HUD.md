@@ -26,9 +26,10 @@ retains the explicit recovery overlay above the scene.
 | Instruments | Same-tick detailed motion, orbital forecast, chart, docking, surface and saved-command messages | Paused, scrolling, keyboard/controller focus; all existing actions remain accessible |
 
 The compact card consolidates resources and motion instead of accumulating
-separate permanent rails. The existing HOME direction marker remains visible
-in flight when the origin station is actually available; it is a direction
-cue, not a safe route. Ground walking hides ship flight/navigation readouts.
+separate permanent rails. The selected [Origin/port marker](HOME_NAVIGATION.md) carries a readable name,
+live range and direction while flying when its local target is available.
+Paused Controls selects the station, current docking port or no HUD target.
+It supplies a bearing, not a safe route or automatic flight. Ground walking hides ship flight/navigation readouts.
 
 Reference altitude is height above the C++ reference sphere, **not generated
 terrain clearance**. The detailed central-body orbital forecast retains stable,

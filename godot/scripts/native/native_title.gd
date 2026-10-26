@@ -52,6 +52,16 @@ var busy := false
 var focused := true
 var readable_scale := -1.0
 var choice_help_reveal_pending := false
+var loading_overlay: ColorRect
+var loading_margin: MarginContainer
+var loading_column: VBoxContainer
+var loading_heading: Label
+var loading_status: Label
+var request_generation := 0
+var loading_started_frame := 0
+var loading_disabled_states: Dictionary = {}
+var loading_seed_editable := true
+var loading_input_enabled := true
 # -2 discovers a launch-time owner; a journey return supplies its live selection.
 var initial_controller_device := -2
 
@@ -150,7 +160,8 @@ func _ready() -> void:
 	catalog_load_button = add_button("Load saved journey…", open_catalog)
 	reference_button = add_button("Flight basics", open_reference)
 	settings_button = add_button("Settings", open_settings)
-	quit_button = add_button("Quit", func(): quit_requested.emit())
+	quit_button = add_button("Quit", func():
+		if not busy: quit_requested.emit())
 	status = Label.new()
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.text = "Choose a seed for New Game, or select a saved journey. Quit does not autosave."
@@ -164,6 +175,7 @@ func _ready() -> void:
 	add_child(chooser)
 	chooser.file_selected.connect(choose_continue)
 	chooser.canceled.connect(func():
+		if busy: return
 		controls.set_process_input(true)
 		status.text = "Continue canceled. No journey was opened."
 		if focused: continue_button.grab_focus())
@@ -188,6 +200,7 @@ func _ready() -> void:
 	controls.bindings_changed.connect(func(): catalog_browser.device = controls.device)
 	catalog_browser.selected.connect(choose_catalog)
 	catalog_browser.canceled.connect(back_from_catalog)
+	setup_loading()
 	refresh_catalog()
 	layout_title()
 	new_button.grab_focus()
@@ -198,6 +211,69 @@ func add_button(text: String, action: Callable) -> Button:
 	button.pressed.connect(action)
 	column.add_child(button)
 	return button
+
+func setup_loading() -> void:
+	loading_overlay = ColorRect.new()
+	loading_overlay.color = Color(0.015, 0.025, 0.04, 1.0)
+	loading_overlay.theme = theme_owner
+	loading_overlay.focus_mode = Control.FOCUS_ALL
+	loading_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	loading_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(loading_overlay)
+	loading_margin = MarginContainer.new()
+	loading_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	loading_overlay.add_child(loading_margin)
+	var center := CenterContainer.new()
+	loading_margin.add_child(center)
+	loading_column = VBoxContainer.new()
+	center.add_child(loading_column)
+	loading_heading = Label.new()
+	loading_heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loading_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_column.add_child(loading_heading)
+	loading_status = Label.new()
+	loading_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loading_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_column.add_child(loading_status)
+	loading_overlay.hide()
+
+func disable_loading_button(button: BaseButton) -> void:
+	if button == null: return
+	loading_disabled_states[button] = button.disabled
+	button.disabled = true
+
+func queue_start(selection: Dictionary) -> void:
+	if not is_inside_tree() or is_queued_for_deletion() or busy or not focused or chooser.visible or reference.visible or settings_view.visible: return
+	request_generation += 1
+	busy = true
+	loading_started_frame = Engine.get_process_frames()
+	loading_heading.text = "Starting New Game" if selection.mode == "new_game" else "Opening saved journey"
+	loading_status.text = "Preparing your journey.\nPlease wait." if selection.mode == "new_game" else "Checking and loading your saved journey.\nPlease wait."
+	loading_seed_editable = seed.editable
+	seed.editable = false
+	loading_input_enabled = controls.is_processing_input()
+	controls.set_process_input(false)
+	for child in column.get_children():
+		if child is BaseButton: disable_loading_button(child)
+	for child in catalog_browser.buttons:
+		disable_loading_button(child as BaseButton)
+	disable_loading_button(catalog_browser.back)
+	loading_overlay.show()
+	loading_overlay.grab_focus()
+	var request: Dictionary = selection.duplicate(true)
+	request["_title_request"] = request_generation
+	start_requested.emit(request)
+
+func finish_loading() -> void:
+	request_generation += 1
+	busy = false
+	loading_overlay.hide()
+	seed.editable = loading_seed_editable
+	controls.set_process_input(loading_input_enabled)
+	for value in loading_disabled_states:
+		var button: BaseButton = value as BaseButton
+		if is_instance_valid(button): button.disabled = bool(loading_disabled_states[value])
+	loading_disabled_states.clear()
 
 func add_choice_help(choice: OptionButton) -> Label:
 	var help := Label.new()
@@ -255,8 +331,7 @@ func begin_new() -> void:
 		status.text = "Enter a whole unsigned seed from 0 to 18446744073709551615, without signs, spaces or leading zeros."
 		seed.grab_focus()
 		return
-	busy = true
-	start_requested.emit({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "frontier": network_choice.selected == 4, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed, "derelict_recovery": network_choice.selected in [3, 4] and derelict_recovery_choice.button_pressed})
+	queue_start({"mode": "new_game", "value": seed.text, "network": network_choice.selected > 0, "planetary": network_choice.selected == 2, "uncharted": network_choice.selected == 3, "frontier": network_choice.selected == 4, "drive_recovery": recovery_choice.selected > 0, "drive_strain": recovery_choice.selected == 2, "origin_service": origin_service_choice.button_pressed, "derelict_recovery": network_choice.selected in [3, 4] and derelict_recovery_choice.button_pressed})
 
 func open_continue() -> void:
 	if busy or not focused or reference.visible or settings_view.visible: return
@@ -265,22 +340,32 @@ func open_continue() -> void:
 	chooser.popup_centered_ratio(0.75)
 
 func choose_continue(path: String) -> void:
+	if busy: return
 	chooser.hide()
 	controls.set_process_input(true)
-	if busy or not focused: return
+	if not focused: return
 	if not path.is_absolute_path() or path.is_empty() or path.length() > 4096:
 		refuse("Choose a bounded absolute save path.")
 		return
-	busy = true
-	start_requested.emit({"mode": "continue", "value": path})
+	queue_start({"mode": "continue", "value": path})
 
 func refuse(message: String) -> void:
-	busy = false
+	if busy: finish_loading()
 	status.text = "Journey could not open: " + message
 	if catalog_browser != null and catalog_browser.visible:
 		catalog_browser.status.text = status.text
 		if focused: catalog_browser.back.grab_focus()
-	elif focused: continue_button.grab_focus()
+	elif focused:
+		continue_button.grab_focus()
+	if focused: reveal_refusal.call_deferred()
+
+func reveal_refusal() -> void:
+	await get_tree().process_frame
+	if not is_inside_tree() or busy or not focused: return
+	if catalog_browser.visible:
+		catalog_browser.scroll.ensure_control_visible(catalog_browser.status)
+	elif panel.visible:
+		scroll.ensure_control_visible(status)
 
 func open_reference() -> void:
 	if busy or not focused or chooser.visible or settings_view.visible: return
@@ -288,6 +373,7 @@ func open_reference() -> void:
 	reference.open()
 
 func back_to_title() -> void:
+	if busy: return
 	if catalog_browser != null and catalog_browser.visible:
 		back_from_catalog()
 		return
@@ -312,6 +398,7 @@ func layout_title() -> void:
 	var pixels := Vector2(get_window().size)
 	if not pixels.is_finite() or not size.is_finite() or minf(pixels.x, pixels.y) <= 0 or minf(size.x, size.y) <= 0: return
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+	loading_column.custom_minimum_size.x = minf(720 * scale, maxf(1.0, size.x - 64 * scale))
 	if is_equal_approx(scale, readable_scale): return
 	readable_scale = scale
 	theme_owner.default_font_size = roundi(20 * scale)
@@ -320,7 +407,10 @@ func layout_title() -> void:
 	theme_owner.set_font_size("title_font_size", "Window", roundi(20 * scale))
 	for side in ["left", "right", "top", "bottom"]:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
+		loading_margin.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
+	loading_column.add_theme_constant_override("separation", roundi(16 * scale))
+	loading_heading.add_theme_font_size_override("font_size", roundi(28 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
 	for button in [seed, network_choice, recovery_choice, origin_service_choice, derelict_recovery_choice, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
@@ -330,6 +420,9 @@ func _process(_delta: float) -> void:
 	layout_title()
 
 func _input(event: InputEvent) -> void:
+	if busy:
+		get_viewport().set_input_as_handled()
+		return
 	if focused and catalog_browser != null and catalog_browser.visible:
 		catalog_browser._input(event)
 
@@ -337,9 +430,12 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
 		if controls != null: controls.focused = false
+		if busy: refuse("Restore application focus and choose the journey again.")
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
 		if controls != null: controls.focused = true
+		if status != null and not busy and not chooser.visible and status.text.begins_with("Journey could not open:"):
+			reveal_refusal.call_deferred()
 
 func refresh_catalog() -> void:
 	if catalog_owner == null or not catalog_owner.has_method("list_freedom_profiles"):
@@ -357,8 +453,7 @@ func continue_catalog() -> void:
 	refresh_catalog()
 	var index := int(catalog_snapshot.get("continue_index", -1))
 	if index < 0: return
-	busy = true
-	start_requested.emit({"mode": "profile", "value": index})
+	queue_start({"mode": "profile", "value": index})
 
 func open_catalog() -> void:
 	if busy or not focused or not panel.visible or chooser.visible: return
@@ -369,12 +464,16 @@ func open_catalog() -> void:
 
 func choose_catalog(index: int) -> void:
 	if busy or not focused: return
-	busy = true
-	start_requested.emit({"mode": "profile", "value": index})
+	queue_start({"mode": "profile", "value": index})
 
 func back_from_catalog() -> void:
+	if busy: return
 	catalog_browser.hide()
 	panel.show()
 	controls.set_process_input(true)
 	refresh_catalog()
 	if focused: catalog_load_button.grab_focus()
+
+func _exit_tree() -> void:
+	request_generation += 1
+	busy = false

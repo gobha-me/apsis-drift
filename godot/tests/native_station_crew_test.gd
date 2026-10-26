@@ -118,24 +118,51 @@ func idle_views(view: Control, packet: Dictionary) -> void:
 	check(actor.card.texture.get_width() == 1536 and actor.card.texture.get_height() == 1024, "Crew adapter replaced the selected unchanged sheet")
 	view.refresh_crew()
 
-func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, output: String, label: String = "") -> void:
+func reader_layout(view: Control, owner: Variant, baseline: PackedByteArray, output: String, label: String = "", existing_save: String = "") -> void:
 	var old_size := root.size
+	var reader: Control = view.crew_reader
+	var original_text: String = reader.text.text
 	for dimensions in [Vector2i(640, 450), Vector2i(1280, 720)]:
 		root.size = dimensions
+		for frame in 4: await process_frame
+		var card: Rect2 = reader.panel.get_global_rect()
+		var bounds := Rect2(Vector2.ZERO, view.size)
+		var detail := "window=%s logical=%s card=%s reply=%s choices=%s" % [dimensions, view.size, card, reader.response_scroll.get_global_rect(), reader.scroll.get_global_rect()]
+		check(view.crew_open() and view.paused and bounds.encloses(card) and card.position.x > view.size.x * 0.5 and card.size.x <= view.size.x * 0.44 + 1.0 and card.size.y <= view.size.y * 0.8 + 1.0, "Crew card covers centre/world or escapes viewport: " + detail)
+		check(card.size.x * dimensions.x / view.size.x <= 561.0 and reader.text.get_theme_font_size("font_size") * dimensions.x / view.size.x >= 19.5, "Crew card lost its readable physical width/font: " + detail)
+		for child in reader.get_children():
+			if child is ColorRect and child.visible:
+				check(child.color.a <= 0.15 or not child.get_global_rect().has_point(view.size * 0.5), "Crew conversation restored an opaque screen-wide shade")
+		var face: Vector3 = view.crew_actor.global_transform * Vector3(0, 1.65, 0)
+		var face_pixel: Vector2 = view.camera.unproject_position(face) * view.size / Vector2(view.viewport.size)
+		check(view.crew_actor.visible and not view.camera.is_position_behind(face) and bounds.has_point(face_pixel) and not card.has_point(face_pixel), "Actual attendant face was hidden by the conversation: " + detail + " face=" + str(face_pixel))
+		var fixed_title: Rect2 = reader.title.get_global_rect()
+		var fixed_back: Rect2 = reader.back.get_global_rect()
+		check(card.encloses(fixed_title) and card.encloses(fixed_back), "Conversation name/Back escaped the fixed card")
+		check(reader.response_scroll.get_global_rect().size.y > 0 and reader.scroll.get_global_rect().size.y > 0 and reader.text.text == original_text, "Reply/choice panes lost space or changed actual C++ text")
+		reader.reply_down.grab_focus()
+		reader.accept()
 		await process_frame
-		await process_frame
-		check(view.crew_open() and view.paused and view.crew_reader.readable_theme.default_font_size >= 20, "Crew reader resize lost paused readable modal")
-		for button in view.crew_reader.topics + [view.crew_reader.keep] + view.crew_reader.services + [view.crew_reader.back]:
+		var maximum: float = reader.response_scroll.get_v_scroll_bar().max_value - reader.response_scroll.get_v_scroll_bar().page
+		var reply_position: int = reader.response_scroll.scroll_vertical
+		check(maximum < 1.0 or reply_position > 0, "Long C++ reply could not scroll through the controller-accessible page action")
+		for button in reader.topics + [reader.keep] + reader.services + [reader.reply_up, reader.reply_down, reader.back]:
 			if not button.visible: continue
 			button.grab_focus()
 			await process_frame
 			await process_frame
-			var clip: Rect2 = view.crew_reader.scroll.get_global_rect()
+			var clip: Rect2 = card if button in [reader.reply_up, reader.reply_down, reader.back] else reader.scroll.get_global_rect()
 			var rect: Rect2 = button.get_global_rect()
-			check(button.has_focus() and button.custom_minimum_size.y >= 44 and rect.size.x > 0 and rect.position.x >= clip.position.x - 1.0 and rect.end.x <= clip.end.x + 1.0 and rect.position.y >= clip.position.y - 1.0 and rect.end.y <= clip.end.y + 1.0 and clip.position.x >= 0 and clip.position.y >= 0 and clip.end.x <= view.size.x + 1.0 and clip.end.y <= view.size.y + 1.0, "Focused crew reader control escaped scroll/viewport bounds")
+			check(button.has_focus() and button.size.y * dimensions.y / view.size.y >= 43.5 and rect.size.x > 0 and rect.position.x >= clip.position.x - 1.0 and rect.end.x <= clip.end.x + 1.0 and rect.position.y >= clip.position.y - 1.0 and rect.end.y <= clip.end.y + 1.0, "Focused crew control escaped its pane: " + detail + " control=" + button.text + " rect=" + str(rect))
+			check(reader.title.get_global_rect() == fixed_title and reader.back.get_global_rect() == fixed_back and reader.response_scroll.scroll_vertical == reply_position, "Topic focus moved the speaker/Back or reset the reply scroll")
+		reader.reply_up.grab_focus()
+		reader.accept()
+		check(reader.response_scroll.scroll_vertical <= reply_position and reader.text.text == original_text, "Reading earlier reply lines changed the C++ response")
+		reader.response_scroll.scroll_vertical = 0
 	root.size = old_size
-	await process_frame
-	check(save(owner, output.path_join(label + "reader-resized.json")) == baseline, "Crew reader resize changed complete journey")
+	for frame in 4: await process_frame
+	var proof_path: String = output.path_join(label + "reader-resized.json") if existing_save.is_empty() else existing_save
+	check(save(owner, proof_path) == baseline, "Crew reader resize/scroll changed complete journey")
 
 func stop_talk_regressions(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
 	# Start from real Continue each time, then move with physical input. These
@@ -208,9 +235,19 @@ func stop_talk_regressions(shell: Control, owner: Variant, source: String, asset
 	print("Station stop-talk regressions: 7 scenarios checked")
 
 func mouse_topic(button: Button) -> void:
+	# Entry can construct/show this reader and invoke the test in one frame.
+	# Let its wrapped text and panes settle before focus-follow scroll uses the
+	# button rectangle; otherwise the later centre can lie below the pane.
+	await process_frame
+	await process_frame
 	button.grab_focus()
 	await process_frame
 	await process_frame
+	var pane: ScrollContainer = button.get_parent().get_parent() as ScrollContainer
+	var rect: Rect2 = button.get_global_rect()
+	var clip: Rect2 = pane.get_global_rect()
+	var detail := "viewport=%s button=%s rect=%s pane=%s scroll=%d focus=%s" % [root.get_visible_rect(), button.text, rect, clip, pane.scroll_vertical, button.has_focus()]
+	if not check(button.is_visible_in_tree() and not button.disabled and button.has_focus() and rect.has_area() and clip.grow(1.0).encloses(rect) and root.get_visible_rect().encloses(rect), "Physical crew mouse target is clipped or unfocused after layout: " + detail): return
 	for down in [true, false]:
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
@@ -378,7 +415,7 @@ func service_interactions(shell: Control, owner: Variant, phases: String, assets
 			view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 			view.open_crew_service("unknown")
 			check(view.crew_open() and not view.commissions_open() and not view.origin_repair_open() and save(owner, prefix + "-guarded.json") == baseline, "Service entry bypassed demand/focus/modal guards: " + service)
-			button.grab_focus()
+			if gesture != "mouse": button.grab_focus()
 			if gesture == "mouse": await mouse_topic(button)
 			elif gesture == "pad":
 				pad(view, 0, JOY_BUTTON_A, true)
@@ -454,6 +491,9 @@ func lead_interactions(shell: Control, owner: Variant, phases: String, assets: S
 		for response in owner.get_freedom_station_crew().topics:
 			if response.id == 5: dialogue = response.text
 		check(not dialogue.is_empty() and dialogue in view.crew_reader.text.text, "Actual lead reader replaced the fresh C++ conversation with generic note text")
+		if gesture == "keyboard":
+			# Reuse the existing topic proof file: no new fixture or saved-state row.
+			await reader_layout(view, owner, initial, output, "", prefix + "-topic.json")
 		# The only mutation is the explicit Keep; direct signal calls retain all
 		# the owning station view's focus, modal and independent-demand guards.
 		key(view, KEY_W, true)
@@ -469,7 +509,7 @@ func lead_interactions(shell: Control, owner: Variant, phases: String, assets: S
 		view.crew_reader.keep.pressed.emit()
 		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 		check(not owner.get_freedom_station_stellar_lead().kept and save(owner, prefix + "-guarded.json") == initial, "Held demand/focus/modal bypassed Keep guards")
-		view.crew_reader.keep.grab_focus()
+		if gesture != "mouse": view.crew_reader.keep.grab_focus()
 		if gesture == "mouse":
 			await mouse_topic(view.crew_reader.keep)
 		elif gesture == "pad":

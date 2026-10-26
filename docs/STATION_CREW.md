@@ -15,6 +15,30 @@ does not force an extra simulation tick or relax C++ eligibility.
 The conversation reader pauses the journey;
 closing it returns to paused controls, with an explicit neutral Resume.
 
+Conversation stays beside the scene in a right-side card, leaving the centre
+view and attendant visible without moving the camera. Only the card has an
+opaque backing. Its speaker name and Back action stay fixed; the current reply
+and topic/service choices scroll independently. Mouse users can scroll the
+reply directly. The two header arrows page earlier/later reply lines and are
+also reachable through ordinary keyboard/controller focus and confirmation.
+Choice focus reveals that choice without moving the reply scrollbar. A new
+reply starts at its beginning; this adds no dialogue history or saved progress.
+
+The card uses up to 44% of the view width, capped at 560 physical pixels, and
+80% of its height. These are this layout's starting bounds, not universal UI
+ratios. Readable text and button heights are retained at small windows rather
+than shrinking to fit all content. The existing nearby overheard bubbles remain
+separate, do not capture focus and are hidden during conversation.
+
+This follows the owner's request to keep the world visible. The research
+compared [Starfield's optional dialogue camera](https://bethesda.net/en-US/news/starfield-update-1-11-36-may-15-2024),
+[Cyberpunk's distinct dialogue/background subtitles and contrast controls](https://www.cyberpunk.net/en/news/49591/update-2-1-accessibility-features),
+and [Disco Elysium's official side-column example](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/632470/ss_dec29c440fab2f7817d68c1380c019290eb1755e.1920x1080.jpg).
+[Firsthand controller scrolling complaints](https://www.reddit.com/r/DiscoElysium/comments/pjpv3q/console_controls_any_tips/)
+informed the separate, stable scroll controls. These are design observations
+and anecdotal preferences; the chosen bounds are our implementation decision,
+not proof of universal preference or manual/hardware acceptance.
+
 **Survey office · work and sales** and **Origin hull repair** open the existing
 station service screens directly from the conversation. The office contains
 commission work, specimen and salvage sales, and paid-operation terms. Opening
