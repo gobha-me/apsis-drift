@@ -460,6 +460,40 @@ func check_rated_rise_value(value: Variant) -> bool:
 	return valid
 
 
+func check_hud_tracking(view: Control, owner: Variant, directory: String, fixture: String) -> void:
+	view.pause_controls("Review HUD tracking.")
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var prefix := directory.path_join("hud-tracking-" + fixture.get_basename())
+	check(owner.save_freedom_as(prefix + "-before.json"), "HUD tracking baseline Save failed")
+	var bytes := FileAccess.get_file_as_bytes(prefix + "-before.json")
+	view.home_tracking_button.pressed.emit()
+	var home: Dictionary = FlightView.hud_tracking_target(before, view.station_geometry, "home")
+	check(view.paused and view.hud_tracking_mode == "home" and not home.is_empty() and view.home_marker.display_name == home.name and view.home_marker.detail_text.begins_with("%.1f m" % home.range_metres if home.range_metres < 1000 else "%.1f km" % (home.range_metres / 1000)), "Actual home target omitted live in-flight identity/range")
+	view.port_tracking_button.pressed.emit()
+	var port: Dictionary = FlightView.hud_tracking_target(before, view.station_geometry, "port")
+	check(view.hud_tracking_mode == "port" and not port.is_empty() and port.label == "D%d" % before.target_port and is_equal_approx(port.range_metres, port.position.length()), "Selected known port lost its actual target/range")
+	view.clear_tracking_button.pressed.emit()
+	check(view.hud_tracking_mode == "off" and not view.home_marker.visible and view.home_marker.cue.is_empty(), "Stopping HUD tracking retained a stale marker")
+	view.focused = false
+	view.home_tracking_button.pressed.emit()
+	check(view.hud_tracking_mode == "off", "Unfocused tracking request changed the target")
+	view.focused = true
+	view.home_tracking_button.pressed.emit()
+	check(view.hud_tracking_mode == "home" and view.home_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Restored target intercepted flight input")
+	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(prefix + "-after.json") and FileAccess.get_file_as_bytes(prefix + "-after.json") == bytes, "Tracking selection changed complete world, navigation, craft or Save state")
+	var unavailable := before.duplicate(true)
+	unavailable.station_available = false
+	check(FlightView.hud_tracking_target(unavailable, view.station_geometry, "home").is_empty(), "Tracking invented an unavailable station")
+	unavailable = before.duplicate(true)
+	unavailable.station_position = Vector3(NAN, 0, 0)
+	check(FlightView.hud_tracking_target(unavailable, view.station_geometry, "home").is_empty(), "Nonfinite target geometry reached the HUD")
+	check(FlightView.hud_tracking_target(before, {}, "port").is_empty() and FlightView.hud_tracking_target(before, view.station_geometry, "unknown").is_empty(), "Unknown target or absent port geometry invented a target")
+	unavailable = before.duplicate(true)
+	unavailable.surface_walk = {"supported": true}
+	check(FlightView.hud_tracking_target(unavailable, view.station_geometry, "home").is_empty(), "Suited walking retained a ship navigation target")
+	view.show_instruments()
+
+
 func check_hud_profiles(directory: String, assets: String) -> void:
 	root.size = Vector2i(800, 450)
 	for fixture in ["flight-18.json", "port-far.json", "port-approach.json", "port-docked.json"]:
@@ -482,6 +516,7 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 			var nearby: bool = before.attached or before.station_position.length() < 1000.0
 			check(view.dock_status.visible == nearby and view.port_row.visible == nearby and view.approach_button.visible == nearby, "HUD presented remote collar diagnostics or hid nearby ports")
 			check(view.home_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and "Origin Station ·" in view.home_cue.text and str(before.station_id) in view.home_cue.tooltip_text, "Home cue lost readable range, owner identity or input pass-through")
+			check_hud_tracking(view, owner, directory, fixture)
 			check(view.port_buttons.size() == 2 and view.capture_button.disabled == (before.attached or not before.docking.ready) and view.release_button.disabled == not before.attached, "Responsive HUD changed real port assessment")
 			check(view.port_buttons[0].disabled == before.attached and (before.attached and "Attached to D" in view.dock_status.text or not before.attached and str(before.docking.reason) in view.dock_status.text), "Responsive HUD lost port target/refusal")
 		else:

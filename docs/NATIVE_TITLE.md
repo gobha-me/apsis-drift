@@ -40,6 +40,18 @@ each selector together with its explanation; the labels do not take focus or
 change popup navigation. Reading or changing a choice creates no C++ journey
 and leaves error/status feedback separate from the help.
 
+Accepting New Game, Continue, a catalog slot or an explicit save file immediately
+shows a static loading acknowledgement. It identifies whether the game is
+preparing a new world or checking a saved journey and preparing its view. The
+acknowledgement gets a complete frame before preparation starts; the window may
+briefly stop updating during that work. It does not show a percentage or promise
+continuous animation. Other title actions stay locked until the request succeeds
+or returns a readable refusal. Losing focus before preparation starts cancels
+that request; restore focus and choose again. Duplicate or stale requests cannot
+open a second journey. Failed loading restores the menu without changing the
+source Save. Successful loading retains the existing paused, neutral-control
+handoff.
+
 Continue uses the existing C++ save validation and complete detached model/view
 staging. Cancel or refusal retains the title and leaves the source file intact;
 no current world is committed. Losing focus prevents accepting a selection,

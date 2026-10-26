@@ -126,6 +126,10 @@ var orbital_forecast: RichTextLabel
 var telemetry: RichTextLabel
 var home_cue: RichTextLabel
 var home_marker: Control
+var hud_tracking_mode := "home"
+var home_tracking_button: Button
+var port_tracking_button: Button
+var clear_tracking_button: Button
 var ship_marker: Control
 var contact_marker: Control
 var contact_buttons: Array[Button] = []
@@ -1317,6 +1321,9 @@ func setup_controls() -> void:
 	refresh_derelict_controls()
 	surface_conditions_button = controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
+	home_tracking_button = controls_menu.add_button(survey_column, "Track Origin Station", select_hud_tracking.bind("home"))
+	port_tracking_button = controls_menu.add_button(survey_column, "Track selected docking port", select_hud_tracking.bind("port"))
+	clear_tracking_button = controls_menu.add_button(survey_column, "Stop HUD tracking", select_hud_tracking.bind("off"))
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
 	controls_menu.add_button(survey_column, "Select asteroid inspection jump", select_minor_jump)
 	setup_planet_route_controls(survey_column)
@@ -2216,6 +2223,31 @@ func refresh_orbital_survey() -> void:
 		survey_cancel_button.tooltip_text = progress + "\nStop, accepted jumps or craft replacement discard unfinished work. Pause and Save preserve it; a nonqualifying orbit holds progress."
 
 
+func select_hud_tracking(mode: String) -> void:
+	if not marker_controls_available() or mode not in ["home", "port", "off"]: return
+	var target := hud_tracking_target(state, station_geometry, mode)
+	if mode != "off" and target.is_empty():
+		report_action_status("That navigation target is unavailable in the current local frame.")
+		return
+	hud_tracking_mode = mode
+	update_view(0.0)
+	report_action_status("HUD tracking stopped." if mode == "off" else "Tracking %s on the HUD. Range is from the craft reference point; use collar offsets for docking." % target.name)
+
+
+func refresh_hud_tracking() -> void:
+	if home_tracking_button == null: return
+	var local: bool = state.get("station_available", true) and not surface_walking()
+	home_tracking_button.visible = not surface_walking()
+	port_tracking_button.visible = not surface_walking() and state.get("frame_id", "1") == "2"
+	clear_tracking_button.visible = not surface_walking()
+	home_tracking_button.disabled = not local
+	port_tracking_button.disabled = not local or hud_tracking_target(state, station_geometry, "port").is_empty()
+	clear_tracking_button.disabled = hud_tracking_mode == "off"
+	home_tracking_button.text = "Tracking Origin Station" if hud_tracking_mode == "home" else "Track Origin Station"
+	var port_name := "D%d" % state.get("target_port", 1)
+	port_tracking_button.text = ("Tracking " if hud_tracking_mode == "port" else "Track ") + "Origin " + port_name
+
+
 func select_distant_contact(index: int) -> void:
 	if not marker_controls_available() or not DistantContacts.valid(state): return
 	var contacts: Array = state.get("distant_contacts", {}).get("contacts", [])
@@ -2301,6 +2333,8 @@ func refresh_surface_marker() -> void:
 	else:
 		home_marker.visible = true
 		home_marker.label_text = "MARK"
+		home_marker.display_name = ""
+		home_marker.detail_text = ""
 		home_marker.update_cue(camera, marker.position, false)
 		if home_cue != null: home_cue.visible = false
 
@@ -3048,11 +3082,11 @@ func apply_camera_depth(relation: Transform3D, minimum_far: float) -> bool:
 	return true
 
 
-static func home_navigation_target(value: Dictionary, geometry: Variant) -> Dictionary:
+static func home_navigation_target(value: Dictionary, geometry: Variant, force_port := false) -> Dictionary:
 	var centre: Variant = value.get("station_position")
 	if not centre is Vector3 or not centre.is_finite(): return {}
 	var result := {"position": centre, "label": "HOME"}
-	if not value.get("station_available", true) or value.get("attached", false) or centre.length() >= 1000.0: return result
+	if not value.get("station_available", true) or (not force_port and (value.get("attached", false) or centre.length() >= 1000.0)): return result
 	var ordinal: Variant = value.get("target_port")
 	var frame: Variant = value.get("station_basis")
 	var station_id: Variant = value.get("station_id")
@@ -3067,6 +3101,18 @@ static func home_navigation_target(value: Dictionary, geometry: Variant) -> Dict
 		result.position = point
 		result.label = "D%d" % ordinal
 	return result
+
+
+static func hud_tracking_target(value: Dictionary, geometry: Variant, mode: String) -> Dictionary:
+	var walking: Variant = value.get("surface_walk", {})
+	if mode not in ["home", "port"] or not value.get("station_available", true) or not walking is Dictionary or not walking.is_empty(): return {}
+	var target := home_navigation_target(value, geometry, mode == "port")
+	if target.is_empty() or (mode == "port" and target.label == "HOME"): return {}
+	var distance: float = target.position.length()
+	if not is_finite(distance) or distance < 0: return {}
+	target.name = "Origin Station" if target.label == "HOME" else "Origin · " + target.label
+	target.range_metres = distance
+	return target
 
 
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
@@ -3267,16 +3313,24 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			jump_button.tooltip_text += " Next arrival recovery ≤ %.1f s if committed now; spooling cools the drive." % recovery.next_recovery_seconds
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
-	var home_target := home_navigation_target(state, station_geometry)
+	var home_target := hud_tracking_target(state, station_geometry, hud_tracking_mode)
 	home_marker.label_text = home_target.get("label", "HOME")
-	home_marker.visible = state.get("station_available", true)
-	home_cue.visible = home_marker.visible
-	if home_marker.visible: home_marker.update_cue(camera, home_target.get("position", target), state.attached)
+	home_marker.display_name = str(home_target.get("name", ""))
+	home_marker.detail_text = HomeNavigation.range_text(float(home_target.get("range_metres", -1.0)))
+	home_marker.visible = not home_target.is_empty()
+	home_cue.visible = state.get("station_available", true)
+	if home_marker.visible:
+		home_marker.update_cue(camera, home_target.position, state.attached)
+	else:
+		home_marker.cue = {}
+	refresh_hud_tracking()
 	var navigation: Dictionary = home_marker.cue
 	var direction := " · behind you" if navigation.get("behind", false) else (" · follow %s marker" % home_marker.label_text if not navigation.get("in_view", false) else " · ahead")
 	if navigation.is_empty(): direction = " · direction unavailable"
 	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
+	if not state.attached and not home_target.is_empty() and HomeNavigation.globe_occludes(camera.position, home_target.position, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius):
+		home_marker.detail_text += "\nBeyond horizon"
 	var bearing_description := "the selected port collar" if home_marker.label_text != "HOME" else "the station centre"
 	home_cue.tooltip_text = "Station %s · %s marks %s. Range is to the station centre. Bearing only; use live port readings for alignment and capture." % [state.station_id, home_marker.label_text, bearing_description]
 	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)

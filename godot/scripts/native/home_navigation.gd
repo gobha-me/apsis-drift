@@ -5,6 +5,17 @@ const COLOR := Color(0.4, 0.9, 1.0)
 var cue: Dictionary = {}
 var render_scale := 1.0
 var label_text := "HOME"
+var display_name := ""
+var detail_text := ""
+
+static func range_text(metres: float) -> String:
+	if not is_finite(metres) or metres < 0: return ""
+	return "%.1f m" % metres if metres < 1000.0 else "%.1f km" % (metres / 1000.0)
+
+func caption_lines() -> PackedStringArray:
+	var lines := PackedStringArray([display_name if not display_name.is_empty() else label_text])
+	if not detail_text.is_empty(): lines.append_array(detail_text.split("\n"))
+	return lines
 
 static func project(camera: Camera3D, target: Vector3, bounds: Vector2, inset: float = INSET) -> Dictionary:
 	if camera == null or not camera.is_inside_tree() or not target.is_finite() or not bounds.is_finite() or not is_finite(inset) or inset <= 0 or bounds.x <= inset * 2 or bounds.y <= inset * 2:
@@ -57,8 +68,11 @@ func label_bounds(at: Vector2) -> Rect2:
 	if not at.is_finite() or not size.is_finite() or not is_finite(render_scale) or render_scale <= 0 or size.x <= 0 or size.y <= 0:
 		return Rect2()
 	var font_size := maxi(1, roundi(18 * render_scale))
-	var measured := ThemeDB.fallback_font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var extent := Vector2(minf(size.x, measured + 6 * render_scale), minf(size.y, 24 * render_scale))
+	var lines := caption_lines()
+	var measured := 0.0
+	for line in lines:
+		measured = maxf(measured, ThemeDB.fallback_font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
+	var extent := Vector2(minf(size.x, measured + 6 * render_scale), minf(size.y, (24 + 22 * (lines.size() - 1)) * render_scale))
 	var left := at.x + 9 * render_scale
 	if left + extent.x > size.x: left = at.x - extent.x - 9 * render_scale
 	return Rect2(Vector2(clampf(left, 0, size.x - extent.x), clampf(at.y - 18 * render_scale, 0, size.y - extent.y)), extent)
@@ -75,4 +89,6 @@ func _draw() -> void:
 	var backing := label_bounds(p)
 	if not backing.has_area(): return
 	draw_rect(backing, Color(0.0, 0.0, 0.0, 0.85))
-	draw_string(ThemeDB.fallback_font, backing.position + Vector2(3, 18) * render_scale, label_text, HORIZONTAL_ALIGNMENT_LEFT, maxf(0, backing.size.x - 6 * render_scale), maxi(1, roundi(18 * render_scale)), COLOR)
+	var lines := caption_lines()
+	for index in lines.size():
+		draw_string(ThemeDB.fallback_font, backing.position + Vector2(3, 18 + 22 * index) * render_scale, lines[index], HORIZONTAL_ALIGNMENT_LEFT, maxf(0, backing.size.x - 6 * render_scale), maxi(1, roundi(18 * render_scale)), COLOR)

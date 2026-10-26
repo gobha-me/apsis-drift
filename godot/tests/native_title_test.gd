@@ -5,7 +5,24 @@ const Title = preload("res://scripts/native/native_title.gd")
 const Walk = preload("res://scripts/native/native_walk_view.gd")
 
 class TestShell extends "res://scripts/native/native_start_shell.gd":
+	var loading_stages: Array[Dictionary] = []
 	func _ready() -> void: pass
+	func select_start(owner: Variant, options: Dictionary) -> bool:
+		if title_view != null:
+			var title: Control = title_view
+			var bounds: Rect2 = title.loading_overlay.get_global_rect()
+			var density: Vector2 = get_viewport().get_final_transform().get_scale().abs()
+			loading_stages.append({
+				"mode": options.mode,
+				"frame_opportunities": Engine.get_process_frames() - title.loading_started_frame,
+				"visible": title.busy and title.loading_overlay.is_visible_in_tree(),
+				"enclosed": title.get_global_rect().encloses(bounds) and bounds.encloses(title.loading_heading.get_global_rect()) and bounds.encloses(title.loading_status.get_global_rect()),
+				"readable": title.loading_status.get_theme_font_size("font_size") * minf(density.x, density.y) >= 18.0 and title.loading_status.get_visible_line_count() == title.loading_status.get_line_count(),
+				"message": title.loading_heading.text + "\n" + title.loading_status.text,
+				"barrier": not title.controls.is_processing_input() and title.new_button.disabled and title.continue_button.disabled and title.network_choice.disabled,
+				"unselected": owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(),
+				"frontend_token_removed": not options.has("_title_request")})
+		return super.select_start(owner, options)
 
 var failures := 0
 
@@ -86,6 +103,7 @@ func check_choice_help(title: Control, owner: Variant) -> void:
 	title.network_choice.item_selected.emit(0)
 	title.network_choice.grab_focus()
 	await settle()
+
 	await key(KEY_ENTER)
 	check(title.network_choice.get_popup().visible, "Keyboard could not open the chart popup")
 	await key(KEY_DOWN)
@@ -113,9 +131,70 @@ func check_choice_help(title: Control, owner: Variant) -> void:
 	title.new_button.grab_focus()
 	await settle()
 
+func check_loading_now(title: Control, owner: Variant) -> void:
+	check(title.busy and title.loading_overlay.is_visible_in_tree() and root.gui_get_focus_owner() == title.loading_overlay and not title.controls.is_processing_input(), "Accepted request did not immediately acknowledge and isolate loading")
+	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Loading acknowledgement already generated a C++ journey")
+	var generation: int = title.request_generation
+	title.begin_new()
+	title.choose_continue("/not-a-second-selection.json")
+	title.choose_catalog(0)
+	title.back_to_title()
+	title.chooser.canceled.emit()
+	for down in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = KEY_ENTER
+		event.physical_keycode = KEY_ENTER
+		event.pressed = down
+		Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	check(title.request_generation == generation and title.busy and not title.controls.is_processing_input() and not title.chooser.visible and owner.get_freedom_start().is_empty(), "Duplicate/cancel/input callbacks bypassed the acknowledged request")
+
+func check_loading_stages(shell: Control) -> void:
+	check(not shell.loading_stages.is_empty(), "Actual title staging produced no acknowledgement witness")
+	for value in shell.loading_stages:
+		var row: Dictionary = value
+		check(row.frame_opportunities >= 2 and row.visible and row.enclosed and row.readable and row.barrier and row.unselected and row.frontend_token_removed, "Actual native work began before a readable isolated acknowledgement: " + str(row))
+		check(("Starting New Game" in row.message) == (row.mode == "new_game") and ("Opening saved journey" in row.message) == (row.mode in ["continue", "profile"]), "Loading label misrepresented the actual request")
+
+func check_catalog_loading(assets: String, expected: PackedByteArray, output: String) -> void:
+	for browse in [false, true]:
+		var owner: Variant = ClassDB.instantiate("FreedomBridge")
+		var shell := TestShell.new()
+		root.add_child(shell)
+		shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		shell.open_title(owner, {"mode": "title", "assets": assets, "persist_controls": false})
+		var title: Control = shell.title_view
+		await settle()
+		check(not title.catalog_continue_button.disabled, "Actual saved profile was absent from title Continue")
+		if title.catalog_continue_button.disabled:
+			shell.free()
+			await settle()
+			continue
+		if browse:
+			title.open_catalog()
+			check(title.catalog_browser.visible and not title.catalog_browser.buttons.is_empty(), "Actual catalog browser did not expose its saved row")
+			if title.catalog_browser.buttons.is_empty():
+				shell.free()
+				await settle()
+				continue
+			title.catalog_browser.buttons[0].pressed.emit()
+		else:
+			title.catalog_continue_button.pressed.emit()
+		check_loading_now(title, owner)
+		await settle()
+		check_loading_stages(shell)
+		var witness: String = output.path_join("title-catalog-browser.json" if browse else "title-catalog-continue.json")
+		check(shell.title_view == null and shell.current_view is Walk and shell.current_view.paused and owner.save_freedom_as(witness) and FileAccess.get_file_as_bytes(witness) == expected, "Catalog loading acknowledgement changed the committed journey or failed to retire")
+		shell.free()
+		await settle()
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3 or DisplayServer.get_name() != "headless" or AudioServer.get_driver_name() != "Dummy": quit(1); return
+	var catalog_data: String = OS.get_environment("XDG_DATA_HOME").path_join("title-loading-%d" % OS.get_process_id())
+	check(catalog_data.is_absolute_path() and not DirAccess.dir_exists_absolute(catalog_data), "Title catalog test storage was not fresh and isolated")
+	if not catalog_data.is_absolute_path() or DirAccess.dir_exists_absolute(catalog_data): quit(1); return
+	OS.set_environment("XDG_DATA_HOME", catalog_data)
 	for value in ["", "-1", "+1", "01", "00", " 42", "42 ", "4.2", "18446744073709551616", "1".repeat(21), "１２", "NaN"]:
 		check(not Title.valid_seed(value), "Invalid title seed accepted: " + value)
 	for value in ["0", "42", "9223372036854775808", "18446744073709551615"]:
@@ -141,6 +220,18 @@ func run() -> void:
 	check(title.recovery_choice != null and title.recovery_choice.selected == 0 and title.recovery_choice.item_count == 3 and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive rules changed the default or lost independent keyboard selection")
 	check(title.origin_service_choice != null and not title.origin_service_choice.button_pressed and title.origin_service_choice.focus_mode == Control.FOCUS_ALL, "Fuel service must remain explicit opt-in with keyboard/controller access")
 	await check_choice_help(title, owner)
+	# A deferred selection belongs to this title, not a later replacement.
+	title.begin_new()
+	check_loading_now(title, owner)
+	var retired: Control = title
+	shell.remove_child(retired)
+	shell.open_title(owner, {"mode": "title", "assets": args[0], "persist_controls": false})
+	title = shell.title_view
+	retired.free()
+	title.controls.device = 0
+	title.controls.install()
+	await settle()
+	check(not title.busy and not title.loading_overlay.visible and shell.loading_stages.is_empty() and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Retired title request opened a world or canceled its replacement")
 	title.open_settings()
 	var settings: Control = title.settings_view
 	title.begin_new()
@@ -196,10 +287,16 @@ func run() -> void:
 	await settle()
 	check(not title.chooser.visible and owner.get_freedom_start().is_empty(), "Escape could not cancel the exclusive chooser")
 	var corrupt := FileAccess.get_file_as_bytes(args[2])
-	for path in ["relative.json", args[2], args[2].get_base_dir().path_join("missing.json")]:
-		title.choose_continue(path)
+	var refused_paths: Array[String] = ["relative.json", args[2], args[2].get_base_dir().path_join("missing.json")]
+	for index in refused_paths.size():
+		root.size = Vector2i(640, 450) if index < 2 else Vector2i(1280, 720)
 		await settle()
-		check(shell.title_view == title and not title.busy and shell.current_view == null and not title.status.text.is_empty(), "Failed Continue lost title")
+		var path: String = refused_paths[index]
+		title.choose_continue(path)
+		if path.is_absolute_path(): check_loading_now(title, owner)
+		await settle()
+		check(shell.title_view == title and not title.busy and not title.loading_overlay.visible and title.controls.is_processing_input() and not title.new_button.disabled and shell.current_view == null and not title.status.text.is_empty(), "Failed Continue lost usable title or retained loading/input locks")
+		check(title.scroll.get_global_rect().encloses(title.status.get_global_rect()), "Continue refusal was not readable after loading closed")
 		check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Failed Continue left C++ state")
 		check(FileAccess.get_file_as_bytes(args[2]) == corrupt, "Continue refusal rewrote source")
 	title.focused = false
@@ -207,16 +304,37 @@ func run() -> void:
 	title.begin_new()
 	check(not title.busy and owner.get_freedom_start().is_empty(), "Unfocused New Game accepted")
 	title.focused = true
+	var stages_before: int = shell.loading_stages.size()
 	title.begin_new()
+	check_loading_now(title, owner)
 	title.focused = false
 	await settle()
-	check(not title.busy and shell.title_view == title and owner.get_freedom_start().is_empty(), "Focus lost before deferred selection opened a journey")
+	check(not title.busy and not title.loading_overlay.visible and shell.title_view == title and shell.loading_stages.size() == stages_before and owner.get_freedom_start().is_empty(), "Focus lost before deferred selection opened a journey")
 	title.focused = true
+	title.begin_new()
+	check_loading_now(title, owner)
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await settle()
+	check(not title.busy and shell.loading_stages.size() == stages_before and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Restored focus revived an earlier canceled selection")
+	title.begin_new()
+	check_loading_now(title, owner)
+	shell.closing = true
+	await settle()
+	check(not title.busy and not title.loading_overlay.visible and shell.loading_stages.size() == stages_before and owner.get_freedom_start().is_empty(), "Closing shell still opened an acknowledged journey")
+	shell.closing = false
 	var assets: String = shell.title_options.assets
 	shell.title_options.assets = ""
+	var requests: Array[Dictionary] = []
+	var record_request: Callable = func(value: Dictionary): requests.append(value.duplicate(true))
+	title.start_requested.connect(record_request)
 	title.begin_new()
+	check_loading_now(title, owner)
+	var duplicate: Dictionary = requests.back().duplicate(true)
+	title.start_requested.emit(duplicate)
 	await settle()
-	check(shell.title_view == title and not title.busy and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Late asset refusal committed a title candidate")
+	title.start_requested.disconnect(record_request)
+	check(shell.title_view == title and not title.busy and not title.loading_overlay.visible and shell.loading_stages.size() == stages_before + 1 and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Duplicate/late asset refusal committed a title candidate or repeated native staging")
 	shell.title_options.assets = assets
 	# Two available software pads; explicitly adopt the non-first device through
 	# the real Start path. This is input ownership, not hardware qualification.
@@ -232,6 +350,7 @@ func run() -> void:
 	await key(KEY_ENTER)
 	await settle()
 	check(shell.title_view == null and shell.current_view is Walk and owner.get_freedom_walk_state().universe_seed == "0", "Actual seed-zero New Game did not start on station")
+	check_loading_stages(shell)
 	check(shell.current_view.state.actor_id == "1", "New Game did not create the player actor")
 	var title_drive: Dictionary = owner.get_freedom_flight_state().jump.recovery
 	check(title_drive.version == 2 and title_drive.ready and title_drive.next_recovery_seconds == 45.0, "Actual title selection did not start with the selected strained drive")
@@ -258,8 +377,10 @@ func run() -> void:
 	check(is_equal_approx(shell.current_view.stick_preferences.deadzone, 0.35) and shell.current_view.stick_preferences.curve == 2.0, "New Game walker did not consume saved title preferences")
 	check(FileAccess.get_file_as_bytes(preferences_path) == preferences_bytes, "Starting the journey rewrote preferences")
 	check(DirAccess.remove_absolute(preferences_path) == OK, "Could not remove title-owned preferences")
+	check(owner.save_freedom_profile(true) and owner.save_freedom_as(ownership_save) and FileAccess.get_file_as_bytes(ownership_save) == ownership_bytes, "Actual catalog enrollment changed the new journey bytes")
 	shell.free()
 	await settle()
+	await check_catalog_loading(args[0], ownership_bytes, args[1].get_base_dir())
 	# A fresh title selects an existing actor save through its connected dialog.
 	owner = ClassDB.instantiate("FreedomBridge")
 	shell = TestShell.new()
@@ -274,7 +395,9 @@ func run() -> void:
 	var source := FileAccess.get_file_as_bytes(args[1])
 	title.continue_button.pressed.emit()
 	title.chooser.file_selected.emit(args[1])
+	check_loading_now(title, owner)
 	await settle()
+	check_loading_stages(shell)
 	check(shell.title_view == null and shell.current_view is Walk and shell.current_view.paused, "Continue did not retire title into paused actor")
 	check(shell.current_view.selected_pad == 41, "Continue lost the selected title controller")
 	var output := args[1].get_base_dir().path_join("title-continued.json")

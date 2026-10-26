@@ -16,6 +16,9 @@ func run() -> void:
 	root.add_child(camera)
 	camera.current = true
 	# Invalid geometry refuses before any projection or drawing.
+	for invalid in [-1.0, NAN, INF]:
+		check(Navigation.range_text(invalid).is_empty(), "Invalid target range became a visible number")
+	check(Navigation.range_text(83.4) == "83.4 m" and Navigation.range_text(1000.0) == "1.0 km" and Navigation.range_text(12345.0) == "12.3 km", "Target range lost actual metre/kilometre units")
 	for bounds in [Vector2.ZERO, Vector2(-1, 720), Vector2(1280, 56), Vector2(NAN, 720), Vector2(1280, INF)]:
 		check(Navigation.project(camera, Vector3(0, 0, -10), bounds).is_empty(), "Invalid marker dimensions accepted")
 	for inset in [0.0, -1.0, NAN, INF, 1000.0]:
@@ -79,6 +82,20 @@ func run() -> void:
 					var backing: Rect2 = ship_marker.label_bounds(point)
 					var measured := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, roundi(18 * scale))).x
 					check(Rect2(Vector2.ZERO, bounds).encloses(backing) and backing.size.x >= measured + 6 * scale, "Measured return/home/ship label clipped at viewport edge")
+	# Live target names/ranges must remain readable at every viewport edge.
+	ship_marker.display_name = "Origin Station"
+	ship_marker.detail_text = "12.3 km\nBeyond horizon"
+	for bounds in [Vector2(640, 450), Vector2(1280, 720)]:
+		ship_marker.size = bounds
+		for scale in [1.0, 2.0]:
+			ship_marker.render_scale = scale
+			for point in [Vector2.ONE, Vector2(bounds.x - 1, 1), Vector2(1, bounds.y - 1), bounds - Vector2.ONE]:
+				var rect := ship_marker.label_bounds(point)
+				check(Rect2(Vector2.ZERO, bounds).encloses(rect) and rect.size.y >= 68 * scale, "Named target/range/horizon caption clipped at viewport edge")
+	check(ship_marker.caption_lines() == PackedStringArray(["Origin Station", "12.3 km", "Beyond horizon"]), "Tracking caption lost target identity, distance or horizon warning")
+	ship_marker.display_name = ""
+	ship_marker.detail_text = ""
+	check(ship_marker.caption_lines() == PackedStringArray([ship_marker.label_text]), "Cleared tracking text leaked into an ordinary marker")
 	check(marker.label_text == "HOME", "Return label changed separate home marker")
 	ship_marker.free()
 	marker.free()

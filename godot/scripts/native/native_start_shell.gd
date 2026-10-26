@@ -763,20 +763,41 @@ func open_title(owner: Variant, options: Dictionary, previous: Control = null) -
 	title_view.persist_controls = options.get("persist_controls", true)
 	inherit_controller(previous, title_view)
 	add_child(title_view)
-	title_view.start_requested.connect(start_from_title, CONNECT_DEFERRED)
+	title_view.start_requested.connect(start_from_title.bind(title_view.get_instance_id()), CONNECT_DEFERRED)
 	title_view.quit_requested.connect(request_native_quit)
 	print("Freedom native title opened: no journey selected")
 
 
-func start_from_title(selection: Dictionary) -> void:
-	if closing or title_view == null: return
-	if not title_view.focused:
-		title_view.refuse("Restore application focus before opening a journey.")
+func title_request_current(requester: Control, generation: int) -> bool:
+	return is_inside_tree() and not is_queued_for_deletion() and not closing and is_instance_valid(requester) and requester == title_view and requester.is_inside_tree() and not requester.is_queued_for_deletion() and requester.busy and requester.focused and requester.request_generation == generation
+
+func cancel_title_request(requester: Control, generation: int) -> void:
+	if is_instance_valid(requester) and requester == title_view and requester.busy and requester.request_generation == generation:
+		requester.refuse("Opening canceled. Restore application focus and choose again.")
+
+func start_from_title(selection: Dictionary, requester_id: int) -> void:
+	var requester: Control = instance_from_id(requester_id) as Control
+	var token: Variant = selection.get("_title_request")
+	if not token is int or not is_instance_valid(requester) or requester != title_view: return
+	var generation: int = token
+	if not title_request_current(requester, generation):
+		cancel_title_request(requester, generation)
 		return
+	var tree: SceneTree = get_tree()
+	# Let the acknowledgement finish a complete frame before synchronous world
+	# and asset preparation. Nothing yields inside the existing commit/view swap.
+	for frame in 2:
+		await tree.process_frame
+		if not is_instance_valid(requester): return
+		if not title_request_current(requester, generation):
+			cancel_title_request(requester, generation)
+			return
 	var options := title_options.duplicate(true)
-	options.merge(selection, true)
+	var native_selection: Dictionary = selection.duplicate(true)
+	native_selection.erase("_title_request")
+	options.merge(native_selection, true)
 	if not select_start(bridge, options):
-		title_view.refuse(error)
+		requester.refuse(error)
 		error = ""
 		return
 	# The existing complete C++/view transaction succeeded; retire only the title.
