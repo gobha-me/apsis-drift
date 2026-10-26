@@ -243,7 +243,15 @@ static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
 
 
 static func valid_commission_progress(value: Variant) -> bool:
-	if not value is Dictionary or value.size() != 6: return false
+	if not value is Dictionary: return false
+	if value.has("version"):
+		if value.size() != 7 or not value.get("version") is int or value.version != 2 or not value.get("kind") is int or value.kind != 2: return false
+		for field in ["active", "ready", "expired"]:
+			if not value.get(field) is bool: return false
+		if not value.active or not value.get("remaining_ticks") is int or value.remaining_ticks < 0 or value.remaining_ticks > 1728000: return false
+		if not NativeEnvironment.decimal(value.get("earnings")) or SurveyCommissions.decimal_before("429496729500", value.earnings) or int(value.earnings) % 100 != 0: return false
+		return value.expired == (value.remaining_ticks == 0) and not (value.expired and value.ready)
+	if value.size() != 6: return false
 	if not value.get("acquired_ticks") is int or value.acquired_ticks < 0 or value.acquired_ticks > 3600: return false
 	for key in ["active", "completed", "expired"]:
 		if not value.get(key) is bool: return false
@@ -257,7 +265,11 @@ static func valid_commission_progress(value: Variant) -> bool:
 static func commission_progress_text(value: Variant) -> String:
 	if not valid_commission_progress(value) or not value.active: return ""
 	if value.expired: return "Commission · deadline passed"
-	var work := "report ready" if value.completed else "%.1f / 30 s" % (floorf(float(value.acquired_ticks) / 12.0) / 10.0)
+	var work: String
+	if value.get("version") == 2:
+		work = "fresh specimen carried · deliver at Origin" if value.ready else "collect a fresh specimen on the accepted planet"
+	else:
+		work = "report ready" if value.completed else "%.1f / 30 s" % (floorf(float(value.acquired_ticks) / 12.0) / 10.0)
 	var remaining := "less than 1 s" if value.remaining_ticks < 120 else SurveyCommissions.seconds_text(floori(float(value.remaining_ticks) / 120.0))
 	return "Commission · %s · %s left" % [work, remaining]
 
@@ -1072,8 +1084,11 @@ func update_compact_hud() -> void:
 		var commission_text := commission_progress_text(work)
 		primary_status.text += "\n" + commission_text
 		primary_status.tooltip_text += "\n" + commission_text
-		if work.completed and not work.expired:
-			primary_status.tooltip_text += "\nReturn to Origin and submit before the deadline."
+		var geological: bool = work.get("version", 1) == 2
+		var ready: bool = work.ready if geological else work.completed
+		if ready and not work.expired:
+			var action: String = "deliver the named specimen" if geological else "submit"
+			primary_status.tooltip_text += "\nReturn to Origin and %s before the deadline." % action
 	var quiet_text := QuietTravel.text(state.get("quiet_travel"))
 	if not quiet_text.is_empty():
 		primary_status.text += "\n" + quiet_text
@@ -1749,7 +1764,7 @@ func open_survey_commissions() -> void:
 	if not marker_controls_available() or mode_change_pending or not controls_menu.menu_margin.visible: return
 	observe_neutral_controls()
 	if not controls_armed: return
-	var packet: Variant = bridge.get_freedom_survey_commissions()
+	var packet: Variant = bridge.get_freedom_survey_commissions(controls_menu.commissions_view.requested_kind)
 	if not SurveyCommissions.valid_packet(packet):
 		report_action_status("Survey commission terms are unavailable.")
 		return
@@ -1765,26 +1780,35 @@ func survey_commission_command(action: String) -> void:
 	if origin_repair_open(): return
 	if commissions_open() and controls_menu.commissions_view.service_child_open(): return
 	if not paused or not focused or journey_dialog_open or recovery_notified or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or controls_menu == null or not controls_menu.panel.visible or controls_menu.commissions_view == null or not controls_menu.commissions_view.visible or not player_input.waiting_action.is_empty() or controls_menu.settings_view.visible or controls_menu.basics.visible or controls_menu.surface_reference_view.visible or (controls_menu.observations_view != null and controls_menu.observations_view.visible): return
-	if action not in ["accept", "submit", "abandon"] or commission_action_frame == Engine.get_process_frames(): return
+	if action not in ["accept", "submit", "abandon", "choose_orbital", "choose_geological"] or commission_action_frame == Engine.get_process_frames(): return
 	observe_neutral_controls()
 	if not controls_armed: return
 	var reader: Control = controls_menu.commissions_view
-	var packet: Variant = bridge.get_freedom_survey_commissions()
+	var packet: Variant = bridge.get_freedom_survey_commissions(controls_menu.commissions_view.requested_kind)
 	if not SurveyCommissions.valid_packet(packet): return
-	for key in ["tick", "offer_until", "offer_sequence", "sequence", "system_id", "planet_id", "accepted_tick", "deadline_tick"]:
-		if packet[key] != reader.packet.get(key):
-			reader.refresh(packet)
-			return
+	if packet != reader.packet:
+		reader.refresh(packet)
+		reader.back.grab_focus()
+		return
+	if action in ["choose_orbital", "choose_geological"]:
+		if packet.sequence != 0: return
+		commission_action_frame = Engine.get_process_frames()
+		var offer: Variant = bridge.get_freedom_survey_commissions(1 if action == "choose_orbital" else 2)
+		reader.refresh(offer if SurveyCommissions.valid_packet(offer) else {})
+		reader.back.grab_focus()
+		return
 	var action_button: Button = {"accept": reader.accept_button, "submit": reader.submit_button, "abandon": reader.abandon_button}[action]
 	if not action_button.visible or action_button.disabled: return
 	if not packet.at_origin or not packet.get("can_" + action, false): return
 	commission_action_frame = Engine.get_process_frames()
 	var accepted: bool
 	if action == "accept":
-		accepted = bridge.accept_freedom_survey_commission(packet.offer_until, str(packet.offer_sequence))
+		accepted = bridge.accept_freedom_geological_survey_commission(packet.offer_until, str(packet.offer_sequence)) if packet.get("kind", 1) == 2 else bridge.accept_freedom_survey_commission(packet.offer_until, str(packet.offer_sequence))
+	elif action == "submit" and packet.get("kind", 1) == 2:
+		accepted = bridge.submit_freedom_geological_survey_commission(packet.submission_token)
 	else:
 		accepted = bridge.call("submit_freedom_survey_commission" if action == "submit" else "abandon_freedom_survey_commission", str(packet.sequence))
-	var updated: Variant = bridge.get_freedom_survey_commissions()
+	var updated: Variant = bridge.get_freedom_survey_commissions(controls_menu.commissions_view.requested_kind)
 	if SurveyCommissions.valid_packet(updated): reader.refresh(updated)
 	refresh_paid_operations()
 	refresh_specimen_sale()
@@ -1843,7 +1867,7 @@ func paid_operations_command(action: String) -> void:
 	commission_action_frame = Engine.get_process_frames()
 	var command: String = {"enable": "enable_freedom_paid_operations", "purchase": "purchase_freedom_paid_fuel", "retainer": "request_freedom_paid_retainer"}[action]
 	var accepted: bool = bridge.call(command, reviewed.token)
-	var after: Variant = bridge.get_freedom_survey_commissions()
+	var after: Variant = bridge.get_freedom_survey_commissions(controls_menu.commissions_view.requested_kind)
 	office.refresh(after if SurveyCommissions.valid_packet(after) else {})
 	refresh_paid_operations()
 	refresh_specimen_sale()

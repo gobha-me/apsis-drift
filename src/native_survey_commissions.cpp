@@ -2,6 +2,8 @@
 
 #include "apsis_drift/save_file.hpp"
 
+#include <algorithm>
+
 namespace apsis_drift {
 namespace {
 auto target_name(const FreedomKnowledge& knowledge, SystemId system,
@@ -19,9 +21,14 @@ auto target_name(const FreedomKnowledge& knowledge, SystemId system,
 }
 } // namespace
 
-auto NativeFreedomFlightSession::survey_commission_view() const
+auto NativeFreedomFlightSession::survey_commission_view(
+    SurveyCommissionKind requested_kind) const
     -> std::expected<NativeSurveyCommissionView, std::string> {
+  if (requested_kind != SurveyCommissionKind::orbital &&
+      requested_kind != SurveyCommissionKind::geological)
+    return std::unexpected{"Unknown commission kind"};
   NativeSurveyCommissionView view;
+  view.kind = requested_kind;
   view.tick = document_.flight.tick;
   view.note = "Survey commissions require a planetary-chart journey. "
               "Existing flight and free station service remain available.";
@@ -30,8 +37,18 @@ auto NativeFreedomFlightSession::survey_commission_view() const
     return view;
   const auto ids = generate_first_intersystem_identities(
       document_.origin.recipe.universe_seed);
-  const auto target = generate_physical_local_system(
-      ids.target_system_seed, knowledge_->recipe.physical_catalog);
+  const auto account =
+      knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
+  if (auto valid = validate_survey_commissions(account, view.tick); !valid)
+    return std::unexpected{valid.error()};
+  if (account.active) view.kind = account.active->kind;
+  const auto target =
+      view.kind == SurveyCommissionKind::geological
+          ? generate_physical_origin_system(
+                document_.origin.recipe.universe_seed,
+                knowledge_->recipe.physical_catalog)
+          : generate_physical_local_system(ids.target_system_seed,
+                                           knowledge_->recipe.physical_catalog);
   if (!target || target->catalog.planets.empty())
     return std::unexpected{"Commission destination is unavailable"};
   view.system = target->catalog.id;
@@ -45,10 +62,6 @@ auto NativeFreedomFlightSession::survey_commission_view() const
   }
   view.supported = true;
   view.selected = knowledge_->survey_commissions.has_value();
-  const auto account =
-      knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
-  if (auto valid = validate_survey_commissions(account, view.tick); !valid)
-    return std::unexpected{valid.error()};
   view.earnings = survey_commission_earnings(account);
   view.at_origin =
       !recovery_pending() && docking_ && docking_->attached && !moon_ &&
@@ -73,12 +86,47 @@ auto NativeFreedomFlightSession::survey_commission_view() const
     view.expired = view.tick >= job.deadline_tick;
     if (job.measurement) view.acquired_ticks = job.measurement->acquired_ticks;
     view.completed = view.acquired_ticks == kSurveyCommissionMeasurementTicks;
+    if (job.kind == SurveyCommissionKind::geological &&
+        knowledge_->field_samples &&
+        knowledge_->field_samples->carrier == document_.origin.state.craft) {
+      const auto& items = knowledge_->field_samples->carried;
+      for (std::size_t index = 0; index < items.size(); ++index) {
+        if (!apsis_drift::submit_geological_survey_commission(
+                account, job.sequence, view.tick, items[index]))
+          continue;
+        view.completed = true;
+        std::string label;
+        switch (items[index].kind) {
+          case SurfaceLandmarkKind::pale_exposure:
+            label = "Pale specimen";
+            break;
+          case SurfaceLandmarkKind::ochre_exposure:
+            label = "Ochre specimen";
+            break;
+          case SurfaceLandmarkKind::dark_exposure:
+            label = "Dark specimen";
+            break;
+        }
+        view.specimen = "Pouch slot " + std::to_string(index + 1) + ": " +
+                        label + " - " + view.body_name;
+        view.submission_token = geological_commission_token();
+        break;
+      }
+    }
     view.can_abandon = view.at_origin;
     view.can_submit = view.at_origin && view.completed && !view.expired;
     if (view.expired)
       view.note = "Submission deadline passed; this commission pays nothing. "
                   "At Origin, explicitly replace it with a new commission. "
                   "Your exploration observations are retained.";
+    else if (job.kind == SurveyCommissionKind::geological)
+      view.note = view.completed
+                      ? "Fresh specimen carried. Return to Origin and confirm "
+                        "delivery of the named pouch item before the deadline. "
+                        "Discovery notes and other specimens remain."
+                      : "Collect a new specimen at a geological exposure on "
+                        "the named planet after acceptance. An earlier sample "
+                        "or a field note cannot fulfill this request.";
     else if (view.completed)
       view.note = "Fresh measurement complete. Return to Origin, attach to "
                   "a port and explicitly submit before the deadline.";
@@ -91,21 +139,42 @@ auto NativeFreedomFlightSession::survey_commission_view() const
     else
       view.note = "Acquiring fresh orbital reference measurements. Maintain "
                   "a stable orbit above the atmosphere, within two radii.";
+  } else if (view.kind == SurveyCommissionKind::geological) {
+    view.note = "Standing request: collect one new physical specimen on the "
+                "named planet, then deliver it at Origin. Reward: 100 "
+                "prototype credits; reservation: four game hours. Delivery "
+                "consumes one specimen and retains its discovery note.";
   } else {
     view.note = "Standing request: record 30 new seconds in a stable orbit "
                 "at this remote planet, then return to Origin and submit. "
                 "Reward: 100 prototype credits; reservation: four game hours.";
   }
   if (view.at_origin && offer_until)
-    view.can_accept = apsis_drift::accept_survey_commission(
-                          account, view.system, view.planet, view.tick)
+    view.can_accept = (view.kind == SurveyCommissionKind::geological
+                           ? apsis_drift::accept_geological_survey_commission(
+                                 account, view.system, view.planet, view.tick)
+                           : apsis_drift::accept_survey_commission(
+                                 account, view.system, view.planet, view.tick))
                           .has_value();
   return view;
 }
 
 auto NativeFreedomFlightSession::commit_survey_commission_account(
-    SurveyCommissionAccount account) -> std::expected<void, std::string> {
+    SurveyCommissionAccount account,
+    const std::optional<FreedomFieldSampleRecord>& delivered)
+    -> std::expected<void, std::string> {
   auto candidate = *this;
+  if (delivered) {
+    if (!candidate.knowledge_->field_samples ||
+        candidate.knowledge_->field_samples->carrier !=
+            document_.origin.state.craft)
+      return std::unexpected{"A physical specimen must belong to this carrier"};
+    auto& carried = candidate.knowledge_->field_samples->carried;
+    const auto item = std::find(carried.begin(), carried.end(), *delivered);
+    if (item == carried.end())
+      return std::unexpected{"The reviewed specimen is no longer carried"};
+    carried.erase(item);
+  }
   candidate.knowledge_->survey_commissions = account;
   if (knowledge_->paid_operations) {
     auto counts = paid_income_counts();
@@ -134,7 +203,8 @@ auto NativeFreedomFlightSession::accept_survey_commission(
     -> std::expected<void, std::string> {
   const auto view = survey_commission_view();
   if (!view) return std::unexpected{view.error()};
-  if (!view->can_accept || offer_until != view->offer_until)
+  if (view->kind != SurveyCommissionKind::orbital || !view->can_accept ||
+      offer_until != view->offer_until)
     return std::unexpected{"Review a current offer while attached at Origin"};
   const auto account =
       knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
@@ -150,13 +220,75 @@ auto NativeFreedomFlightSession::submit_survey_commission(
     std::uint32_t sequence) -> std::expected<void, std::string> {
   const auto view = survey_commission_view();
   if (!view) return std::unexpected{view.error()};
-  if (!view->can_submit || !knowledge_->survey_commissions)
+  if (view->kind != SurveyCommissionKind::orbital || !view->can_submit ||
+      !knowledge_->survey_commissions)
     return std::unexpected{"A completed, unexpired report must be submitted "
                            "while attached at Origin"};
   auto next = apsis_drift::submit_survey_commission(
       *knowledge_->survey_commissions, sequence, document_.flight.tick);
   if (!next) return std::unexpected{next.error()};
   return commit_survey_commission_account(*next);
+}
+
+auto NativeFreedomFlightSession::geological_commission_token() const
+    -> std::string {
+  std::string token = "geo1:" + specimen_sale_token();
+  if (!knowledge_ || !knowledge_->survey_commissions) return token;
+  const auto& account = *knowledge_->survey_commissions;
+  const auto word = [&](auto value) {
+    token += ':';
+    token += std::to_string(value);
+  };
+  word(account.version);
+  word(account.next_sequence);
+  word(account.paid_count);
+  word(account.geological_paid_count);
+  if (account.active) {
+    const auto& job = *account.active;
+    word(static_cast<unsigned>(job.kind));
+    word(job.sequence);
+    word(job.system.value);
+    word(job.planet.value);
+    word(job.accepted_tick);
+    word(job.deadline_tick);
+  }
+  return token;
+}
+
+auto NativeFreedomFlightSession::accept_geological_survey_commission(
+    SimulationTick offer_until, std::uint32_t sequence)
+    -> std::expected<void, std::string> {
+  const auto view = survey_commission_view(SurveyCommissionKind::geological);
+  if (!view) return std::unexpected{view.error()};
+  if (view->kind != SurveyCommissionKind::geological || !view->can_accept ||
+      offer_until != view->offer_until)
+    return std::unexpected{"Review a current geological offer at Origin"};
+  const auto account =
+      knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
+  if (sequence != account.next_sequence)
+    return std::unexpected{"The displayed geological offer is stale"};
+  const auto next = apsis_drift::accept_geological_survey_commission(
+      account, view->system, view->planet, document_.flight.tick);
+  if (!next) return std::unexpected{next.error()};
+  return commit_survey_commission_account(*next);
+}
+
+auto NativeFreedomFlightSession::submit_geological_survey_commission(
+    std::string_view token) -> std::expected<void, std::string> {
+  const auto view = survey_commission_view(SurveyCommissionKind::geological);
+  if (!view) return std::unexpected{view.error()};
+  if (view->kind != SurveyCommissionKind::geological || !view->can_submit ||
+      token.empty() || token != view->submission_token ||
+      !knowledge_->survey_commissions || !knowledge_->field_samples)
+    return std::unexpected{
+        "Review the current carried-specimen delivery at Origin"};
+  const auto& account = *knowledge_->survey_commissions;
+  for (const auto& item : knowledge_->field_samples->carried) {
+    const auto next = apsis_drift::submit_geological_survey_commission(
+        account, view->sequence, document_.flight.tick, item);
+    if (next) return commit_survey_commission_account(*next, item);
+  }
+  return std::unexpected{"The reviewed fresh specimen is no longer available"};
 }
 
 auto NativeFreedomFlightSession::abandon_survey_commission(
@@ -177,6 +309,7 @@ auto NativeFreedomFlightSession::advance_survey_commission_tick()
       !knowledge_->survey_commissions->active)
     return {};
   const auto& job = *knowledge_->survey_commissions->active;
+  if (job.kind != SurveyCommissionKind::orbital) return {};
   const bool qualifies = !moon_ && !minor_ &&
                          system_.catalog.id == job.system &&
                          rotation_.rotation.planet == job.planet &&

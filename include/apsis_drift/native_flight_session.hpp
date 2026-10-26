@@ -156,6 +156,8 @@ struct NativeSurveyCommissionView {
   SystemId system;
   PlanetId planet;
   std::string body_name, note, last_payment;
+  SurveyCommissionKind kind{SurveyCommissionKind::orbital};
+  std::string specimen, submission_token;
 };
 
 struct NativeChartedArrivalView {
@@ -338,12 +340,18 @@ class NativeFreedomFlightSession {
       -> std::expected<void, std::string>;
   [[nodiscard]] auto request_paid_retainer(std::string_view token)
       -> std::expected<void, std::string>;
-  [[nodiscard]] auto survey_commission_view() const
+  [[nodiscard]] auto survey_commission_view(
+      SurveyCommissionKind requested_kind = SurveyCommissionKind::orbital) const
       -> std::expected<NativeSurveyCommissionView, std::string>;
   [[nodiscard]] auto accept_survey_commission(SimulationTick offer_until,
                                               std::uint32_t sequence)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto submit_survey_commission(std::uint32_t sequence)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto accept_geological_survey_commission(
+      SimulationTick offer_until, std::uint32_t sequence)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto submit_geological_survey_commission(std::string_view token)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto abandon_survey_commission(std::uint32_t sequence)
       -> std::expected<void, std::string>;
@@ -595,7 +603,10 @@ class NativeFreedomFlightSession {
   auto cancel_derelict_recovery_unfinished() noexcept -> void;
   [[nodiscard]] auto advance_derelict_recovery_tick()
       -> std::expected<void, std::string>;
-  [[nodiscard]] auto commit_survey_commission_account(SurveyCommissionAccount)
+  [[nodiscard]] auto geological_commission_token() const -> std::string;
+  [[nodiscard]] auto commit_survey_commission_account(
+      SurveyCommissionAccount,
+      const std::optional<FreedomFieldSampleRecord>& delivered = std::nullopt)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto orbital_survey_conditions() const
       -> std::expected<void, std::string>;

@@ -150,6 +150,14 @@ insurance-first income. Existing technical journeys remain free until explicit
 enrollment. Full economy profitability and procedural-start viability remain
 [#293](https://github.com/gobha-me/apsis-drift/issues/293) work.
 
+2026-10-26 engineering follow-through: [fresh-specimen commissions](SURVEY_COMMISSIONS.md#geological-commissions)
+([#713](https://github.com/gobha-me/apsis-drift/issues/713)) add one optional
+collect-and-return request using existing geological sites and physical pouch
+records. A shared commission slot, fresh collection after acceptance and one
+explicit delivery preserve notes and prevent a second ordinary sale. This is
+a bounded engineering default under the continuing development loop; broader
+markets, start viability and price balance remain #293 work.
+
 2026-10-23 engineering follow-through: [closer charted arrivals](CHARTED_ARRIVALS.md)
 ([#692](https://github.com/gobha-me/apsis-drift/issues/692)) adds an explicit
 navigation choice for known primary planets after measuring a long survey

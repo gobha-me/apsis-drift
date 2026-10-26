@@ -1,9 +1,13 @@
 #include "apsis_drift/freedom_recovery_save.hpp"
 #include "apsis_drift/native_startup.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -353,12 +357,309 @@ auto completed_recovery() -> void {
         "An individually valid newest receipt cannot mint more payments "
         "than retained ready work plus fresh elapsed acquisition permits");
 }
+auto geological_record() -> FreedomFieldSampleRecord {
+  // Generated persistence witness only: no flown visit, inspection or sample
+  // collection is claimed by this metadata boundary fixture.
+  const auto owner = need(generate_physical_origin_system({42}, 2));
+  const auto& planet = owner.catalog.planets.front().descriptor;
+  check(planet.id == generate_origin_station({42}).orbit.host_planet,
+        "Geological fixture must target the actual Origin host planet");
+  const auto radius = static_cast<double>(planet.radius.value) * 1000;
+  for (unsigned i = 0; i < 512; ++i) {
+    const auto angle = 2 * std::numbers::pi * i / 512;
+    const SurfaceLandmarkCell base{
+        static_cast<std::int32_t>(std::floor(radius * std::cos(angle) / 512)),
+        static_cast<std::int32_t>(std::floor(radius * std::sin(angle) / 512)),
+        0};
+    for (std::int32_t x = -1; x <= 1; ++x)
+      for (std::int32_t y = -1; y <= 1; ++y)
+        for (std::int32_t z = -1; z <= 1; ++z) {
+          const SurfaceLandmarkCell cell{base.x + x, base.y + y, base.z + z};
+          const auto site = need(identify_surface_landmark(planet, cell));
+          if (site)
+            return {{owner.catalog.id, body_id(planet.id)},
+                    cell,
+                    site->id,
+                    3,
+                    site->kind,
+                    need(derive_freedom_craft_identity({42}, 0)),
+                    8};
+        }
+  }
+  throw std::runtime_error("No generated Origin exposure for persistence test");
+}
+auto geological_knowledge(bool paid, std::uint32_t version = 5)
+    -> FreedomKnowledge {
+  auto k = need(make_freedom_starting_knowledge({42}, version));
+  const auto record = geological_record();
+  k.surface_landmarks = FreedomSurfaceLandmarkState{};
+  k.surface_landmarks->inspections.push_back(
+      {record.target.system, PlanetId{record.target.body.value}, record.cell,
+       record.site, record.terrain_recipe, 7});
+  k.field_samples =
+      FreedomFieldSampleState{1, record.craft, {record}, {record}};
+  auto account = need(accept_geological_survey_commission(
+      {}, record.target.system, PlanetId{record.target.body.value}, 6));
+  if (paid) {
+    account = need(submit_geological_survey_commission(account, 1, 8, record));
+    k.field_samples->carried.clear();
+  }
+  k.survey_commissions = account;
+  return k;
+}
+auto geological_metadata() -> void {
+  const auto record = geological_record();
+  for (auto version : {5U, 6U, 7U}) {
+    for (bool paid : {false, true}) {
+      const auto k = geological_knowledge(paid, version);
+      const auto text = need(encode_freedom_knowledge_json(k, 8));
+      check(need(decode_freedom_knowledge_json(text, 8)) == k &&
+                need(encode_freedom_knowledge_json(
+                    need(decode_freedom_knowledge_json(text, 8)), 8)) == text,
+            "Closed geological active/paid records retain exact world proof");
+      const auto account = Json::parse(text)["survey_commissions"];
+      check(account.size() == 6 && account["version"] == 2 &&
+                account["geological_paid_count"] == (paid ? 1 : 0) &&
+                (paid ? account["latest_paid"]["commission"]["kind"] == 2 &&
+                            account["latest_paid"].size() == 3
+                      : account["active"]["kind"] == 2),
+            "Version2 requires its kind, delivered proof and separate count");
+    }
+  }
+  auto paid = geological_knowledge(true);
+  const auto text = need(encode_freedom_knowledge_json(paid, 9));
+  for (unsigned fault = 0; fault < 22; ++fault) {
+    auto j = Json::parse(text);
+    auto& a = j["survey_commissions"];
+    auto& r = a["latest_paid"];
+    auto& c = r["commission"];
+    auto& item = r["delivered_specimen"];
+    switch (fault) {
+      case 0: a.erase("geological_paid_count"); break;
+      case 1: a["geological_paid_count"] = -1; break;
+      case 2: a["geological_paid_count"] = 1.0; break;
+      case 3: a["geological_paid_count"] = std::uint64_t{1} << 32; break;
+      case 4: a["geological_paid_count"] = 2; break;
+      case 5: c.erase("kind"); break;
+      case 6: c["kind"] = 0; break;
+      case 7: c["kind"] = 3; break;
+      case 8: c["kind"] = 2.0; break;
+      case 9: c["kind"] = false; break;
+      case 10: r.erase("delivered_specimen"); break;
+      case 11: item = nullptr; break;
+      case 12: item["craft"] = record.craft.value; break;
+      case 13: item["cell"][0] = 0.5; break;
+      case 14: item["cell"][0] = std::uint64_t{1} << 32; break;
+      case 15: item["tick"] = 6; break;
+      case 16: item["tick"] = 9; break;
+      case 17: item["site"] = record.site.value + 1; break;
+      case 18: item["unknown"] = 1; break;
+      case 19: r["extra"] = 1; break;
+      case 20: a["version"] = 1; break;
+      case 21:
+        c["measurement"] = {{"craft", record.craft.value},
+                            {"started_tick", 7},
+                            {"last_tick", 8},
+                            {"acquired_ticks", 2}};
+        break;
+      default: break;
+    }
+    check(!decode_freedom_knowledge_json(j.dump(), 9),
+          "Mixed/wide/malformed geological metadata must fail closed");
+  }
+  auto legacy = need(make_freedom_starting_knowledge({42}, 5));
+  legacy.survey_commissions = accepted();
+  const auto v1 = need(encode_freedom_knowledge_json(legacy, 0));
+  for (unsigned fault = 0; fault < 3; ++fault) {
+    auto j = Json::parse(v1);
+    if (fault == 0) j["survey_commissions"]["geological_paid_count"] = 0;
+    if (fault == 1) j["survey_commissions"]["active"]["kind"] = 1;
+    if (fault == 2) j["survey_commissions"]["active"]["kind"] = 2;
+    check(!decode_freedom_knowledge_json(j.dump(), 0),
+          "Legacy version1 cannot silently acquire version2 fields");
+  }
+  legacy.survey_commissions = need(
+      submit_survey_commission(complete(accepted(), record.craft), 1, 3600));
+  auto old_receipt =
+      Json::parse(need(encode_freedom_knowledge_json(legacy, 3600)));
+  old_receipt["survey_commissions"]["latest_paid"]["delivered_specimen"] =
+      nullptr;
+  check(!decode_freedom_knowledge_json(old_receipt.dump(), 3600),
+        "Version1 receipts reject even a null version2 specimen field");
+  const auto [system, planet] = target();
+  paid.survey_commissions = need(
+      accept_survey_commission(*paid.survey_commissions, system, planet, 8));
+  check(
+      paid.survey_commissions->version == 2 &&
+          paid.survey_commissions->active->kind ==
+              SurveyCommissionKind::orbital &&
+          need(decode_freedom_knowledge_json(
+              need(encode_freedom_knowledge_json(paid, 8)), 8)) == paid,
+      "An orbital job after delivery preserves version2 and its exact receipt");
+  paid.survey_commissions = need(submit_survey_commission(
+      complete(*paid.survey_commissions, record.craft), 2, 3608));
+  const auto mixed = need(encode_freedom_knowledge_json(paid, 3608));
+  check(
+      paid.survey_commissions->paid_count == 2 &&
+          paid.survey_commissions->geological_paid_count == 1 &&
+          Json::parse(
+              mixed)["survey_commissions"]["latest_paid"]["delivered_specimen"]
+              .is_null() &&
+          need(decode_freedom_knowledge_json(mixed, 3608)) == paid,
+      "Mixed earnings retain the geological counter and orbital proof only");
+  auto k = geological_knowledge(true);
+  for (unsigned fault = 0; fault < 6; ++fault) {
+    auto bad = k;
+    auto& item = *bad.survey_commissions->latest_paid->delivered_specimen;
+    if (fault == 0) bad.field_samples->carried = {record};
+    if (fault == 1) bad.field_samples->journal.clear();
+    if (fault == 2) item.craft = need(derive_freedom_craft_identity({42}, 1));
+    if (fault == 3) bad.surface_landmarks->inspections.clear();
+    if (fault == 4) {
+      const auto neighbor = target();
+      bad.survey_commissions->latest_paid->commission.system = neighbor.first;
+      bad.survey_commissions->latest_paid->commission.planet = neighbor.second;
+      item.target = {neighbor.first, body_id(neighbor.second)};
+    }
+    if (fault == 5)
+      bad.specimen_sales =
+          FreedomSpecimenSalesAccount{1, 1, {record.craft, 8, {record}}};
+    check(!validate_freedom_knowledge(bad, 8),
+          "Delivered physical source, lineage, notes and single-consumption "
+          "join must hold");
+  }
+  auto later = record;
+  later.tick = 9;
+  k.field_samples->carried = {later};
+  check(
+      validate_freedom_knowledge(k, 9).has_value() &&
+          need(decode_freedom_knowledge_json(
+              need(encode_freedom_knowledge_json(k, 9)), 9)) == k,
+      "A later recollection at the retained site is not the consumed specimen");
+}
+auto geological_recovery() -> void {
+  auto source = std::make_unique<FreedomKnowledgeSaveDocument>(fixture());
+  source->knowledge = geological_knowledge(false);
+  snapshot_tick(*source, 10);
+  auto replaced =
+      std::make_unique<FreedomRecoverySaveDocument>(replace(*source));
+  auto& current = std::get<FreedomKnowledgeSaveDocument>(replaced->voyage);
+  const auto craft = current.voyage.resources.craft;
+  check(current.knowledge.survey_commissions ==
+                source->knowledge.survey_commissions &&
+            current.knowledge.field_samples->carried.empty() &&
+            current.knowledge.field_samples->journal ==
+                source->knowledge.field_samples->journal &&
+            need(decode_freedom_recovery_document_json(
+                need(encode_freedom_recovery_document_json(*replaced)))) ==
+                *replaced,
+        "Replacement retains geological terms/notes and loses physical goods");
+  auto old_goods = std::make_unique<FreedomRecoverySaveDocument>(*replaced);
+  auto& bad = std::get<FreedomKnowledgeSaveDocument>(old_goods->voyage);
+  bad.knowledge.survey_commissions = need(submit_geological_survey_commission(
+      *bad.knowledge.survey_commissions, 1, 10, geological_record()));
+  check(validate_freedom_knowledge_document(bad).has_value() &&
+            !validate_freedom_recovery_document(*old_goods),
+        "Retired specimen provenance cannot produce new post-loss income");
+  auto fresh = geological_record();
+  fresh.craft = craft;
+  fresh.tick = 11;
+  current.knowledge.survey_commissions =
+      need(submit_geological_survey_commission(
+          *current.knowledge.survey_commissions, 1, 11, fresh));
+  snapshot_tick(current, 11);
+  check(need(decode_freedom_recovery_document_json(need(
+            encode_freedom_recovery_document_json(*replaced)))) == *replaced,
+        "Replacement-owned fresh delivery may pay one tick after loss without "
+        "fake orbital work");
+  auto inflated = std::make_unique<FreedomRecoverySaveDocument>(*replaced);
+  auto& excess = *std::get<FreedomKnowledgeSaveDocument>(inflated->voyage)
+                      .knowledge.survey_commissions;
+  ++excess.next_sequence;
+  ++excess.paid_count;
+  ++excess.geological_paid_count;
+  ++excess.latest_paid->commission.sequence;
+  excess.latest_paid->commission.accepted_tick = 10;
+  excess.latest_paid->commission.deadline_tick =
+      10 + kSurveyCommissionReservationTicks;
+  need(validate_freedom_knowledge_document(
+      std::get<FreedomKnowledgeSaveDocument>(inflated->voyage)));
+  check(!validate_freedom_recovery_document(*inflated),
+        "Geological aggregate cannot pay twice within one fresh tick");
+  auto wrong_craft = std::make_unique<FreedomRecoverySaveDocument>(*replaced);
+  std::get<FreedomKnowledgeSaveDocument>(wrong_craft->voyage)
+      .knowledge.survey_commissions->latest_paid->delivered_specimen->craft =
+      geological_record().craft;
+  check(!validate_freedom_recovery_document(*wrong_craft),
+        "New delivery receipt must bind the replacement craft even though old "
+        "history may name ancestors");
+  auto settled_source =
+      std::make_unique<FreedomKnowledgeSaveDocument>(fixture());
+  settled_source->knowledge = geological_knowledge(true);
+  snapshot_tick(*settled_source, 10);
+  auto settled =
+      std::make_unique<FreedomRecoverySaveDocument>(replace(*settled_source));
+  auto& settled_document =
+      std::get<FreedomKnowledgeSaveDocument>(settled->voyage);
+  check(settled_document.knowledge.survey_commissions ==
+            settled_source->knowledge.survey_commissions,
+        "Settled geological receipt/count survives replacement exactly");
+  auto rewritten = std::make_unique<FreedomRecoverySaveDocument>(*settled);
+  ++std::get<FreedomKnowledgeSaveDocument>(rewritten->voyage)
+        .knowledge.survey_commissions->latest_paid->submitted_tick;
+  snapshot_tick(std::get<FreedomKnowledgeSaveDocument>(rewritten->voyage), 11);
+  check(!validate_freedom_recovery_document(*rewritten),
+        "Unchanged paid count cannot rewrite a retained delivered receipt");
+  const auto [system, planet] = target();
+  auto orbital = complete(
+      need(accept_survey_commission(
+          *settled_document.knowledge.survey_commissions, system, planet, 10)),
+      settled_document.voyage.resources.craft);
+  settled_document.knowledge.survey_commissions =
+      need(submit_survey_commission(orbital, 2, 3610));
+  snapshot_tick(settled_document, 3610);
+  check(validate_freedom_recovery_document(*settled).has_value(),
+        "Version2 mixed history preserves the original3600-tick orbital bound");
+  auto orbital_source =
+      std::make_unique<FreedomKnowledgeSaveDocument>(fixture());
+  orbital_source->knowledge.survey_commissions = accepted();
+  snapshot_tick(*orbital_source, 10);
+  auto promoted =
+      std::make_unique<FreedomRecoverySaveDocument>(replace(*orbital_source));
+  auto& promoted_document =
+      std::get<FreedomKnowledgeSaveDocument>(promoted->voyage);
+  auto next = need(abandon_survey_commission(
+      *promoted_document.knowledge.survey_commissions, 1, 10));
+  const auto specimen = geological_record();
+  promoted_document.knowledge.survey_commissions =
+      need(accept_geological_survey_commission(
+          next, specimen.target.system, PlanetId{specimen.target.body.value},
+          10));
+  check(validate_freedom_recovery_document(*promoted).has_value() &&
+            promoted_document.knowledge.survey_commissions->version == 2,
+        "Explicit new geological acceptance may promote a retained version1 "
+        "account");
+  auto silent_promotion =
+      std::make_unique<FreedomRecoverySaveDocument>(*promoted);
+  auto& silent_account =
+      *std::get<FreedomKnowledgeSaveDocument>(silent_promotion->voyage)
+           .knowledge.survey_commissions;
+  silent_account.active.reset();
+  silent_account.next_sequence = 2;
+  need(validate_freedom_knowledge_document(
+      std::get<FreedomKnowledgeSaveDocument>(silent_promotion->voyage)));
+  check(!validate_freedom_recovery_document(*silent_promotion),
+        "Replacement cannot promote old version1 without a fresh accepted "
+        "serial");
+}
 } // namespace
 auto main() -> int {
   try {
     metadata();
     recovery();
     completed_recovery();
+    geological_metadata();
+    geological_recovery();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

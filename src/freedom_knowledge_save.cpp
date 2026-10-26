@@ -113,7 +113,8 @@ auto bounded_nesting(std::string_view text) -> bool {
   }
   return !depth && !quoted;
 }
-auto commission_json(const SurveyCommission& commission) -> Json {
+auto commission_json(const SurveyCommission& commission, std::uint32_t version)
+    -> Json {
   Json measurement = nullptr;
   if (commission.measurement) {
     const auto& value = *commission.measurement;
@@ -122,17 +123,23 @@ auto commission_json(const SurveyCommission& commission) -> Json {
                    {"last_tick", value.last_tick},
                    {"acquired_ticks", value.acquired_ticks}};
   }
-  return {{"sequence", commission.sequence},
-          {"system", commission.system.value},
-          {"planet", commission.planet.value},
-          {"accepted_tick", commission.accepted_tick},
-          {"deadline_tick", commission.deadline_tick},
-          {"measurement", std::move(measurement)}};
+  Json result{{"sequence", commission.sequence},
+              {"system", commission.system.value},
+              {"planet", commission.planet.value},
+              {"accepted_tick", commission.accepted_tick},
+              {"deadline_tick", commission.deadline_tick},
+              {"measurement", std::move(measurement)}};
+  if (version == kGeologicalSurveyCommissionVersion)
+    result["kind"] = static_cast<unsigned>(commission.kind);
+  return result;
 }
-auto commission_value(const Json& j)
+auto commission_value(const Json& j, std::uint32_t version)
     -> std::expected<SurveyCommission, SaveSchemaError> {
-  if (!fields(j, {"sequence", "system", "planet", "accepted_tick",
-                  "deadline_tick", "measurement"}) ||
+  const bool extended = version == kGeologicalSurveyCommissionVersion;
+  if (!(extended ? fields(j, {"sequence", "system", "planet", "accepted_tick",
+                              "deadline_tick", "measurement", "kind"})
+                 : fields(j, {"sequence", "system", "planet", "accepted_tick",
+                              "deadline_tick", "measurement"})) ||
       !unsigned_fields(j, {"sequence", "system", "planet", "accepted_tick",
                            "deadline_tick"}) ||
       j["sequence"] > std::numeric_limits<std::uint32_t>::max())
@@ -143,6 +150,14 @@ auto commission_value(const Json& j)
                               j["accepted_tick"].get<SimulationTick>(),
                               j["deadline_tick"].get<SimulationTick>(),
                               {}};
+  if (extended) {
+    if (!j["kind"].is_number_unsigned() ||
+        j["kind"] < static_cast<unsigned>(SurveyCommissionKind::orbital) ||
+        j["kind"] > static_cast<unsigned>(SurveyCommissionKind::geological))
+      return std::unexpected{failure("invalid commission kind")};
+    commission.kind =
+        static_cast<SurveyCommissionKind>(j["kind"].get<unsigned>());
+  }
   if (!j["measurement"].is_null()) {
     const auto& m = j["measurement"];
     if (!fields(m, {"craft", "started_tick", "last_tick", "acquired_ticks"}) ||
@@ -467,17 +482,32 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
   if (k.survey_commissions) {
     const auto& account = *k.survey_commissions;
     Json latest = nullptr;
-    if (account.latest_paid)
-      latest = {
-          {"commission", commission_json(account.latest_paid->commission)},
-          {"submitted_tick", account.latest_paid->submitted_tick}};
+    if (account.latest_paid) {
+      latest = {{"commission", commission_json(account.latest_paid->commission,
+                                               account.version)},
+                {"submitted_tick", account.latest_paid->submitted_tick}};
+      if (account.version == kGeologicalSurveyCommissionVersion) {
+        Json specimen = nullptr;
+        if (account.latest_paid->delivered_specimen) {
+          auto encoded =
+              sample_record_json(*account.latest_paid->delivered_specimen);
+          if (!encoded) return std::unexpected{encoded.error()};
+          specimen = std::move(*encoded);
+        }
+        latest["delivered_specimen"] = std::move(specimen);
+      }
+    }
     root["survey_commissions"] = {
         {"version", account.version},
         {"next_sequence", account.next_sequence},
         {"paid_count", account.paid_count},
-        {"active",
-         account.active ? commission_json(*account.active) : Json(nullptr)},
+        {"active", account.active
+                       ? commission_json(*account.active, account.version)
+                       : Json(nullptr)},
         {"latest_paid", std::move(latest)}};
+    if (account.version == kGeologicalSurveyCommissionVersion)
+      root["survey_commissions"]["geological_paid_count"] =
+          account.geological_paid_count;
   }
   if (k.paid_operations) {
     const auto& account = *k.paid_operations;
@@ -893,30 +923,52 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (commissions_selected) {
     const auto& account = (*root)["survey_commissions"];
     if (!network || !freedom_knowledge_has_planetary_chart(k.recipe.version) ||
-        !fields(account, {"version", "next_sequence", "paid_count", "active",
-                          "latest_paid"}) ||
         !unsigned_fields(account, {"version", "next_sequence", "paid_count"}) ||
-        account["version"] != kSurveyCommissionVersion ||
+        (account["version"] != kSurveyCommissionVersion &&
+         account["version"] != kGeologicalSurveyCommissionVersion) ||
         account["next_sequence"] > std::numeric_limits<std::uint32_t>::max() ||
         account["paid_count"] > std::numeric_limits<std::uint32_t>::max())
       return std::unexpected{failure("invalid survey commission account")};
     SurveyCommissionAccount state;
+    state.version = account["version"].get<std::uint32_t>();
+    const bool extended = state.version == kGeologicalSurveyCommissionVersion;
+    if (!(extended ? fields(account,
+                            {"version", "next_sequence", "paid_count", "active",
+                             "latest_paid", "geological_paid_count"})
+                   : fields(account, {"version", "next_sequence", "paid_count",
+                                      "active", "latest_paid"})))
+      return std::unexpected{failure("invalid closed commission account")};
+    if (extended) {
+      if (!account["geological_paid_count"].is_number_unsigned() ||
+          account["geological_paid_count"] >
+              std::numeric_limits<std::uint32_t>::max())
+        return std::unexpected{failure("invalid geological payment count")};
+      state.geological_paid_count =
+          account["geological_paid_count"].get<std::uint32_t>();
+    }
     state.next_sequence = account["next_sequence"].get<std::uint32_t>();
     state.paid_count = account["paid_count"].get<std::uint32_t>();
     if (!account["active"].is_null()) {
-      auto active = commission_value(account["active"]);
+      auto active = commission_value(account["active"], state.version);
       if (!active) return std::unexpected{active.error()};
       state.active = *active;
     }
     if (!account["latest_paid"].is_null()) {
       const auto& receipt = account["latest_paid"];
-      if (!fields(receipt, {"commission", "submitted_tick"}) ||
+      if (!(extended ? fields(receipt, {"commission", "submitted_tick",
+                                        "delivered_specimen"})
+                     : fields(receipt, {"commission", "submitted_tick"})) ||
           !unsigned_fields(receipt, {"submitted_tick"}))
         return std::unexpected{failure("invalid commission settlement")};
-      auto commission = commission_value(receipt["commission"]);
+      auto commission = commission_value(receipt["commission"], state.version);
       if (!commission) return std::unexpected{commission.error()};
       state.latest_paid = SurveyCommissionReceipt{
           *commission, receipt["submitted_tick"].get<SimulationTick>()};
+      if (extended && !receipt["delivered_specimen"].is_null()) {
+        auto record = sample_record_value(receipt["delivered_specimen"]);
+        if (!record) return std::unexpected{record.error()};
+        state.latest_paid->delivered_specimen = *record;
+      }
     }
     k.survey_commissions = state;
   }

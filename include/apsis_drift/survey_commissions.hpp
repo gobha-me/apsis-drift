@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/freedom_field_sample_record.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/planet.hpp"
@@ -12,6 +13,8 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kSurveyCommissionVersion{1};
+inline constexpr std::uint32_t kGeologicalSurveyCommissionVersion{2};
+enum class SurveyCommissionKind : std::uint8_t { orbital = 1, geological = 2 };
 inline constexpr std::uint32_t kSurveyCommissionMeasurementTicks{3600};
 inline constexpr SimulationTick kSurveyCommissionHourTicks{432'000};
 inline constexpr SimulationTick kSurveyCommissionReservationTicks{
@@ -34,12 +37,14 @@ struct SurveyCommission {
   PlanetId planet;
   SimulationTick accepted_tick{}, deadline_tick{};
   std::optional<SurveyCommissionMeasurement> measurement;
+  SurveyCommissionKind kind{SurveyCommissionKind::orbital};
   friend auto operator==(const SurveyCommission&, const SurveyCommission&)
       -> bool = default;
 };
 struct SurveyCommissionReceipt {
   SurveyCommission commission;
   SimulationTick submitted_tick{};
+  std::optional<FreedomFieldSampleRecord> delivered_specimen{};
   friend auto operator==(const SurveyCommissionReceipt&,
                          const SurveyCommissionReceipt&) -> bool = default;
 };
@@ -48,6 +53,7 @@ struct SurveyCommissionAccount {
   std::uint32_t next_sequence{1}, paid_count{};
   std::optional<SurveyCommission> active;
   std::optional<SurveyCommissionReceipt> latest_paid;
+  std::uint32_t geological_paid_count{};
   friend auto operator==(const SurveyCommissionAccount&,
                          const SurveyCommissionAccount&) -> bool = default;
 };
@@ -69,6 +75,9 @@ struct SurveyCommissionAccount {
                                             SystemId, PlanetId,
                                             SimulationTick now)
     -> std::expected<SurveyCommissionAccount, std::string>;
+[[nodiscard]] auto accept_geological_survey_commission(
+    const SurveyCommissionAccount&, SystemId, PlanetId, SimulationTick now)
+    -> std::expected<SurveyCommissionAccount, std::string>;
 // Call once after an ordinary committed flight interval. Repeating the same
 // tick, holding conditions, completion or expiry never adds progress. Once
 // present, measurement source remains fixed until replacement discards an
@@ -80,6 +89,12 @@ struct SurveyCommissionAccount {
 [[nodiscard]] auto submit_survey_commission(const SurveyCommissionAccount&,
                                             std::uint32_t expected_sequence,
                                             SimulationTick now)
+    -> std::expected<SurveyCommissionAccount, std::string>;
+// Physical site, lineage and carried-item membership are authenticated by
+// Knowledge/session owners. This provider checks shape and fresh chronology.
+[[nodiscard]] auto submit_geological_survey_commission(
+    const SurveyCommissionAccount&, std::uint32_t expected_sequence,
+    SimulationTick now, const FreedomFieldSampleRecord&)
     -> std::expected<SurveyCommissionAccount, std::string>;
 [[nodiscard]] auto abandon_survey_commission(const SurveyCommissionAccount&,
                                              std::uint32_t expected_sequence,

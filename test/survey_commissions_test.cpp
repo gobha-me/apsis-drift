@@ -23,6 +23,197 @@ auto acquire(SurveyCommissionAccount account, SimulationTick first,
     account = need(advance_survey_commission(account, craft, first + i, true));
   return account;
 }
+// Typed provider fixtures exercise record shape only, without claiming an
+// authenticated site, physical collection, carried membership or flown route.
+auto specimen(SimulationTick tick) -> FreedomFieldSampleRecord {
+  return {{{2}, body_id(PlanetId{3})},         {1, -2, 3}, {9}, 2,
+          SurfaceLandmarkKind::ochre_exposure, {7},        tick};
+}
+auto geological_invalid_boundaries() -> void {
+  const SurveyCommissionAccount empty;
+  check(!accept_geological_survey_commission(empty, {}, {3}, 0) &&
+            !accept_geological_survey_commission(empty, {2}, {}, 0) &&
+            !submit_geological_survey_commission(empty, 1, 1, specimen(1)),
+        "Invalid targets and missing work refuse before geological payment");
+  const auto account =
+      need(accept_geological_survey_commission(empty, {2}, {3}, 100));
+  for (unsigned fault = 0; fault < 13; ++fault) {
+    auto sample = specimen(101);
+    switch (fault) {
+      case 0: sample.tick = 100; break;
+      case 1: sample.tick = 99; break;
+      case 2: sample.tick = 103; break;
+      case 3: sample.target.system = {4}; break;
+      case 4: sample.target.body = body_id(PlanetId{4}); break;
+      case 5: sample.target.body.kind = BodyKind::moon; break;
+      case 6: sample.target.body.version = 2; break;
+      case 7: sample.site = {}; break;
+      case 8: sample.craft = {}; break;
+      case 9: sample.terrain_recipe = 0; break;
+      case 10: sample.terrain_recipe = 4; break;
+      case 11: sample.kind = static_cast<SurfaceLandmarkKind>(3); break;
+      case 12: sample.cell.y = -32769; break;
+      default: throw std::runtime_error("Invalid sample fault");
+    }
+    check(!submit_geological_survey_commission(account, 1, 102, sample),
+          "Old, future, foreign or malformed geological proof refuses");
+  }
+  auto bad = account;
+  bad.active->measurement = SurveyCommissionMeasurement{{7}, 101, 101, 1};
+  check(!validate_survey_commissions(bad, 102),
+        "Geological active work rejects an orbital measurement");
+  bad = account;
+  bad.active->kind = static_cast<SurveyCommissionKind>(0);
+  check(!validate_survey_commissions(bad, 102), "Unknown work kind refuses");
+  bad = account;
+  bad.version = kSurveyCommissionVersion;
+  check(!validate_survey_commissions(bad, 102),
+        "Version one cannot contain geological work");
+  bad = empty;
+  bad.geological_paid_count = 1;
+  check(!validate_survey_commissions(bad, 102),
+        "Default account cannot claim geological earnings");
+  const auto deadline = account.active->deadline_tick;
+  check(!accept_geological_survey_commission(account, {2}, {3}, 102) &&
+            !accept_survey_commission(account, {2}, {3}, 102) &&
+            submit_geological_survey_commission(account, 1, deadline - 1,
+                                                specimen(101))
+                .has_value() &&
+            !submit_geological_survey_commission(
+                account, 1, std::numeric_limits<SimulationTick>::max(),
+                specimen(101)) &&
+            !accept_geological_survey_commission(
+                empty, {2}, {3},
+                std::numeric_limits<SimulationTick>::max() -
+                    kSurveyCommissionReservationTicks + 1),
+        "Kinds share one reservation; last predeadline payment works and clock "
+        "wrap refuses");
+  check(!submit_geological_survey_commission(account, 2, 102, specimen(101)) &&
+            !submit_survey_commission(account, 1, 102) &&
+            !submit_geological_survey_commission(account, 1, deadline,
+                                                 specimen(101)) &&
+            need(advance_survey_commission(account, {}, 102, true)) ==
+                account &&
+            need(advance_survey_commission(account, {7}, deadline, true)) ==
+                account,
+        "Stale serial, wrong action and deadline equality refuse; flight ticks "
+        "do not measure samples");
+  auto expired = need(accept_survey_commission(account, {2}, {3}, deadline));
+  check(expired.version == kGeologicalSurveyCommissionVersion &&
+            expired.active->sequence == 2 &&
+            expired.active->kind == SurveyCommissionKind::orbital &&
+            !expired.active->measurement && expired.paid_count == 0,
+        "Expired geological terms can be replaced by fresh orbital work "
+        "without demotion");
+  check(account.active->accepted_tick == 100 && !account.active->measurement &&
+            account.paid_count == 0 && !account.latest_paid,
+        "All refused sample actions leave the original ledger unchanged");
+}
+auto geological_payment_and_mixed_history() -> void {
+  const auto account =
+      need(accept_geological_survey_commission({}, {2}, {3}, 100));
+  const auto sample = specimen(101);
+  auto paid =
+      need(submit_geological_survey_commission(account, 1, 101, sample));
+  check(paid.version == kGeologicalSurveyCommissionVersion && !paid.active &&
+            paid.paid_count == 1 && paid.geological_paid_count == 1 &&
+            paid.latest_paid->delivered_specimen == sample &&
+            paid.latest_paid->commission == *account.active &&
+            paid.latest_paid->submitted_tick == 101 &&
+            survey_commission_earnings(paid) == 100 &&
+            validate_survey_commissions(paid, 101).has_value() &&
+            !submit_geological_survey_commission(paid, 1, 101, sample),
+        "One fresh proof pays once, retaining exact sample and terms");
+  for (unsigned fault = 0; fault < 8; ++fault) {
+    auto bad = paid;
+    switch (fault) {
+      case 0: bad.version = kSurveyCommissionVersion; break;
+      case 1: bad.geological_paid_count = 0; break;
+      case 2: bad.geological_paid_count = 2; break;
+      case 3: bad.latest_paid->delivered_specimen.reset(); break;
+      case 4: bad.latest_paid->delivered_specimen->tick = 100; break;
+      case 5: bad.latest_paid->submitted_tick = 100; break;
+      case 6:
+        bad.latest_paid->commission.measurement =
+            SurveyCommissionMeasurement{{7}, 101, 101, 1};
+        break;
+      case 7:
+        bad.latest_paid->commission.kind = SurveyCommissionKind::orbital;
+        break;
+      default: throw std::runtime_error("Invalid paid geological fault");
+    }
+    check(!validate_survey_commissions(bad, 102),
+          "Paid sample receipt rejects version, count, chronology and mixed "
+          "proofs");
+  }
+  auto mixed = need(accept_survey_commission(paid, {2}, {3}, 101));
+  check(!submit_geological_survey_commission(mixed, 2, 102, specimen(102)),
+        "A physical record cannot fulfill orbital work");
+  mixed = acquire(mixed, 102);
+  mixed = need(submit_survey_commission(mixed, 2, 3702));
+  check(
+      mixed.version == kGeologicalSurveyCommissionVersion &&
+          mixed.paid_count == 2 && mixed.geological_paid_count == 1 &&
+          !mixed.latest_paid->delivered_specimen &&
+          survey_commission_earnings(mixed) == 200,
+      "Orbital settlement in a mixed ledger preserves geological count and v2");
+  auto bad = mixed;
+  bad.geological_paid_count = bad.paid_count;
+  check(!validate_survey_commissions(bad, 3702),
+        "Latest orbital payment requires a nonzero orbital lifetime count");
+  bad = mixed;
+  bad.latest_paid->delivered_specimen = sample;
+  check(!validate_survey_commissions(bad, 3702),
+        "An orbital receipt cannot carry a second physical proof");
+  mixed = need(accept_geological_survey_commission(mixed, {2}, {3}, 3702));
+  check(
+      !submit_geological_survey_commission(mixed, 3, 3703, sample),
+      "A preceding paid collection cannot fulfill the next fresh reservation");
+  const auto later = specimen(3703);
+  mixed = need(submit_geological_survey_commission(mixed, 3, 3703, later));
+  check(mixed.paid_count == 3 && mixed.geological_paid_count == 2 &&
+            mixed.latest_paid->delivered_specimen == later,
+        "Later recollection at the same site is fresh provider proof");
+  const auto abandoned = need(abandon_survey_commission(
+      need(accept_geological_survey_commission(mixed, {2}, {3}, 3703)), 4,
+      3703));
+  check(
+      abandoned.paid_count == mixed.paid_count &&
+          abandoned.geological_paid_count == mixed.geological_paid_count &&
+          abandoned.latest_paid == mixed.latest_paid && !abandoned.active &&
+          abandoned.version == kGeologicalSurveyCommissionVersion,
+      "Abandonment consumes no proof or earnings and never demotes the ledger");
+  // Explicit aggregate-history boundary: no claim to have executed billions of
+  // jobs.
+  auto last = paid;
+  const auto maximum = std::numeric_limits<std::uint32_t>::max();
+  last.next_sequence = maximum - 1;
+  last.paid_count = maximum - 2;
+  last.geological_paid_count = maximum - 2;
+  last.latest_paid->commission.sequence = maximum - 2;
+  last = need(accept_geological_survey_commission(last, {2}, {3}, 101));
+  last = need(submit_geological_survey_commission(last, maximum - 1, 102,
+                                                  specimen(102)));
+  check(last.next_sequence == maximum && last.paid_count == maximum - 1 &&
+            last.geological_paid_count == maximum - 1 &&
+            survey_commission_earnings(last) ==
+                static_cast<std::uint64_t>(maximum - 1) * 100 &&
+            !accept_geological_survey_commission(last, {2}, {3}, 102) &&
+            !submit_geological_survey_commission(last, maximum - 1, 102,
+                                                 specimen(102)),
+        "Last usable serial settles without counter or earnings overflow; no "
+        "wrap or duplicate grant");
+  const SurveyCommission legacy{
+      1, {2}, {3}, 0, kSurveyCommissionReservationTicks, {}};
+  const SurveyCommissionReceipt legacy_receipt{legacy, 1};
+  const SurveyCommissionAccount legacy_account{1, 2, 0, legacy, {}};
+  check(legacy.kind == SurveyCommissionKind::orbital &&
+            !legacy_receipt.delivered_specimen &&
+            legacy_account.geological_paid_count == 0 &&
+            validate_survey_commissions(legacy_account, 1).has_value(),
+        "Legacy aggregate positions and all appended defaults retain their "
+        "exact meaning");
+}
 auto boundaries() -> void {
   const SurveyCommissionAccount empty;
   check(validate_survey_commissions(empty, 0).has_value() &&
@@ -159,7 +350,7 @@ auto expiry_and_invalid_state() -> void {
     auto& receipt = *bad.latest_paid;
     auto& measurement = *receipt.commission.measurement;
     switch (kind) {
-      case 0: bad.version = 2; break;
+      case 0: bad.version = 3; break;
       case 1: bad.next_sequence = 0; break;
       case 2: bad.paid_count = bad.next_sequence; break;
       case 3: bad.paid_count = 0; break;
@@ -203,9 +394,11 @@ auto expiry_and_invalid_state() -> void {
 } // namespace
 int main() {
   try {
+    geological_invalid_boundaries();
     boundaries();
     acquisition_and_payment();
     expiry_and_invalid_state();
+    geological_payment_and_mixed_history();
     std::cout << "Survey commissions: " << checks << " checks, 0 failures\n";
     return 0;
   } catch (const std::exception& error) {

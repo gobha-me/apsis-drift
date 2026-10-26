@@ -91,22 +91,58 @@ func packet_controls(packet: Dictionary) -> void:
 		bad.erase(field)
 		check(not FlightView.valid_commission_progress(bad), "missing progress field accepted: " + field)
 
+func geological_packet_controls(owner: Variant, output: String) -> void:
+	var before := save(owner, output.path_join("geological-query-before.json"))
+	var offer: Dictionary = owner.get_freedom_survey_commissions(2)
+	check(Office.valid_packet(offer) and offer.version == 2 and offer.kind == 2 and offer.size() == 27 and offer.required_ticks == 0 and offer.acquired_ticks == 0 and offer.specimen.is_empty() and offer.submission_token.is_empty(), "actual geological offer lacks closed physical-work schema")
+	for field in offer:
+		var bad := offer.duplicate(true)
+		bad.erase(field)
+		check(not Office.valid_packet(bad), "missing geological field accepted: " + field)
+	for change in [{"extra": true}, {"version": 1}, {"version": 2.0}, {"kind": 1}, {"kind": 2.0}, {"kind": true}, {"specimen": null}, {"specimen": "x".repeat(513)}, {"submission_token": []}, {"submission_token": "x".repeat(2049)}, {"acquired_ticks": 1}, {"required_ticks": 3600}, {"completed": true}, {"specimen": "old sample"}]:
+		var bad := offer.duplicate(true)
+		bad.merge(change, true)
+		check(not Office.valid_packet(bad), "malformed geological packet accepted: " + str(change.keys()))
+	# Reader-only shape fixture, not a physical collection or authoritative Save.
+	var ready := offer.duplicate(true)
+	ready.merge({"selected": true, "sequence": 1, "accepted_tick": offer.tick, "deadline_tick": str(int(offer.tick) + 1728000), "completed": true, "specimen": "Pouch slot 1: Pale specimen", "submission_token": "reader-shape-only", "can_accept": false, "can_submit": true, "can_abandon": true}, true)
+	check(Office.valid_packet(ready), "physical-ready packet requires fake orbital intervals")
+	ready.submission_token = ""
+	check(not Office.valid_packet(ready), "delivery enables without reviewed physical proof token")
+	var progress := {"version": 2, "kind": 2, "active": true, "ready": false, "expired": false, "earnings": "0", "remaining_ticks": 120}
+	check(FlightView.valid_commission_progress(progress) and "collect a fresh specimen" in FlightView.commission_progress_text(progress), "geological HUD invents orbital measurement")
+	progress.ready = true
+	check(FlightView.valid_commission_progress(progress) and "fresh specimen carried" in FlightView.commission_progress_text(progress), "geological HUD hides actual physical readiness")
+	for change in [{"acquired_ticks": 3600}, {"completed": true}, {"version": 2.0}, {"kind": 1}, {"active": false}, {"ready": 1}, {"remaining_ticks": 0}, {"earnings": "1"}]:
+		var bad := progress.duplicate(true)
+		bad.merge(change, true)
+		check(not FlightView.valid_commission_progress(bad), "malformed physical HUD accepted: " + str(change.keys()))
+	for value in [null, true, false, "1", "2", 1.0, 2.0, NAN, INF, 0, 3, [], {}]:
+		check(owner.get_freedom_survey_commissions(value).is_empty(), "non-typed or unsupported office kind accepted")
+	for value in [null, true, 1, 1.0, NAN, INF, "", "x".repeat(2049), "é", [], {}]:
+		check(not owner.submit_freedom_geological_survey_commission(value), "malformed geological confirmation accepted")
+	check(save(owner, output.path_join("geological-query-after.json")) == before, "geological reads or malformed confirmations mutated complete Save")
+
 func progress_matches_office(owner: Variant, packet: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var progress: Variant = state.get("survey_commission")
 	if not FlightView.valid_commission_progress(progress): return false
 	# Retained seed42 fixture clocks fit signed int; this is not a uint64 parser.
 	var remaining := maxi(0, int(packet.deadline_tick) - int(packet.tick)) if packet.sequence != 0 else 0
+	if packet.get("kind", 1) == 2 and packet.sequence != 0:
+		return progress.get("version") == 2 and progress.ready == packet.completed and progress.expired == packet.expired and progress.remaining_ticks == remaining
 	return progress.remaining_ticks == remaining and progress.active == (packet.sequence != 0) and progress.completed == packet.completed and progress.expired == packet.expired and progress.acquired_ticks == packet.acquired_ticks
 
 func malformed_commands(owner: Variant, packet: Dictionary, output: String) -> void:
 	var before := save(owner, output.path_join("arguments-before.json"))
 	for value in [null, 1, 1.0, NAN, INF, "", "01", "-1", "1.0", "4294967296", [], {}]:
 		check(not owner.accept_freedom_survey_commission(packet.offer_until, value), "wrong sequence Variant accepted")
+		check(not owner.accept_freedom_geological_survey_commission(packet.offer_until, value), "wrong geological sequence Variant accepted")
 		check(not owner.submit_freedom_survey_commission(value), "wrong submit Variant accepted")
 		check(not owner.abandon_freedom_survey_commission(value), "wrong abandon Variant accepted")
 	for value in [null, 1, 1.0, NAN, INF, "", "01", "-1", "1.0", "18446744073709551616", [], {}]:
 		check(not owner.accept_freedom_survey_commission(value, str(packet.offer_sequence)), "wrong offer Variant accepted")
+		check(not owner.accept_freedom_geological_survey_commission(value, str(packet.offer_sequence)), "wrong geological offer Variant accepted")
 	check(not owner.accept_freedom_survey_commission(str(int(packet.offer_until) - 1), str(packet.offer_sequence)), "stale offer accepted")
 	check(not owner.accept_freedom_survey_commission(packet.offer_until, str(packet.offer_sequence + 1)), "stale sequence accepted")
 	check(save(owner, output.path_join("arguments-after.json")) == before, "refused arguments changed complete Save")
@@ -155,6 +191,103 @@ func refused_ui(view: Control, owner: Variant, action: String, output: String, l
 	view.survey_commission_command(action)
 	check(page.packet == owner.get_freedom_survey_commissions() and save(owner, output.path_join(label + "-stale.json")) == before, "stale displayed terms were committed instead of refreshed")
 
+func run_geological(tree: SceneTree, fixtures: String, assets: String, output: String) -> void:
+	if not check(DirAccess.make_dir_recursive_absolute(output) == OK, "geological witness directory unavailable"): return
+	var originals := {}
+	for phase in ["geo-offer", "geo-accepted", "geo-collected", "geo-origin", "geo-paid-origin", "geo-delivered", "geo-lost"]:
+		originals[phase] = FileAccess.get_file_as_bytes(fixtures.path_join(phase + ".json"))
+		check(not originals[phase].is_empty(), "missing actual geological source: " + phase)
+	if failures: return
+	var backend: Variant = restore(fixtures.path_join("geo-offer.json"))
+	if backend == null: return
+	var offer: Dictionary = backend.get_freedom_survey_commissions(2)
+	check(Office.valid_packet(offer) and offer.can_accept and offer.kind == 2, "actual geological source lacks explicit offer")
+	backend = null
+	var station_shell := host(tree, fixtures.path_join("geo-offer.json"), assets)
+	if station_shell == null: return
+	var station: Control = station_shell.current_view
+	var station_owner: Variant = station_shell.bridge
+	if not check(station is WalkView and station.paused, "geological offer lacks actual station walking host"):
+		station_shell.free()
+		return
+	station.open_survey_commissions()
+	var station_page: Control = reader(station)
+	await tree.process_frame
+	station_page.geological_button.pressed.emit()
+	check(station_page.packet == offer and save(station_owner, output.path_join("offer-ui.json")) == originals["geo-offer"], "geological station choice mutated source or differs from actual offer")
+	await tree.process_frame
+	station_page.accept_button.pressed.emit()
+	var active: Dictionary = station_owner.get_freedom_survey_commissions()
+	check(active.get("kind") == 2 and not active.completed and not station_owner.accept_freedom_survey_commission(offer.offer_until, str(offer.offer_sequence)) and save(station_owner, output.path_join("accepted-ui.json")) == originals["geo-accepted"], "explicit station geological Accept differs from C++ full Save or permits orbital replacement")
+	station_page.geological_button.pressed.emit()
+	check(save(station_owner, output.path_join("accepted-duplicate.json")) == originals["geo-accepted"], "queued geological acceptance changed active terms")
+	station_shell.free()
+	station_owner = null
+	await tree.process_frame
+	backend = restore(fixtures.path_join("geo-collected.json"))
+	if backend != null:
+		var collected: Dictionary = backend.get_freedom_survey_commissions(2)
+		check(Office.valid_packet(collected) and collected.completed and not collected.at_origin and not collected.can_submit and progress_matches_office(backend, collected), "actual fresh collection lacks truthful remote physical HUD")
+		check(not backend.submit_freedom_geological_survey_commission(collected.submission_token) and save(backend, output.path_join("remote-refused.json")) == originals["geo-collected"], "fresh carried sample remotely paid")
+	backend = restore(fixtures.path_join("geo-lost.json"))
+	if backend != null:
+		var lost: Dictionary = backend.get_freedom_survey_commissions(2)
+		check(Office.valid_packet(lost) and lost.sequence != 0 and not lost.completed and lost.submission_token.is_empty() and not backend.submit_freedom_geological_survey_commission("old-physical-item") and save(backend, output.path_join("lost-refused.json")) == originals["geo-lost"], "replacement reconstructs lost goods from discovery notes")
+	backend = null
+	var shell := host(tree, fixtures.path_join("geo-paid-origin.json"), assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var owner: Variant = shell.bridge
+	if not check(view is FlightView and view.paused, "geological return fixture lacks actual seated flight host"):
+		shell.free()
+		return
+	view.open_survey_commissions()
+	var page: Control = reader(view)
+	check(page.visible and Office.valid_packet(page.packet) and page.packet.kind == 2 and page.packet.completed and page.packet.can_submit and not page.submit_button.disabled and page.packet.required_ticks == 0 and page.packet.acquired_ticks == 0 and page.packet.specimen in page.details.text and "consumed" in page.details.text and progress_matches_office(owner, page.packet), "physical delivery reader omits actual item/consumption or invents orbital work")
+	check("fresh specimen carried" in view.primary_status.text and "deliver the named specimen" in view.primary_status.tooltip_text, "compact physical-work HUD omits its ready state or named delivery tooltip")
+	check(save(owner, output.path_join("reader-ui.json")) == originals["geo-paid-origin"], "paused geological office read changed full Save")
+	var token: String = page.packet.submission_token
+	check(not owner.submit_freedom_survey_commission(str(page.packet.sequence)), "orbital submission accepted physical work")
+	view.focused = false
+	view.survey_commission_command("submit")
+	view.focused = true
+	view.journey_dialog_open = true
+	view.survey_commission_command("submit")
+	view.journey_dialog_open = false
+	view.mode_change_pending = true
+	view.survey_commission_command("submit")
+	view.mode_change_pending = false
+	view.save_dialog.popup_centered()
+	view.survey_commission_command("submit")
+	view.save_dialog.hide()
+	key(int(view.player_input.bindings.forward.key.code), true)
+	view.survey_commission_command("submit")
+	key(int(view.player_input.bindings.forward.key.code), false)
+	view.observe_neutral_controls()
+	check(save(owner, output.path_join("modal-refused.json")) == originals["geo-paid-origin"], "held/modal geological action changed full Save")
+	page.packet.submission_token += ":stale"
+	view.survey_commission_command("submit")
+	check(page.packet == owner.get_freedom_survey_commissions(2) and save(owner, output.path_join("stale-refused.json")) == originals["geo-paid-origin"], "stale item confirmation committed instead of refreshing")
+	await tree.process_frame
+	page.submit_button.pressed.emit()
+	check(view.paused and page.visible and page.packet.sequence == 0 and page.packet.earnings == "100" and owner.get_freedom_paid_operations().cash == "280" and save(owner, output.path_join("delivered-ui.json")) == originals["geo-delivered"], "explicit named delivery differs from C++ item removal/payment Save")
+	check(owner.get_freedom_specimen_sale().earned_credits == "0", "commission also credited ordinary 40-credit specimen sale")
+	check(not owner.submit_freedom_geological_survey_commission(token), "duplicate physical delivery paid again")
+	page.submit_button.pressed.emit()
+	check(save(owner, output.path_join("duplicate-refused.json")) == originals["geo-delivered"], "queued duplicate delivery changed Save")
+	backend = restore(output.path_join("delivered-ui.json"))
+	if backend != null:
+		check(backend.get_freedom_survey_commissions(2) == page.packet and save(backend, output.path_join("delivered-continued.json")) == originals["geo-delivered"], "delivery Continue lost receipt/income or recreated goods")
+	backend = null
+	shell.free()
+	owner = null
+	await tree.process_frame
+	for phase in originals:
+		check(FileAccess.get_file_as_bytes(fixtures.path_join(phase + ".json")) == originals[phase], "geological presentation rewrote producer source: " + phase)
+	var report := {"schema": "apsis.geological-commissions-native/1", "completed": failures == 0, "failures": failures, "physical_proof": true, "reward_credits": 100, "paid_cash": "280", "scope": "Actual public acceptance, real initialized-supported-ground inspection/collection source, explicit same-clock Origin attachment, paused named delivery and whole C++ Save parity. Loss uses actual replacement; no uninterrupted flown collection/return, manual pacing, hardware or profit claim."}
+	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
+	if check(file != null, "geological report unavailable"): file.store_string(JSON.stringify(report, "\t") + "\n")
+
 func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> int:
 	if not check(DirAccess.make_dir_recursive_absolute(output) == OK, "witness directory unavailable"): return failures
 	var originals := {}
@@ -166,6 +299,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	if backend == null: return failures
 	var packet: Dictionary = backend.get_freedom_survey_commissions()
 	packet_controls(packet)
+	geological_packet_controls(backend, output)
 	malformed_commands(backend, packet, output)
 	backend = null
 	if failures: return failures
@@ -200,8 +334,19 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	check(save(owner, output.path_join("invalid-reader-refused.json")) == originals["commission-station"], "invalid reader changed complete Save")
 	page.refresh(owner.get_freedom_survey_commissions())
 	await tree.process_frame
+	page.geological_button.grab_focus()
+	key(KEY_ENTER, true)
+	key(KEY_ENTER, false)
+	check(page.packet == owner.get_freedom_survey_commissions(2) and page.packet.kind == 2 and "Discovery notes" in page.details.text and save(owner, output.path_join("geological-choice-ui.json")) == originals["commission-station"], "station kind selection is not read-only or hides consumption terms")
+	page.orbital_button.pressed.emit()
+	check(page.requested_kind == 2, "same-frame queued kind choice bypassed action barrier")
+	await tree.process_frame
+	page.orbital_button.pressed.emit()
+	check(page.packet == packet and save(owner, output.path_join("orbital-choice-ui.json")) == originals["commission-station"], "return to orbital offer mutated full Save")
+	await tree.process_frame
 	page.accept_button.pressed.emit()
 	check(view.paused and page.visible and page.packet.acquired_ticks == 0 and page.packet.sequence == 1 and save(owner, output.path_join("accepted-ui.json")) == originals["commission-accepted"], "explicit station Accept differs from direct C++ full Save")
+	check(page.orbital_button.disabled and page.geological_button.disabled, "active work permits kind replacement without abandonment")
 	var accepted := save(owner, output.path_join("accepted-before-repeat.json"))
 	page.accept_button.pressed.emit()
 	check(save(owner, output.path_join("accepted-duplicate.json")) == accepted, "duplicate queued Accept changed account")
@@ -230,6 +375,8 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	check(page.visible and page.packet.acquired_ticks == 3599 and not page.packet.completed and page.submit_button.disabled and page.accept_button.disabled and "29.9" in page.details.text, "3599-interval reader falsely completed or omitted actual progress")
 	check(progress_matches_office(owner, page.packet) and "29.9 / 30 s" in view.primary_status.text, "actual near HUD countdown differs from C++ office")
 	check(save(owner, output.path_join("near-reader.json")) == originals["commission-near"], "near reader acquired work while paused")
+	view.survey_commission_command("choose_geological")
+	check(page.packet.get("kind", 1) == 1 and page.geological_button.disabled and save(owner, output.path_join("active-kind-refused.json")) == originals["commission-near"], "active orbital work was replaced by a geological selection")
 	view.survey_commission_command("submit")
 	view.survey_commission_command("abandon")
 	check(save(owner, output.path_join("remote-refused.json")) == originals["commission-near"], "remote office action changed account")
@@ -292,6 +439,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	backend = null
 	for phase in originals:
 		check(FileAccess.get_file_as_bytes(fixtures.path_join(phase + ".json")) == originals[phase], "presentation rewrote C++ source fixture: " + phase)
+	if not failures: await run_geological(tree, fixtures.path_join("geological-commissions"), assets, output.get_base_dir().path_join("geological-commissions"))
 	var report := {"schema": "apsis.survey-commissions-native/1", "completed": failures == 0, "failures": failures, "witnesses": witnesses, "scope": "Actual station/flight Shell Continue, paused office commands, malformed/held/modal/device refusal, full C++ Save parity and one committed completion interval. Source scenario uses explicitly initialized home-space, remote orbit and home-port poses with actual charged jumps; not uninterrupted flown/manual/hardware/performance acceptance."}
 	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
 	if check(file != null, "report unavailable"): file.store_string(JSON.stringify(report, "\t") + "\n")

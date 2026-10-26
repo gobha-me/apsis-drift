@@ -111,18 +111,24 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
                          StarterCraftId craft, SimulationTick loss_tick,
                          SimulationTick now_tick) -> bool {
   if (!now) return !old;
-  if (now_tick < loss_tick ||
-      (old && (now->version != old->version ||
-               now->next_sequence < old->next_sequence ||
-               now->paid_count < old->paid_count)))
-    return false;
   const auto prior_next = old ? old->next_sequence : 1U;
   const auto prior_paid = old ? old->paid_count : 0U;
+  const auto prior_geological = old ? old->geological_paid_count : 0U;
+  const auto prior_orbital = prior_paid - prior_geological;
+  const bool promotion = old && old->version == kSurveyCommissionVersion &&
+                         now->version == kGeologicalSurveyCommissionVersion &&
+                         now->next_sequence > prior_next;
+  if (now_tick < loss_tick || now->next_sequence < prior_next ||
+      now->paid_count < prior_paid ||
+      now->geological_paid_count < prior_geological ||
+      now->paid_count - now->geological_paid_count < prior_orbital ||
+      (old && now->version != old->version && !promotion))
+    return false;
   const auto same_terms = [](const SurveyCommission& a,
                              const SurveyCommission& b) {
     return a.sequence == b.sequence && a.system == b.system &&
            a.planet == b.planet && a.accepted_tick == b.accepted_tick &&
-           a.deadline_tick == b.deadline_tick;
+           a.deadline_tick == b.deadline_tick && a.kind == b.kind;
   };
   const auto admitted = [&](const SurveyCommission& commission) {
     if (old && old->active && commission.sequence == old->active->sequence) {
@@ -143,26 +149,40 @@ auto retains_commissions(const std::optional<SurveyCommissionAccount>& now,
   };
   if (now->active && !admitted(*now->active)) return false;
   if (now->paid_count == prior_paid)
-    return now->latest_paid == (old ? old->latest_paid : std::nullopt);
+    return now->geological_paid_count == prior_geological &&
+           now->latest_paid == (old ? old->latest_paid : std::nullopt);
   if (!now->latest_paid || now->latest_paid->submitted_tick < loss_tick ||
       !admitted(now->latest_paid->commission) ||
       (old && old->latest_paid &&
        now->latest_paid->commission.sequence <=
            old->latest_paid->commission.sequence))
     return false;
+  if (now->latest_paid->commission.kind == SurveyCommissionKind::geological &&
+      (!now->latest_paid->delivered_specimen ||
+       now->latest_paid->delivered_specimen->craft != craft ||
+       now->latest_paid->delivered_specimen->tick <= loss_tick))
+    return false;
   const auto paid = static_cast<std::uint64_t>(now->paid_count - prior_paid);
   const auto new_acceptances =
       static_cast<std::uint64_t>(now->next_sequence - prior_next);
   if (paid > new_acceptances + (old && old->active ? 1U : 0U)) return false;
-  const bool retained_ready = old && old->active && old->active->measurement &&
-                              old->active->measurement->acquired_ticks ==
-                                  kSurveyCommissionMeasurementTicks &&
-                              loss_tick < old->active->deadline_tick;
+  const bool retained_ready =
+      old && old->active &&
+      old->active->kind == SurveyCommissionKind::orbital &&
+      old->active->measurement &&
+      old->active->measurement->acquired_ticks ==
+          kSurveyCommissionMeasurementTicks &&
+      loss_tick < old->active->deadline_tick;
   // Only one already-complete report can pay immediately after replacement;
   // every additional payment needs 3600 fresh committed intervals. This bounds
   // cumulative earnings without introducing an unbounded receipt history.
-  return paid <= (now_tick - loss_tick) / kSurveyCommissionMeasurementTicks +
-                     (retained_ready ? 1U : 0U);
+  const auto geological =
+      static_cast<std::uint64_t>(now->geological_paid_count - prior_geological);
+  const auto orbital = static_cast<std::uint64_t>(
+      now->paid_count - now->geological_paid_count - prior_orbital);
+  return geological <= now_tick - loss_tick &&
+         orbital <= (now_tick - loss_tick) / kSurveyCommissionMeasurementTicks +
+                        (retained_ready ? 1U : 0U);
 }
 auto retains_specimen_sales(
     const std::optional<FreedomSpecimenSalesAccount>& now,

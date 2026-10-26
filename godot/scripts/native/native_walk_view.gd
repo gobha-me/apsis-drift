@@ -731,7 +731,7 @@ func commissions_open() -> bool:
 func open_survey_commissions() -> void:
 	if not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or commissions_open() or origin_repair_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral(): return
 	if not bridge.has_method("get_freedom_survey_commissions"): return
-	var packet: Variant = bridge.get_freedom_survey_commissions()
+	var packet: Variant = bridge.get_freedom_survey_commissions(commissions_view.requested_kind)
 	if not SurveyCommissions.valid_packet(packet) or packet.tick != state.tick:
 		save_status.text = "Survey commissions unavailable: current office response was invalid."
 		return
@@ -745,11 +745,9 @@ func open_survey_commissions() -> void:
 func survey_commission_command(action: String) -> void:
 	if commissions_open() and commissions_view.service_child_open(): return
 	if not commissions_open() or origin_repair_open() or not activated or not paused or not focused or journey_dialog_open or mode_change_pending or not error.is_empty() or save_dialog == null or save_dialog.visible or settings_open() or observations_open() or crew_open() or boarding_transition() or preferences_provider == null or not preferences_provider.waiting_action.is_empty() or not current_controls_neutral() or commission_action_frame == Engine.get_process_frames(): return
-	if action not in ["accept", "submit", "abandon"]: return
-	var button: Button = {"accept": commissions_view.accept_button, "submit": commissions_view.submit_button, "abandon": commissions_view.abandon_button}[action]
-	if button.disabled or not button.visible: return
+	if action not in ["accept", "submit", "abandon", "choose_orbital", "choose_geological"]: return
 	var reviewed: Dictionary = commissions_view.packet
-	var fresh: Variant = bridge.get_freedom_survey_commissions()
+	var fresh: Variant = bridge.get_freedom_survey_commissions(commissions_view.requested_kind)
 	if not SurveyCommissions.valid_packet(fresh) or fresh.tick != state.tick:
 		commissions_view.refresh({})
 		return
@@ -758,13 +756,22 @@ func survey_commission_command(action: String) -> void:
 		commissions_view.back.grab_focus()
 		save_status.text = "Commission terms changed. Review the current office response before choosing an action."
 		return
+	if action in ["choose_orbital", "choose_geological"]:
+		if fresh.sequence != 0: return
+		commission_action_frame = Engine.get_process_frames()
+		var offer: Variant = bridge.get_freedom_survey_commissions(1 if action == "choose_orbital" else 2)
+		commissions_view.refresh(offer if SurveyCommissions.valid_packet(offer) else {})
+		commissions_view.back.grab_focus()
+		return
+	var button: Button = {"accept": commissions_view.accept_button, "submit": commissions_view.submit_button, "abandon": commissions_view.abandon_button}[action]
+	if button.disabled or not button.visible: return
 	if not fresh.at_origin or not fresh.get("can_" + action, false): return
 	commission_action_frame = Engine.get_process_frames()
 	var accepted := false
-	if action == "accept": accepted = bridge.accept_freedom_survey_commission(fresh.offer_until, str(fresh.offer_sequence))
-	elif action == "submit": accepted = bridge.submit_freedom_survey_commission(str(fresh.sequence))
+	if action == "accept": accepted = bridge.accept_freedom_geological_survey_commission(fresh.offer_until, str(fresh.offer_sequence)) if fresh.get("kind", 1) == 2 else bridge.accept_freedom_survey_commission(fresh.offer_until, str(fresh.offer_sequence))
+	elif action == "submit": accepted = bridge.submit_freedom_geological_survey_commission(fresh.submission_token) if fresh.get("kind", 1) == 2 else bridge.submit_freedom_survey_commission(str(fresh.sequence))
 	else: accepted = bridge.abandon_freedom_survey_commission(str(fresh.sequence))
-	var after: Variant = bridge.get_freedom_survey_commissions()
+	var after: Variant = bridge.get_freedom_survey_commissions(commissions_view.requested_kind)
 	commissions_view.refresh(after if SurveyCommissions.valid_packet(after) else {})
 	refresh_paid_operations()
 	refresh_specimen_sale()
@@ -805,7 +812,7 @@ func paid_operations_command(action: String) -> void:
 	commission_action_frame = Engine.get_process_frames()
 	var command: String = {"enable": "enable_freedom_paid_operations", "purchase": "purchase_freedom_paid_fuel", "retainer": "request_freedom_paid_retainer"}[action]
 	var accepted: bool = bridge.call(command, reviewed.token)
-	var after: Variant = bridge.get_freedom_survey_commissions()
+	var after: Variant = bridge.get_freedom_survey_commissions(commissions_view.requested_kind)
 	commissions_view.refresh(after if SurveyCommissions.valid_packet(after) else {})
 	refresh_paid_operations()
 	refresh_specimen_sale()
