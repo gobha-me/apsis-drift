@@ -199,6 +199,7 @@ var sample_pouch_button: Button
 var sample_discard_buttons: Array[Button] = []
 var sample_packet: Dictionary = {}
 var sample_collection_id := ""
+var exposure_collection_frame := -1
 var planet_route_label: Label
 var planet_route_buttons: Array[Button] = []
 var planet_route_packet: Dictionary = {}
@@ -1404,7 +1405,53 @@ func inspect_surface_landmark() -> void:
 	var notice := "Exposure inspection already recorded." if site.inspected else "Exposure inspected and recorded."
 	report_action_status(notice)
 	refresh_field_samples()
-	controls_menu.show_surface_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nBack to controls to collect a hand specimen.\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button)
+	controls_menu.show_exposure_reference("LOCAL EXPOSURE\n%s\n\n%s\n\n%s\nCollect explicitly while within reach on supported ground.\nThis is a geological appearance record, not a material analysis, resource deposit or landing certificate. Your personal marker is unchanged." % [site.label, site.description, notice], landmark_inspect_button, exposure_collection_context(state, str(site.id)), collect_exposure_sample)
+	refresh_exposure_collection()
+
+
+func exposure_collection_context(value: Dictionary, site_id: String) -> Dictionary:
+	# Bind this snapshot to the actual loaded individual and outside actor, not
+	# whichever exposure happens to be nearest after a Continue or owner change.
+	var context: Dictionary = {"site_id": site_id, "bridge": bridge.get_instance_id()}
+	for field in ["universe_seed", "system_id", "body_kind", "body_id", "planet_id", "craft_id", "frame_id", "tick", "checksum", "surface_walk"]:
+		context[field] = value.get(field)
+	return context.duplicate(true)
+
+
+func exposure_collection_controls_available() -> bool:
+	return activated and paused and focused and not journey_dialog_open and not recovery_notified and not mode_change_pending and error.is_empty() and save_dialog != null and not save_dialog.visible and controls_menu != null and controls_menu.panel.visible and not controls_menu.menu_margin.visible and player_input != null and player_input.waiting_action.is_empty() and controls_menu.surface_reference_view.visible and not controls_menu.settings_view.visible and not controls_menu.basics.visible and (controls_menu.observations_view == null or not controls_menu.observations_view.visible) and not commissions_open() and not origin_repair_open()
+
+
+func refresh_exposure_collection() -> void:
+	var reader: Control = controls_menu.surface_reference_view
+	if reader.collection_context.is_empty(): return
+	var site_id: String = str(reader.collection_context.site_id)
+	var fresh: Dictionary = bridge.get_freedom_flight_state()
+	if exposure_collection_context(fresh, site_id) != reader.collection_context or fresh.get("recovery_pending", false) or fresh.get("impact", {}).get("pending_loss", false):
+		reader.refresh_collection(false, "This exposure snapshot belongs to an earlier state. Close it and inspect again.")
+		return
+	var availability: Dictionary = bridge.get_freedom_field_sample_availability(site_id)
+	reader.refresh_collection(availability.get("available", false), str(availability.get("reason", "Collection unavailable.")) if not availability.get("available", false) else "Collect one hand specimen; stay paused and retain its source in field notes.")
+
+
+func collect_exposure_sample() -> void:
+	if not exposure_collection_controls_available() or exposure_collection_frame == Engine.get_process_frames(): return
+	var reader: Control = controls_menu.surface_reference_view
+	if not reader.collection_ready() or not surface_interaction_neutral(): return
+	# Recheck the pinned owner and C++ reach/pouch/inspection rules immediately
+	# before the existing transactional command. A covered control never acts.
+	refresh_exposure_collection()
+	if reader.collect_button.disabled: return
+	exposure_collection_frame = Engine.get_process_frames()
+	var site_id: String = str(reader.collection_context.site_id)
+	var collected: bool = bridge.collect_freedom_field_sample(site_id)
+	var reason: String = "Specimen collected. Its source is recorded in your field notes." if collected else str(bridge.get_last_error())
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	refresh_field_samples()
+	refresh_exposure_collection()
+	report_action_status(reason)
+	reader.back_button.grab_focus()
 
 
 func setup_field_sample_controls(column: Node) -> void:

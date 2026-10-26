@@ -59,6 +59,82 @@ func activate_archive(tree: SceneTree, view: Control, button: Button, controller
 			await tree.process_frame
 	button.process_mode = mode
 
+func sample_key(code: int, down: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = down
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func inspect_reader(tree: SceneTree, view: Control, owner: Variant, before: PackedByteArray, site_id: String) -> Control:
+	# Hold the actual opening interaction key across opening/release. The fixture
+	# already recorded this exposure, so repeat inspection is complete-Save neutral.
+	sample_key(KEY_E, true)
+	view.inspect_surface_landmark()
+	var reader: Control = view.controls_menu.surface_reference_view
+	reader.process_mode = Node.PROCESS_MODE_ALWAYS
+	reader.collect_button.pressed.emit()
+	check(reader.visible and reader.collection_context.get("site_id") == site_id and reader.back_button.has_focus() and not reader.collect_button.disabled and save_bytes(owner, "exposure-open-held") == before, "Exposure opening gesture collected or lost its pinned site/Back focus")
+	sample_key(KEY_E, false)
+	await tree.process_frame
+	check(reader.visible and save_bytes(owner, "exposure-open-released") == before, "Opening-key release collected or closed the exposure reader")
+	return reader
+
+func exposure_guards(tree: SceneTree, view: Control, owner: Variant, reader: Control, before: PackedByteArray) -> void:
+	for gate in ["focus", "journey", "save", "mode", "remap", "movement", "look", "settings", "recovery"]:
+		if gate == "focus": view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		elif gate == "journey": view.journey_dialog_open = true
+		elif gate == "save": view.save_dialog.show()
+		elif gate == "mode": view.mode_change_pending = true
+		elif gate == "remap": view.player_input.waiting_action = "forward"
+		elif gate == "movement": sample_key(KEY_W, true)
+		elif gate == "look": sample_key(KEY_RIGHT, true)
+		elif gate == "settings": view.controls_menu.settings_view.show()
+		elif gate == "recovery": view.recovery_notified = true
+		reader.collect_button.pressed.emit()
+		if gate == "focus": view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+		elif gate == "journey": view.journey_dialog_open = false
+		elif gate == "save": view.save_dialog.hide()
+		elif gate == "mode": view.mode_change_pending = false
+		elif gate == "remap": view.player_input.waiting_action = ""
+		elif gate == "movement": sample_key(KEY_W, false)
+		elif gate == "look": sample_key(KEY_RIGHT, false)
+		elif gate == "settings": view.controls_menu.settings_view.hide()
+		elif gate == "recovery": view.recovery_notified = false
+		check(save_bytes(owner, "exposure-guard-" + gate) == before, "Exposure reader bypassed " + gate)
+	var old_device: int = view.player_input.device
+	var old_pads: Dictionary = view.player_input.available_pads.duplicate()
+	view.player_input.device = 2
+	view.player_input.available_pads[2] = true
+	view.player_input.install()
+	reader.collect_button.grab_focus()
+	for down in [true, false]:
+		var foreign := InputEventJoypadButton.new()
+		foreign.device = 3
+		foreign.button_index = JOY_BUTTON_A
+		foreign.pressed = down
+		Input.parse_input_event(foreign)
+		Input.flush_buffered_events()
+		await tree.process_frame
+	view.player_input.device = old_device
+	view.player_input.available_pads = old_pads
+	view.player_input.install()
+	check(save_bytes(owner, "exposure-foreign-pad") == before, "Foreign pad collected the inspected specimen")
+	# A genuine neutral foot tick invalidates the pinned snapshot. Restore by
+	# normal Continue after proving the stale action cannot change that new Save.
+	var state: Dictionary = owner.get_freedom_flight_state()
+	check(owner.advance_freedom_surface_walk(1.0/120.0, PackedFloat64Array([0, 0, float(state.surface_walk.heading)]), false), "Neutral tick for stale exposure check refused")
+	var advanced: PackedByteArray = save_bytes(owner, "exposure-advanced")
+	reader.collect_button.pressed.emit()
+	check(reader.collect_button.disabled and "earlier state" in reader.collect_button.tooltip_text and save_bytes(owner, "exposure-stale") == advanced, "Stale inspected-owner snapshot collected after a real tick")
+	check(owner.stage_freedom_continue(output.path_join("field-samples-before.json")) and owner.commit_pending_freedom_start(owner.get_pending_freedom_start().candidate_id), "Restore actual baseline after stale-reader check refused")
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(0.0)
+	view.refresh_exposure_collection()
+	reader.back_button.grab_focus()
+	check(save_bytes(owner, "exposure-restored") == before and not reader.collect_button.disabled, "Restoring the exact owner snapshot changed its complete Save")
+
 static func saved_knowledge(bytes: PackedByteArray) -> Dictionary:
 	var value: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 	for depth in 16:
@@ -110,7 +186,7 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	# Empty reads are real menu actions and must not adopt the optional state.
 	await activate.call(view, view.sample_pouch_button, false)
 	var reader: Control = view.controls_menu.surface_reference_view
-	if not check(reader.visible and reader.heading.text == "FIELD SAMPLES" and reader.back_button.has_focus() and "No specimens carried" in reader.body.text and save_bytes(owner, "empty-reader") == before, "Empty pouch reader changed saved state or lost readable focus"): return
+	if not check(reader.visible and reader.heading.text == "FIELD SAMPLES" and not reader.collect_button.visible and reader.collection_context.is_empty() and reader.back_button.has_focus() and "No specimens carried" in reader.body.text and save_bytes(owner, "empty-reader") == before, "Empty pouch reader changed saved state or lost readable focus"): return
 	view.sample_collect_button.pressed.emit()
 	check(save_bytes(owner, "reader-guard") == before, "Reference modal admitted background collection")
 	reader.back_button.pressed.emit()
@@ -128,11 +204,18 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	if not check(peer.stage_freedom_continue(baseline) and peer.commit_pending_freedom_start(peer.get_pending_freedom_start().candidate_id) and peer.collect_freedom_field_sample(site_id), "Independent direct collection reference refused"): return
 	var expected_path := output.path_join("field-samples-direct.json")
 	if not check(peer.save_freedom_as(expected_path), "Direct specimen Save refused"): return
-	await activate.call(view, view.sample_collect_button, false)
+	reader = await inspect_reader(tree, view, owner, before, site_id)
+	await exposure_guards(tree, view, owner, reader, before)
+	await activate_archive(tree, view, reader.collect_button, false)
+	reader.collect_button.pressed.emit()
 	var collected: Dictionary = owner.get_freedom_field_samples()
 	var first := save_bytes(owner, "collected")
-	if not check(valid_packet(collected, initial, site_id) and collected.carried[0].tick == initial.tick and collected.journal == collected.carried and first == FileAccess.get_file_as_bytes(expected_path), "Controls collection differs from authentic typed direct C++ result"): return
+	if not check(valid_packet(collected, initial, site_id) and collected.carried[0].tick == initial.tick and collected.journal == collected.carried and first == FileAccess.get_file_as_bytes(expected_path), "Exposure-reader keyboard collection differs from authentic typed direct C++ result"): return
 	check(owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations and view.paused and view.sample_collect_button.disabled, "Collection changed clock/actor/craft/resources/facts or left duplicate collection enabled")
+	check(reader.visible and reader.collect_button.disabled and reader.back_button.has_focus(), "Collected exposure did not stay paused with duplicate disabled and Back focus")
+	reader.back_button.pressed.emit()
+	check(not reader.visible and reader.collection_context.is_empty() and not reader.collect_button.visible and view.landmark_inspect_button.has_focus(), "Exposure Back retained its action or lost invoking focus")
+	reader.process_mode = Node.PROCESS_MODE_INHERIT
 	var notes: Array = collected.journal.duplicate(true)
 	var first_metadata: Dictionary = saved_knowledge(first).field_samples
 	await check_archive(tree, view, owner, first, notes[0], true, "collected")
@@ -157,11 +240,22 @@ func exercise(tree: SceneTree, shell: Control, owner: Variant, assets: String, s
 	if not check(discarded.selected and discarded.carried.is_empty() and discarded.journal == notes and saved_knowledge(discarded_bytes).field_samples.journal == first_metadata.journal and not view.sample_collect_button.disabled and owner.get_freedom_flight_state() == initial and owner.get_freedom_observations() == observations, "Controller Discard lost first notes, changed physics, or failed to free the slot"): return
 	var source: Dictionary = collected.carried[0]
 	if not check(peer.discard_freedom_field_sample(source.system_id, source.body_kind, source.body_id, source.site_id) and peer.save_freedom_as(expected_path) and FileAccess.get_file_as_bytes(expected_path) == discarded_bytes, "Controls Discard differs from the complete direct C++ result"): return
-	await activate.call(view, view.sample_collect_button, false)
+	reader = await inspect_reader(tree, view, owner, discarded_bytes, site_id)
+	var collect_device: int = view.player_input.device
+	var collect_pads: Dictionary = view.player_input.available_pads.duplicate()
+	view.player_input.device = 2
+	view.player_input.available_pads[2] = true
+	view.player_input.install()
+	await activate_archive(tree, view, reader.collect_button, true)
+	view.player_input.device = collect_device
+	view.player_input.available_pads = collect_pads
+	view.player_input.install()
+	reader.back_button.pressed.emit()
+	reader.process_mode = Node.PROCESS_MODE_INHERIT
 	var recollected: Dictionary = owner.get_freedom_field_samples()
 	var final_bytes := save_bytes(owner, "recollected")
 	if not check(valid_packet(recollected, initial, site_id) and recollected.journal == notes and saved_knowledge(final_bytes).field_samples.journal == first_metadata.journal and owner.get_freedom_flight_state() == initial, "Recollection rewrote first notes or changed the actual foot/clock"): return
-	if not check(peer.collect_freedom_field_sample(site_id) and peer.save_freedom_as(expected_path) and FileAccess.get_file_as_bytes(expected_path) == final_bytes, "Controls recollection differs from the complete direct C++ result"): return
+	if not check(peer.collect_freedom_field_sample(site_id) and peer.save_freedom_as(expected_path) and FileAccess.get_file_as_bytes(expected_path) == final_bytes, "Selected-pad exposure recollection differs from the complete direct C++ result"): return
 	if not check(shell.select_start(owner, {"mode": "continue", "value": output.path_join("field-samples-recollected.json"), "assets": assets}), "Carried specimen Continue refused"): return
 	view = shell.current_view
 	view.set_process(false)
