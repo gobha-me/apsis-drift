@@ -611,6 +611,11 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
   auto station = std::make_unique<NativeFreedomFlightSession>(reopen(*session));
   need(station->accept_survey_commission_target(waypoint, quote.offer_until,
                                                 quote.offer_sequence));
+  const auto orbital_terms = bytes(*station);
+  check(!station->survey_commission_view(SurveyCommissionKind::geological,
+                                         waypoint) &&
+            bytes(*station) == orbital_terms,
+        "An explicit geological request cannot read an orbital target quote");
   checkpoint(*station, output, "station-accepted", phases);
   // A separate initialized deadline branch preserves the actual accepted terms.
   auto expired =
@@ -645,6 +650,12 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
       need(expired->survey_commission_view(SurveyCommissionKind::geological));
   need(expired->accept_geological_survey_commission(geo.offer_until,
                                                     geo.offer_sequence));
+  const auto geological_terms = bytes(*expired);
+  check(!expired->survey_commission_view(
+            SurveyCommissionKind::orbital,
+            BodyTarget{geo.system, body_id(geo.planet)}) &&
+            bytes(*expired) == geological_terms,
+        "An explicit orbital target getter cannot return geological terms");
   check(
       expired->knowledge()->survey_commissions->version == 3 &&
           expired->knowledge()->survey_commissions->active->kind ==

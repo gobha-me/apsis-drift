@@ -88,6 +88,11 @@ auto NativeFreedomFlightSession::survey_commission_view(
       knowledge_->survey_commissions.value_or(SurveyCommissionAccount{});
   if (auto valid = validate_survey_commissions(account, view.tick); !valid)
     return std::unexpected{valid.error()};
+  if (requested_target &&
+      (requested_kind != SurveyCommissionKind::orbital ||
+       (account.active &&
+        account.active->kind != SurveyCommissionKind::orbital)))
+    return std::unexpected{"Explicit destinations apply only to orbital work"};
   if (account.active) view.kind = account.active->kind;
   if (account.active) {
     view.system = account.active->system;
@@ -97,9 +102,6 @@ auto NativeFreedomFlightSession::survey_commission_view(
       return std::unexpected{
           "Abandon existing work before changing destination"};
   } else if (requested_target) {
-    if (view.kind != SurveyCommissionKind::orbital)
-      return std::unexpected{
-          "Explicit destinations apply only to orbital work"};
     const auto offers = survey_commission_offers();
     if (!offers) return std::unexpected{offers.error()};
     bool admitted = false;
