@@ -92,9 +92,13 @@ transactional metadata actions; Continue and recovery retain both histories.
 
 ## Hand specimens
 
-After inspecting an exposure, choose **Collect hand specimen** in paused
-Controls while still within eight metres on supported ground. The same action
-works at planetary and Moon exposures. Collection adds one specimen to a
+After inspecting an exposure, release the interaction control, then explicitly
+choose **Collect hand specimen** in its paused reader while still within eight
+metres on supported ground. Opening or reading the exposure never collects.
+Collection stays in the reader with a visible result and current availability
+reason; Back returns to paused Controls. The existing
+Controls collection action also remains available. Both paths work at planetary
+and Moon exposures. Collection adds one specimen to a
 four-slot pouch and records its source in your field notes. It leaves the clock,
 resources and personal marker unchanged. An already-carried specimen or a full
 pouch refuses collection; no specimen is silently replaced.

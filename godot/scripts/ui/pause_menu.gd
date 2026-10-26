@@ -543,17 +543,25 @@ func close_observations() -> void:
 		left_scroll.ensure_control_visible(observations_button)
 		ensure_entry_focus_visible()
 
-func show_surface_reference(text: String, invoking: Button, title := "SURFACE CONDITIONS") -> void:
-	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return
+func show_surface_reference(text: String, invoking: Button, title := "SURFACE CONDITIONS") -> bool:
+	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return false
 	entry_focus_frames = 0
 	surface_reference_invoker = weakref(invoking) if is_instance_valid(invoking) else null
+	surface_reference_view.clear_collection()
 	surface_reference_view.reference_text = text
 	surface_reference_view.reference_title = title
 	menu_margin.hide()
 	surface_reference_view.open()
+	return true
+
+func show_exposure_reference(text: String, invoking: Button, context: Dictionary, command: Callable) -> bool:
+	if not show_surface_reference(text, invoking, "LOCAL EXPOSURE"): return false
+	surface_reference_view.configure_collection(context, command)
+	return true
 
 func close_surface_reference() -> void:
 	if not is_instance_valid(surface_reference_view): return
+	surface_reference_view.clear_collection()
 	surface_reference_view.hide()
 	menu_margin.show()
 	var target: Variant = surface_reference_invoker.get_ref() if surface_reference_invoker != null else null
@@ -640,7 +648,9 @@ func hide_menu() -> void:
 	if is_instance_valid(commissions_view): commissions_view.hide()
 	if is_instance_valid(origin_repair_view): origin_repair_view.hide()
 	if is_instance_valid(observations_view): observations_view.hide()
-	if is_instance_valid(surface_reference_view): surface_reference_view.hide()
+	if is_instance_valid(surface_reference_view):
+		surface_reference_view.clear_collection()
+		surface_reference_view.hide()
 	surface_reference_invoker = null
 	if is_instance_valid(settings_view):
 		settings_view.pending.clear()
