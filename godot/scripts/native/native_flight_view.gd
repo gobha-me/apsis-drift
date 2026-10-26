@@ -1452,7 +1452,7 @@ func collect_exposure_sample() -> void:
 	update_view(0.0)
 	refresh_field_samples()
 	refresh_exposure_collection()
-	reader.show_collection_result(reason)
+	reader.show_collection_result("Specimen collected." if collected else reason)
 	report_action_status(reason)
 	reader.back_button.grab_focus()
 
