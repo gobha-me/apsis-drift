@@ -191,6 +191,7 @@ auto acquired_network_chart() -> void {
           "selection");
     if (!network || !encoded) continue;
     std::vector<SystemId> acquired;
+    acquired.reserve(kFreedomSystemNetworkSize + 1);
     for (std::size_t i = 0; i < kFreedomSystemNetworkSize; ++i)
       acquired.push_back(network->nodes[i].system);
     const auto ledger = resources(seed, 3);

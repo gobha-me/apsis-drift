@@ -538,12 +538,12 @@ auto outer_acquisition(const std::filesystem::path& output) -> void {
 auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   std::filesystem::path output;
-  if (argc != 1) {
-    if (argc != 3 || std::string_view{argv[1]} != "--export-frontier" ||
-        !(output = argv[2]).is_absolute()) {
-      std::cerr << "Expected --export-frontier ABS_DIR or no arguments\n";
-      return 2;
-    }
+  const bool exporting =
+      argc == 3 && std::string_view{argv[1]} == "--export-frontier";
+  if (exporting) output = argv[2];
+  if (argc != 1 && (!exporting || !output.is_absolute())) {
+    std::cerr << "Expected --export-frontier ABS_DIR or no arguments\n";
+    return 2;
   }
   try {
     basic_charts();
