@@ -1,0 +1,485 @@
+{
+  "schema": "apsis.paid-recovery-reference-observation/1",
+  "seed": 42,
+  "factory": "native_planetary_network_new_game",
+  "completed_cycles": 3,
+  "inputs": {
+    "walk_controls": [
+      0,
+      -1,
+      0
+    ],
+    "walk_ticks": 1194,
+    "boarding_ticks": 1440,
+    "work_controls": {
+      "negative_translation_y": 0.25
+    },
+    "work_ticks": 120,
+    "retainer_action": "query only; no demand or funding invocation"
+  },
+  "initial": {
+    "file": "initial.json",
+    "tick": "0",
+    "craft": "7949747325485323805",
+    "generation": 0,
+    "resource_craft": "7949747325485323805",
+    "resource_tick": "0",
+    "flight_quanta": "3032640000000000",
+    "jump_charges": 3,
+    "cash": "180",
+    "insurance_due": "0",
+    "operating_tab": "0",
+    "spent_credits": "20",
+    "charged_generation": 0,
+    "earnings": "0",
+    "commission": {
+      "sequence": 1,
+      "next_sequence": 2,
+      "system": "2910174744474113395",
+      "planet": "11663323411267002299",
+      "accepted_tick": "0",
+      "deadline_tick": "1728000",
+      "kind": 1,
+      "paid_count": 0,
+      "acquired_ticks": 0
+    }
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "loss_tick": "2754",
+      "generation": 1,
+      "retired_craft": "7949747325485323805",
+      "current_craft": "7949747325485323806",
+      "source_checksum": "9930211821828000225",
+      "fuel_debit_quanta": "56160000000",
+      "applied_force_ticks": 120,
+      "cash": "80",
+      "insurance_due": "0",
+      "operating_tab": "0",
+      "flight_quanta_after_replacement": "3032640000000000",
+      "jump_charges_after_replacement": 3,
+      "earnings": "0",
+      "repeat_recovery_save_neutral": true,
+      "continue_save_file": "cycle-1-continued.json",
+      "next_unpaid_sequence": 2,
+      "retainer_quote": {
+        "can_retainer": false,
+        "service_credits": "0",
+        "retainer_cash": "0",
+        "retainer_tab": "0",
+        "retainer_subsidy": "0",
+        "retainer_berth": "0",
+        "retainer_total": "0",
+        "funded": false
+      }
+    },
+    {
+      "cycle": 2,
+      "loss_tick": "5508",
+      "generation": 2,
+      "retired_craft": "7949747325485323806",
+      "current_craft": "7949747325485323807",
+      "source_checksum": "111361737613683128",
+      "fuel_debit_quanta": "56160000000",
+      "applied_force_ticks": 120,
+      "cash": "0",
+      "insurance_due": "20",
+      "operating_tab": "0",
+      "flight_quanta_after_replacement": "3032640000000000",
+      "jump_charges_after_replacement": 3,
+      "earnings": "0",
+      "repeat_recovery_save_neutral": true,
+      "continue_save_file": "cycle-2-continued.json",
+      "next_unpaid_sequence": 3,
+      "retainer_quote": {
+        "can_retainer": true,
+        "service_credits": "0",
+        "retainer_cash": "0",
+        "retainer_tab": "5",
+        "retainer_subsidy": "0",
+        "retainer_berth": "5",
+        "retainer_total": "5",
+        "funded": false
+      }
+    },
+    {
+      "cycle": 3,
+      "loss_tick": "8262",
+      "generation": 3,
+      "retired_craft": "7949747325485323807",
+      "current_craft": "7949747325485323808",
+      "source_checksum": "4759112228214259019",
+      "fuel_debit_quanta": "56160000000",
+      "applied_force_ticks": 120,
+      "cash": "0",
+      "insurance_due": "100",
+      "operating_tab": "0",
+      "flight_quanta_after_replacement": "3032640000000000",
+      "jump_charges_after_replacement": 3,
+      "earnings": "0",
+      "repeat_recovery_save_neutral": true,
+      "continue_save_file": "cycle-3-continued.json",
+      "next_unpaid_sequence": 4,
+      "retainer_quote": {
+        "can_retainer": true,
+        "service_credits": "0",
+        "retainer_cash": "0",
+        "retainer_tab": "5",
+        "retainer_subsidy": "0",
+        "retainer_berth": "5",
+        "retainer_total": "5",
+        "funded": false
+      }
+    }
+  ],
+  "time": {
+    "ticks_per_second": 120,
+    "elapsed_ticks": 8262,
+    "elapsed_game_seconds": 68.85,
+    "full_berth_hours_elapsed": 0
+  },
+  "actions": [
+    {
+      "action": "new_game",
+      "preset": "planetary",
+      "seed": "42"
+    },
+    {
+      "action": "accept_survey_commission",
+      "offer_until": "432000",
+      "sequence": 1
+    },
+    {
+      "action": "enable_paid_operations",
+      "token": "paid1:42:7949747325485323805:0:3032640000000000:3:0:0:0:0:1:1728000:0"
+    },
+    {
+      "action": "save_as",
+      "file": "initial.json"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-predeparture.json"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        -1,
+        0
+      ],
+      "ticks": 1194
+    },
+    {
+      "action": "begin_boarding"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        0,
+        0
+      ],
+      "ticks": 1440
+    },
+    {
+      "action": "release_port"
+    },
+    {
+      "action": "advance",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        0.25,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ticks": 120
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-worked.json"
+    },
+    {
+      "action": "record_loss",
+      "cause": "recoverable_destruction",
+      "craft": "7949747325485323805",
+      "tick": "2754",
+      "source_checksum": "9930211821828000225"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-pending.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-replacement.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "continue",
+      "file": "cycle-1-replacement.json"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-continued.json"
+    },
+    {
+      "action": "abandon_survey_commission",
+      "sequence": 1
+    },
+    {
+      "action": "accept_survey_commission",
+      "offer_until": "432000",
+      "sequence": 2
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-1-next-work.json"
+    },
+    {
+      "action": "query_retainer",
+      "funded": false
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-predeparture.json"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        -1,
+        0
+      ],
+      "ticks": 1194
+    },
+    {
+      "action": "begin_boarding"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        0,
+        0
+      ],
+      "ticks": 1440
+    },
+    {
+      "action": "release_port"
+    },
+    {
+      "action": "advance",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        0.25,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ticks": 120
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-worked.json"
+    },
+    {
+      "action": "record_loss",
+      "cause": "recoverable_destruction",
+      "craft": "7949747325485323806",
+      "tick": "5508",
+      "source_checksum": "111361737613683128"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-pending.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-replacement.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "continue",
+      "file": "cycle-2-replacement.json"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-continued.json"
+    },
+    {
+      "action": "abandon_survey_commission",
+      "sequence": 2
+    },
+    {
+      "action": "accept_survey_commission",
+      "offer_until": "432000",
+      "sequence": 3
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-2-next-work.json"
+    },
+    {
+      "action": "query_retainer",
+      "funded": false
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-predeparture.json"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        -1,
+        0
+      ],
+      "ticks": 1194
+    },
+    {
+      "action": "begin_boarding"
+    },
+    {
+      "action": "advance_walk",
+      "controls": [
+        0,
+        0,
+        0
+      ],
+      "ticks": 1440
+    },
+    {
+      "action": "release_port"
+    },
+    {
+      "action": "advance",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        0.25,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ticks": 120
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-worked.json"
+    },
+    {
+      "action": "record_loss",
+      "cause": "recoverable_destruction",
+      "craft": "7949747325485323807",
+      "tick": "8262",
+      "source_checksum": "4759112228214259019"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-pending.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-replacement.json"
+    },
+    {
+      "action": "complete_recovery"
+    },
+    {
+      "action": "continue",
+      "file": "cycle-3-replacement.json"
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-continued.json"
+    },
+    {
+      "action": "abandon_survey_commission",
+      "sequence": 3
+    },
+    {
+      "action": "accept_survey_commission",
+      "offer_until": "432000",
+      "sequence": 4
+    },
+    {
+      "action": "save_as",
+      "file": "cycle-3-next-work.json"
+    },
+    {
+      "action": "query_retainer",
+      "funded": false
+    }
+  ],
+  "save_sha256": {
+    "cycle-1-continued.json": "82102a20e2e525592ccb9abf15b2c0bf0c9e37419676dad12e4c0156591d0d49",
+    "cycle-1-next-work.json": "58ce6394d782e0fbb2b8ee61608e192e5467a6e10217b07e250c057b2e941117",
+    "cycle-1-pending.json": "f96a6defe75496a2a90eb2eaae2f16411b96548e6e8cc2f15e4c083f4368e8e7",
+    "cycle-1-predeparture.json": "89e167042349f949671cb9a14ace8301caa957f22fc0ab4b26578a46b8c6f692",
+    "cycle-1-replacement.json": "82102a20e2e525592ccb9abf15b2c0bf0c9e37419676dad12e4c0156591d0d49",
+    "cycle-1-worked.json": "e166e631f99a36941646b35d722a55c1ec907f321ef55a1844c80cfd855a4196",
+    "cycle-2-continued.json": "9e917595c549861bfdb557340b7716ddf4379f7044a6ae3d421ee19373263fe7",
+    "cycle-2-next-work.json": "26710c25cf9dd17cedeccbca64d5392f8d6ce07bde3db8c2647eeee2774a3b29",
+    "cycle-2-pending.json": "f9794895dbe8148a25a8529a21d26c97b6e82905b79e548a61e53afa71707740",
+    "cycle-2-predeparture.json": "58ce6394d782e0fbb2b8ee61608e192e5467a6e10217b07e250c057b2e941117",
+    "cycle-2-replacement.json": "9e917595c549861bfdb557340b7716ddf4379f7044a6ae3d421ee19373263fe7",
+    "cycle-2-worked.json": "e32e95e713d173a82a03416d09e71197de6ac79c36f2deed56ed142daca9d22b",
+    "cycle-3-continued.json": "f676d4522c1e4e0499ded27064826f4a886f903ef2f3c3751604dbeeb9196ddc",
+    "cycle-3-next-work.json": "52094e3d9410b345e8b38d50f7c158b323982c96b663dfd07c8f73c33be8c4c4",
+    "cycle-3-pending.json": "b09990bde42604db342b86cf4fe1a8f58cb436964ea967078912b898c519d8b1",
+    "cycle-3-predeparture.json": "26710c25cf9dd17cedeccbca64d5392f8d6ce07bde3db8c2647eeee2774a3b29",
+    "cycle-3-replacement.json": "f676d4522c1e4e0499ded27064826f4a886f903ef2f3c3751604dbeeb9196ddc",
+    "cycle-3-worked.json": "602610a5bfbdeb097d9b08972c0eeeffb4e5b4290b4ecfce577810e973daee61",
+    "initial.json": "89e167042349f949671cb9a14ace8301caa957f22fc0ab4b26578a46b8c6f692"
+  },
+  "numerical_profile": {
+    "build_type": "Release",
+    "fp_contract": "off",
+    "compilers": [
+      "GCC 16.2.1",
+      "Clang 20.1.8"
+    ],
+    "libc": {
+      "name": "glibc",
+      "version": "2.44"
+    },
+    "save_hash_scope": "Both recorded compiler exports match on this numerical environment. These hashes are evidence, not enforced cross-environment flight goldens; see issue #255."
+  },
+  "scope": "Debt and replacement composition from public actions. Each loss is an authenticated, explicitly classified recoverable-destruction application event, not a physical collision. No pose, resource or clock assignment; no additional opening grant, survey earnings, funded retainer, route controller, or price change. Fresh unpaid acceptance and full replacement stores establish a bounded next action, not a qualified voyage, general starting viability, profitability, full rent exposure, indefinite failures or manual acceptance."
+}
