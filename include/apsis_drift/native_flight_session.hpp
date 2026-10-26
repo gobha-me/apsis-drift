@@ -191,6 +191,15 @@ struct NativeStarSearchView {
   std::string note;
 };
 
+struct NativeOriginRepairView {
+  bool supported{}, at_origin{}, paid_selected{}, can_repair{};
+  std::uint32_t forebody{}, landing_structure{}, severity_units{};
+  std::uint64_t unit_credits{kCraftOriginRepairUnitCredits}, repair_credits{},
+      cash_before{}, cash_after{}, berth_credits{};
+  SimulationTick tick{};
+  std::string token, note, terms;
+};
+
 struct NativeDerelictRecoveryView {
   bool selected{}, known{}, can_begin{}, active{};
   std::uint32_t acquired_ticks{},
@@ -343,6 +352,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto begin_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto cancel_star_search() -> std::expected<void, std::string>;
   [[nodiscard]] auto star_search_view() const -> NativeStarSearchView;
+  [[nodiscard]] auto origin_repair_view() const
+      -> std::expected<NativeOriginRepairView, std::string>;
+  [[nodiscard]] auto repair_at_origin(std::string_view reviewed_token)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto derelict_recovery_view() const
       -> std::expected<NativeDerelictRecoveryView, std::string>;
   [[nodiscard]] auto begin_derelict_recovery()
@@ -568,6 +581,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_survey_commission_tick()
       -> std::expected<void, std::string>;
   [[nodiscard]] auto paid_operations_origin_available() const -> bool;
+  [[nodiscard]] auto origin_repair_available() const -> bool;
+  [[nodiscard]] auto origin_repair_token() const
+      -> std::expected<std::string, std::string>;
   [[nodiscard]] auto paid_operations_token() const -> std::string;
   [[nodiscard]] auto paid_operations_generation() const -> std::uint64_t;
   [[nodiscard]] auto survey_paid_count() const -> std::uint32_t;

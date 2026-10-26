@@ -403,6 +403,9 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk-detail/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-walk-detail-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/native-selected-terrain/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/impact/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/impact-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/impact-native/origin-repair/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/frame-import/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/frame-import-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-loop/*.json

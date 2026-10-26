@@ -180,6 +180,15 @@ requires [paid-operation enrollment](PAID_OPERATIONS.md). That separate choice
 adds fuel and jump-charge prices, berth bills, operating support and replacement
 excess. The initial flight route remains available without enrolling.
 
+## Repair a surviving ship
+
+With experimental impacts selected, return to Origin and open paused
+**Controls → Origin craft repair**, seated and attached or walking in the station.
+Review and confirm to clear both damaged regions. Technical service is free;
+paid journeys require cash after berth charges. Repair retains fuel, cargo,
+drive state and impact history. Lost ships require recovery instead. See
+[repair at Origin](ORIGIN_REPAIR.md).
+
 ## Save and report problems
 
 [Save / Save As, Load and Continue](NATIVE_PROFILES.md) persist the actor, craft,

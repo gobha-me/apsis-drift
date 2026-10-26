@@ -59,6 +59,11 @@ func check(ok: bool, message: String) -> void:
 		failures += 1
 
 
+func navigation_details(view: Control, button: Button, pixels: Vector2i) -> String:
+	var focused := root.gui_get_focus_owner()
+	return "window=%s requested=%s logical=%s expected=%s focus=%s scroll=%s target=%s scroll_vertical=%s" % [view.get_window().size, pixels, view.size, button.text, str(focused.get_path()) if focused != null else "none", view.hud_scroll.get_global_rect(), button.get_global_rect(), view.hud_scroll.scroll_vertical]
+
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -228,13 +233,31 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(root.gui_get_focus_owner() == view.save_button and view.hud_scroll.get_global_rect().encloses(view.save_button.get_global_rect()), "Selected D-pad did not reveal Save As")
 		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
 		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
-		check(root.gui_get_focus_owner() == view.load_button and view.hud_scroll.get_global_rect().encloses(view.load_button.get_global_rect()), "Selected D-pad did not reveal Load")
+		check(root.gui_get_focus_owner() == view.load_button, "Selected D-pad did not focus Load immediately: " + navigation_details(view, view.load_button, pixels))
+		var load_enclosed_immediately: bool = view.hud_scroll.get_global_rect().encloses(view.load_button.get_global_rect())
+		await process_frame
+		var load_enclosed_after_frame: bool = view.hud_scroll.get_global_rect().encloses(view.load_button.get_global_rect())
+		check(load_enclosed_after_frame, "Selected D-pad did not reveal Load after layout: " + navigation_details(view, view.load_button, pixels))
+		if not load_enclosed_immediately and load_enclosed_after_frame:
+			print("Station focus scroll settled on next frame: " + navigation_details(view, view.load_button, pixels))
 		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
 		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
-		check(root.gui_get_focus_owner() == view.settings_button and view.hud_scroll.get_global_rect().encloses(view.settings_button.get_global_rect()), "Selected D-pad did not reveal Settings")
+		check(root.gui_get_focus_owner() == view.settings_button, "Selected D-pad did not focus Settings immediately: " + navigation_details(view, view.settings_button, pixels))
+		var settings_enclosed_immediately: bool = view.hud_scroll.get_global_rect().encloses(view.settings_button.get_global_rect())
+		await process_frame
+		var settings_enclosed_after_frame: bool = view.hud_scroll.get_global_rect().encloses(view.settings_button.get_global_rect())
+		check(settings_enclosed_after_frame, "Selected D-pad did not reveal Settings after layout: " + navigation_details(view, view.settings_button, pixels))
+		if not settings_enclosed_immediately and settings_enclosed_after_frame:
+			print("Station focus scroll settled on next frame: " + navigation_details(view, view.settings_button, pixels))
 		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
 		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
-		check(root.gui_get_focus_owner() == view.title_button and view.hud_scroll.get_global_rect().encloses(view.title_button.get_global_rect()), "Selected D-pad did not reveal Title")
+		check(root.gui_get_focus_owner() == view.title_button, "Selected D-pad did not focus Title immediately: " + navigation_details(view, view.title_button, pixels))
+		var title_enclosed_immediately: bool = view.hud_scroll.get_global_rect().encloses(view.title_button.get_global_rect())
+		await process_frame
+		var title_enclosed_after_frame: bool = view.hud_scroll.get_global_rect().encloses(view.title_button.get_global_rect())
+		check(title_enclosed_after_frame, "Selected D-pad did not reveal Title after layout: " + navigation_details(view, view.title_button, pixels))
+		if not title_enclosed_immediately and title_enclosed_after_frame:
+			print("Station focus scroll settled on next frame: " + navigation_details(view, view.title_button, pixels))
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
 		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
