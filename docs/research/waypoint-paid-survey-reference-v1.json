@@ -1,0 +1,113 @@
+{
+  "schema": "apsis.waypoint-paid-survey-reference/1",
+  "qualification": {
+    "kind": "recorded_local_reference",
+    "method": "The two recorded runs executed the candidate fixture. Standard repository builds then reproduced both executables byte-for-byte; the fixture source difference is pinned clang-format 20 formatting only. The repository epoch passed 207 CTests per compiler, static analysis of 421 translation units, and the existing native roundtrip with 27 argument refusals. Original executions are not relabelled as additional runs.",
+    "boundary": "This is one candidate, not hosted Waypoint playback, manual piloting, typical/sparse-start distribution or price acceptance."
+  },
+  "seed": 42,
+  "factory": "native_planetary_network_new_game",
+  "profile": "assisted",
+  "drive": "standard",
+  "recipes": {
+    "physical_catalog": 2,
+    "physical_ephemeris": 2,
+    "terrain_policy": 3,
+    "knowledge": 5,
+    "starting_chart": 3,
+    "resources": 1,
+    "paid_operations": 1,
+    "survey_commissions": 3,
+    "commission_target_policy": 2,
+    "system_request_outbound": 4,
+    "system_request_return": 2
+  },
+  "target": {
+    "offer": "Waypoint A primary",
+    "system": "system-a08ee09f81f67670",
+    "planet": "5312957088792034803"
+  },
+  "time": {
+    "ticks_per_second": 120,
+    "elapsed_ticks": 161948,
+    "committed_flight_ticks": 155988,
+    "committed_walk_ticks": 5960,
+    "accepted_tick": 0,
+    "deadline_tick": 1728000,
+    "measurement_owner_started_tick": 4401,
+    "first_qualifying_tick": 42407,
+    "last_qualifying_tick": 46006,
+    "acquired_ticks": 3600,
+    "neutral_qualifying_command_ticks": 3599
+  },
+  "fuel": {
+    "capacity_quanta": 3032640000000000,
+    "spent_quanta": 278940584316058,
+    "before_restoration_quanta": 2753699415683942,
+    "jump_charge_sequence": [
+      3,
+      2,
+      1
+    ],
+    "restored_quanta": 3032640000000000,
+    "restored_jump_charges": 3
+  },
+  "credits": {
+    "opening_budget": 200,
+    "initial_four_hour_berth": 20,
+    "enrolled_cash": 180,
+    "actual_report_payment": 100,
+    "flight_restoration": 4,
+    "jump_restoration": 30,
+    "new_berth_bill": 0,
+    "post_report_cash": 280,
+    "final_cash": 246,
+    "operating_tab": 0,
+    "recovery_due": 0
+  },
+  "candidate_controller": {
+    "target_radius_multiple": 1.5,
+    "radial_speed_cap_metres_per_second": 30000,
+    "radial_braking_metres_per_second_squared": 6,
+    "velocity_gain": 0.1,
+    "maximum_destination_ticks": 864000,
+    "scope": "Candidate test pilot, physically saturated by existing frame actuators; no pose or velocity writes and no automatic gameplay insertion."
+  },
+  "charted_arrivals": {
+    "version": 1
+  },
+  "evidence": {
+    "fixture": "test/godot/freedom_planetary_fixture.cpp",
+    "checkpoint_count": 21,
+    "gcc_clang_equal_route_artifacts": 46,
+    "command_stream_sha256": "c4e91e01c1cf0abcefca50d574f48555d57c5c1ef46fdaa3fd7db16984ba532b",
+    "trace_sha256": "b616db96fcd8c2244971d4d895da389d585200a914fd10d8b1c58820d5425025",
+    "final_save_sha256": "6113a16efc591d9a2cccce0bce3efe391b4679f59bea43de49be8c85ee0280fe",
+    "compiler_runs": {
+      "gcc": {
+        "executable_sha256": "df7ebb1ab8889b2a36ac5d6ea9f1fd18820297aa1e885f69c34d3fe00078fdf7",
+        "core_archive_sha256": "f39b7d65569e93612fb1512218f3e6c89a5a9d1e4ccb35798f16bb80dcf60ee6"
+      },
+      "clang20": {
+        "executable_sha256": "21921d25f233b00422f994863d74130771b43ea4b8e15eb20541724b38bcb04b",
+        "core_archive_sha256": "2ed793577c1be6386b031cbcb392c65af44cb8819acbe838c8e171ff0404d0bf"
+      }
+    },
+    "nearby_regression": {
+      "gcc_clang_equal_route_artifacts": 46,
+      "unchanged_original_route_artifacts": 46,
+      "original_reference": "charted-paid-survey-reference-v1.json"
+    },
+    "executed_fixture_sha256": "4b7fc5da65cbbd00d6c9c876774151a12dff193d362dda71a5e4b465df64ae86",
+    "repository_fixture_sha256": "e7d6153d67634687bb19544f08b69245d82549ec361b53fca13c4f831fd24dd0",
+    "repository_binaries_identical_to_executed": true,
+    "repository_fixture_change": "Pinned clang-format20 formatting only; no controller or simulation edits."
+  },
+  "scope": [
+    "One public New Game with explicit paid enrollment and target acceptance, walking, boarding, charged travel, actuator-only orbital acquisition, powered Home capture, payout and paid restoration; no initialized intermediate pose, velocity, clock, resource or financial state.",
+    "The same craft owns the active and paid target-policy-2 report. The commission account is version 3; paid operations remains version 1 with no specimen or canister income.",
+    "All 46 route artifacts match across both compiler runs on the recorded numerical profile. Checkpoint/Continue and uninterrupted C++ peer equality are separate from Godot replay, manual piloting, GPU acceptance or cross-host math-library compatibility.",
+    "The owner record starts at tick 4,401; fresh qualifying work runs from 42,407 through 46,006. The retained commission-progress.json is interim, including after completion; trace.json is the completed outcome.",
+    "This is not an optimal route, typical/sparse starting distribution, general affordability/balance result or player acceptance. Prices remain provisional under #293."
+  ]
+}
