@@ -70,7 +70,7 @@ func run() -> void:
 	await settle()
 	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and shell.current_view == null, "Title generated a world before selection")
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
-	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 4 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
+	check(title.network_choice != null and title.network_choice.selected == 0 and title.network_choice.item_count == 5 and title.network_choice.focus_mode == Control.FOCUS_ALL, "Optional chart packages changed default New Game or lost keyboard access")
 	check(title.recovery_choice != null and title.recovery_choice.selected == 0 and title.recovery_choice.item_count == 3 and title.recovery_choice.focus_mode == Control.FOCUS_ALL, "Drive rules changed the default or lost independent keyboard selection")
 	check(title.origin_service_choice != null and not title.origin_service_choice.button_pressed and title.origin_service_choice.focus_mode == Control.FOCUS_ALL, "Fuel service must remain explicit opt-in with keyboard/controller access")
 	title.open_settings()
@@ -302,6 +302,32 @@ func run() -> void:
 	var service_hash := FileAccess.get_sha256(service_save)
 	check(shell.select_start(shell.bridge, {"mode": "continue", "value": service_save, "assets": args[0]}) and shell.current_view.paused, "Selected service Continue failed actual station staging")
 	check(shell.bridge.save_freedom_as(service_save) and FileAccess.get_sha256(service_save) == service_hash and shell.current_view.service_craft != null and shell.current_view.service_craft.visible, "Service Continue changed complete Save or lost its real D2 presentation")
+	# One actual title request composes the new chart with existing drive/service choices.
+	var frontier_title := Title.new()
+	frontier_title.persist_controls = false
+	frontier_title.catalog_owner = shell.bridge
+	root.add_child(frontier_title)
+	var requests: Array[Dictionary] = []
+	frontier_title.start_requested.connect(func(selection: Dictionary): requests.append(selection))
+	frontier_title.network_choice.select(4)
+	frontier_title.network_choice.item_selected.emit(4)
+	frontier_title.recovery_choice.select(2)
+	frontier_title.origin_service_choice.button_pressed = true
+	frontier_title.derelict_recovery_choice.button_pressed = true
+	check(frontier_title.network_choice.get_item_text(4) == "Outer frontier: four charted systems" and not frontier_title.derelict_recovery_choice.disabled, "Frontier title label or retrieval composition unavailable")
+	frontier_title.begin_new()
+	check(requests.size() == 1 and requests[0].get("frontier", false) and not requests[0].get("uncharted", true) and requests[0].drive_strain and requests[0].origin_service and requests[0].derelict_recovery, "Title did not dispatch its explicit frontier composition")
+	if requests.size() == 1:
+		var options: Dictionary = requests[0].duplicate(true)
+		options.assets = args[0]
+		check(shell.select_start(shell.bridge, options), "Actual frontier title request refused: " + shell.error)
+		var frontier_state: Dictionary = shell.bridge.get_freedom_flight_state()
+		check(shell.current_view is Walk and frontier_state.tick == "0" and frontier_state.chart.rows.size() == 4 and frontier_state.star_search.get("version") == 2 and frontier_state.jump.recovery.version == 2 and frontier_state.origin_service.selected and frontier_state.derelict_recovery.selected, "Frontier title composition changed clock, starting knowledge or selected options")
+		var frontier_save: String = args[1].get_base_dir().path_join("frontier-title-start.json")
+		check(shell.bridge.save_freedom_as(frontier_save), "Frontier station save refused")
+		var frontier_bytes := FileAccess.get_file_as_bytes(frontier_save)
+		check(shell.select_start(shell.bridge, {"mode": "continue", "value": frontier_save, "assets": args[0]}) and shell.current_view.paused and shell.bridge.save_freedom_as(frontier_save) and FileAccess.get_file_as_bytes(frontier_save) == frontier_bytes, "Frontier composed Continue changed complete station Save")
+	frontier_title.free()
 	shell.free()
 	await settle()
 	print("Native title: %d failures" % failures)

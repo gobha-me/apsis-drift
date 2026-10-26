@@ -328,6 +328,7 @@ jobs:
           apsis-drift-freedom-flight-import-tests
           apsis-drift-native-system-release-tests
           apsis-drift-native-orbital-survey-tests
+          apsis-drift-native-known-chart-map-tests
           apsis-drift-native-derelict-tests
           apsis-drift-native-derelict-recovery-tests
 
@@ -431,6 +432,7 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/paid-operations/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/specimen-sales/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/charted-arrivals/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey/frontier-chart/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/commissions/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/paid-operations/*.json
@@ -439,6 +441,9 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/quiet-travel/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/return-charge-check/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/known-chart-map/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/orbital-survey-native/frontier-chart/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/frontier-search-native/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/frontier-title-start.json
           if-no-files-found: warn
           retention-days: 7
 

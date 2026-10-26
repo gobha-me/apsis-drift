@@ -36,6 +36,7 @@ FIXTURES = {
     "frame_import": "apsis-drift-freedom-flight-import-tests",
     "system_release": "apsis-drift-native-system-release-tests",
     "orbital_survey": "apsis-drift-native-orbital-survey-tests",
+    "frontier_chart": "apsis-drift-native-known-chart-map-tests",
     "derelict": "apsis-drift-native-derelict-tests",
     "derelict_recovery": "apsis-drift-native-derelict-recovery-tests",
 }
@@ -349,6 +350,8 @@ def layout(selected, runner):
                        ("native_system_release", "system_release"), ("orbital_survey", "orbital_survey")):
         if name in selected:
             add(role + "_saves", role)
+    if "orbital_survey" in selected:
+        add("frontier_chart_saves", "frontier_chart")
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         add("derelict_saves", "derelict")
     if "native_derelict" in selected:
@@ -453,6 +456,9 @@ def validate_report(report, path, metadata, selected, m, runner):
                 require(set(row["files_sha256"]) == {name + ".json" for name in
                     (*runner.DERELICT_RECOVERY_PHASES, "manifest")},
                     "Incomplete actual derelict recovery phases")
+            if family == "frontier_chart_saves":
+                require(set(row["files_sha256"]) == set(runner.FRONTIER_CHART_FILES),
+                        "Incomplete actual frontier chart phases")
             if family == "moon_voyage":
                 require(set(row["files_sha256"]) == {name + ".json" for name in
                     ("arrival", "approach", "touchdown-source", "landed", "outside", "returned", "released", "ascent",

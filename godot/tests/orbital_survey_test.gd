@@ -306,7 +306,7 @@ func check_known_map_inputs() -> void:
 		var bad := packet.duplicate(true)
 		bad.erase(field)
 		map_check(not KnownMap.valid_packet(bad), "missing closed map field accepted")
-	for change in [{"extra": true}, {"version": 1.0}, {"version": 2}, {"available": 1}, {"tick": "01"}, {"tick": "-1"}, {"tick": "18446744073709551616"}, {"nodes": []}, {"nodes": [null]}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "é".repeat(513)}]:
+	for change in [{"extra": true}, {"version": 1.0}, {"version": 3}, {"available": 1}, {"tick": "01"}, {"tick": "-1"}, {"tick": "18446744073709551616"}, {"nodes": []}, {"nodes": [null]}, {"note": ""}, {"note": "x".repeat(1025)}, {"note": "é".repeat(513)}]:
 		var bad := packet.duplicate(true)
 		bad.merge(change, true)
 		map_check(not KnownMap.valid_packet(bad) and KnownMap.rects_for_packet(bad, Vector2(640, 450)).is_empty(), "malformed map reached drawing: " + str(change.keys()))
@@ -336,6 +336,19 @@ func check_known_map_inputs() -> void:
 	widget.configure({})
 	map_check(widget.packet.is_empty() and widget.marker_rects().is_empty(), "invalid configure left stale markers")
 	widget.free()
+	# Eight-point search2 projection uses its own minimum; legacy geometry stays exact.
+	var frontier_points := [Vector2(0.0, 0.5), Vector2(1.0, 0.5), Vector2(0.625, 0.25), Vector2(0.375, 0.75), Vector2(0.375, 0.25), Vector2(0.625, 0.75), Vector2(0.5, 0.0), Vector2(1.0, 1.0)]
+	var frontier := {"version": 2, "available": true, "tick": "0", "nodes": [], "note": "Admitted locations only"}
+	for i in frontier_points.size(): frontier.nodes.append({"system_id": "system-%016x" % (i + 1), "name": "Known " + str(i + 1), "current": i == 0, "selected": i == 7, "plot_x": float(frontier_points[i].x), "plot_y": float(frontier_points[i].y)})
+	map_check(KnownMap.valid_packet(frontier), "Closed version2 eight-node map refused")
+	for dimensions in [Vector2(272, 244), Vector2(640, 450), Vector2(1280, 720), Vector2(16384, 16384)]: map_rect_bounds(KnownMap.rects_for_packet(frontier, dimensions), dimensions, 8)
+	for dimensions in [Vector2(272, 176), Vector2(272, 243), Vector2(271, 244), Vector2(NAN, 244), Vector2(272, INF), Vector2(16385, 244)]: map_check(KnownMap.rects_for_packet(frontier, dimensions).is_empty(), "Invalid or overlapping frontier dimensions admitted")
+	var legacy_overflow := frontier.duplicate(true)
+	legacy_overflow.version = 1
+	map_check(not KnownMap.valid_packet(legacy_overflow), "Map1 silently widened to eight nodes")
+	var frontier_overflow := frontier.duplicate(true)
+	frontier_overflow.nodes.append({"system_id": "system-0000000000000009", "name": "Known9", "current": false, "selected": false, "plot_x": 0.0, "plot_y": 0.0})
+	map_check(not KnownMap.valid_packet(frontier_overflow), "Ninth map2 node admitted")
 
 func check_known_map_readers(fixtures: String, assets: String, output: String) -> void:
 	if not map_check(DirAccess.make_dir_recursive_absolute(output) == OK, "proof folder unavailable"): return
@@ -486,6 +499,64 @@ func check_known_map_readers(fixtures: String, assets: String, output: String) -
 	for phase in sources: map_check(FileAccess.get_sha256(source.path_join(phase)) == sources[phase], "map reader rewrote C++ source fixture")
 	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
 	if map_check(file != null, "map report unavailable"): file.store_string(JSON.stringify({"schema": "apsis.known-chart-map-native/1", "completed": failures == 0, "failures": failures, "assertions": known_map_assertions, "source_sha256": sources, "witnesses": witnesses, "scope": "Existing actual four/five-known C++ charted fixtures, passive cached projection, stable admitted points, read-only whole Save, keyboard-small/selected-pad-normal chart disclosure/resize/Back and unchanged existing selection/C++oracle. Six-node synthetic bounds precede asset host; real six-known and alternate axes are C++ coverage. No new voyage/anchors/distances/edges/range/world or manual/GPU acceptance."}, "\t") + "\n")
+	shell.free()
+	owner = null
+	await process_frame
+
+func check_frontier_map(fixtures: String, assets: String, output: String) -> void:
+	if not map_check(DirAccess.make_dir_recursive_absolute(output) == OK, "frontier map proof folder unavailable"): return
+	var source := fixtures.path_join("frontier-chart")
+	var save_source := source.path_join("frontier-eight.json")
+	var map_source := source.path_join("frontier-eight-map.json")
+	var manifest_source := source.path_join("manifest.json")
+	var source_hashes := {"frontier-eight.json": FileAccess.get_sha256(save_source), "frontier-eight-map.json": FileAccess.get_sha256(map_source), "manifest.json": FileAccess.get_sha256(manifest_source)}
+	var expected: Variant = JSON.parse_string(FileAccess.get_file_as_string(map_source))
+	if not map_check(expected is Dictionary and expected.get("version") == 2.0, "actual C++ frontier map sidecar missing"): return
+	# JSON represents its integer as a float; only this schema discriminator is normalized.
+	expected.version = 2
+	if not map_check(KnownMap.valid_packet(expected) and expected.nodes.size() == 8, "actual C++ eight-node sidecar invalid"): return
+	var owner: Variant = restore(save_source)
+	if owner == null: return
+	var original := FileAccess.get_file_as_bytes(save_source)
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var packet: Dictionary = owner.get_freedom_known_chart_map()
+	if not map_check(packet == expected and packet.version == 2 and packet.nodes.size() == 8, "real bridge map differs from actual C++ eight-point projection"): return
+	for repeat in 3: map_check(owner.get_freedom_known_chart_map() == packet and owner.get_freedom_flight_state() == before, "frontier map getter changed its owner")
+	map_rect_bounds(KnownMap.rects_for_packet(packet, KnownMap.FRONTIER_MINIMUM), KnownMap.FRONTIER_MINIMUM, 8)
+	var read := output.path_join("read.json")
+	map_check(save_bytes(owner, read) == original, "frontier map reading changed complete Save")
+	var shell := shell_for(owner, save_source, assets)
+	if shell == null: return
+	var view: Control = shell.current_view
+	var old_size := root.size
+	var witnesses: Array = []
+	for pixels in [Vector2i(640, 450), Vector2i(1280, 720)]:
+		root.size = pixels
+		view.show_instruments()
+		view.chart_button.button_pressed = true
+		view.refresh_known_chart_map()
+		view.update_view(0.0)
+		for frame in 3: await process_frame
+		view.hud_scroll.ensure_control_visible(view.known_chart_map)
+		for frame in 2: await process_frame
+		map_check(view.paused and view.known_chart_map.is_visible_in_tree() and view.known_chart_map.packet == packet, "frontier eight-point disclosure or resize cache is stale")
+		map_rect_bounds(view.known_chart_map.marker_rects(), view.known_chart_map.size, 8)
+		var density: Vector2 = view.get_viewport().get_final_transform().get_scale().abs()
+		var font_pixels: float = float(roundi(20.0 * view.known_chart_map.ui_scale)) * minf(density.x, density.y)
+		map_check(density.is_finite() and minf(density.x, density.y) > 0.0 and font_pixels >= 18.0, "frontier ordinal font is unreadable in physical pixels")
+		for box: Rect2 in view.known_chart_map.marker_rects(): map_check(minf(box.size.x * density.x, box.size.y * density.y) >= 40.0, "frontier marker shrank in physical pixels")
+		map_check(view.jump_destinations.filter(func(button: Button) -> bool: return button.visible).size() == 8, "actual eight admitted destinations were truncated")
+		for i in 8: map_check(view.jump_destinations[i].text == "Select " + str(before.chart.rows[i].name) and "%d. %s" % [i + 1, packet.nodes[i].name] in view.chart_status.text, "frontier destination button or map ordinal changed ownership")
+		var opened := output.path_join("open-%d.json" % pixels.x)
+		map_check(save_bytes(owner, opened) == original, "frontier opening/resizing changed complete Save")
+		view.instruments_button.pressed.emit()
+		var back := output.path_join("back-%d.json" % pixels.x)
+		map_check(view.paused and not view.instruments_open and not view.known_chart_map.is_visible_in_tree() and save_bytes(owner, back) == original, "frontier Back resumed or changed the journey")
+		witnesses.append({"size": [pixels.x, pixels.y], "font_pixels": font_pixels, "map_size": [view.known_chart_map.size.x, view.known_chart_map.size.y], "open": opened.get_file(), "back": back.get_file()})
+	root.size = old_size
+	for filename in source_hashes: map_check(FileAccess.get_sha256(source.path_join(filename)) == source_hashes[filename], "frontier UI rewrote an actual C++ source")
+	var file := FileAccess.open(output.path_join("report.json"), FileAccess.WRITE)
+	if map_check(file != null, "frontier map report unavailable"): file.store_string(JSON.stringify({"schema": "apsis.frontier-chart-map-native/1", "completed": failures == 0, "failures": failures, "source_sha256": source_hashes, "packet": packet, "witnesses": witnesses, "scope": "Actual C++ New Game, three charged jumps and four acquisitions supplied the admitted eight-point Save. This reader proves projection/layout/cache/Save purity only; it does not claim a physical return, service or manual/GPU acceptance."}, "\t") + "\n")
 	shell.free()
 	owner = null
 	await process_frame
@@ -652,6 +723,7 @@ func run() -> void:
 	await process_frame
 	if not failures: await check_return_charge_readers(args[0], args[1], output.path_join("return-charge-check"))
 	if not failures: await check_known_map_readers(args[0], args[1], output.path_join("known-chart-map"))
+	if not failures: await check_frontier_map(args[0], args[1], output.path_join("frontier-chart"))
 	var commissions := preload("res://tests/survey_commissions_test.gd").new()
 	failures += await commissions.run(self, args[0], args[1], output.path_join("commissions"))
 	var paid := preload("res://tests/paid_operations_test.gd").new()

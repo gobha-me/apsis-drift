@@ -25,6 +25,7 @@ import time
 DERELICT_RECOVERY_PHASES = tuple("""station-selected ready started half near complete
 cancelled interrupted origin-carried origin-paid sold paid-sold prior-sale-enrolled
 lost-cargo unfinished-loss origin-debt debt-sold""".split())
+FRONTIER_CHART_FILES = ("frontier-eight.json", "frontier-eight-map.json", "manifest.json")
 
 TESTS = {
     "native_status": "none",
@@ -273,6 +274,7 @@ def main(argv=None):
     frame_import_fixture = args.build_dir.resolve() / "apsis-drift-freedom-flight-import-tests"
     system_release_fixture = args.build_dir.resolve() / "apsis-drift-native-system-release-tests"
     survey_fixture = args.build_dir.resolve() / "apsis-drift-native-orbital-survey-tests"
+    frontier_chart_fixture = args.build_dir.resolve() / "apsis-drift-native-known-chart-map-tests"
     derelict_fixture = args.build_dir.resolve() / "apsis-drift-native-derelict-tests"
     derelict_recovery_fixture = args.build_dir.resolve() / "apsis-drift-native-derelict-recovery-tests"
     for path in (engine, exporter):
@@ -308,6 +310,8 @@ def main(argv=None):
     if "orbital_survey" in selected:
         if not survey_fixture.is_file() or not os.access(survey_fixture, os.X_OK):
             parser.error(f"missing C++ orbital survey fixture: {survey_fixture}")
+        if not frontier_chart_fixture.is_file() or not os.access(frontier_chart_fixture, os.X_OK):
+            parser.error(f"missing C++ frontier chart fixture: {frontier_chart_fixture}")
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         if not derelict_fixture.is_file() or not os.access(derelict_fixture, os.X_OK):
             parser.error(f"missing C++ derelict fixture: {derelict_fixture}")
@@ -415,6 +419,9 @@ def main(argv=None):
         shutil.copy2(survey_fixture, work / survey_fixture.name)
         survey_fixture = work / survey_fixture.name
         staged_executables.append(survey_fixture)
+        shutil.copy2(frontier_chart_fixture, work / frontier_chart_fixture.name)
+        frontier_chart_fixture = work / frontier_chart_fixture.name
+        staged_executables.append(frontier_chart_fixture)
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         shutil.copy2(derelict_fixture, work / derelict_fixture.name)
         derelict_fixture = work / derelict_fixture.name
@@ -901,6 +908,25 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.relative_to(phases).as_posix(): sha256(path)
             for path in sorted(phases.rglob("*.json"))}
+        save()
+        chart_phases = phases / "frontier-chart"
+        chart_log = work / "frontier-chart-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(frontier_chart_fixture), "--export-frontier", str(chart_phases)],
+            chart_log, env, args.timeout)
+        chart_record = {"family": "frontier_chart_saves", "returncode": code,
+                        "timed_out": timed_out, "seconds": elapsed,
+                        "fixture_sha256": sha256(frontier_chart_fixture)}
+        report["setup"].append(chart_record)
+        save()
+        if code != 0 or timed_out or not all(
+                (chart_phases / name).is_file() and
+                0 < (chart_phases / name).stat().st_size <= 1 << 20
+                for name in FRONTIER_CHART_FILES):
+            print(f"FAIL authoritative frontier chart fixture: {chart_log}", flush=True)
+            return 1
+        chart_record["files_sha256"] = {
+            name: sha256(chart_phases / name) for name in FRONTIER_CHART_FILES}
         save()
     if any(name in selected for name in ("native_derelict", "native_station_crew")):
         phases = work / "derelict-voyage"

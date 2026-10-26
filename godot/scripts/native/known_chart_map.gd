@@ -2,6 +2,7 @@ extends Control
 ## Cached presentation of C++ points from admitted system-location evidence.
 const Finance = preload("res://scripts/native/paid_operations.gd")
 const MINIMUM := Vector2(272, 176)
+const FRONTIER_MINIMUM := Vector2(272, 244)
 const MAXIMUM := 16384.0
 const PADDING := 32.0
 const MARKER_RADIUS := 22.0
@@ -28,9 +29,9 @@ static func chart_key(value: Variant) -> bool:
 
 static func valid_packet(value: Variant) -> bool:
 	if not value is Dictionary or value.size() != 5: return false
-	if not value.get("version") is int or value.version != 1 or not value.get("available") is bool: return false
+	if not value.get("version") is int or value.version not in [1, 2] or not value.get("available") is bool: return false
 	if not Finance.decimal(value.get("tick")) or not bounded_text(value.get("note"), 1024): return false
-	if not value.get("nodes") is Array or value.nodes.size() > 6: return false
+	if not value.get("nodes") is Array or value.nodes.size() > (8 if value.version == 2 else 6): return false
 	if not value.available: return value.nodes.is_empty()
 	if value.nodes.size() < 2: return false
 	var keys := {}
@@ -51,7 +52,8 @@ static func valid_packet(value: Variant) -> bool:
 static func rects_for_packet(value: Variant, dimensions: Vector2) -> Array[Rect2]:
 	var result: Array[Rect2] = []
 	if not valid_packet(value) or not value.available or not dimensions.is_finite(): return result
-	if dimensions.x < MINIMUM.x or dimensions.y < MINIMUM.y or dimensions.x > MAXIMUM or dimensions.y > MAXIMUM: return result
+	var minimum: Vector2 = FRONTIER_MINIMUM if value.version == 2 else MINIMUM
+	if dimensions.x < minimum.x or dimensions.y < minimum.y or dimensions.x > MAXIMUM or dimensions.y > MAXIMUM: return result
 	var extent := dimensions - Vector2(PADDING * 2.0, PADDING * 2.0)
 	for node: Dictionary in value.nodes:
 		var point := Vector2(PADDING, PADDING) + Vector2(node.plot_x, node.plot_y) * extent
@@ -60,6 +62,7 @@ static func rects_for_packet(value: Variant, dimensions: Vector2) -> Array[Rect2
 
 func configure(value: Variant) -> void:
 	packet = value.duplicate(true) if valid_packet(value) else {}
+	custom_minimum_size = (FRONTIER_MINIMUM if packet.get("version") == 2 else MINIMUM) * ui_scale
 	queue_redraw()
 
 func set_ui_scale(value: float) -> void:
@@ -70,7 +73,7 @@ func set_ui_scale(value: float) -> void:
 		return
 	if is_equal_approx(ui_scale, value): return
 	ui_scale = value
-	custom_minimum_size = MINIMUM * ui_scale
+	custom_minimum_size = (FRONTIER_MINIMUM if packet.get("version") == 2 else MINIMUM) * ui_scale
 	queue_redraw()
 
 func marker_rects() -> Array[Rect2]:

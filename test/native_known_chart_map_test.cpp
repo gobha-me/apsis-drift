@@ -4,13 +4,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <numbers>
 #include <source_location>
 #include <stdexcept>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -88,12 +92,17 @@ auto view(const NativeFreedomFlightSession& session, std::uint32_t count)
   check(need(session.known_chart_map_view()) == result &&
             bytes(session) == before,
         "Repeated map reads changed the authoritative complete voyage");
-  check(result.version == 1 && result.tick == session.document().flight.tick &&
+  const auto version =
+      session.knowledge()->recipe.version == kFreedomOuterKnowledgeVersion ? 2U
+                                                                           : 1U;
+  check(result.version == version &&
+            result.tick == session.document().flight.tick &&
             !result.note.empty() && result.note.size() <= 1024 &&
             result.note.find('\0') == std::string::npos,
         "Map returned an invalid owner clock or explanation");
   check(result.available && result.node_count == count && count >= 2 &&
-            count <= kNativeKnownChartMapCapacity,
+            count <= (version == 2 ? kNativeKnownChartMapCapacity
+                                   : kFreedomUnchartedSystemNetworkSize),
         "Map count disclosed a hidden slot or omitted an admitted system");
   const auto chart = need(resolve_freedom_knowledge_chart(
       *session.knowledge(), session.system().catalog.id, *session.resources(),
@@ -393,21 +402,156 @@ auto actual_acquisition() -> void {
           "Continue changed actual fifth/sixth observed positions");
     prior = next;
   }
-  check(prior.node_count == kNativeKnownChartMapCapacity,
+  check(prior.node_count == kFreedomUnchartedSystemNetworkSize &&
+            prior.version == 1,
         "Actual six-known fixture omitted the independently separated "
         "third-axis nodes");
+}
+auto outer_acquisition(const std::filesystem::path& output) -> void {
+  auto live = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_frontier_network_new_game({42})))));
+  const auto network = need(
+      generate_freedom_system_network({42}, kFreedomOuterSystemNetworkVersion));
+  const auto reach =
+      generate_first_universe_route({42}).distance_light_seconds /
+      kFreedomOuterSearchRangeDivisor;
+  auto prior = view(*live, 4);
+  check(prior.version == 2 && live->star_search_view().version == 2 &&
+            !live->star_search_view().can_begin,
+        "Outer station selects packet2 without claiming eligible flight or "
+        "hidden slots");
+  board(*live);
+  const auto home_bytes = bytes(*live);
+  const auto no_signal = live->star_search_view();
+  check(no_signal.version == 2 && !no_signal.can_begin &&
+            no_signal.note.find(std::to_string(reach)) != std::string::npos &&
+            no_signal.note.find("between system anchors") !=
+                std::string::npos &&
+            !live->begin_star_search() && bytes(*live) == home_bytes,
+        "Eligible Home flight truthfully refuses a local fix with its declared "
+        "anchor reach, without advancing or changing the complete Save");
+  const auto jump_to = [&](SystemId target) {
+    need(live->select_jump(target));
+    stable(prior, view(*live, prior.node_count));
+    need(live->begin_jump());
+    for (SimulationTick i = 0; i < kJumpSpoolTicks + kJumpTransitTicks; ++i)
+      need(live->advance({}));
+    check(live->system().catalog.id == target,
+          "Actual outer map jump did not hand off to its selected system");
+  };
+  const auto acquire = [&]() -> SystemId {
+    const auto source_bytes = bytes(*live);
+    const auto ready = live->star_search_view();
+    check(ready.version == 2 && ready.can_begin && !ready.active &&
+              ready.note.find(std::to_string(reach)) != std::string::npos &&
+              bytes(*live) == source_bytes,
+          "Actual eligible outer source has a pure bounded signal preview");
+    need(live->begin_star_search());
+    for (SimulationTick i = 1; i <= kFreedomStarSearchTicks; ++i) {
+      need(live->advance({}));
+      if (i == kFreedomStarSearchTicks - 1)
+        stable(prior, view(*live, prior.node_count));
+    }
+    const auto result = live->knowledge()->star_search->completed.back().target;
+    const auto next = view(*live, prior.node_count + 1);
+    stable(prior, next);
+    check(need(continued(*live)->known_chart_map_view()) == next,
+          "Continue changed the actually acquired outer map or packet version");
+    prior = next;
+    return result;
+  };
+  // Four real acquisitions and three existing charged handoffs. This is a
+  // chart/projection proof, not a return, refueling or endurance voyage.
+  jump_to(network.nodes[2].system);
+  const auto first = acquire();
+  const auto first_node =
+      need(find_freedom_system_network_node(network, first));
+  check(first_node.ordinal == 4 || first_node.ordinal == 5,
+        "The first waypoint fix skipped its reachable inner frontier");
+  jump_to(first);
+  const auto outer = acquire();
+  check(
+      outer == network.nodes[first_node.ordinal == 4 ? 6 : 7].system,
+      "The first discovered frontier did not acquire its nearer outer contact");
+  const auto second = acquire();
+  check(second == network.nodes[first_node.ordinal == 4 ? 5 : 4].system,
+        "Inclusive h reach failed to retain the remaining inner frontier");
+  jump_to(second);
+  const auto last = acquire();
+  check(last == network.nodes[first_node.ordinal == 4 ? 7 : 6].system &&
+            prior.version == 2 && prior.node_count == 8 &&
+            live->resources()->jump_charges == 0 &&
+            !live->star_search_view().can_begin,
+        "Eight admitted positions require actual acquisitions and exactly "
+        "three original charges, with no new pool or hidden count");
+  if (!output.empty()) {
+    std::filesystem::create_directories(output);
+    need(live->save_as(output / "frontier-eight.json"));
+    auto restored = std::make_unique<NativeFreedomFlightSession>(
+        need(NativeFreedomFlightSession::open(
+            need(native_continue(output / "frontier-eight.json")))));
+    check(bytes(*restored) == bytes(*live) &&
+              need(restored->known_chart_map_view()) == prior,
+          "Exported actual eight-anchor Save changed through file Continue");
+    using Json = nlohmann::ordered_json;
+    Json nodes = Json::array();
+    for (std::uint32_t i = 0; i < prior.node_count; ++i) {
+      const auto& node = prior.nodes[i];
+      nodes.push_back({{"system_id", system_id_string(node.system)},
+                       {"name", node.name},
+                       {"current", node.current},
+                       {"selected", node.selected},
+                       {"plot_x", node.plot_x},
+                       {"plot_y", node.plot_y}});
+    }
+    const Json packet{{"version", prior.version},
+                      {"available", prior.available},
+                      {"tick", std::to_string(prior.tick)},
+                      {"note", prior.note},
+                      {"nodes", nodes}};
+    const Json manifest{
+        {"schema", "apsis.frontier-chart-map-fixture/1"},
+        {"completed", true},
+        {"save", "frontier-eight.json"},
+        {"map", "frontier-eight-map.json"},
+        {"seed", 42},
+        {"tick", std::to_string(prior.tick)},
+        {"source",
+         "Actual frontier New Game, station walk/boarding/release, "
+         "three charged system handoffs and four 1200-tick acquisitions; "
+         "no initialized pose, extra charge, return or refueling claim."}};
+    const auto write = [&](const char* name, const Json& value) {
+      std::ofstream stream(output / name);
+      stream << value.dump(2) << '\n';
+      stream.close();
+      check(!stream.fail(),
+            "Could not write actual frontier map fixture metadata");
+    };
+    write("frontier-eight-map.json", packet);
+    write("manifest.json", manifest);
+  }
 }
 } // namespace
 } // namespace apsis_drift
 
-auto main() -> int {
+auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
+  std::filesystem::path output;
+  if (argc != 1) {
+    if (argc != 3 || std::string_view{argv[1]} != "--export-frontier" ||
+        !(output = argv[2]).is_absolute()) {
+      std::cerr << "Expected --export-frontier ABS_DIR or no arguments\n";
+      return 2;
+    }
+  }
   try {
     basic_charts();
     signed_axes();
     no_lead_slot();
     actual_route();
     actual_acquisition();
+    outer_acquisition(output);
     std::cout << checks << " known-chart-map checks passed\n";
     return 0;
   } catch (const std::exception& error) {

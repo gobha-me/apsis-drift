@@ -189,6 +189,8 @@ struct NativeStarSearchView {
   std::uint32_t acquired_ticks{};
   std::size_t completed{};
   std::string note;
+  // Version1 retains the historical unversioned presentation packet.
+  std::uint32_t version{1};
 };
 
 struct NativeOriginRepairView {

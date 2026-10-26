@@ -778,7 +778,7 @@ func build_ui() -> void:
 	column.add_child(charted_arrival_button)
 	charted_arrival_status = hud_text()
 	column.add_child(charted_arrival_status)
-	for ordinal in 6:
+	for ordinal in 8:
 		var destination := Button.new()
 		destination.focus_mode = Control.FOCUS_ALL
 		destination.pressed.connect(func(): select_jump_destination(ordinal))

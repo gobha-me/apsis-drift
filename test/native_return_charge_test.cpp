@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <source_location>
 #include <stdexcept>
 #include <type_traits>
@@ -304,6 +305,69 @@ auto discoverable_route() -> void {
   check(need(continued(*live)->return_charge_view()) == view(*live),
         "Continue changed actual acquired endpoint budget");
 }
+auto outer_route() -> void {
+  auto live = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(
+          need(native_frontier_network_new_game({42})))));
+  const auto network = need(
+      generate_freedom_system_network({42}, kFreedomOuterSystemNetworkVersion));
+  const auto origin = network.nodes[0].system;
+  const auto hidden_bytes = bytes(*live);
+  for (std::size_t i = 4; i < network.nodes.size(); ++i)
+    check(!live->select_jump(network.nodes[i].system) &&
+              bytes(*live) == hidden_bytes,
+          "Generated unknown outer endpoint leaked into selectable return "
+          "budgets");
+  need(live->advance_walk({0, 0, -std::numbers::pi / 2}));
+  const auto lead = need(live->station_stellar_lead_view());
+  check(lead.selected && lead.can_keep && lead.offer_tick &&
+            live->knowledge()->star_search->completed.empty(),
+        "Outer profile lost the existing unverified attendant offer at Origin");
+  const auto facts = live->knowledge()->entries;
+  need(live->receive_station_stellar_lead(*lead.offer_tick));
+  check(live->knowledge()->entries == facts &&
+            need(live->station_stellar_lead_view()).status == "unverified",
+        "Keeping outer-profile hearsay fabricated a resolved route endpoint");
+  unavailable(*live);
+  need(live->select_jump(network.nodes[2].system));
+  route(*live, network.nodes[2].system, origin);
+  board(*live);
+  need(live->release_port());
+  const auto jump_to = [&](SystemId target) {
+    need(live->select_jump(target));
+    need(live->begin_jump());
+    for (SimulationTick i = 0; i < kJumpSpoolTicks + kJumpTransitTicks; ++i)
+      need(live->advance({}));
+    unavailable(*live); // Existing selection now names the current system.
+  };
+  jump_to(network.nodes[2].system);
+  need(live->begin_star_search());
+  for (SimulationTick i = 0; i < kFreedomStarSearchTicks; ++i)
+    need(live->advance({}));
+  const auto inner = live->knowledge()->star_search->completed.back().target;
+  need(live->select_jump(inner));
+  route(*live, inner, origin);
+  jump_to(inner);
+  need(live->begin_star_search());
+  for (SimulationTick i = 0; i < kFreedomStarSearchTicks; ++i)
+    need(live->advance({}));
+  const auto outer = live->knowledge()->star_search->completed.back().target;
+  const auto node = need(find_freedom_system_network_node(network, outer));
+  check(node.ordinal >= 6 && node.ordinal < 8,
+        "Native source did not earn an actual outer identity/location fix");
+  need(live->select_jump(outer));
+  route(*live, outer, origin);
+  const auto budget = view(*live);
+  check(budget.version == 1 && budget.jump_charges == 1 &&
+            budget.required_charges == 2 && budget.charge_shortfall == 1 &&
+            budget.legs[0].destination_name.find("Outer frontier ") == 0,
+        "Outer routing must retain the unchanged named two-leg budget and "
+        "actual one-charge shortfall, not a new reserve or departure gate");
+  check(need(continued(*live)->return_charge_view()) == budget,
+        "Continue changed the actual acquired outer return-charge reading");
+  need(live->select_jump(origin));
+  route(*live, origin, origin);
+}
 auto unsupported() -> void {
   auto legacy = std::make_unique<NativeFreedomFlightSession>(
       need(NativeFreedomFlightSession::open(need(native_new_game({42})))));
@@ -326,6 +390,7 @@ auto main() -> int {
     unsupported();
     known_route();
     discoverable_route();
+    outer_route();
     std::cout << checks << " return-charge checks passed\n";
     return 0;
   } catch (const std::exception& error) {

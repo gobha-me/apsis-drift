@@ -32,7 +32,9 @@ An [asteroid inspection trip](docs/ASTEROID_INSPECTION.md) adds close flight aro
 one existing minor body, an explicit stand-off limit and a charged return.
 The title screen also offers [four charted systems](docs/FREEDOM_TOPOLOGY.md#optional-four-system-region)
 for a new journey, or [two additional uncharted systems](docs/FREEDOM_TOPOLOGY.md#discoverable-systems)
-to discover in flight; existing saves retain their original map. New uncharted
+to discover in flight. The separate [outer-frontier profile](docs/FREEDOM_TOPOLOGY.md#outer-frontier)
+extends the seeded region with contacts that require searching from farther out;
+existing saves retain their original map. New uncharted
 journeys also include a [derelict exterior to find and inspect](docs/FREEDOM_TOPOLOGY.md#derelict-inspection).
 Optional [survey work](docs/SURVEY_COMMISSIONS.md) earns credits for fresh orbital
 measurements, and an [Origin buyer](docs/SPECIMEN_SALES.md) purchases carried

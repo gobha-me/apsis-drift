@@ -115,3 +115,29 @@ for the finite catalogs and their histories. Legacy recipes retain 128 facts
 and 65536 bytes. Transition, inspection and survey bounds remain unchanged.
 The document validator binds recipe 4 to the explicit selected origin; a pair
 save cannot borrow it to disclose extra destinations.
+
+## Discoverable profiles
+
+The [six-system profile](FREEDOM_TOPOLOGY.md#discoverable-systems) uses
+knowledge6/chart4/search1. The separate
+[outer-frontier profile](FREEDOM_TOPOLOGY.md#outer-frontier) uses
+knowledge7/chart5/search2 and network3. Both start with only the original four
+system anchors and their planetary navigation charts. Search1 retains its
+unrestricted regional selection and two completed records. Search2 filters
+contacts by its declared anchor-based reach before choosing the nearest and
+admits at most four completed records. Their versions cannot be interchanged
+in a Save.
+
+A completed fix binds its source system, craft, start/completion ticks and
+resolved navigation facts. A hidden system can be an acquisition source only
+after its own fix was acquired. Save/Continue preserves the active immutable
+target and partial progress; committed travel or craft replacement discards
+unfinished work. Station hearsay uses its separate unbounded selection policy
+and grants no sensor facts.
+
+Both profiles retain the existing 384-fact and 262144-byte bounds and the
+existing optional survey, specimen, paid-operation and derelict state versions.
+The lightweight native signal query operates on an already admitted snapshot:
+it reconstructs only bounded network anchors and returns a boolean. It exposes
+no hidden identity, coordinates or remaining-contact count. Commands and Save
+admission still authenticate the complete ledger and generated world.
