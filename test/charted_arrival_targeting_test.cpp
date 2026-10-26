@@ -70,7 +70,7 @@ auto invalid_contract() -> void {
       case 3: bad.charted_arrival->version = 0; break;
       case 4: bad.charted_arrival->version = 2; break;
       case 5: bad.network.reset(); break;
-      case 6: bad.network->version = 3; break;
+      case 6: bad.network->version = 4; break;
       case 7: bad.craft.value ^= 1; break;
       case 8: bad.source.frame.planet.reset(); break;
       case 9: bad.source.craft.version = 2; break;

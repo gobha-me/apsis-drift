@@ -86,7 +86,7 @@ auto invalid_contract() -> void {
       case 1: request.attempt = 0; break;
       case 2: request.attempt = UINT64_MAX; break;
       case 3: request.source.origin.network.reset(); break;
-      case 4: request.source.origin.network->version = 3; break;
+      case 4: request.source.origin.network->version = 4; break;
       case 5: request.destination.body.kind = BodyKind::minor; break;
       case 6: request.destination.system = {}; break;
       case 7:

@@ -503,6 +503,31 @@ func check_known_map_readers(fixtures: String, assets: String, output: String) -
 	owner = null
 	await process_frame
 
+func frontier_map_matches(actual: Variant, expected: Variant) -> bool:
+	if not KnownMap.valid_packet(actual) or not KnownMap.valid_packet(expected): return false
+	if actual.nodes.size() != expected.nodes.size(): return false
+	var normalized: Dictionary = expected.duplicate(true)
+	for i in actual.nodes.size():
+		for key in ["plot_x", "plot_y"]:
+			# The measured Godot JSON parse differs from the C++ double by one
+			# ULP at two coordinates. All non-coordinate fields remain exact.
+			# Valid packets bound these finite doubles to [0, 1], so their
+			# positive bit patterns and their difference fit signed int64.
+			var actual_value: float = actual.nodes[i][key]
+			var expected_value: float = expected.nodes[i][key]
+			if actual_value == 0.0: actual_value = 0.0
+			if expected_value == 0.0: expected_value = 0.0
+			var actual_bytes := PackedByteArray()
+			var expected_bytes := PackedByteArray()
+			actual_bytes.resize(8)
+			expected_bytes.resize(8)
+			actual_bytes.encode_double(0, actual_value)
+			expected_bytes.encode_double(0, expected_value)
+			if absi(actual_bytes.decode_u64(0) - expected_bytes.decode_u64(0)) > 1: return false
+			normalized.nodes[i][key] = actual_value
+	return actual == normalized
+
+
 func check_frontier_map(fixtures: String, assets: String, output: String) -> void:
 	if not map_check(DirAccess.make_dir_recursive_absolute(output) == OK, "frontier map proof folder unavailable"): return
 	var source := fixtures.path_join("frontier-chart")
@@ -520,7 +545,7 @@ func check_frontier_map(fixtures: String, assets: String, output: String) -> voi
 	var original := FileAccess.get_file_as_bytes(save_source)
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var packet: Dictionary = owner.get_freedom_known_chart_map()
-	if not map_check(packet == expected and packet.version == 2 and packet.nodes.size() == 8, "real bridge map differs from actual C++ eight-point projection"): return
+	if not map_check(frontier_map_matches(packet, expected) and packet.version == 2 and packet.nodes.size() == 8, "real bridge map differs from actual C++ eight-point projection"): return
 	for repeat in 3: map_check(owner.get_freedom_known_chart_map() == packet and owner.get_freedom_flight_state() == before, "frontier map getter changed its owner")
 	map_rect_bounds(KnownMap.rects_for_packet(packet, KnownMap.FRONTIER_MINIMUM), KnownMap.FRONTIER_MINIMUM, 8)
 	var read := output.path_join("read.json")

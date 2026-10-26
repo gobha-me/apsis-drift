@@ -111,7 +111,7 @@ auto network_roundtrips() -> void {
     }
     for (const auto& selection :
          {Json(nullptr), Json::object(), Json{{"version", true}},
-          Json{{"version", 3U}}, Json{{"version", 1U}, {"seed", "42"}}}) {
+          Json{{"version", 4U}}, Json{{"version", 1U}, {"seed", "42"}}}) {
       auto bad = json;
       bad["network"] = selection;
       check(!decode_freedom_save_document_json(bad.dump()),
