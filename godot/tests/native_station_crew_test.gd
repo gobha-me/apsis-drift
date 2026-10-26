@@ -338,6 +338,18 @@ func service_interactions(shell: Control, owner: Variant, phases: String, assets
 		view.set_process(false)
 		view.set_process_input(false)
 		view.preferences_provider.persist = false
+		view.observe_neutral_controls()
+		view.resume_requested()
+		view.request_crew_conversation()
+		var historical := save(owner, output.path_join("services-" + gesture + "-historical.json"))
+		if not check(view.crew_open() and not view.crew_reader.services[0].disabled and view.crew_reader.services[1].disabled, "Historical condition-free journey lost office access or invented repair support"): return
+		view.crew_reader.services[1].pressed.emit()
+		check(view.crew_open() and not view.origin_repair_open() and save(owner, output.path_join("services-" + gesture + "-unavailable.json")) == historical, "Unavailable historical repair changed the Save or opened service")
+		view.close_crew_conversation()
+		# Explicit public mode selection on a test clone supplies a genuine
+		# pristine condition owner. It is not a flown damage/repair claim.
+		if not check(owner.enable_freedom_impact_consequences(), "Public condition selection refused for service clone"): return
+		view.update_view()
 		if gesture == "pad":
 			Input.joy_connection_changed.emit(0, true)
 			pad(view, 0, JOY_BUTTON_START, true)
@@ -540,6 +552,8 @@ func run() -> void:
 	shell.presentation_only = true
 	root.add_child(shell)
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	await service_interactions(shell, owner, derelict_phases, assets, output)
+	if failures != 0: shell.free(); quit(1); return
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Crew source Continue failed: " + shell.error): shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	view.set_process(false)
@@ -675,7 +689,6 @@ func run() -> void:
 	stop_talk_regressions(shell, owner, source, assets, output)
 	await earned_contact_topics(shell, owner, derelict_phases, assets, output, packet.topics)
 	await lead_interactions(shell, owner, derelict_phases, assets, output)
-	await service_interactions(shell, owner, derelict_phases, assets, output)
 	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Original station route reset refused"): shell.free(); quit(1); return
 	view = shell.current_view
 	view.set_process(false)
