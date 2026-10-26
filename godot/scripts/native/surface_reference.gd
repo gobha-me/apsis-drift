@@ -72,10 +72,10 @@ func refresh_collection(available: bool, reason: String) -> void:
 	collection_status.text = reason
 
 func show_collection_result(result := "") -> void:
-	if result.is_empty() or result == collect_button.tooltip_text:
-		collection_status.text = collect_button.tooltip_text
-	else:
-		collection_status.text = result + "\n" + collect_button.tooltip_text
+	# An empty call only reveals the existing result after layout/resizing.
+	# Fresh availability already replaced this text before any refused action.
+	if not result.is_empty():
+		collection_status.text = result if result == collect_button.tooltip_text else result + "\n" + collect_button.tooltip_text
 	# The changed text needs container layout before it can be brought into
 	# view. Owned frames cannot outlive a rapid Back/Continue transition.
 	feedback_scroll_frames = 2
