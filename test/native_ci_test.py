@@ -217,7 +217,7 @@ class NativeCiTest(unittest.TestCase):
     def test_pack_and_unpack_exact_payload_modes(self):
         output = self.root / "unpacked"
         ci.unpack(self.archive, self.envelope, output)
-        self.assertEqual(len(self.m["files"]), 14)
+        self.assertEqual(len(self.m["files"]), 15)
         for name, row in self.m["files"].items():
             p = output / name
             self.assertEqual(ci.digest(p), row["sha256"])

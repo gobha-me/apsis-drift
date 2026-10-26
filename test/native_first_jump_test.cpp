@@ -638,7 +638,13 @@ auto frontier_roundtrip(const std::filesystem::path& path) -> void {
     check(!live->select_jump(network.nodes[ordinal].system) &&
               saved_bytes(*live) == initial,
           "Generated but unearned hidden IDs cannot select a frontier jump");
-  *live = resume(*live, path);
+  // The station has no travel owner before its first selected jump.
+  need(live->save_as(path));
+  auto station_copy = std::make_unique<NativeFreedomFlightSession>(
+      need(NativeFreedomFlightSession::open(need(native_continue(path)))));
+  check(saved_bytes(*station_copy) == initial,
+        "Station Save/Continue preserves the complete predeparture journey");
+  live = std::move(station_copy);
   for (unsigned tick = 0; tick < 1194; ++tick)
     need(live->advance_walk({0, -1, 0}));
   need(live->begin_boarding());
