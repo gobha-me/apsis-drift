@@ -235,9 +235,19 @@ func stop_talk_regressions(shell: Control, owner: Variant, source: String, asset
 	print("Station stop-talk regressions: 7 scenarios checked")
 
 func mouse_topic(button: Button) -> void:
+	# Entry can construct/show this reader and invoke the test in one frame.
+	# Let its wrapped text and panes settle before focus-follow scroll uses the
+	# button rectangle; otherwise the later centre can lie below the pane.
+	await process_frame
+	await process_frame
 	button.grab_focus()
 	await process_frame
 	await process_frame
+	var pane: ScrollContainer = button.get_parent().get_parent() as ScrollContainer
+	var rect: Rect2 = button.get_global_rect()
+	var clip: Rect2 = pane.get_global_rect()
+	var detail := "viewport=%s button=%s rect=%s pane=%s scroll=%d focus=%s" % [root.get_visible_rect(), button.text, rect, clip, pane.scroll_vertical, button.has_focus()]
+	if not check(button.is_visible_in_tree() and not button.disabled and button.has_focus() and rect.has_area() and clip.grow(1.0).encloses(rect) and root.get_visible_rect().encloses(rect), "Physical crew mouse target is clipped or unfocused after layout: " + detail): return
 	for down in [true, false]:
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
@@ -405,7 +415,7 @@ func service_interactions(shell: Control, owner: Variant, phases: String, assets
 			view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 			view.open_crew_service("unknown")
 			check(view.crew_open() and not view.commissions_open() and not view.origin_repair_open() and save(owner, prefix + "-guarded.json") == baseline, "Service entry bypassed demand/focus/modal guards: " + service)
-			button.grab_focus()
+			if gesture != "mouse": button.grab_focus()
 			if gesture == "mouse": await mouse_topic(button)
 			elif gesture == "pad":
 				pad(view, 0, JOY_BUTTON_A, true)
@@ -499,7 +509,7 @@ func lead_interactions(shell: Control, owner: Variant, phases: String, assets: S
 		view.crew_reader.keep.pressed.emit()
 		view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
 		check(not owner.get_freedom_station_stellar_lead().kept and save(owner, prefix + "-guarded.json") == initial, "Held demand/focus/modal bypassed Keep guards")
-		view.crew_reader.keep.grab_focus()
+		if gesture != "mouse": view.crew_reader.keep.grab_focus()
 		if gesture == "mouse":
 			await mouse_topic(view.crew_reader.keep)
 		elif gesture == "pad":

@@ -498,8 +498,8 @@ func run() -> void:
 	frontier_title.persist_controls = false
 	frontier_title.catalog_owner = shell.bridge
 	root.add_child(frontier_title)
-	var requests: Array[Dictionary] = []
-	frontier_title.start_requested.connect(func(selection: Dictionary): requests.append(selection))
+	var frontier_requests: Array[Dictionary] = []
+	frontier_title.start_requested.connect(func(selection: Dictionary): frontier_requests.append(selection))
 	frontier_title.network_choice.select(4)
 	frontier_title.network_choice.item_selected.emit(4)
 	frontier_title.recovery_choice.select(2)
@@ -507,9 +507,12 @@ func run() -> void:
 	frontier_title.derelict_recovery_choice.button_pressed = true
 	check(frontier_title.network_choice.get_item_text(4) == "Outer frontier: four charted systems" and not frontier_title.derelict_recovery_choice.disabled, "Frontier title label or retrieval composition unavailable")
 	frontier_title.begin_new()
-	check(requests.size() == 1 and requests[0] == {"mode": "new_game", "value": "42", "network": true, "planetary": false, "uncharted": false, "frontier": true, "drive_recovery": true, "drive_strain": true, "origin_service": true, "derelict_recovery": true}, "Title help changed its explicit frontier start arguments")
-	if requests.size() == 1:
-		var options: Dictionary = requests[0].duplicate(true)
+	check(frontier_requests.size() == 1, "Frontier title emitted duplicate or missing requests")
+	if frontier_requests.size() == 1:
+		var options: Dictionary = frontier_requests[0].duplicate(true)
+		check(options.get("_title_request") == frontier_title.request_generation, "Frontier title request lost its UI-generation guard")
+		options.erase("_title_request")
+		check(options == {"mode": "new_game", "value": "42", "network": true, "planetary": false, "uncharted": false, "frontier": true, "drive_recovery": true, "drive_strain": true, "origin_service": true, "derelict_recovery": true}, "Title help changed its explicit frontier start arguments")
 		options.assets = args[0]
 		check(shell.select_start(shell.bridge, options), "Actual frontier title request refused: " + shell.error)
 		var frontier_state: Dictionary = shell.bridge.get_freedom_flight_state()
