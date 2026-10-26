@@ -257,6 +257,8 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   const auto ordinary_bytes = bytes(ordinary);
   check(!need(ordinary.survey_commission_view()).supported,
         "Historical ordinary chart gained commission policy implicitly");
+  check(ordinary.survey_commission_acquisition_status().empty(),
+        "Unselected historical journey invents acquisition feedback");
   refuse_actions(ordinary, 0, 1);
   check(bytes(ordinary) == ordinary_bytes,
         "Unsupported reader changed ordinary startup");
@@ -272,7 +274,8 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   for (unsigned i = 0; i < 3; ++i)
     (void)need(session.survey_commission_view());
   check(bytes(session) == unselected &&
-            !session.knowledge()->survey_commissions,
+            !session.knowledge()->survey_commissions &&
+            session.survey_commission_acquisition_status().empty(),
         "Reading commissions selected a ledger or advanced time");
   checkpoint(session, output, "commission-station", phases);
   if (paid_mode) {
@@ -337,6 +340,14 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
           need(session.survey_commission_view()).acquired_ticks == 0,
       "Acceptance changed physics/resources/knowledge or invented measurement");
   checkpoint(session, output, "commission-accepted", phases);
+  const auto status_before = bytes(session);
+  check(session.survey_commission_acquisition_status() ==
+                "Survey held: travel to the accepted planet" &&
+            session.survey_commission_acquisition_status() ==
+                need(session.survey_commission_view()).note &&
+            bytes(session) == status_before,
+        "Wrong-body commission feedback differs from the office or mutates "
+        "the voyage");
   const auto accepted = session;
   if (paid_mode) {
     // Explicit insolvent account/store fixture: no claim these debts were
@@ -381,11 +392,13 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   auto abandoned = reopen(session);
   need(abandoned.abandon_survey_commission(offered.offer_sequence));
   check(!abandoned.knowledge()->survey_commissions->active &&
-            need(abandoned.survey_commission_view()).earnings == 0,
+            need(abandoned.survey_commission_view()).earnings == 0 &&
+            abandoned.survey_commission_acquisition_status().empty(),
         "Abandonment paid credits or retained active work");
   auto expired = deadline_station(accepted);
   const auto expired_before = bytes(expired);
   check(need(expired.survey_commission_view()).expired &&
+            expired.survey_commission_acquisition_status().empty() &&
             !expired.submit_survey_commission(offered.offer_sequence) &&
             !expired.accept_survey_commission(offered.offer_until,
                                               offered.offer_sequence) &&
@@ -410,12 +423,22 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   session = home_space(std::move(session));
   need(session.set_assistance(false));
   charged_leg(session, offered.system);
+  const auto arrival_before = bytes(session);
+  check(session.survey_commission_acquisition_status().starts_with(
+            "Survey held:") &&
+            session.survey_commission_acquisition_status() ==
+                need(session.survey_commission_view()).note &&
+            bytes(session) == arrival_before,
+        "Actual arrival hides its held physical condition or changes the Save");
   session = measurement_orbit(session);
   const auto orbit_bytes = bytes(session);
   for (unsigned i = 0; i < 3; ++i)
     (void)need(session.survey_commission_view());
   check(bytes(session) == orbit_bytes &&
-            need(session.survey_commission_view()).acquired_ticks == 0,
+            need(session.survey_commission_view()).acquired_ticks == 0 &&
+            session.survey_commission_acquisition_status() ==
+                "Survey eligible: maintain a stable orbit" &&
+            bytes(session) == orbit_bytes,
         "Arrival, initialized orbit, read or Save invented fresh measurement");
   NativeFlightControls invalid;
   invalid.positive_rotation.x = std::numeric_limits<double>::quiet_NaN();
@@ -429,6 +452,8 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
     need(session.advance({}));
   check(need(session.survey_commission_view()).acquired_ticks == 3599 &&
             !need(session.survey_commission_view()).completed &&
+            session.survey_commission_acquisition_status() ==
+                "Survey eligible: maintain a stable orbit" &&
             session.document().flight.tick == acquisition_start + 3599,
         "3599 genuine qualifying flight ticks completed or skipped commission "
         "work");
@@ -445,6 +470,7 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   need(continued.advance({}));
   check(bytes(session) == bytes(continued) &&
             need(session.survey_commission_view()).completed &&
+            session.survey_commission_acquisition_status().empty() &&
             need(session.survey_commission_view()).acquired_ticks == 3600 &&
             !need(session.survey_commission_view()).can_submit,
         "3600th committed tick/Continue differs or remotely pays commission");
@@ -497,6 +523,7 @@ auto run_commission_scenario(const std::optional<std::filesystem::path>& output,
   const auto late_bytes = bytes(late);
   check(need(late.survey_commission_view()).completed &&
             need(late.survey_commission_view()).expired &&
+            late.survey_commission_acquisition_status().empty() &&
             !late.submit_survey_commission(offered.offer_sequence) &&
             bytes(late) == late_bytes &&
             late.knowledge()->survey_commissions->active == earned &&
@@ -624,6 +651,7 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
       expired->survey_commission_view(SurveyCommissionKind::orbital, waypoint));
   const auto expired_bytes = bytes(*expired);
   check(renewal.sequence == quote.offer_sequence && renewal.expired &&
+            expired->survey_commission_acquisition_status().empty() &&
             renewal.can_abandon && renewal.can_accept &&
             need(expired->survey_commission_view()) == renewal &&
             !expired->survey_commission_view(SurveyCommissionKind::orbital,
@@ -651,6 +679,9 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
   need(expired->accept_geological_survey_commission(geo.offer_until,
                                                     geo.offer_sequence));
   const auto geological_terms = bytes(*expired);
+  check(expired->survey_commission_acquisition_status().empty() &&
+            bytes(*expired) == geological_terms,
+        "Geological work invents an orbital-acquisition status");
   check(!expired->survey_commission_view(
             SurveyCommissionKind::orbital,
             BodyTarget{geo.system, body_id(geo.planet)}) &&
@@ -764,13 +795,21 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
   // The wrong commissioned body cannot acquire progress, even during real
   // ticks.
   need(session->advance({}));
-  check(need(session->survey_commission_view()).acquired_ticks == 0,
+  const auto wrong_body = bytes(*session);
+  check(need(session->survey_commission_view()).acquired_ticks == 0 &&
+            session->survey_commission_acquisition_status() ==
+                "Survey held: travel to the accepted planet" &&
+            bytes(*session) == wrong_body,
         "Origin flight cannot remotely fulfill the Waypoint measurement");
   charged_leg(*session, waypoint.system);
   *session = measurement_orbit(*session);
   for (unsigned tick = 0; tick < 600; ++tick)
     need(session->advance({}));
-  check(need(session->survey_commission_view()).acquired_ticks == 600,
+  const auto partial_before = bytes(*session);
+  check(need(session->survey_commission_view()).acquired_ticks == 600 &&
+            session->survey_commission_acquisition_status() ==
+                "Survey eligible: maintain a stable orbit" &&
+            bytes(*session) == partial_before,
         "Chosen destination must count exactly six hundred genuine intervals");
   checkpoint(*session, output, "partial", phases);
   auto peer = std::make_unique<NativeFreedomFlightSession>(reopen(*session));
@@ -788,6 +827,7 @@ auto run_destination_scenario(const std::optional<std::filesystem::path>& root)
   }
   check(bytes(*session) == bytes(*peer) &&
             need(session->survey_commission_view()).completed &&
+            session->survey_commission_acquisition_status().empty() &&
             !need(session->survey_commission_view()).can_submit,
         "Partial Continue must converge on fresh completion without remote "
         "payout");

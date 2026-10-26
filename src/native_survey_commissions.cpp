@@ -30,6 +30,36 @@ auto target_name(const FreedomKnowledge& knowledge, SystemId system,
 }
 } // namespace
 
+auto NativeFreedomFlightSession::survey_commission_measurement_conditions()
+    const -> std::expected<void, std::string> {
+  if (!knowledge_ || !knowledge_->survey_commissions ||
+      !knowledge_->survey_commissions->active ||
+      knowledge_->survey_commissions->active->kind !=
+          SurveyCommissionKind::orbital)
+    return std::unexpected{"No active orbital commission"};
+  const auto& job = *knowledge_->survey_commissions->active;
+  if (system_.catalog.id != job.system ||
+      rotation_.rotation.planet != job.planet || moon_ || minor_)
+    return std::unexpected{"Survey held: travel to the accepted planet"};
+  return orbital_measurement_conditions();
+}
+
+auto NativeFreedomFlightSession::survey_commission_acquisition_status() const
+    -> std::string {
+  if (!knowledge_ || !knowledge_->survey_commissions ||
+      !knowledge_->survey_commissions->active)
+    return {};
+  const auto& job = *knowledge_->survey_commissions->active;
+  if (job.kind != SurveyCommissionKind::orbital ||
+      document_.flight.tick >= job.deadline_tick ||
+      (job.measurement &&
+       job.measurement->acquired_ticks == kSurveyCommissionMeasurementTicks))
+    return {};
+  if (auto ready = survey_commission_measurement_conditions(); !ready)
+    return ready.error();
+  return "Survey eligible: maintain a stable orbit";
+}
+
 auto NativeFreedomFlightSession::survey_commission_offers() const
     -> std::expected<NativeSurveyCommissionOffersView, std::string> {
   NativeSurveyCommissionOffersView view;
@@ -203,11 +233,7 @@ auto NativeFreedomFlightSession::survey_commission_view(
     else if (view.completed)
       view.note = "Fresh measurement complete. Return to Origin, attach to "
                   "a port and explicitly submit before the deadline.";
-    else if (system_.catalog.id != job.system ||
-             rotation_.rotation.planet != job.planet || moon_ || minor_)
-      view.note = "Travel to the accepted planet. The scanner acquires only "
-                  "new qualifying flight intervals there.";
-    else if (auto ready = orbital_measurement_conditions(); !ready)
+    else if (auto ready = survey_commission_measurement_conditions(); !ready)
       view.note = ready.error();
     else
       view.note = "Acquiring fresh orbital reference measurements. Maintain "
@@ -426,10 +452,7 @@ auto NativeFreedomFlightSession::advance_survey_commission_tick()
     return {};
   const auto& job = *knowledge_->survey_commissions->active;
   if (job.kind != SurveyCommissionKind::orbital) return {};
-  const bool qualifies = !moon_ && !minor_ &&
-                         system_.catalog.id == job.system &&
-                         rotation_.rotation.planet == job.planet &&
-                         orbital_measurement_conditions().has_value();
+  const bool qualifies = survey_commission_measurement_conditions().has_value();
   auto next = apsis_drift::advance_survey_commission(
       *knowledge_->survey_commissions, document_.origin.state.craft,
       document_.flight.tick, qualifies);

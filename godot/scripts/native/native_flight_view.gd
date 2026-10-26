@@ -252,7 +252,13 @@ static func valid_commission_progress(value: Variant) -> bool:
 		if not value.active or not value.get("remaining_ticks") is int or value.remaining_ticks < 0 or value.remaining_ticks > 1728000: return false
 		if not NativeEnvironment.decimal(value.get("earnings")) or SurveyCommissions.decimal_before("429496729500", value.earnings) or int(value.earnings) % 100 != 0: return false
 		return value.expired == (value.remaining_ticks == 0) and not (value.expired and value.ready)
-	if value.size() != 6: return false
+	if value.size() != 7: return false
+	if not value.get("status") is String: return false
+	var status: String = value.status
+	if status.to_utf8_buffer().size() > 256: return false
+	for index in status.length():
+		var code: int = status.unicode_at(index)
+		if code < 32 or (code >= 127 and code <= 159): return false
 	if not value.get("acquired_ticks") is int or value.acquired_ticks < 0 or value.acquired_ticks > 3600: return false
 	for key in ["active", "completed", "expired"]:
 		if not value.get(key) is bool: return false
@@ -260,6 +266,7 @@ static func valid_commission_progress(value: Variant) -> bool:
 	if int(value.earnings) % 100 != 0 or value.completed != (value.acquired_ticks == 3600): return false
 	if not value.get("remaining_ticks") is int or value.remaining_ticks < 0 or value.remaining_ticks > 1728000: return false
 	if value.expired != (value.active and value.remaining_ticks == 0): return false
+	if status.is_empty() != (not value.active or value.completed or value.expired): return false
 	return value.active or (value.acquired_ticks == 0 and not value.completed and not value.expired and value.remaining_ticks == 0)
 
 
@@ -272,7 +279,8 @@ static func commission_progress_text(value: Variant) -> String:
 	else:
 		work = "report ready" if value.completed else "%.1f / 30 s" % (floorf(float(value.acquired_ticks) / 12.0) / 10.0)
 	var remaining := "less than 1 s" if value.remaining_ticks < 120 else SurveyCommissions.seconds_text(floori(float(value.remaining_ticks) / 120.0))
-	return "Commission · %s · %s left" % [work, remaining]
+	var line: String = "Commission · %s · %s left" % [work, remaining]
+	return line if value.get("version") == 2 or value.completed else line + "\n" + value.status
 
 
 static func valid_state(value: Dictionary) -> bool:
@@ -1059,12 +1067,26 @@ func update_compact_hud() -> void:
 	instruments_button.visible = true
 	instruments_button.text = "Back to controls" if detailed else "Esc / Start · Controls"
 	instruments_button.focus_mode = Control.FOCUS_ALL if detailed else Control.FOCUS_NONE
-	var margin := Status.layout_bounds(size, Vector2(get_window().size)).position.x
+	var compact_pixels: Vector2 = Vector2(get_window().size)
+	var compact_bounds: Rect2 = Status.layout_bounds(size, compact_pixels)
+	var margin: float = compact_bounds.position.x
+	var show_acquisition_status: bool = false
+	if compact_pixels.is_finite() and compact_pixels.x > 0.0 and compact_pixels.y > 0.0 and size.is_finite() and size.x > 0.0 and size.y > 0.0:
+		var compact_scale: float = maxf(1.0, maxf(size.x / compact_pixels.x, size.y / compact_pixels.y))
+		var acquisition: Variant = state.get("survey_commission")
+		show_acquisition_status = not detailed and valid_commission_progress(acquisition) and not acquisition.has("version") and acquisition.active and not acquisition.completed and not acquisition.expired
+		# Width depends only on the current mode/state, never deferred text
+		# height. Restore the original compact width as soon as work is ready.
+		primary_status.size.x = minf(560.0 * compact_scale, maxf(0.0, size.x - 2.0 * margin)) if show_acquisition_status else compact_bounds.size.x
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
 	# Quiet refreshes absorb command/load changes without inventing a finding.
 	observation_cue.observe(state, false, 0.0)
 	surface_aid_cue.observe(state, false, 0.0)
 	primary_status.text = Status.summary(state, player_input.foot_keyboard_label() if player_input != null else "WASD") if error.is_empty() else "Flight paused\n" + error
+	if show_acquisition_status:
+		# Preserve both telemetry values on one row; the full service result,
+		# acquisition reason and unchanged 18 px body font still need room.
+		primary_status.text = primary_status.text.replace("\nFlight assistance on\nFuel ", "\nFlight assistance on · Fuel ")
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
 		if not outcome.is_empty(): primary_status.text += "\n" + outcome
@@ -1179,6 +1201,17 @@ func update_compact_hud() -> void:
 		elif player_input != null and player_input.last_device != "pad": context_action.text += " · left click"
 		context_action.tooltip_text = context_source.tooltip_text
 		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
+	var commission: Variant = state.get("survey_commission")
+	if valid_commission_progress(commission) and not commission.has("version"):
+		# Let the extra wrapped status line use available space, while retaining
+		# the existing lower action/Controls area and actual physical font size.
+		var pixels: Vector2 = Vector2(get_window().size)
+		if pixels.is_finite() and pixels.x > 0.0 and pixels.y > 0.0 and size.is_finite() and size.x > 0.0 and size.y > 0.0:
+			var scale: float = maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+			var available: float = maxf(0.0, context_action.position.y - primary_status.position.y - 8.0 * scale)
+			var base_height: float = Status.layout_bounds(size, pixels).size.y
+			var content_height: float = float(primary_status.get_content_height()) if commission.active else base_height
+			primary_status.size.y = minf(available, maxf(base_height, content_height))
 
 
 func setup_cockpit_control() -> bool:

@@ -3533,6 +3533,9 @@ class FreedomBridge : public godot::RefCounted {
           std::to_string(survey_commission_earnings(account)).c_str()};
       return result;
     }
+    const auto status = session.survey_commission_acquisition_status();
+    if (status.size() > 256) return {};
+    result["status"] = godot::String{status.c_str()};
     result["acquired_ticks"] = static_cast<std::int64_t>(count);
     result["completed"] = count == kSurveyCommissionMeasurementTicks;
     // Admitted reservations bound this guarded difference to four hours.
