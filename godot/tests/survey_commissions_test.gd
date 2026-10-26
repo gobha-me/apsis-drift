@@ -244,6 +244,7 @@ func run_geological(tree: SceneTree, fixtures: String, assets: String, output: S
 	view.open_survey_commissions()
 	var page: Control = reader(view)
 	check(page.visible and Office.valid_packet(page.packet) and page.packet.kind == 2 and page.packet.completed and page.packet.can_submit and not page.submit_button.disabled and page.packet.required_ticks == 0 and page.packet.acquired_ticks == 0 and page.packet.specimen in page.details.text and "consumed" in page.details.text and progress_matches_office(owner, page.packet), "physical delivery reader omits actual item/consumption or invents orbital work")
+	check("fresh specimen carried" in view.primary_status.text and "deliver the named specimen" in view.primary_status.tooltip_text, "compact physical-work HUD omits its ready state or named delivery tooltip")
 	check(save(owner, output.path_join("reader-ui.json")) == originals["geo-paid-origin"], "paused geological office read changed full Save")
 	var token: String = page.packet.submission_token
 	check(not owner.submit_freedom_survey_commission(str(page.packet.sequence)), "orbital submission accepted physical work")

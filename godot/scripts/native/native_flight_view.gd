@@ -1084,8 +1084,11 @@ func update_compact_hud() -> void:
 		var commission_text := commission_progress_text(work)
 		primary_status.text += "\n" + commission_text
 		primary_status.tooltip_text += "\n" + commission_text
-		if work.completed and not work.expired:
-			primary_status.tooltip_text += "\nReturn to Origin and submit before the deadline."
+		var geological := work.get("version", 1) == 2
+		var ready: bool = work.ready if geological else work.completed
+		if ready and not work.expired:
+			var action := "deliver the named specimen" if geological else "submit"
+			primary_status.tooltip_text += "\nReturn to Origin and %s before the deadline." % action
 	var quiet_text := QuietTravel.text(state.get("quiet_travel"))
 	if not quiet_text.is_empty():
 		primary_status.text += "\n" + quiet_text
