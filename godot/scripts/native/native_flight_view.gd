@@ -1067,12 +1067,26 @@ func update_compact_hud() -> void:
 	instruments_button.visible = true
 	instruments_button.text = "Back to controls" if detailed else "Esc / Start · Controls"
 	instruments_button.focus_mode = Control.FOCUS_ALL if detailed else Control.FOCUS_NONE
-	var margin := Status.layout_bounds(size, Vector2(get_window().size)).position.x
+	var compact_pixels: Vector2 = Vector2(get_window().size)
+	var compact_bounds: Rect2 = Status.layout_bounds(size, compact_pixels)
+	var margin: float = compact_bounds.position.x
+	var show_acquisition_status: bool = false
+	if compact_pixels.is_finite() and compact_pixels.x > 0.0 and compact_pixels.y > 0.0 and size.is_finite() and size.x > 0.0 and size.y > 0.0:
+		var compact_scale: float = maxf(1.0, maxf(size.x / compact_pixels.x, size.y / compact_pixels.y))
+		var acquisition: Variant = state.get("survey_commission")
+		show_acquisition_status = not detailed and valid_commission_progress(acquisition) and not acquisition.has("version") and acquisition.active and not acquisition.completed and not acquisition.expired
+		# Width depends only on the current mode/state, never deferred text
+		# height. Restore the original compact width as soon as work is ready.
+		primary_status.size.x = minf(560.0 * compact_scale, maxf(0.0, size.x - 2.0 * margin)) if show_acquisition_status else compact_bounds.size.x
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
 	# Quiet refreshes absorb command/load changes without inventing a finding.
 	observation_cue.observe(state, false, 0.0)
 	surface_aid_cue.observe(state, false, 0.0)
 	primary_status.text = Status.summary(state, player_input.foot_keyboard_label() if player_input != null else "WASD") if error.is_empty() else "Flight paused\n" + error
+	if show_acquisition_status:
+		# Preserve both telemetry values on one row; the full service result,
+		# acquisition reason and unchanged 18 px body font still need room.
+		primary_status.text = primary_status.text.replace("\nFlight assistance on\nFuel ", "\nFlight assistance on · Fuel ")
 	if error.is_empty():
 		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
 		if not outcome.is_empty(): primary_status.text += "\n" + outcome

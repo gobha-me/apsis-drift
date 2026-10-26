@@ -182,6 +182,11 @@ func progress_layout(tree: SceneTree, view: Control, owner: Variant, witness: St
 		var density: Vector2 = view.get_viewport().get_final_transform().get_scale().abs()
 		check(view.paused and label.is_visible_in_tree() and view.get_global_rect().grow(1).encloses(label.get_global_rect()) and not label.get_global_rect().intersects(view.instruments_button.get_global_rect()), "commission status escaped or covered Controls at " + str(pixels))
 		check(label.get_theme_font_size("normal_font_size") * density.y >= 17.5 and label.get_content_height() > 0 and label.get_content_height() <= label.size.y + 1.0, "commission status clipped/shrank at %s: content%d/%.1f text=%s" % [pixels, label.get_content_height(), label.size.y, label.text])
+		check(label.size.x * density.x <= 560.5, "unfinished commission readout widened beyond its modest physical bound")
+		if before.get("assistance", false) and before.get("resources", {}).get("selected", false):
+			check("Flight assistance on" in label.text and "Fuel " in label.text and "Jumps " in label.text, "compact telemetry join dropped assistance, fuel or jump information")
+		if "free station service" in view.save_status.text:
+			check(view.save_status.text in label.text and view.save_status.text in label.tooltip_text, "compact status lost the full actual free-service feedback")
 		check(FlightView.valid_commission_progress(progress) and not progress.status.is_empty() and readout in label.text and progress.status in label.text and progress.status in label.tooltip_text, "actual held/eligible status or counter missing from flight HUD")
 		check(owner.get_freedom_flight_state() == before and save(owner, witness) == original, "paused status/read/layout changed ticks, resources, acquisition or whole Save")
 	tree.root.size = previous_size
@@ -653,6 +658,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	page = reader(view)
 	check(progress_matches_office(owner, page.packet) and "report ready" in view.primary_status.text, "actual completed HUD lost submission countdown")
 	check(view.state.survey_commission.status == "" and not "Survey eligible" in view.primary_status.text, "completed report retained stale acquisition eligibility")
+	check(view.primary_status.size.x * view.get_viewport().get_final_transform().get_scale().abs().x <= 380.5, "ready report retained the widened unfinished-work panel")
 	check(page.visible and page.packet.completed and page.packet.acquired_ticks == 3600 and page.packet.earnings == "0" and view.state.survey_commission.completed and save(owner, output.path_join("complete-ui.json")) == originals["commission-complete"], "one genuine completing tick differs from C++ fixture or pays remotely")
 	oracle = restore(output.path_join("complete-ui.json"))
 	if oracle != null:
@@ -675,6 +681,7 @@ func run(tree: SceneTree, fixtures: String, assets: String, output: String) -> i
 	page.submit_button.pressed.emit()
 	check(view.paused and page.visible and page.packet.earnings == "100" and page.packet.sequence == 0 and not page.packet.last_payment.is_empty() and save(owner, output.path_join("paid-ui.json")) == originals["commission-paid"], "Submit differs from direct C++ full Save or lacks payment receipt")
 	check(progress_matches_office(owner, page.packet), "actual paid inactive account retains countdown")
+	check(view.primary_status.size.x * view.get_viewport().get_final_transform().get_scale().abs().x <= 380.5, "inactive account retained the widened unfinished-work panel")
 	var paid := save(owner, output.path_join("paid-before-duplicate.json"))
 	check(not owner.submit_freedom_survey_commission("1"), "duplicate backend submission paid again")
 	page.submit_button.pressed.emit()
