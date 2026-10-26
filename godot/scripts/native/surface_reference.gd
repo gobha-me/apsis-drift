@@ -82,7 +82,7 @@ func refresh() -> void:
 	heading.text = reference_title
 	var exposure: bool = not collection_context.is_empty()
 	_paused.text = "PAUSED / INSPECTED EXPOSURE" if exposure else "PAUSED / READ-ONLY REFERENCE"
-	_hint.text = "Left / right or Tab: select · Enter / A: activate\nUp / down: scroll text · B / Circle / Esc / Start: back to controls" if exposure else "Up / down: scroll text\nB / Circle / Esc / Start: back to controls"
+	_hint.text = "Left/right/Tab: select · Enter/A: activate\nUp/down: scroll · B/Circle/Esc: back" if exposure else "Up / down: scroll text\nB / Circle / Esc / Start: back to controls"
 	body.text = reference_text
 	previous_button.hide()
 	next_button.hide()
