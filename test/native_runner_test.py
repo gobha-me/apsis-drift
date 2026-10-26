@@ -19,6 +19,36 @@ spec.loader.exec_module(runner)
 
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_paid_recovery_reference_refuses_partial_success_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="paid-recovery-proof-") as directory:
+            phases = Path(directory)
+            reference = phases / "paid-recovery-reference"
+            reference.mkdir()
+            # The version-1 evidence contract has one initial Save and six
+            # named boundaries for each of its three attempts.
+            for name in ["initial", *(f"cycle-{cycle}-{phase}"
+                                      for cycle in (1, 2, 3)
+                                      for phase in ("predeparture", "worked", "pending",
+                                                    "replacement", "continued", "next-work"))]:
+                (reference / (name + ".json")).write_text("declared complete Save\n")
+            manifest = {"schema": "apsis.paid-recovery-reference/1",
+                        "completed": True, "cycles": [{}, {}, {}]}
+            path = reference / "manifest.json"
+            path.write_text(json.dumps(manifest))
+            self.assertTrue(runner.paid_recovery_reference_complete(phases))
+            missing = reference / "cycle-2-pending.json"
+            original = missing.read_bytes()
+            missing.unlink()
+            before = {p.name: p.read_bytes() for p in reference.iterdir()}
+            self.assertFalse(runner.paid_recovery_reference_complete(phases))
+            self.assertEqual(before, {p.name: p.read_bytes() for p in reference.iterdir()})
+            missing.write_bytes(original)
+            manifest["completed"] = False
+            path.write_text(json.dumps(manifest))
+            self.assertFalse(runner.paid_recovery_reference_complete(phases))
+            path.write_text("{unfinished")
+            self.assertFalse(runner.paid_recovery_reference_complete(phases))
+
     def test_helper_staging_reuses_readonly_identical_bytes_and_mode(self):
         with tempfile.TemporaryDirectory(prefix="native-helper-") as directory:
             root = Path(directory)

@@ -25,7 +25,7 @@ never posts another bill; every transaction uses the same elapsed-time bill.
 Prior settled survey and [specimen-sale](SPECIMEN_SALES.md) earnings carry into
 the opening cash balance.
 
-A poor pilot at Origin can accept fresh survey work and review a **noncash
+A poor pilot at Origin can accept fresh orbital survey work and review a **noncash
 operating retainer** before acquiring any measurement. It restores the starter
 stores and prepays berth through the accepted deadline, once per commission.
 Cash pays first, then an operating tab capped at 200 credits. Necessary support
@@ -82,3 +82,38 @@ reading, selection and Continue do not. Paid-v3 adds its settled canister counte
 and retains the specimen counter, including zero. Earlier v1/v2 accounts keep
 their original shapes and meanings. Existing insurance-first/tab settlement,
 opening credit, fuel/berth prices and recovery excess are unchanged.
+
+## Repeated classified-loss reference
+
+The [paid-recovery reference](research/paid-recovery-reference-v1.json) starts
+from the public seed-42 planetary New Game, accepts unpaid orbital work and
+enrolls once. Three real walking, boarding, release and short fuel-consuming
+flight cycles each end with an authenticated **classified loss**, followed by
+actual replacement. No poses, resources or clocks are assigned between actions.
+The event is an application fixture, not a simulated physical collision.
+
+Cash changes from 180 to **80, 0, 0**; outstanding excess becomes **0, 20, 100**.
+Each replacement retains one current serviceable ship, full starter stores and
+zero earnings. A repeated replacement command is Save-neutral; actual
+Save/Continue and fresh unpaid acceptance remain available. The later
+five-credit berth-only retainer is quoted, never funded. All three cycles take
+68.85 game seconds, inside the initial four prepaid hours.
+
+Use your configured native build directory in place of `build-native`:
+
+```sh
+cmake --build build-native --target apsis-drift-native-orbital-survey-tests
+build-native/apsis-drift-native-orbital-survey-tests --fixtures "$PWD/build-recovery-reference"
+```
+
+The existing exporter retains nineteen complete Saves and a primitive action
+transcript under `paid-recovery-reference/`. Default CTest runs the same checks
+with an owned temporary directory. GCC and Clang exports matched byte-for-byte
+on the recorded numerical profile, including unchanged earlier fixture files.
+Recorded SHA256 values attest that observation; they do not replace the
+cross-environment numerical contract tracked in #255.
+
+This checks bounded debt, replacement ownership and the next unpaid command.
+It does not establish cargo survival, a completed earning voyage, full rent
+exposure, sparse starts, indefinite failures or price balance. The remaining
+[#293](https://github.com/gobha-me/apsis-drift/issues/293) criteria stay open.

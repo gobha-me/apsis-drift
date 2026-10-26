@@ -120,6 +120,26 @@ ERROR = re.compile(
 SUCCESS = re.compile(r"\b0 failures\b")
 
 
+def paid_recovery_reference_complete(phases):
+    """Refuse partial evidence even when its producer exited successfully."""
+    reference = phases / "paid-recovery-reference"
+    names = ["initial", *(f"cycle-{cycle}-{phase}"
+                          for cycle in (1, 2, 3)
+                          for phase in ("predeparture", "worked", "pending",
+                                        "replacement", "continued", "next-work"))]
+    if any(not (reference / (name + ".json")).is_file() or
+           (reference / (name + ".json")).stat().st_size == 0 for name in names):
+        return False
+    try:
+        manifest = json.loads((reference / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return (isinstance(manifest, dict) and
+            manifest.get("schema") == "apsis.paid-recovery-reference/1" and
+            manifest.get("completed") is True and
+            isinstance(manifest.get("cycles"), list) and len(manifest["cycles"]) == 3)
+
+
 def timeout_seconds(value):
     number = float(value)
     if not math.isfinite(number) or not 1 <= number <= 900:
@@ -904,6 +924,9 @@ def main(argv=None):
         if any(not (phases / "charted-arrivals" / (name + ".json")).is_file()
                for name in arrival_required):
             print(f"FAIL incomplete charted arrival fixtures: {log}", flush=True)
+            return 1
+        if not paid_recovery_reference_complete(phases):
+            print(f"FAIL incomplete paid recovery reference fixtures: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
             path.relative_to(phases).as_posix(): sha256(path)
