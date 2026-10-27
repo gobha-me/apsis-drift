@@ -56,7 +56,8 @@ namespace {
   const auto target_fixed =
       planet_fixed_from_terrain_address(*state.planet, target->anchor, 0.0);
   const auto target_position =
-      target_fixed ? geodetic_from_planet_fixed(*state.planet, *target_fixed)
+      target_fixed ? geodetic_from_planet_fixed(*state.planet, *target_fixed,
+                                                state.recipe.numerical_profile)
                    : std::expected<GeodeticPosition, CoordinateError>{
                          std::unexpected{CoordinateError::non_finite_input}};
   const auto bands = flight_regime_bands(*state.planet);
@@ -69,7 +70,8 @@ namespace {
   GeodeticPosition orbital = *target_position;
   orbital.altitude_metres =
       bands->orbit_enter_altitude_metres + kOriginRendezvousAboveOrbitMetres;
-  const auto frame = make_local_tangent_frame(*state.planet, orbital);
+  const auto frame = make_local_tangent_frame(*state.planet, orbital,
+                                              state.recipe.numerical_profile);
   const auto fixed =
       frame
           ? planet_fixed_from_local(
@@ -78,7 +80,8 @@ namespace {
           : std::expected<PlanetFixedPositionMetres, CoordinateError>{
                 std::unexpected{CoordinateError::non_finite_input}};
   const auto position =
-      fixed ? geodetic_from_planet_fixed(*state.planet, *fixed)
+      fixed ? geodetic_from_planet_fixed(*state.planet, *fixed,
+                                         state.recipe.numerical_profile)
             : std::expected<GeodeticPosition, CoordinateError>{
                   std::unexpected{CoordinateError::non_finite_input}};
   if (!position) {
@@ -92,7 +95,8 @@ namespace {
                                     GeodeticPosition target,
                                     double arrival_radius)
     -> std::expected<OriginNavigationSolution, SignalRunError> {
-  const auto frame = make_local_tangent_frame(planet, flight.pose.position);
+  const auto frame = make_local_tangent_frame(planet, flight.pose.position,
+                                              flight.numerical_profile);
   const auto fixed = planet_fixed_from_geodetic(planet, target);
   const auto local =
       frame && fixed ? local_from_planet_fixed(*frame, *fixed)
@@ -333,7 +337,7 @@ auto launch_signal_run(SignalRunState& state, TerrainTileCache& cache)
   if (!sample) return std::unexpected{SignalRunError::terrain_failure};
   auto flight = initial_planetary_flight_state(
       *state.planet, state.rendezvous->position, {sample->elevation_metres},
-      0.0, FlightMode::manual);
+      0.0, FlightMode::manual, state.recipe.numerical_profile);
   if (!flight) return std::unexpected{SignalRunError::flight_failure};
   auto onboarding = state.onboarding;
   if (!advance_origin_onboarding(onboarding, OriginOnboardingCommand::launch)) {
@@ -400,7 +404,8 @@ auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
       .controls = {},
       .time_scale = SystemTimeScale::one,
   };
-  auto flight = insert_system_flight_orbit(state.origin_system, approach);
+  auto flight = insert_system_flight_orbit(state.origin_system, approach,
+                                           state.recipe.numerical_profile);
   if (!flight) return std::unexpected{SignalRunError::flight_failure};
   auto navigation = resolve_signal_navigation(*state.planet, state.catalog,
                                               *flight, state.scanner);

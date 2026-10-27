@@ -1,7 +1,7 @@
 # Save Format and Compatibility
 
-Apsis Drift save format 16 is a deterministic JSON document. It keeps the
-generated-world recipe separate from mutable player state and excludes terrain
+Apsis Drift career save formats 16 and 65 are deterministic JSON documents. They keep
+the generated-world recipe separate from mutable player state and excludes terrain
 tiles, render state, terminal capabilities, user preferences, caches, and other
 reproducible presentation data.
 
@@ -49,12 +49,17 @@ error after replacement.
 
 ## Document shape and provenance
 
-Every format-16 document has these required top-level fields:
+Every format-16 or format-65 document has these required top-level fields:
 
 - `application` is exactly `apsis-drift`;
 - `application_version` is the non-empty, printable ASCII version of the build
   that most recently wrote the file, bounded to 64 bytes;
-- `format_version` is the unsigned JSON integer `16`;
+- `format_version` is the unsigned JSON integer `16` for historical host-math
+  continuation, or `65` for newly created controlled-profile careers. Format65
+  additionally requires unsigned root `numerical_profile: 1`; format16 forbids
+  that field. Otherwise their document structure is identical. See the
+  [numerical compatibility contract](NUMERICAL_COMPATIBILITY_FINDING.md#save-and-continuation-policy)
+  for profile dispatch, old-save continuation and downgrade rules;
 - `recipe` and `state` are required objects.
 
 Writer provenance is diagnostic metadata. It does not enter `SaveDocument`,

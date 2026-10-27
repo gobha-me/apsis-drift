@@ -141,6 +141,7 @@ include(cmake/NativeData.cmake)
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
+  src/flight_numerics.cpp
   src/craft_frame.cpp
   src/freedom_save.cpp
   src/freedom_system_network.cpp
@@ -356,6 +357,10 @@ target_compile_features(apsis_drift_boarding_research PUBLIC cxx_std_23)
 target_link_libraries(apsis_drift_boarding_research
   PUBLIC apsis-drift::core
   PRIVATE nlohmann_json::nlohmann_json)
+
+# Controlled flight hypot v1 fixes binary64 evaluation and forbids implicit FMA.
+set_property(SOURCE src/flight_numerics.cpp src/coordinates.cpp src/planetary_flight.cpp src/system_flight.cpp src/signal_run.cpp src/signal_scanner.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-fno-fast-math;-ffp-contract=off>)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.

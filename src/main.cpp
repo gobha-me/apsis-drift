@@ -2764,8 +2764,9 @@ class LandscapeApp final : public App {
           if (contract.phase == OriginSystemContractPhase::outbound_transfer) {
             const auto guidance = resolve_system_flight_guidance(
                 m_origin_system, *m_system_flight);
-            auto orbital =
-                insert_system_flight_orbit(m_origin_system, *m_system_flight);
+            auto orbital = insert_system_flight_orbit(
+                m_origin_system, *m_system_flight,
+                m_save_profile->recipe.numerical_profile);
             auto next = contract;
             if (!orbital ||
                 !advance_origin_system_contract(
@@ -2958,8 +2959,9 @@ class LandscapeApp final : public App {
         if (key.key == Key::Enter && key.action == KeyAction::Press) {
           const auto guidance =
               resolve_system_flight_guidance(m_local_system, *m_system_flight);
-          auto orbital =
-              insert_system_flight_orbit(m_local_system, *m_system_flight);
+          auto orbital = insert_system_flight_orbit(
+              m_local_system, *m_system_flight,
+              m_save_profile->recipe.numerical_profile);
           if (!orbital) {
             m_error = guidance ? format_system_flight_status(*m_system_flight,
                                                              *guidance)

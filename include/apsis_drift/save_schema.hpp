@@ -20,7 +20,9 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
+// Historical host-math envelope; preserved when re-encoding old saves.
 inline constexpr std::uint32_t kSaveFormatVersion{16};
+inline constexpr std::uint32_t kControlledFlightSaveFormatVersion{65};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -59,6 +61,8 @@ struct SaveRecipe {
   PlanetId station_host_planet;
   OriginStationOrbit station_orbit;
   PlanetId active_planet;
+  // Format16 has the implicit legacy profile. New games explicitly select v1.
+  FlightNumericalProfile numerical_profile{FlightNumericalProfile::legacy_host};
 
   friend auto operator==(const SaveRecipe&, const SaveRecipe&)
       -> bool = default;

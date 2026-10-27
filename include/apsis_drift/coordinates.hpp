@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <expected>
 
+#include "apsis_drift/flight_numerics.hpp"
 #include "apsis_drift/planet.hpp"
 
 namespace apsis_drift {
@@ -133,6 +134,7 @@ enum class CoordinateError : std::uint8_t {
   wrong_planet,
   invalid_tile_index,
   invalid_tile_coordinate,
+  invalid_numerical_profile,
 };
 
 // Identity-free cube topology shared by planet and authenticated moon terrain.
@@ -156,12 +158,18 @@ struct CubeSurfaceAddress {
     const PlanetDescriptor& planet, GeodeticPosition position) noexcept
     -> std::expected<PlanetFixedPositionMetres, CoordinateError>;
 
+// Profile defaults retain historical shared/Freedom coordinate semantics.
+// Authoritative planetary replay passes the recorded profile explicitly.
 [[nodiscard]] auto geodetic_from_planet_fixed(
-    const PlanetDescriptor& planet, PlanetFixedPositionMetres position) noexcept
+    const PlanetDescriptor& planet, PlanetFixedPositionMetres position,
+    FlightNumericalProfile profile =
+        FlightNumericalProfile::legacy_host) noexcept
     -> std::expected<GeodeticPosition, CoordinateError>;
 
-[[nodiscard]] auto make_local_tangent_frame(const PlanetDescriptor& planet,
-                                            GeodeticPosition origin) noexcept
+[[nodiscard]] auto make_local_tangent_frame(
+    const PlanetDescriptor& planet, GeodeticPosition origin,
+    FlightNumericalProfile profile =
+        FlightNumericalProfile::legacy_host) noexcept
     -> std::expected<LocalTangentFrame, CoordinateError>;
 
 [[nodiscard]] auto local_from_planet_fixed(

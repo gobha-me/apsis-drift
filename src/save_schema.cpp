@@ -1194,7 +1194,8 @@ template <typename Id>
   };
 }
 
-[[nodiscard]] auto decode_flight(const Json& json)
+[[nodiscard]] auto decode_flight(const Json& json,
+                                 FlightNumericalProfile profile)
     -> std::expected<PlanetaryFlightState, SaveSchemaError> {
   constexpr std::string_view path{"$.state.flight"};
   if (!json.is_object()) {
@@ -1299,6 +1300,7 @@ template <typename Id>
       .regime = *regime,
       .last_transition = last_transition,
       .thermal = {*thermal_load, *thermal_abort},
+      .numerical_profile = profile,
   };
 }
 
@@ -1974,6 +1976,13 @@ auto make_save_recipe(Seed universe_seed, std::uint64_t active_planet_ordinal)
 
 auto validate_save_document(const SaveDocument& document)
     -> std::expected<void, SaveSchemaError> {
+  if (!valid_flight_numerical_profile(document.recipe.numerical_profile) ||
+      (document.state.flight && document.state.flight->numerical_profile !=
+                                    document.recipe.numerical_profile)) {
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.numerical_profile",
+                "invalid or mismatched flight numerical profile")};
+  }
   if (!validate_onboarding_progress(document.state.onboarding)) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
@@ -2484,10 +2493,13 @@ auto encode_save_document_json(const SaveDocument& document)
         {"origin_system_world_deltas", std::move(origin_system_deltas)},
     };
   }
-  const Json root{
+  Json root{
       {"application", kSaveApplication},
       {"application_version", kApplicationVersion},
-      {"format_version", kSaveFormatVersion},
+      {"format_version",
+       document.recipe.numerical_profile == FlightNumericalProfile::legacy_host
+           ? kSaveFormatVersion
+           : kControlledFlightSaveFormatVersion},
       {"recipe",
        Json{{"universe_seed", decimal(document.recipe.universe_seed.value)},
             {"origin_system_ordinal",
@@ -2533,6 +2545,9 @@ auto encode_save_document_json(const SaveDocument& document)
              encoded_id("planet-", document.recipe.active_planet)}}},
       {"state", std::move(state)},
   };
+  if (document.recipe.numerical_profile != FlightNumericalProfile::legacy_host)
+    root["numerical_profile"] =
+        static_cast<std::uint32_t>(document.recipe.numerical_profile);
   auto output = root.dump(2);
   output.push_back('\n');
   if (output.size() > kMaximumSaveDocumentBytes) {
@@ -2605,7 +2620,8 @@ auto decode_save_document_json(std::string_view json_text)
             "and is not supported; the source file was not modified",
             *format_version))};
   }
-  if (*format_version != kSaveFormatVersion) {
+  if (*format_version != kSaveFormatVersion &&
+      *format_version != kControlledFlightSaveFormatVersion) {
     std::string detail = std::format(
         "save format version {} is unsupported by this build", *format_version);
     if (const auto writer = root.find("application_version");
@@ -2618,6 +2634,21 @@ auto decode_save_document_json(std::string_view json_text)
     return std::unexpected{
         failure(SaveSchemaErrorCode::unsupported_format_version,
                 "$.format_version", std::move(detail))};
+  }
+  auto numerical_profile = FlightNumericalProfile::legacy_host;
+  if (*format_version == kControlledFlightSaveFormatVersion) {
+    auto profile = read_u32(root, "numerical_profile", "$");
+    if (!profile) return std::unexpected{profile.error()};
+    if (*profile !=
+        static_cast<std::uint32_t>(FlightNumericalProfile::controlled_hypot_v1))
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_value, "$.numerical_profile",
+                  "unsupported controlled flight numerical profile")};
+    numerical_profile = static_cast<FlightNumericalProfile>(*profile);
+  } else if (root.contains("numerical_profile")) {
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_value, "$.numerical_profile",
+                "format16 has implicit legacy host arithmetic")};
   }
   auto application_version = read_string(root, "application_version", "$");
   if (!application_version) {
@@ -2844,7 +2875,7 @@ auto decode_save_document_json(std::string_view json_text)
 
   std::optional<PlanetaryFlightState> flight;
   if (!(**flight_json).is_null()) {
-    auto decoded = decode_flight(**flight_json);
+    auto decoded = decode_flight(**flight_json, numerical_profile);
     if (!decoded) return std::unexpected{decoded.error()};
     flight = *decoded;
   }
@@ -2971,6 +3002,7 @@ auto decode_save_document_json(std::string_view json_text)
                       .ascending_node_turns = *station_node,
                   },
               .active_planet = *planet,
+              .numerical_profile = numerical_profile,
           },
       .state =
           SaveMutableState{

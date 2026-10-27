@@ -159,7 +159,8 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
   const auto target = planet_fixed_from_terrain_address(
       planet, signal.anchor,
       static_cast<double>(signal.approach_altitude_metres));
-  const auto frame = make_local_tangent_frame(planet, flight.pose.position);
+  const auto frame = make_local_tangent_frame(planet, flight.pose.position,
+                                              flight.numerical_profile);
   if (!craft || !target || !frame || !finite(*craft) || !finite(*target)) {
     return std::unexpected{SignalScannerError::coordinate_failure};
   }
@@ -172,7 +173,8 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
   const double dy = target->y - craft->y;
   const double dz = target->z - craft->z;
   const double distance = std::hypot(dx, dy, dz);
-  const double horizontal = std::hypot(local_target->east, local_target->north);
+  const double horizontal = flight_numerics::hypot(
+      local_target->east, local_target->north, flight.numerical_profile);
   if (!std::isfinite(distance) || !std::isfinite(horizontal)) {
     return std::unexpected{SignalScannerError::coordinate_failure};
   }

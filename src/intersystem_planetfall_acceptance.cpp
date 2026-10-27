@@ -90,7 +90,8 @@ struct Replay {
       fixture.planet, target.anchor,
       static_cast<double>(target.approach_altitude_metres));
   const auto position =
-      fixed ? geodetic_from_planet_fixed(fixture.planet, *fixed)
+      fixed ? geodetic_from_planet_fixed(fixture.planet, *fixed,
+                                         kCurrentFlightNumericalProfile)
             : std::expected<GeodeticPosition, CoordinateError>{
                   std::unexpected{CoordinateError::non_finite_input}};
   if (!position) {

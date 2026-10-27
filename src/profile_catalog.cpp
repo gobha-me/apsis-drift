@@ -225,7 +225,10 @@ class FileDescriptor {
       .id = id,
       .save_sequence = sequence,
       .application_version = std::string{kApplicationVersion},
-      .format_version = kSaveFormatVersion,
+      .format_version = document.recipe.numerical_profile ==
+                                FlightNumericalProfile::legacy_host
+                            ? kSaveFormatVersion
+                            : kControlledFlightSaveFormatVersion,
       .universe_seed = document.recipe.universe_seed,
       .penalty_mode = document.state.intersystem_contract->rule_profile,
       .onboarding_state = document.state.onboarding.state,

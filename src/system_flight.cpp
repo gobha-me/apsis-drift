@@ -482,7 +482,8 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
 }
 
 auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
-                                const SystemFlightState& state)
+                                const SystemFlightState& state,
+                                FlightNumericalProfile profile)
     -> std::expected<PlanetaryFlightState, SystemFlightError> {
   const auto valid = ValidatedFlightTarget::prepare(system, state);
   if (!valid) return std::unexpected{valid.error()};
@@ -512,9 +513,11 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       subtract(fixed_velocity, cross({0.0, 0.0, omega}, fixed_position));
   const PlanetFixedPositionMetres fixed{fixed_position.x, fixed_position.y,
                                         fixed_position.z};
-  const auto geodetic = geodetic_from_planet_fixed(body.descriptor, fixed);
+  const auto geodetic =
+      geodetic_from_planet_fixed(body.descriptor, fixed, profile);
   if (!geodetic) return std::unexpected{SystemFlightError::coordinate_failure};
-  const auto frame = make_local_tangent_frame(body.descriptor, *geodetic);
+  const auto frame =
+      make_local_tangent_frame(body.descriptor, *geodetic, profile);
   if (!frame) return std::unexpected{SystemFlightError::coordinate_failure};
   const auto component = [&](PlanetFixedDirection axis) {
     return fixed_velocity.x * axis.x + fixed_velocity.y * axis.y +
@@ -523,8 +526,9 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
   const double east = component(frame->east);
   const double north = component(frame->north);
   const double up_velocity = component(frame->up);
-  const double heading =
-      std::hypot(east, north) > 1.0e-9 ? std::atan2(north, east) : 0.0;
+  const double heading = flight_numerics::hypot(east, north, profile) > 1.0e-9
+                             ? std::atan2(north, east)
+                             : 0.0;
   PlanetaryFlightState result{
       .tick = state.tick,
       .planet = state.target,
@@ -536,6 +540,7 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       .regime = FlightRegime::orbital,
       .last_transition = std::nullopt,
       .thermal = {},
+      .numerical_profile = profile,
   };
   if (!validate_planetary_flight_state(body.descriptor, result)) {
     return std::unexpected{SystemFlightError::coordinate_failure};
@@ -557,8 +562,8 @@ auto depart_planetary_orbit(const LocalSystemDescriptor& system,
       system, state.planet, {.tick = state.tick, .sub_tick_fraction = 0.0});
   const auto fixed_position =
       planet_fixed_from_geodetic((*body)->descriptor, state.pose.position);
-  const auto frame =
-      make_local_tangent_frame((*body)->descriptor, state.pose.position);
+  const auto frame = make_local_tangent_frame(
+      (*body)->descriptor, state.pose.position, state.numerical_profile);
   if (!ephemeris || !fixed_position || !frame) {
     return std::unexpected{SystemFlightError::coordinate_failure};
   }

@@ -266,8 +266,11 @@ auto planet_fixed_from_geodetic(const PlanetDescriptor& planet,
 }
 
 auto geodetic_from_planet_fixed(const PlanetDescriptor& planet,
-                                PlanetFixedPositionMetres position) noexcept
+                                PlanetFixedPositionMetres position,
+                                FlightNumericalProfile profile) noexcept
     -> std::expected<GeodeticPosition, CoordinateError> {
+  if (!valid_flight_numerical_profile(profile))
+    return std::unexpected{CoordinateError::invalid_numerical_profile};
   const auto radius = radius_metres(planet);
   if (!radius) return std::unexpected{radius.error()};
   if (!finite(position)) {
@@ -280,7 +283,8 @@ auto geodetic_from_planet_fixed(const PlanetDescriptor& planet,
   if (radial_distance == 0.0) {
     return std::unexpected{CoordinateError::planet_center};
   }
-  const auto horizontal_distance = std::hypot(position.x, position.y);
+  const auto horizontal_distance =
+      flight_numerics::hypot(position.x, position.y, profile);
   const auto latitude = std::atan2(position.z, horizontal_distance);
   const auto longitude =
       horizontal_distance == 0.0
@@ -290,12 +294,13 @@ auto geodetic_from_planet_fixed(const PlanetDescriptor& planet,
 }
 
 auto make_local_tangent_frame(const PlanetDescriptor& planet,
-                              GeodeticPosition origin) noexcept
+                              GeodeticPosition origin,
+                              FlightNumericalProfile profile) noexcept
     -> std::expected<LocalTangentFrame, CoordinateError> {
   const auto fixed_origin = planet_fixed_from_geodetic(planet, origin);
   if (!fixed_origin) return std::unexpected{fixed_origin.error()};
   const auto canonical_origin =
-      geodetic_from_planet_fixed(planet, *fixed_origin);
+      geodetic_from_planet_fixed(planet, *fixed_origin, profile);
   if (!canonical_origin) return std::unexpected{canonical_origin.error()};
 
   const auto latitude = canonical_origin->latitude_radians;

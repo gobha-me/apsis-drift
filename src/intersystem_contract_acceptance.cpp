@@ -147,7 +147,8 @@ struct Replay {
 
 [[nodiscard]] auto target_entry_position(const PlanetDescriptor& planet,
                                          SurfaceSignalId target,
-                                         TerrainTileCache& cache)
+                                         TerrainTileCache& cache,
+                                         FlightNumericalProfile profile)
     -> std::expected<std::pair<GeodeticPosition, PlanetaryFlightEnvironment>,
                      IntersystemContractAcceptanceError> {
   const auto catalog = generate_surface_signals(planet, cache);
@@ -165,7 +166,7 @@ struct Replay {
       planet, found->anchor,
       static_cast<double>(found->approach_altitude_metres));
   const auto position =
-      fixed ? geodetic_from_planet_fixed(planet, *fixed)
+      fixed ? geodetic_from_planet_fixed(planet, *fixed, profile)
             : std::expected<GeodeticPosition, CoordinateError>{
                   std::unexpected{CoordinateError::non_finite_input}};
   if (!position) {
@@ -551,7 +552,8 @@ struct Replay {
   }
   const auto orbital =
       system_steps < maximum_system_steps
-          ? insert_system_flight_orbit(target_system, *system_flight)
+          ? insert_system_flight_orbit(target_system, *system_flight,
+                                       document.recipe.numerical_profile)
           : std::expected<PlanetaryFlightState, SystemFlightError>{
                 std::unexpected{SystemFlightError::orbit_insertion_refused}};
   if (!orbital || !advance_intersystem_contract(
@@ -574,11 +576,12 @@ struct Replay {
   const auto target_entry = target_entry_position(
       (*target_body)->descriptor,
       document.state.intersystem_contract->identities.target_objective,
-      *terrain_cache);
+      *terrain_cache, document.recipe.numerical_profile);
   auto target_flight =
       target_entry ? initial_planetary_flight_state(
                          (*target_body)->descriptor, target_entry->first,
-                         target_entry->second, 0.0, FlightMode::autopilot)
+                         target_entry->second, 0.0, FlightMode::autopilot,
+                         document.recipe.numerical_profile)
                    : std::expected<PlanetaryFlightState, PlanetaryFlightError>{
                          std::unexpected{PlanetaryFlightError::invalid_state}};
   if (!target_entry || !target_flight) {

@@ -118,7 +118,8 @@ struct ThermalRates {
          state.clearance_metres >= kMinimumFlightClearanceMetres &&
          state.thermal.load_units <= kMaximumThermalLoadUnits &&
          valid_mode(state.mode) && valid_regime(state.regime) &&
-         valid_transition(state);
+         valid_transition(state) &&
+         valid_flight_numerical_profile(state.numerical_profile);
 }
 
 [[nodiscard]] auto valid_command(FlightCommandKind kind) noexcept -> bool {
@@ -222,11 +223,12 @@ auto apply_command(PlanetaryFlightState& state, FlightCommandKind kind) noexcept
                                  const PlanetaryFlightState& state) noexcept
     -> std::optional<ThermalRates> {
   if (!valid_planet(planet) || !finite_state(state)) return std::nullopt;
-  const double horizontal_speed =
-      std::hypot(state.velocity.east_metres_per_second,
-                 state.velocity.north_metres_per_second);
-  const double speed =
-      std::hypot(horizontal_speed, state.velocity.up_metres_per_second);
+  const double horizontal_speed = flight_numerics::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second, state.numerical_profile);
+  const double speed = flight_numerics::hypot(
+      horizontal_speed, state.velocity.up_metres_per_second,
+      state.numerical_profile);
   if (!std::isfinite(speed)) return std::nullopt;
 
   double density{};
@@ -306,8 +308,9 @@ auto advance_thermal_state(const PlanetDescriptor& planet,
   if (!valid_regime(state.regime)) return false;
   const auto parameters = parameters_for(planet, state.regime);
   constexpr double tolerance{1.0e-9};
-  return std::hypot(state.velocity.east_metres_per_second,
-                    state.velocity.north_metres_per_second) <=
+  return flight_numerics::hypot(state.velocity.east_metres_per_second,
+                                state.velocity.north_metres_per_second,
+                                state.numerical_profile) <=
              parameters.maximum_horizontal_speed + tolerance &&
          std::abs(state.velocity.up_metres_per_second) <=
              parameters.maximum_vertical_speed + tolerance;
@@ -316,9 +319,9 @@ auto advance_thermal_state(const PlanetDescriptor& planet,
 auto clamp_velocity(const PlanetDescriptor& planet,
                     PlanetaryFlightState& state) noexcept -> void {
   const auto parameters = parameters_for(planet, state.regime);
-  const double horizontal_speed =
-      std::hypot(state.velocity.east_metres_per_second,
-                 state.velocity.north_metres_per_second);
+  const double horizontal_speed = flight_numerics::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second, state.numerical_profile);
   if (horizontal_speed > parameters.maximum_horizontal_speed) {
     const double scale = parameters.maximum_horizontal_speed / horizontal_speed;
     state.velocity.east_metres_per_second *= scale;
@@ -609,15 +612,16 @@ auto resolve_thermal_assessment(const PlanetDescriptor& planet,
 auto initial_planetary_flight_state(const PlanetDescriptor& planet,
                                     GeodeticPosition position,
                                     PlanetaryFlightEnvironment environment,
-                                    double heading_radians,
-                                    FlightMode mode) noexcept
+                                    double heading_radians, FlightMode mode,
+                                    FlightNumericalProfile profile) noexcept
     -> std::expected<PlanetaryFlightState, PlanetaryFlightError> {
   const auto bands = flight_regime_bands(planet);
   if (!bands) return std::unexpected{bands.error()};
   if (!std::isfinite(environment.surface_elevation_metres)) {
     return std::unexpected{PlanetaryFlightError::invalid_environment};
   }
-  if (!std::isfinite(heading_radians) || !valid_mode(mode)) {
+  if (!std::isfinite(heading_radians) || !valid_mode(mode) ||
+      !valid_flight_numerical_profile(profile)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
   if (!planet_fixed_from_geodetic(planet, position)) {
@@ -640,6 +644,7 @@ auto initial_planetary_flight_state(const PlanetDescriptor& planet,
       .regime = regime_for_initial(*bands, position.altitude_metres, clearance),
       .last_transition = std::nullopt,
       .thermal = {},
+      .numerical_profile = profile,
   };
   if (!finite_state(state)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
@@ -773,7 +778,8 @@ auto advance_planetary_flight(
                        parameters.maximum_horizontal_speed;
   double target_north = (heading_sin * forward + heading_cos * strafe) *
                         parameters.maximum_horizontal_speed;
-  const double target_horizontal_speed = std::hypot(target_east, target_north);
+  const double target_horizontal_speed = flight_numerics::hypot(
+      target_east, target_north, state.numerical_profile);
   if (target_horizontal_speed > parameters.maximum_horizontal_speed) {
     const double scale =
         parameters.maximum_horizontal_speed / target_horizontal_speed;
@@ -801,7 +807,8 @@ auto advance_planetary_flight(
                   parameters.vertical_acceleration * dt);
   clamp_velocity(planet, next);
 
-  const auto frame = make_local_tangent_frame(planet, next.pose.position);
+  const auto frame = make_local_tangent_frame(planet, next.pose.position,
+                                              next.numerical_profile);
   if (!frame) {
     return std::unexpected{PlanetaryFlightError::coordinate_failure};
   }
@@ -818,7 +825,8 @@ auto advance_planetary_flight(
               frame->north.z * next.velocity.north_metres_per_second +
               frame->up.z * next.velocity.up_metres_per_second) *
              dt;
-  const auto position = geodetic_from_planet_fixed(planet, fixed);
+  const auto position =
+      geodetic_from_planet_fixed(planet, fixed, next.numerical_profile);
   if (!position) {
     return std::unexpected{PlanetaryFlightError::coordinate_failure};
   }

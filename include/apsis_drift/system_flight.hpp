@@ -105,7 +105,8 @@ enum class SystemFlightError : std::uint8_t {
     -> std::expected<void, SystemFlightError>;
 
 [[nodiscard]] auto insert_system_flight_orbit(
-    const LocalSystemDescriptor& system, const SystemFlightState& state)
+    const LocalSystemDescriptor& system, const SystemFlightState& state,
+    FlightNumericalProfile profile = kCurrentFlightNumericalProfile)
     -> std::expected<PlanetaryFlightState, SystemFlightError>;
 
 // Converts an orbital planet-fixed craft state back into system-inertial
