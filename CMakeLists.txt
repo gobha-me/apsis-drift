@@ -239,6 +239,7 @@ add_library(apsis_drift_core STATIC
   src/native_origin_repair.cpp
   src/native_charted_arrivals.cpp
   src/native_known_chart_map.cpp
+  src/native_planet_tracking.cpp
   src/native_return_charge.cpp
   src/native_specimen_sales.cpp
   src/paid_operations.cpp

@@ -394,6 +394,7 @@ jobs:
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/station-crew-native/interaction/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/port-docking-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/planetary/*.json
+            build-native-contracts-g${{ matrix.group }}/native-contracts-*/planetary-native/known-planet-tracking/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/voyage-native/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface/*.json
             build-native-contracts-g${{ matrix.group }}/native-contracts-*/surface-native/*.json

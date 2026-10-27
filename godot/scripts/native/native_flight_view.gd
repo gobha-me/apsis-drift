@@ -130,6 +130,11 @@ var hud_tracking_mode := "home"
 var home_tracking_button: Button
 var port_tracking_button: Button
 var clear_tracking_button: Button
+var planet_tracking_label: Label
+var planet_tracking_buttons: Array[Button] = []
+var planet_tracking_targets: Dictionary = {}
+var planet_tracking_reading: Dictionary = {}
+var tracked_planet_id := ""
 var ship_marker: Control
 var contact_marker: Control
 var contact_buttons: Array[Button] = []
@@ -602,6 +607,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 func activate() -> void:
 	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
 	activated = true
+	clear_planet_tracking()
 	observation_cue.reset(state)
 	surface_aid_cue.reset(state)
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
@@ -1324,6 +1330,12 @@ func setup_controls() -> void:
 	home_tracking_button = controls_menu.add_button(survey_column, "Track Origin Station", select_hud_tracking.bind("home"))
 	port_tracking_button = controls_menu.add_button(survey_column, "Track selected docking port", select_hud_tracking.bind("port"))
 	clear_tracking_button = controls_menu.add_button(survey_column, "Stop HUD tracking", select_hud_tracking.bind("off"))
+	planet_tracking_label = Label.new()
+	planet_tracking_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	survey_column.add_child(planet_tracking_label)
+	for index in 6:
+		planet_tracking_buttons.append(controls_menu.add_button(survey_column, "Track known planet", select_planet_tracking.bind(index)))
+	refresh_planet_tracking_targets()
 	controls_menu.add_button(survey_column, "Select nearby moon jump", select_moon_jump)
 	controls_menu.add_button(survey_column, "Select asteroid inspection jump", select_minor_jump)
 	setup_planet_route_controls(survey_column)
@@ -2229,6 +2241,7 @@ func select_hud_tracking(mode: String) -> void:
 	if mode != "off" and target.is_empty():
 		report_action_status("That navigation target is unavailable in the current local frame.")
 		return
+	clear_planet_tracking()
 	hud_tracking_mode = mode
 	update_view(0.0)
 	report_action_status("HUD tracking stopped." if mode == "off" else "Tracking %s on the HUD. Range is from the craft reference point; use collar offsets for docking." % target.name)
@@ -2246,6 +2259,118 @@ func refresh_hud_tracking() -> void:
 	home_tracking_button.text = "Tracking Origin Station" if hud_tracking_mode == "home" else "Track Origin Station"
 	var port_name := "D%d" % state.get("target_port", 1)
 	port_tracking_button.text = ("Tracking " if hud_tracking_mode == "port" else "Track ") + "Origin " + port_name
+	var valid_targets: bool = valid_planet_tracking_targets(planet_tracking_targets, state)
+	for index in planet_tracking_buttons.size():
+		var button: Button = planet_tracking_buttons[index]
+		button.visible = not surface_walking() and valid_targets and index < planet_tracking_targets.targets.size()
+		if button.visible:
+			var row: Dictionary = planet_tracking_targets.targets[index]
+			button.text = ("Tracking " if hud_tracking_mode == "planet" and tracked_planet_id == row.planet_id else "Track planet · ") + row.name + " · centre"
+			button.disabled = state.get("jump", {}).get("phase", "idle") != "idle"
+	if planet_tracking_label != null: planet_tracking_label.visible = not surface_walking()
+
+
+static func tracking_text(value: Variant, limit: int) -> bool:
+	if not value is String or value.is_empty() or value.to_utf8_buffer().size() > limit: return false
+	for byte in value.to_utf8_buffer():
+		if byte < 32 or byte == 127: return false
+	return true
+
+
+static func valid_planet_tracking_targets(value: Variant, current: Dictionary) -> bool:
+	if not value is Dictionary or value.size() != 4 or typeof(value.get("version")) != TYPE_INT or value.version != 1: return false
+	if not MoonState.decimal(value.get("system_id")) or value.system_id == "0" or not MoonState.decimal(value.get("tick")): return false
+	if value.system_id != current.get("system_id") or value.tick != current.get("tick"): return false
+	if not value.get("targets") is Array or value.targets.size() > 6: return false
+	var seen := {}
+	for row in value.targets:
+		if not row is Dictionary or row.size() != 2 or not MoonState.decimal(row.get("planet_id")) or row.planet_id == "0" or not tracking_text(row.get("name"), 256) or seen.has(row.planet_id): return false
+		seen[row.planet_id] = true
+	return true
+
+
+static func valid_planet_tracking(value: Variant, current: Dictionary) -> bool:
+	if not value is Dictionary or value.size() != 16 or typeof(value.get("version")) != TYPE_INT or value.version != 1: return false
+	for field in ["selected", "available"]:
+		if not value.get(field) is bool: return false
+	if value.selected != value.available: return false
+	for field in ["system_id", "planet_id", "reference_planet_id", "craft_id", "craft_frame_id", "world_body_id", "tick"]:
+		if not MoonState.decimal(value.get(field)): return false
+	if typeof(value.get("craft_frame_version")) != TYPE_INT or value.craft_frame_version < 0 or value.craft_frame_version > 4294967295: return false
+	if not value.get("world_frame") is String or value.world_frame not in ["unavailable", "system_inertial", "planet_fixed", "station_relative_inertial", "planet_relative_inertial", "body_relative_inertial", "body_fixed"]: return false
+	if not value.get("name") is String or not tracking_text(value.get("note"), 1024): return false
+	var position: Variant = value.get("position_metres")
+	if not position is PackedFloat64Array or position.size() != 3: return false
+	for component in position:
+		if not is_finite(component): return false
+	if not value.get("range_metres") is float or not is_finite(value.range_metres): return false
+	if not value.available:
+		return value.planet_id == "0" and value.name.is_empty() and position == PackedFloat64Array([0.0, 0.0, 0.0]) and value.range_metres == 0.0
+	if not tracking_text(value.name, 256) or value.range_metres <= 0.0: return false
+	for field in ["system_id", "planet_id", "reference_planet_id", "craft_id", "craft_frame_id"]:
+		if value[field] == "0": return false
+	if value.system_id != current.get("system_id") or value.reference_planet_id != current.get("planet_id") or value.craft_id != current.get("craft_id") or value.craft_frame_id != current.get("frame_id") or value.craft_frame_version != current.get("frame_version") or value.tick != current.get("tick"): return false
+	var world_frame: String = current.get("coordinate_frame", "planet_relative_inertial")
+	if world_frame not in ["planet_relative_inertial", "system_inertial"] or value.world_frame != world_frame or value.world_body_id != (value.reference_planet_id if world_frame == "planet_relative_inertial" else "0"): return false
+	if current.get("body_kind", "planet") != "planet" or not current.get("surface_walk", {}).is_empty() or current.get("jump", {}).get("phase", "idle") != "idle" or current.get("recovery_pending", false) or current.get("impact", {}).get("pending_loss", false): return false
+	# Check the same reading's F64 vector/range before narrowing for rendering.
+	# Scaling avoids overflow while testing packet consistency, not world physics.
+	var extent: float = maxf(absf(position[0]), maxf(absf(position[1]), absf(position[2])))
+	if extent <= 0.0: return false
+	var x: float = position[0] / extent
+	var y: float = position[1] / extent
+	var z: float = position[2] / extent
+	var vector_range: float = extent * sqrt(x * x + y * y + z * z)
+	if not is_finite(vector_range) or absf(vector_range - value.range_metres) > maxf(0.001, value.range_metres * 0.0000000001): return false
+	var point := Vector3(position[0], position[1], position[2])
+	return point.is_finite() and point != Vector3.ZERO
+
+
+func clear_planet_tracking() -> void:
+	if bridge != null and is_instance_valid(bridge) and bridge.has_method("clear_freedom_planet_tracking"):
+		bridge.clear_freedom_planet_tracking()
+	planet_tracking_reading = {}
+	tracked_planet_id = ""
+	if hud_tracking_mode == "planet": hud_tracking_mode = "off"
+
+
+func refresh_planet_tracking_targets() -> void:
+	if planet_tracking_label == null or not paused: return
+	planet_tracking_targets = {}
+	var packet: Variant = bridge.get_freedom_planet_tracking_targets()
+	if valid_planet_tracking_targets(packet, state):
+		planet_tracking_targets = packet
+		planet_tracking_label.text = "HUD tracking · known planet centres" if not packet.targets.is_empty() else "No known planet target in this local frame."
+	else:
+		planet_tracking_label.text = "Planet tracking unavailable in this local frame."
+	refresh_hud_tracking()
+
+
+func select_planet_tracking(index: int) -> void:
+	if not marker_controls_available() or mode_change_pending or surface_walking() or not valid_planet_tracking_targets(planet_tracking_targets, state): return
+	if index < 0 or index >= planet_tracking_targets.targets.size(): return
+	var row: Dictionary = planet_tracking_targets.targets[index]
+	if not bridge.select_freedom_planet_tracking(planet_tracking_targets.system_id, row.planet_id, planet_tracking_targets.tick):
+		state = bridge.get_freedom_flight_state()
+		report_action_status("Planet tracking refused: " + str(bridge.get_last_error()))
+		refresh_planet_tracking_targets()
+		return
+	tracked_planet_id = row.planet_id
+	hud_tracking_mode = "planet"
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if hud_tracking_mode == "planet": report_action_status("Tracking %s · body centre. Straight-line range and direction only; not altitude, clearance or a safe route. Jump selection is unchanged." % row.name)
+
+
+func planet_tracking_target() -> Dictionary:
+	if hud_tracking_mode != "planet": return {}
+	var packet: Variant = bridge.get_freedom_planet_tracking()
+	if not valid_planet_tracking(packet, state) or not packet.available or packet.planet_id != tracked_planet_id:
+		clear_planet_tracking()
+		report_action_status("Planet tracking ended: current target or local frame is unavailable.")
+		return {}
+	planet_tracking_reading = packet
+	return {"position": Vector3(packet.position_metres[0], packet.position_metres[1], packet.position_metres[2]), "label": "PLANET", "name": packet.name + " · centre", "range_metres": packet.range_metres}
 
 
 func select_distant_contact(index: int) -> void:
@@ -2447,6 +2572,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		refresh_field_samples()
 		refresh_planet_routes()
 	if save_status != null and error.is_empty():
+		refresh_planet_tracking_targets()
 		save_status.text = reason
 	update_compact_hud()
 
@@ -2896,6 +3022,7 @@ func sync_mouse_look() -> void:
 
 
 func _exit_tree() -> void:
+	clear_planet_tracking()
 	reset_quiet_travel(false)
 	clear_cockpit_control()
 	clear_flight_mouse()
@@ -3000,6 +3127,8 @@ func _process(delta: float) -> void:
 		hide_exhaust()
 		return
 	if not bridge.get_freedom_walk_state().is_empty():
+		clear_planet_tracking()
+		home_marker.hide()
 		reset_quiet_travel()
 		hide_exhaust()
 		if not mode_change_pending:
@@ -3019,6 +3148,8 @@ func _process(delta: float) -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	if state.get("body_kind") in ["moon", "minor"]:
+		clear_planet_tracking()
+		home_marker.hide()
 		reset_quiet_travel()
 		hide_exhaust()
 		if not mode_change_pending:
@@ -3029,6 +3160,8 @@ func _process(delta: float) -> void:
 		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
 		return
 	if state.get("impact", {}).get("pending_loss", false):
+		clear_planet_tracking()
+		home_marker.hide()
 		reset_quiet_travel()
 		# The successful C++ batch already committed the actual loss. Stop
 		# here before another tick can refuse or terrain can obscure recovery.
@@ -3314,25 +3447,27 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	var home_target := hud_tracking_target(state, station_geometry, hud_tracking_mode)
+	if hud_tracking_mode == "planet": home_target = planet_tracking_target()
 	home_marker.label_text = home_target.get("label", "HOME")
 	home_marker.display_name = str(home_target.get("name", ""))
 	home_marker.detail_text = HomeNavigation.range_text(float(home_target.get("range_metres", -1.0)))
 	home_marker.visible = not home_target.is_empty()
 	home_cue.visible = state.get("station_available", true)
 	if home_marker.visible:
-		home_marker.update_cue(camera, home_target.position, state.attached)
+		home_marker.update_cue(camera, home_target.position, state.attached and hud_tracking_mode != "planet")
 	else:
 		home_marker.cue = {}
 	refresh_hud_tracking()
-	var navigation: Dictionary = home_marker.cue
+	var navigation: Dictionary = home_marker.cue if hud_tracking_mode != "planet" else {}
 	var direction := " · behind you" if navigation.get("behind", false) else (" · follow %s marker" % home_marker.label_text if not navigation.get("in_view", false) else " · ahead")
 	if navigation.is_empty(): direction = " · direction unavailable"
 	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
-	if not state.attached and not home_target.is_empty() and HomeNavigation.globe_occludes(camera.position, home_target.position, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius):
+	if (not state.attached or hud_tracking_mode == "planet") and not home_target.is_empty() and HomeNavigation.globe_occludes(camera.position, home_target.position, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius):
 		home_marker.detail_text += "\nBeyond horizon"
-	var bearing_description := "the selected port collar" if home_marker.label_text != "HOME" else "the station centre"
-	home_cue.tooltip_text = "Station %s · %s marks %s. Range is to the station centre. Bearing only; use live port readings for alignment and capture." % [state.station_id, home_marker.label_text, bearing_description]
+	var station_label: String = "HOME" if hud_tracking_mode == "planet" else home_marker.label_text
+	var bearing_description := "the selected port collar" if station_label != "HOME" else "the station centre"
+	home_cue.tooltip_text = "Station %s · %s marks %s. Range is to the station centre. Bearing only; use live port readings for alignment and capture." % [state.station_id, station_label, bearing_description]
 	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)
 	if rendezvous_button != null:
 		var rendezvous: Dictionary = state.get("port_rendezvous", {})

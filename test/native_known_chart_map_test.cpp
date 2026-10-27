@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/native_planet_tracking.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include <vector>
 
 namespace apsis_drift {
+auto run_native_planet_tracking_checks() -> void;
 namespace {
 unsigned checks{};
 auto check(bool good, const char* message) -> void {
@@ -349,7 +351,14 @@ auto actual_route() -> void {
         {local->system().catalog.id, bodies.bodies[index].node.id}));
     stable(fixed, view(*local, 4));
   }
+  NativePlanetTracking tracked;
+  const auto home_planet = *need(live->relative_state()).frame.planet;
+  need(tracked.select(*live, {live->system().catalog.id, body_id(home_planet)},
+                      live->document().flight.tick));
+  auto stale_owner = tracked;
   need(live->begin_jump());
+  check(!tracked.read(*live).available,
+        "An actual active jump retained the old planetary HUD target");
   stable(fixed, view(*live, 4));
   auto replay = continued(*live);
   for (SimulationTick tick = 1; tick <= kJumpSpoolTicks + kJumpTransitTicks;
@@ -366,6 +375,11 @@ auto actual_route() -> void {
   check(bytes(*live) == bytes(*replay),
         "Map reads changed frozen arrival/resource replay");
   stable(fixed, view(*live, 4));
+  const auto stale_reading = stale_owner.read(*live);
+  check(
+      !stale_reading.available && stale_reading.name.empty() &&
+          !stale_reading.planet.value,
+      "An old-world target name or position survived an actual system handoff");
   check(live->system().catalog.id == network.nodes[1].system,
         "Current map marker lacks an actual system handoff");
   need(live->advance({}));
@@ -546,6 +560,7 @@ auto main(int argc, char** argv) -> int {
     return 2;
   }
   try {
+    if (!exporting) run_native_planet_tracking_checks();
     basic_charts();
     signed_axes();
     no_lead_slot();

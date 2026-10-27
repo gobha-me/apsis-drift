@@ -22,6 +22,24 @@ alone changes no selected jump, port, observation, craft or Save. It is a
 view preference; opening a replacement view or Continue starts with the station
 default. Unavailable local stations and invalid port geometry grant no target.
 Ground MARK/SHIP/RETURN and optical-contact cues retain their own controls.
+Paused Controls also offers **Track planet · name · centre** for planets whose
+identity and location are already known in the current system. This selects a
+HUD target separately from any jump. The current reference planet is eligible;
+fuel, carried charges and jump selectability do not gate this read-only choice.
+No unknown, unresolved or foreign-system body is offered. Named Moon/minor
+tracking is outside this provider; their optical cues keep their existing rules.
+
+The planet caption explicitly marks its **centre**. Its range is the C++
+binary64 craft-reference-to-centre distance, not camera distance, altitude,
+landing clearance or a jump-arrival estimate. The live vector uses the same
+current native axes as flight, with system, reference planet, craft, frame and
+tick provenance checked before display. Reference-globe occlusion can add
+**Beyond horizon**: this is a direction annotation, never a safe route.
+Known names are refreshed on paused entry, while flight reads only the selected
+target. Home/port/off, Continue and replacement views clear planet selection;
+walking, loss, a jump or a changed local frame also invalidate it. Selecting,
+reading and clearing spend nothing and change no knowledge or Save fields.
+
 Edge bearings can overlap the compact status card; screen-space avoidance is
 still a presentation refinement under #244.
 

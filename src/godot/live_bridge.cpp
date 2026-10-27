@@ -426,6 +426,18 @@ class FreedomBridge : public godot::RefCounted {
         godot::D_METHOD("get_freedom_planet_destinations"),
         &FreedomBridge::get_freedom_planet_destinations);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_planet_tracking_targets"),
+        &FreedomBridge::get_freedom_planet_tracking_targets);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("select_freedom_planet_tracking", "system_id",
+                        "planet_id", "offered_tick"),
+        &FreedomBridge::select_freedom_planet_tracking);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_planet_tracking"),
+                                &FreedomBridge::get_freedom_planet_tracking);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("clear_freedom_planet_tracking"),
+        &FreedomBridge::clear_freedom_planet_tracking);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_planet_jump", "system_id", "planet_id"),
         &FreedomBridge::select_freedom_planet_jump);
     godot::ClassDB::bind_method(godot::D_METHOD("select_freedom_minor_jump"),
@@ -1536,6 +1548,7 @@ class FreedomBridge : public godot::RefCounted {
       if (!changed) throw std::runtime_error(changed.error());
       validate_saved_projection(candidate);
       saved_flight->session = std::move(candidate);
+      (void)saved_flight->planet_tracking.read(saved_flight->session);
       saved_flight->reset_quiet_travel();
       if (reset_actuation) saved_flight->last_step.reset();
       last_error = godot::String{};
@@ -1780,6 +1793,118 @@ class FreedomBridge : public godot::RefCounted {
     result["selected"] = true;
     result["rows"] = rows;
     result["reason"] = godot::String{};
+    return result;
+  }
+  auto get_freedom_planet_tracking_targets() -> godot::Dictionary {
+    if (!saved_flight) {
+      last_error = "Continue a planetary flight first.";
+      return {};
+    }
+    const auto view =
+        saved_flight->planet_tracking.targets(saved_flight->session);
+    if (!view) {
+      last_error = godot::String{view.error().c_str()};
+      return {};
+    }
+    godot::Dictionary result;
+    result["version"] = std::int64_t{1};
+    result["system_id"] =
+        godot::String{std::to_string(view->system.value).c_str()};
+    result["tick"] = godot::String{std::to_string(view->tick).c_str()};
+    godot::Array rows;
+    for (std::size_t i = 0; i < view->count; ++i) {
+      const auto& target = view->targets[i];
+      godot::Dictionary row;
+      row["planet_id"] =
+          godot::String{std::to_string(target.planet.value).c_str()};
+      row["name"] = godot::String{target.name.c_str()};
+      rows.append(row);
+    }
+    result["targets"] = rows;
+    last_error = godot::String{};
+    return result;
+  }
+  auto select_freedom_planet_tracking(const godot::Variant& system,
+                                      const godot::Variant& planet,
+                                      const godot::Variant& tick) -> bool {
+    if (system.get_type() != godot::Variant::STRING ||
+        planet.get_type() != godot::Variant::STRING ||
+        tick.get_type() != godot::Variant::STRING) {
+      last_error = "Planet tracking requires three canonical decimal strings.";
+      return false;
+    }
+    const auto system_word = identity_word(static_cast<godot::String>(system));
+    const auto planet_word = identity_word(static_cast<godot::String>(planet));
+    const auto tick_word = identity_word(static_cast<godot::String>(tick));
+    if (!saved_flight || !system_word || !planet_word || !tick_word) {
+      last_error = "Refresh the current planetary target list.";
+      return false;
+    }
+    const auto accepted = saved_flight->planet_tracking.select(
+        saved_flight->session,
+        {SystemId{*system_word}, body_id(PlanetId{*planet_word})}, *tick_word);
+    if (!accepted) {
+      last_error = godot::String{accepted.error().c_str()};
+      return false;
+    }
+    last_error = godot::String{};
+    return true;
+  }
+  auto clear_freedom_planet_tracking() -> bool {
+    if (saved_flight) saved_flight->planet_tracking.clear();
+    last_error = godot::String{};
+    return true;
+  }
+  auto get_freedom_planet_tracking() const -> godot::Dictionary {
+    NativePlanetTrackingReading view;
+    if (saved_flight)
+      view = saved_flight->planet_tracking.read(saved_flight->session);
+    else
+      view.note = "Continue a planetary flight first.";
+    const auto decimal = [](std::uint64_t value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    const auto frame_name = [](RigidFrameKind kind) -> const char* {
+      switch (kind) {
+        case RigidFrameKind::system_inertial: return "system_inertial";
+        case RigidFrameKind::planet_fixed: return "planet_fixed";
+        case RigidFrameKind::station_relative_inertial:
+          return "station_relative_inertial";
+        case RigidFrameKind::planet_relative_inertial:
+          return "planet_relative_inertial";
+        case RigidFrameKind::body_relative_inertial:
+          return "body_relative_inertial";
+        case RigidFrameKind::body_fixed: return "body_fixed";
+      }
+      return "unavailable";
+    };
+    godot::Dictionary result;
+    result["version"] = std::int64_t{1};
+    result["selected"] = view.selected;
+    result["available"] = view.available;
+    result["system_id"] = decimal(view.system.value);
+    result["planet_id"] = decimal(view.planet.value);
+    result["reference_planet_id"] = decimal(view.reference_planet.value);
+    result["craft_id"] = decimal(view.craft.value);
+    result["craft_frame_id"] =
+        decimal(saved_flight ? view.craft_frame.id.value : 0);
+    result["craft_frame_version"] =
+        static_cast<std::int64_t>(saved_flight ? view.craft_frame.version : 0);
+    result["world_frame"] =
+        saved_flight ? frame_name(view.world_frame.kind) : "unavailable";
+    result["world_body_id"] =
+        decimal(view.world_frame.planet ? view.world_frame.planet->value
+                : view.world_frame.body ? view.world_frame.body->value
+                                        : 0);
+    result["tick"] = decimal(view.tick);
+    result["name"] = godot::String{view.name.c_str()};
+    godot::PackedFloat64Array position;
+    for (double component : {view.position_metres.x, view.position_metres.y,
+                             view.position_metres.z})
+      position.append(component);
+    result["position_metres"] = position;
+    result["range_metres"] = view.range_metres;
+    result["note"] = godot::String{view.note.c_str()};
     return result;
   }
   auto select_freedom_planet_jump(const godot::String& system,

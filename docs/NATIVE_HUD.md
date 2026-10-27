@@ -28,7 +28,11 @@ retains the explicit recovery overlay above the scene.
 The compact card consolidates resources and motion instead of accumulating
 separate permanent rails. The selected [Origin/port marker](HOME_NAVIGATION.md) carries a readable name,
 live range and direction while flying when its local target is available.
-Paused Controls selects the station, current docking port or no HUD target.
+Paused Controls selects the station, current docking port, an already-known
+current-system planet centre, or no HUD target. Planet tracking is separate
+from jump selection and remains available without fuel or charges; it grants
+no unknown body identity, location or surface findings. Centre range is not
+altitude or landing clearance. Continue resets this presentation choice.
 It supplies a bearing, not a safe route or automatic flight. Ground walking hides ship flight/navigation readouts.
 
 Reference altitude is height above the C++ reference sphere, **not generated
