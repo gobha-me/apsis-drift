@@ -10,7 +10,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     set_tests_properties(${recovery_case}-contract PROPERTIES TIMEOUT 120)
   endforeach()
 
-  add_executable(apsis-drift-native-known-chart-map-tests test/native_known_chart_map_test.cpp)
+  add_executable(apsis-drift-native-known-chart-map-tests
+    test/native_known_chart_map_test.cpp
+    test/native_planet_tracking_test.cpp)
   target_include_directories(apsis-drift-native-known-chart-map-tests PRIVATE src)
   target_link_libraries(apsis-drift-native-known-chart-map-tests PRIVATE
     apsis-drift::core nlohmann_json::nlohmann_json)

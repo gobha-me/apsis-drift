@@ -4,6 +4,7 @@
 #include "apsis_drift/godot/saved_moon_flight.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/native_planet_tracking.hpp"
 #include "apsis_drift/planet_optics.hpp"
 #include "apsis_drift/secondary_bodies.hpp"
 
@@ -188,6 +189,8 @@ struct SavedFlightWorld {
   // Transient request only. Append after historical aggregate fields; never
   // serialize it or turn unexecuted bonus work into clock debt.
   std::uint32_t quiet_travel_multiplier{1};
+  // View-local admitted target; new/reopened worlds deliberately start empty.
+  mutable NativePlanetTracking planet_tracking{};
 
   [[nodiscard]] auto quiet_travel_view() const -> QuietTravelView {
     const auto* refusal = quiet_travel_refusal(session);
@@ -281,6 +284,7 @@ struct SavedFlightWorld {
     last_step = actuation;
     dropped_seconds += dropped.count();
     quiet_travel_multiplier = multiplier;
+    (void)planet_tracking.read(session);
   }
 
  private:
