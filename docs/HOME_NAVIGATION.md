@@ -40,12 +40,20 @@ target. Home/port/off, Continue and replacement views clear planet selection;
 walking, loss, a jump or a changed local frame also invalidate it. Selecting,
 reading and clearing spend nothing and change no knowledge or Save fields.
 
-Edge bearings can overlap the compact status card; screen-space avoidance is
-still a presentation refinement under #244.
+Target captions move around the visible compact status card while their marker
+or edge arrow stays at the true bearing. Placement respects the current viewport
+and UI scale. If the remaining space cannot fit a caption, its backing and text
+hide while the direction cue remains; hiding the status card releases that space.
 
 On foot, a separate **SHIP** marker uses the same projection to point toward the
 landed craft centre. HOME stays hidden during surface walking. The bearing helps
 reacquire the ship; the existing aft-access reach check still controls reboarding.
+The **RETURN** and personal **MARK** captions include their live C++ straight-line
+distance, measured from the current on-foot position. A personal MARK viewed
+from aboard uses the craft reference instead. RETURN is the actual ground return
+access, not the ship centre or a guaranteed route. When access is unavailable,
+SHIP remains direction-only: an old RETURN/MARK distance is never reused.
+Remote personal markers retain their saved record without a local caption.
 
 A reference-globe sightline test identifies home beyond the planetary horizon.
 This is directional information for manual flight, not an orbital transfer

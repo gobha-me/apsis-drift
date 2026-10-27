@@ -16,6 +16,20 @@ func run() -> void:
 	root.add_child(camera)
 	camera.current = true
 	# Invalid geometry refuses before any projection or drawing.
+	var invalid_marker := Navigation.new()
+	root.add_child(invalid_marker)
+	invalid_marker.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	invalid_marker.size = Vector2(640, 450)
+	var original_caption: Rect2 = invalid_marker.label_bounds(Vector2(100, 100))
+	for rectangle: Rect2 in [Rect2(), Rect2(Vector2(NAN, 0), Vector2(100, 100)), Rect2(Vector2.ZERO, Vector2(INF, 100)), Rect2(0, 0, -100, 100), Rect2(0, 0, 100, -100), Rect2(0, 0, 0, 100), Rect2(700, 500, 100, 100)]:
+		invalid_marker.exclusion_rect = rectangle
+		check(invalid_marker.label_bounds(Vector2(100, 100)) == original_caption, "Invalid/offscreen exclusion displaced or hid a caption")
+	for scale in [0.0, -1.0, NAN, INF]:
+		invalid_marker.render_scale = scale
+		check(not invalid_marker.label_bounds(Vector2(100, 100)).has_area(), "Invalid caption scale reached rectangle placement")
+	invalid_marker.render_scale = 1.0
+	check(not invalid_marker.label_bounds(Vector2(NAN, 100)).has_area(), "Nonfinite cue point reached caption placement")
+	invalid_marker.free()
 	for invalid in [-1.0, NAN, INF]:
 		check(Navigation.range_text(invalid).is_empty(), "Invalid target range became a visible number")
 	check(Navigation.range_text(83.4) == "83.4 m" and Navigation.range_text(1000.0) == "1.0 km" and Navigation.range_text(12345.0) == "12.3 km", "Target range lost actual metre/kilometre units")
@@ -93,6 +107,36 @@ func run() -> void:
 				var rect := ship_marker.label_bounds(point)
 				check(Rect2(Vector2.ZERO, bounds).encloses(rect) and rect.size.y >= 68 * scale, "Named target/range/horizon caption clipped at viewport edge")
 	check(ship_marker.caption_lines() == PackedStringArray(["Origin Station", "12.3 km", "Beyond horizon"]), "Tracking caption lost target identity, distance or horizon warning")
+	# Exclude one real UI rectangle without changing the projected cue, edge
+	# arrow or supplied target/range strings. Projection remains camera-owned.
+	camera.position = Vector3.ZERO
+	camera.rotation = Vector3.ZERO
+	for bounds in [Vector2(640, 450), Vector2(1280, 720)]:
+		ship_marker.size = bounds
+		var viewport := Rect2(Vector2.ZERO, bounds)
+		for scale in [0.5, 1.0, 2.0]:
+			ship_marker.render_scale = scale
+			for point in [Vector3(0, 0, -10), Vector3(100, 0, -10), Vector3(-100, 0, -10), Vector3(0, 100, -10), Vector3(100, 0, 10)]:
+				var projected: Dictionary = Navigation.project(camera, point, bounds, Navigation.INSET * scale)
+				ship_marker.cue = projected.duplicate(true)
+				ship_marker.exclusion_rect = Rect2()
+				var previous: Rect2 = ship_marker.label_bounds(projected.position)
+				ship_marker.exclusion_rect = Rect2(Vector2.ZERO, bounds * 0.6)
+				var placed: Rect2 = ship_marker.label_bounds(projected.position)
+				check(placed.has_area() and viewport.encloses(placed) and not placed.intersects(ship_marker.exclusion_rect), "Caption overlapped the status card or escaped the viewport")
+				check(placed == ship_marker.label_bounds(projected.position), "Repeated exclusion layout changed deterministic placement")
+				check(placed != previous if previous.intersects(ship_marker.exclusion_rect) else placed == previous, "Exclusion moved a clear caption or retained an overlapping one")
+				check(ship_marker.cue == projected and ship_marker.caption_lines() == PackedStringArray(["Origin Station", "12.3 km", "Beyond horizon"]), "Caption avoidance changed the true cue or target/range text")
+				ship_marker.exclusion_rect = viewport
+				check(not ship_marker.label_bounds(projected.position).has_area() and ship_marker.cue == projected, "Fully blocked viewport lost its cue or retained a caption backing")
+			# A caption as wide as the viewport can still move above/below the
+			# card; left/right candidates must not truncate or shrink it.
+			ship_marker.display_name = "Long known target name ".repeat(30)
+			ship_marker.exclusion_rect = Rect2(0, 0, bounds.x, bounds.y * 0.3)
+			var wide: Rect2 = ship_marker.label_bounds(Vector2(10, 10))
+			check(wide.has_area() and wide.size.x == bounds.x and viewport.encloses(wide) and not wide.intersects(ship_marker.exclusion_rect), "Full-width caption did not use the available vertical space")
+			ship_marker.display_name = "Origin Station"
+	ship_marker.exclusion_rect = Rect2()
 	ship_marker.display_name = ""
 	ship_marker.detail_text = ""
 	check(ship_marker.caption_lines() == PackedStringArray([ship_marker.label_text]), "Cleared tracking text leaked into an ordinary marker")
