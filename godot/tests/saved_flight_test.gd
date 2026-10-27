@@ -353,6 +353,12 @@ func check_compact_hud(view: Control, owner: Variant, directory: String) -> void
 		for item in [view.primary_status, view.context_action, view.instruments_button]:
 			check(bounds.encloses(item.get_rect()), "Compact control escaped " + str(pixels))
 		check(not view.primary_status.get_rect().intersects(view.instruments_button.get_rect()), "Compact text covered the controls button")
+		for marker in [view.home_marker, view.ship_marker, view.contact_marker, view.derelict_marker]:
+			check(marker.exclusion_rect.has_area(), "Visible compact status did not reserve navigation caption space")
+			if pixels.x >= 640:
+				for point in [view.primary_status.position, view.primary_status.get_rect().end - Vector2.ONE]:
+					var caption: Rect2 = marker.label_bounds(point)
+					check(caption.has_area() and not caption.intersects(marker.exclusion_rect), "Navigation caption overlapped the actual compact status card")
 		check(not view.hud_scroll.visible and not view.paused, "Compact resize reopened instruments or paused")
 	root.size = Vector2i(1280, 720)
 	await process_frame
@@ -360,6 +366,8 @@ func check_compact_hud(view: Control, owner: Variant, directory: String) -> void
 	check(view.paused and view.controls_menu.panel.visible and not view.hud_scroll.visible, "Actual compact controls button failed to pause and open controls")
 	view.show_instruments()
 	check(view.paused and view.hud_scroll.visible and not view.primary_status.visible and root.gui_get_focus_owner() == view.instruments_button, "Instrument review lost pause, visibility or keyboard/controller focus")
+	for marker in [view.home_marker, view.ship_marker, view.contact_marker, view.derelict_marker]:
+		check(not marker.exclusion_rect.has_area(), "Hidden compact status retained a navigation caption exclusion")
 	view.instruments_button.pressed.emit()
 	check(not view.instruments_open and not view.hud_scroll.visible and view.controls_menu.panel.visible and view.paused, "Back to controls retained the detail wall or resumed")
 	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(save) and FileAccess.get_file_as_bytes(save) == original, "Compact review, resize or focus changed full saved state")

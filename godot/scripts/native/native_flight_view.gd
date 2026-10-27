@@ -1222,6 +1222,19 @@ func update_compact_hud() -> void:
 			var base_height: float = Status.layout_bounds(size, pixels).size.y
 			var content_height: float = float(primary_status.get_content_height()) if commission.active else base_height
 			primary_status.size.y = minf(available, maxf(base_height, content_height))
+	refresh_navigation_exclusion()
+
+
+func refresh_navigation_exclusion() -> void:
+	for marker in [home_marker, ship_marker, contact_marker, derelict_marker]:
+		if marker == null: continue
+		var reserved := Rect2()
+		if primary_status.is_visible_in_tree():
+			var marker_transform: Transform2D = marker.get_global_transform_with_canvas()
+			var status_transform: Transform2D = primary_status.get_global_transform_with_canvas()
+			if marker_transform.is_finite() and status_transform.is_finite() and absf(marker_transform.determinant()) > 0.000001:
+				reserved = marker_transform.affine_inverse() * status_transform * Rect2(Vector2.ZERO, primary_status.size)
+		marker.exclusion_rect = reserved
 
 
 func setup_cockpit_control() -> bool:
@@ -2454,12 +2467,14 @@ func refresh_surface_marker() -> void:
 	if not show_personal_marker: return
 	if surface_walking():
 		ship_marker.label_text = "MARK"
+		ship_marker.display_name = ""
+		ship_marker.detail_text = HomeNavigation.range_text(marker.distance_metres)
 		ship_marker.update_cue(camera, marker.position, false)
 	else:
 		home_marker.visible = true
 		home_marker.label_text = "MARK"
 		home_marker.display_name = ""
-		home_marker.detail_text = ""
+		home_marker.detail_text = HomeNavigation.range_text(marker.distance_metres)
 		home_marker.update_cue(camera, marker.position, false)
 		if home_cue != null: home_cue.visible = false
 
@@ -3516,11 +3531,14 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	var outside := surface_walking()
 	refresh_suit_lamp()
 	ship_marker.visible = outside
+	ship_marker.display_name = ""
+	ship_marker.detail_text = ""
 	if outside:
 		var access: Dictionary = state.surface_walk.return_access
 		# One marker avoids overlapping labels. SHIP is only a centre fallback;
 		# RETURN identifies the existing ground transfer, not an art hatch.
 		ship_marker.label_text = "RETURN" if access.available else "SHIP"
+		if access.available: ship_marker.detail_text = HomeNavigation.range_text(access.distance_metres)
 		ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
 	orbital_forecast.visible = not outside
 	resource_status.visible = not outside

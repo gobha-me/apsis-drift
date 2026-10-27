@@ -155,6 +155,7 @@ func check_return_bearing(view: Control) -> void:
 	check(access.available and view.ship_marker.visible and view.ship_marker.label_text == "RETURN" and not view.home_marker.visible, "Ground return access marker unavailable")
 	var expected := Navigation.project(view.camera, access.position, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
 	check(view.ship_marker.cue == expected, "RETURN bearing diverged from actual projected entry")
+	check(view.ship_marker.caption_lines() == PackedStringArray(["RETURN", Navigation.range_text(access.distance_metres)]), "RETURN caption omitted or substituted its live C++ access range")
 	check("RETURN" in view.primary_status.text and "%.1f m" % access.distance_metres in view.primary_status.text, "Compact ground HUD omitted access range")
 
 
@@ -165,10 +166,19 @@ func check_return_fallback(view: Control) -> void:
 	view.update_view(0.0)
 	var expected := Navigation.project(view.camera, Vector3.ZERO, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
 	check(view.error.is_empty() and view.ship_marker.visible and view.ship_marker.label_text == "SHIP" and view.ship_marker.cue == expected, "Unavailable return access lost the explicit craft-centre fallback")
+	check(view.ship_marker.caption_lines() == PackedStringArray(["SHIP"]) and view.ship_marker.detail_text.is_empty(), "SHIP fallback retained an unsupported or stale RETURN range")
 	check("Return access unavailable" in view.primary_status.text and not view.home_marker.visible, "Unavailable return access showed a guessed distance or changed HOME")
 	view.state = original
 	view.update_view(0.0)
 	check_return_bearing(view)
+	for damage in ["missing", "nonfinite", "negative", "position"]:
+		var bad := original.duplicate(true)
+		match damage:
+			"missing": bad.surface_walk.return_access.erase("distance_metres")
+			"nonfinite": bad.surface_walk.return_access.distance_metres = NAN
+			"negative": bad.surface_walk.return_access.distance_metres = -1.0
+			"position": bad.surface_walk.return_access.position = Vector3(INF, 0, 0)
+		check(not FlightView.valid_state(bad), "Invalid RETURN observation reached caption admission: " + damage)
 
 
 func marker_state_without_metadata(state: Dictionary) -> Dictionary:
@@ -242,14 +252,30 @@ func check_personal_surface_marker(source: String, assets: String, output: Strin
 	malformed = marked.duplicate(true)
 	malformed.surface_marker.tick = "18446744073709551615"
 	check(not FlightView.valid_surface_marker(malformed), "Future personal marker tick accepted")
+	# A remote retained point supplies no local range or bearing. Exercise the
+	# presentation fallback without changing any C++ record or physical pose.
+	var remote := marked.duplicate(true)
+	remote.surface_marker.current_body = false
+	remote.surface_marker.planet_id = "1" if marked.planet_id != "1" else "2"
+	remote.surface_marker.erase("position")
+	remote.surface_marker.erase("distance_metres")
+	check(FlightView.valid_surface_marker(remote), "Valid remote marker metadata refused")
+	view.state = remote
+	view.show_personal_marker = true
+	view.update_view(0.0)
+	check(not view.show_personal_marker and view.ship_marker.label_text == "RETURN" and view.ship_marker.detail_text == Navigation.range_text(remote.surface_walk.return_access.distance_metres), "Remote MARK retained its stale local caption instead of RETURN")
+	view.state = marked
+	view.update_view(0.0)
 	await activate_marker_button(view, view.show_surface_marker_button)
 	check(view.show_personal_marker and view.ship_marker.label_text == "MARK" and not view.home_marker.visible and "RETURN" in view.primary_status.text, "MARK overlapped return/home cues or removed hatch range")
+	check(view.ship_marker.caption_lines() == PackedStringArray(["MARK", Navigation.range_text(point.distance_metres)]), "MARK caption omitted its admitted foot-reference range")
 	walk(view, KEY_S, 120)
 	view.pause_controls("Inspect the personal marker", true)
 	var moved: Dictionary = owner.get_freedom_flight_state()
 	check(moved.surface_marker.tick == point.tick and moved.surface_marker.distance_metres > 0.1, "Walking moved the saved marker instead of changing its range")
 	var expected := Navigation.project(view.camera, moved.surface_marker.position, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
 	check(view.ship_marker.cue == expected and "straight-line distance" in view.primary_status.text and "RETURN" in view.primary_status.text, "Current-body MARK bearing or compact return information diverged")
+	check(view.ship_marker.detail_text == Navigation.range_text(moved.surface_marker.distance_metres) and view.ship_marker.detail_text != Navigation.range_text(point.distance_metres), "Moving MARK caption retained the recorded-time range")
 	view.player_input.device = 0
 	view.player_input.available_pads[0] = true
 	view.player_input.install()
@@ -263,6 +289,7 @@ func check_personal_surface_marker(source: String, assets: String, output: Strin
 	check(owner.save_freedom_as(saved), "Personal marker Save As refused")
 	var bytes := FileAccess.get_file_as_bytes(saved)
 	for repeat in 3: view.update_view(0.0)
+	check(view.ship_marker.detail_text == Navigation.range_text(replaced.surface_marker.distance_metres), "Paused MARK reads changed the current authoritative range")
 	check(owner.save_freedom_as(saved + ".after.json") and FileAccess.get_file_as_bytes(saved + ".after.json") == bytes, "Marker projection/review changed the complete saved journey")
 	check(shell.select_start(owner, {"mode": "continue", "value": saved, "assets": assets}), "Personal marker Continue refused")
 	view = shell.current_view
@@ -275,6 +302,7 @@ func check_personal_surface_marker(source: String, assets: String, output: Strin
 	var aboard: Dictionary = owner.get_freedom_flight_state()
 	expected = Navigation.project(view.camera, aboard.surface_marker.position, view.home_marker.size, Navigation.INSET * view.home_marker.render_scale)
 	check(view.home_marker.visible and view.home_marker.label_text == "MARK" and not view.ship_marker.visible and view.home_marker.cue == expected, "Seated MARK did not use the shared C++ craft-relative projection")
+	check(view.home_marker.caption_lines() == PackedStringArray(["MARK", Navigation.range_text(aboard.surface_marker.distance_metres)]) and view.ship_marker.detail_text.is_empty(), "Seated MARK lost its craft-reference range or retained hidden foot text")
 	var clear_records: Dictionary = owner.get_freedom_observations()
 	await activate_marker_button(view, view.clear_surface_marker_button)
 	var cleared: Dictionary = owner.get_freedom_flight_state()
@@ -1135,7 +1163,7 @@ func run() -> void:
 	var retained_model: int = view.staged_model.get_instance_id()
 	view.context_action.pressed.emit()
 	check(view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == retained_model and retained_model != model_id, "Nearby return failed or replaced the continued ship")
-	check(not view.ship_marker.visible, "Ground ship bearing remained visible after reboarding")
+	check(not view.ship_marker.visible and view.ship_marker.detail_text.is_empty(), "Ground ship bearing/range remained after reboarding")
 	check(view.state.surface_walk.is_empty(), "Reboarding retained an outside position projection")
 	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Suit lamp remained active after reboarding")
 	checkpoint(owner, args[0], args[2], "seated")

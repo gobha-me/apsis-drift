@@ -7,6 +7,11 @@ var render_scale := 1.0
 var label_text := "HOME"
 var display_name := ""
 var detail_text := ""
+# Marker-local UI coordinates; the physical cue point is never displaced.
+var exclusion_rect: Rect2 = Rect2():
+	set(value):
+		exclusion_rect = value
+		queue_redraw()
 
 static func range_text(metres: float) -> String:
 	if not is_finite(metres) or metres < 0: return ""
@@ -75,7 +80,29 @@ func label_bounds(at: Vector2) -> Rect2:
 	var extent := Vector2(minf(size.x, measured + 6 * render_scale), minf(size.y, (24 + 22 * (lines.size() - 1)) * render_scale))
 	var left := at.x + 9 * render_scale
 	if left + extent.x > size.x: left = at.x - extent.x - 9 * render_scale
-	return Rect2(Vector2(clampf(left, 0, size.x - extent.x), clampf(at.y - 18 * render_scale, 0, size.y - extent.y)), extent)
+	var original := Rect2(Vector2(clampf(left, 0, size.x - extent.x), clampf(at.y - 18 * render_scale, 0, size.y - extent.y)), extent)
+	var viewport := Rect2(Vector2.ZERO, size)
+	if not exclusion_rect.position.is_finite() or not exclusion_rect.size.is_finite() or exclusion_rect.size.x <= 0.0 or exclusion_rect.size.y <= 0.0 or not viewport.intersects(exclusion_rect):
+		return original
+	var blocked := viewport.intersection(exclusion_rect)
+	if not original.intersects(blocked): return original
+	# One physical-pixel gap also avoids edge-touch rounding at scaled sizes.
+	var gap := maxf(1.0, render_scale)
+	var candidates: Array[Vector2] = [
+		Vector2(original.position.x, blocked.position.y - extent.y - gap),
+		Vector2(original.position.x, blocked.end.y + gap),
+		Vector2(blocked.position.x - extent.x - gap, original.position.y),
+		Vector2(blocked.end.x + gap, original.position.y)]
+	var best := Rect2()
+	var nearest := INF
+	for position: Vector2 in candidates:
+		var candidate := Rect2(position.clamp(Vector2.ZERO, size - extent), extent)
+		if not viewport.encloses(candidate) or candidate.intersects(blocked): continue
+		var distance := original.position.distance_squared_to(candidate.position)
+		if distance < nearest:
+			best = candidate
+			nearest = distance
+	return best
 
 func _draw() -> void:
 	if cue.is_empty(): return
