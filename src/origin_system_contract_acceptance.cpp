@@ -332,7 +332,8 @@ auto project_active_state(
   career = *document.state.intersystem_contract;
   contract = *document.state.origin_system_contract;
   outbound = *document.state.system_flight;
-  const auto orbital = insert_system_flight_orbit(system, *outbound);
+  const auto orbital = insert_system_flight_orbit(
+      system, *outbound, document.recipe.numerical_profile);
   if (!orbital || !advance_origin_system_contract(
                       contract, career.universe_tick, career.universe_tick,
                       OriginSystemContractCommand::enter_target_planet)) {

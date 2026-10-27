@@ -6,6 +6,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
   target_compile_definitions(apsis-drift-tests PRIVATE
     APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+  add_test(NAME planetary-replay COMMAND apsis-drift-tests --planetary-replay)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE

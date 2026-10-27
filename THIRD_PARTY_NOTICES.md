@@ -55,3 +55,30 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Controlled flight hypot (glibc 2.41)
+
+`src/flight_numerics.cpp` contains an adaptation of the non-FMA binary64 hypot
+kernel from [glibc 2.41 e_hypot.c](https://github.com/bminor/glibc/blob/glibc-2.41/sysdeps/ieee754/dbl-64/e_hypot.c).
+Copyright (C) 2021-2025 Free Software Foundation, Inc.
+Licensed under the GNU Lesser General Public License, version 2.1 or (at your
+option) any later version. This file retains that license; the repository's BSD
+license does not replace it. No warranty is provided.
+
+The unmodified upstream source is retained as
+`third_party/glibc/e_hypot.c.txt`. The adaptation fixes the non-FMA branch,
+replaces glibc internals with C++ standard operations, supplies namespaced
+profile dispatch and defines application NaN/Inf results without an errno or
+exception-flag guarantee. Upstream credits Carlos F. Borges,
+[An Improved Algorithm for hypot(a,b)](https://arxiv.org/abs/1904.09481).
+
+Complete texts: [LGPL 2.1](third_party/glibc/COPYING.LIB) and
+[GPL 2](third_party/glibc/COPYING), referenced by the LGPL. Preserve these
+notices and the adapted source when distributing it. Binary distributors must
+satisfy LGPL section 6, including allowing modification/reverse engineering for
+debugging such modifications. For this static-link build, accompany the binary
+with the complete corresponding library source and application object files,
+link commands and dependencies needed to relink against a modified
+`flight_numerics.cpp.o` (or another compliant section-6 distribution mechanism).
+The source checkout alone is not a substitute for the relinkable application
+objects when distributing a statically linked executable.

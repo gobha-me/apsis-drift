@@ -169,6 +169,7 @@ struct PlanetaryFlightState {
   FlightRegime regime{FlightRegime::orbital};
   std::optional<FlightRegimeTransition> last_transition;
   PlanetaryThermalState thermal;
+  FlightNumericalProfile numerical_profile{FlightNumericalProfile::legacy_host};
 
   friend auto operator==(const PlanetaryFlightState&,
                          const PlanetaryFlightState&) -> bool = default;
@@ -214,10 +215,13 @@ enum class PlanetaryFlightError : std::uint8_t {
     const PlanetDescriptor& planet, const PlanetaryFlightState& state) noexcept
     -> std::expected<ThermalAssessment, PlanetaryFlightError>;
 
+// New flights select controlled math; continuation callers pass their recipe's
+// recorded profile, including legacy_host for format16.
 [[nodiscard]] auto initial_planetary_flight_state(
     const PlanetDescriptor& planet, GeodeticPosition position,
     PlanetaryFlightEnvironment environment, double heading_radians = 0.0,
-    FlightMode mode = FlightMode::autopilot) noexcept
+    FlightMode mode = FlightMode::autopilot,
+    FlightNumericalProfile profile = kCurrentFlightNumericalProfile) noexcept
     -> std::expected<PlanetaryFlightState, PlanetaryFlightError>;
 
 // Validates the complete authoritative state independently of terrain cache
@@ -239,6 +243,8 @@ enum class PlanetaryFlightError : std::uint8_t {
     std::optional<PlanetaryAnalogInput> analog = std::nullopt) noexcept
     -> std::expected<void, PlanetaryFlightError>;
 
+// Historical physical-state digest. Replay identity also includes the profile;
+// its metadata is deliberately outside this unchanged golden byte recipe.
 [[nodiscard]] auto planetary_flight_state_checksum(
     const PlanetaryFlightState& state) noexcept -> std::uint64_t;
 

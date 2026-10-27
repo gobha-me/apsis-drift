@@ -282,8 +282,10 @@ auto make_new_game_document(const NewGameOptions& options) -> SaveDocument {
 
 auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
   const auto binding = generate_home_signal_contract(universe_seed);
+  auto recipe = make_save_recipe(universe_seed);
+  recipe.numerical_profile = kCurrentFlightNumericalProfile;
   return SaveDocument{
-      .recipe = make_save_recipe(universe_seed),
+      .recipe = recipe,
       .state =
           SaveMutableState{
               .location = OriginLocation::docked_at_origin,

@@ -47,11 +47,13 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
       planet, target.anchor,
       static_cast<double>(target.approach_altitude_metres));
   const auto target_position =
-      target_fixed ? geodetic_from_planet_fixed(planet, *target_fixed)
+      target_fixed ? geodetic_from_planet_fixed(planet, *target_fixed,
+                                                kCurrentFlightNumericalProfile)
                    : std::expected<GeodeticPosition, CoordinateError>{
                          std::unexpected{CoordinateError::non_finite_input}};
   const auto frame =
-      target_position ? make_local_tangent_frame(planet, *target_position)
+      target_position ? make_local_tangent_frame(planet, *target_position,
+                                                 kCurrentFlightNumericalProfile)
                       : std::expected<LocalTangentFrame, CoordinateError>{
                             std::unexpected{CoordinateError::non_finite_input}};
   const auto start_fixed =
@@ -61,7 +63,8 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
             : std::expected<PlanetFixedPositionMetres, CoordinateError>{
                   std::unexpected{CoordinateError::non_finite_input}};
   const auto start_position =
-      start_fixed ? geodetic_from_planet_fixed(planet, *start_fixed)
+      start_fixed ? geodetic_from_planet_fixed(planet, *start_fixed,
+                                               kCurrentFlightNumericalProfile)
                   : std::expected<GeodeticPosition, CoordinateError>{
                         std::unexpected{CoordinateError::non_finite_input}};
   if (!start_position) {
