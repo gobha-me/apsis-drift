@@ -161,6 +161,54 @@ Its travel time of 103 minutes needs player review. The failed/delayed-work case
 typical/sparse starts, later berth bills and broader balance remain #293 work;
 the prototype prices remain provisional.
 
+## Waypoint A paid-survey reference
+
+The [Waypoint A reference](research/waypoint-paid-survey-reference-v1.json)
+uses the actual alternative orbital offer and the existing actuator-only test
+pilot. It starts a public seed-42 planetary New Game, enrolls, walks and boards,
+flies both charged legs, acquires fresh work, captures at Origin, submits and
+purchases restoration. No intermediate pose, velocity, clock, resource or
+financial state is assigned.
+
+| Quantity | Measured result |
+| --- | ---: |
+| Elapsed game time | 161,948 ticks / 22.493 minutes |
+| Committed flight / walking ticks | 155,988 / 5,960 |
+| Fresh qualifying orbital work | 3,600 ticks / 30 seconds |
+| Flight fuel consumed | 278,940,584,316,058 Q / 9.20% of tank |
+| Jump charges before restoration | 3→2→1 |
+| Flight + jump restoration | 4+30=34 credits |
+| Cash after enrollment → report → restoration | 180→280→246 |
+| Final stores | Full flight tank and 3 jump charges |
+
+The initial 20-credit berth covers this trip; no further berth bill, tab or
+insurance charge accrues. Cash finishes 66 above the enrolled balance. The
+commission uses version 3 / target policy 2; paid operations remains version 1.
+Fresh work runs from tick 42,407 through 46,006 inclusive. Its owner record
+starts at 4,401, before qualifying acquisition.
+
+Both recorded compiler runs match all 46 route artifacts and 21 checkpoint /
+Continue boundaries, including the uninterrupted C++ peer. Standard repository
+builds reproduce their exact executables; the source change from the executed
+candidate is pinned formatting only. The default Nearby regression also matches
+all 46 artifacts of the earlier closer-arrival reference. This is one candidate,
+not optimal piloting, a seed distribution, player pacing or price balance.
+
+Create an empty output directory, then run:
+
+```sh
+mkdir waypoint-trip
+build-native/src/godot/apsis-drift-freedom-planetary-fixture \
+  "$PWD/waypoint-trip" --neighbor --commands --commission \
+  --charted-arrivals --commission-waypoint
+```
+
+Use your configured native build directory. The new flag requires the existing
+commission route and refuses the incomplete-work option. The completed outcome
+is in `trace.json`; `commission-progress.json` remains an interim snapshot.
+The broader [economy research](https://github.com/gobha-me/apsis-drift/issues/293)
+remains open.
+
 ## Atmosphere/gravity reference matrix
 
 Each row uses an actual generated physical catalog 2/ephemeris 2 body and the

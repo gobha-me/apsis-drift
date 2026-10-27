@@ -159,7 +159,7 @@ class NativeCiTest(unittest.TestCase):
             cli += [f"surface-loop-refusal-{i}.log" for i in range(11)]
         for name in self.runner.ROUNDTRIP_TESTS:
             if name in selected:
-                cli += [f"{name}-refusal-{i}.log" for i in range(23)]
+                cli += [f"{name}-refusal-{i}.log" for i in range(27)]
         if "native_derelict" in selected:
             cli += [f"derelict-recovery-refusal-{i}.log" for i in range(5)]
         for name in cli:
@@ -344,7 +344,7 @@ class NativeCiTest(unittest.TestCase):
         self.assertEqual(ci.check(args, self.repo), 0)
         summary = ci.read_json(args.output)
         self.assertEqual(summary["counts"], {"tests": 45, "setup_rows": 97, "launch_cases": 25,
-                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 135})
+                                           "expected_nonzero_launches": 9, "cli_refusal_logs": 155})
         self.assertEqual(len(summary["groups"]), 4)
         # Artifact extraction can relocate receipts and proof together.
         relocated = self.root.parent / (self.root.name + "-relocated")
@@ -528,7 +528,7 @@ class NativeCiTest(unittest.TestCase):
 
     def test_last_roundtrip_cli_refusal_cannot_be_hidden(self):
         args = self.make_check()
-        name = "native_roundtrip-refusal-22.log"
+        name = "native_roundtrip-refusal-26.log"
         for inv_path in args.invocation:
             invocation = ci.read_json(inv_path)
             row = invocation["reports"][0]

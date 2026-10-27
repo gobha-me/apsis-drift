@@ -158,3 +158,10 @@ separately flies outward and home without completing the measurement. It records
 zero payment, actual restoration costs and acceptance of fresh work after
 explicit abandonment. It establishes that one next action remains viable for
 that candidate; expiry, sparse starts and player pacing remain separate.
+
+The separate [Waypoint A paid-survey reference](FREEDOM_ENDURANCE.md#waypoint-a-paid-survey-reference)
+now completes one alternative-target voyage through actual commands, including
+orbital acquisition, return, submission and full restoration. Its seed-42
+candidate takes 22.493 game minutes and finishes with 246 credits after a
+34-credit replenishment. It preserves the earlier initialized-boundary tests
+and Nearby references; it does not establish a seed distribution or price balance.

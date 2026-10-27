@@ -241,6 +241,13 @@ struct Trace {
       else if (op == "commission_accept")
         need(live.accept_survey_commission(args.at(0).get<SimulationTick>(),
                                            args.at(1).get<std::uint32_t>()));
+      else if (op == "commission_accept_target")
+        need(live.accept_survey_commission_target(
+            {SystemId{args.at(0).get<std::uint64_t>()},
+             BodyId{args.at(1).get<std::uint32_t>(),
+                    static_cast<BodyKind>(args.at(2).get<std::uint8_t>()),
+                    args.at(3).get<std::uint64_t>()}},
+            args.at(4).get<SimulationTick>(), args.at(5).get<std::uint32_t>()));
       else if (op == "commission_submit")
         need(live.submit_survey_commission(args.at(0).get<std::uint32_t>()));
       else if (op == "commission_submit_refused") {
@@ -1212,7 +1219,8 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
                   bool pilot, std::optional<IntersystemArrivalQuality> grade,
                   const std::optional<std::filesystem::path>& continue_from,
                   bool commission = false, bool charted_arrivals = false,
-                  bool incomplete_commission = false) -> void {
+                  bool incomplete_commission = false,
+                  bool commission_waypoint = false) -> void {
   const auto source_bytes =
       continue_from ? checkpoint_bytes(*continue_from) : std::string{};
   Trace trace{neighbor_start(continue_from, commission), output,
@@ -1322,12 +1330,34 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
           need(session.paid_operations_view(), "Paid terms refused");
       need(session.enable_paid_operations(terms.token));
       trace.action("paid_enable", Json::array({terms.token}));
-      const auto offer =
-          need(session.survey_commission_view(), "Commission offer refused");
-      need(session.accept_survey_commission(offer.offer_until,
-                                            offer.offer_sequence));
-      trace.action("commission_accept",
-                   Json::array({offer.offer_until, offer.offer_sequence}));
+      if (commission_waypoint) {
+        const auto offers = need(session.survey_commission_offers(),
+                                 "Waypoint commission offers refused");
+        check(offers.version == 1 && offers.offer_count == 2 &&
+                  offers.offers[0].target != offers.offers[1].target,
+              "Waypoint measurement requires the actual two distinct offers");
+        const auto target = offers.offers[1].target;
+        const auto offer = need(session.survey_commission_view(
+                                    SurveyCommissionKind::orbital, target),
+                                "Target-qualified Waypoint commission refused");
+        check(offer.can_accept && offer.system == target.system &&
+                  body_id(offer.planet) == target.body,
+              "Waypoint quote differs from the actual offered target");
+        need(session.accept_survey_commission_target(target, offer.offer_until,
+                                                     offer.offer_sequence));
+        trace.action("commission_accept_target",
+                     Json::array({target.system.value, target.body.version,
+                                  static_cast<std::uint32_t>(target.body.kind),
+                                  target.body.value, offer.offer_until,
+                                  offer.offer_sequence}));
+      } else {
+        const auto offer =
+            need(session.survey_commission_view(), "Commission offer refused");
+        need(session.accept_survey_commission(offer.offer_until,
+                                              offer.offer_sequence));
+        trace.action("commission_accept",
+                     Json::array({offer.offer_until, offer.offer_sequence}));
+      }
       const auto accepted =
           need(session.survey_commission_view(), "Accepted commission refused");
       destination = accepted.system;
@@ -2266,7 +2296,7 @@ int main(int argc, char** argv) {
           "Expected one absolute empty output "
           "directory and optional "
           "--commands/--endurance/--neighbor/--commission/--charted-arrivals/"
-          "--incomplete-commission/"
+          "--incomplete-commission/--commission-waypoint/"
           "--pilot/"
           "--aligned/--offset/--surface-loop [--system-frame] or distinct "
           "--terrain-feature; --flight-profile=assisted|advanced requires "
@@ -2274,7 +2304,7 @@ int main(int argc, char** argv) {
           "requires --neighbor --commands");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
         feature{}, system_frame{}, commission{}, charted_arrivals{},
-        incomplete_commission{};
+        incomplete_commission{}, commission_waypoint{};
     std::optional<IntersystemArrivalQuality> grade;
     std::optional<PhysicalFlightProfile> profile;
     std::optional<std::filesystem::path> continue_from;
@@ -2304,6 +2334,8 @@ int main(int argc, char** argv) {
         charted_arrivals = true;
       else if (option == "--incomplete-commission" && !incomplete_commission)
         incomplete_commission = true;
+      else if (option == "--commission-waypoint" && !commission_waypoint)
+        commission_waypoint = true;
       else if (option == "--pilot" && !pilot)
         pilot = true;
       else if (option == "--aligned" && !grade)
@@ -2355,11 +2387,16 @@ int main(int argc, char** argv) {
     if (incomplete_commission && !commission)
       throw std::invalid_argument("--incomplete-commission requires --neighbor "
                                   "--commands --commission");
+    if (commission_waypoint && (!commission || incomplete_commission))
+      throw std::invalid_argument(
+          "--commission-waypoint requires --neighbor --commands --commission "
+          "and no --incomplete-commission");
     if (feature)
       terrain_feature(output);
     else if (neighbor)
       run_neighbor(output, commands, pilot, grade, continue_from, commission,
-                   charted_arrivals, incomplete_commission);
+                   charted_arrivals, incomplete_commission,
+                   commission_waypoint);
     else
       run(output, commands, endurance, surface_loop, system_frame, profile);
     return 0;

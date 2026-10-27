@@ -499,7 +499,7 @@ def validate_report(report, path, metadata, selected, m, runner):
         cli_logs += [f"surface-loop-refusal-{i}.log" for i in range(11)]
     for name in runner.ROUNDTRIP_TESTS:
         if name in selected:
-            cli_logs += [f"{name}-refusal-{i}.log" for i in range(23)]
+            cli_logs += [f"{name}-refusal-{i}.log" for i in range(27)]
     if "native_derelict" in selected:
         cli_logs += [f"derelict-recovery-refusal-{i}.log" for i in range(5)]
     require(all(name in logs for name in cli_logs), "Missing CLI refusal evidence")
