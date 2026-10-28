@@ -184,8 +184,11 @@ tools and dependencies are reported as unavailable; a canceled runner may
 produce no artifact. The existing tests and their failure results remain primary.
 Artifact names include the attempt so a job retry retains earlier evidence.
 On pull requests, `ctest-math-*` artifacts are absent when C++ jobs are
-path-skipped and record a skipped CTest outcome for no-RtAudio PR builds;
-push, dispatch and nightly runs retain full artifacts.
+path-skipped and record a skipped CTest outcome for no-RtAudio PR builds.
+Pushes to main, nightly runs at 07:17 UTC and manual dispatch all run the full
+matrix and retain full artifacts. Push CI stays enabled until a read-only
+readout confirms main requires strict up-to-date status checks; removing it
+requires a separate change and review.
 
 `tools/ctest_math_provenance.py` inspects the already-built executable without
 running its tests. Loader dependency resolution does not establish which math

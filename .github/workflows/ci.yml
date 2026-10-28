@@ -5,13 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -384,7 +386,7 @@ jobs:
           retention-days: 7
 
       - name: Save compiler cache
-        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -505,7 +507,7 @@ jobs:
           retention-days: 7
 
       - name: Save compiler cache
-        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -628,7 +630,7 @@ jobs:
           retention-days: 1
 
       - name: Save compiler cache
-        if: always() && github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -821,3 +823,54 @@ jobs:
             native-ci-results/
           if-no-files-found: warn
           retention-days: 7
+
+  nightly-tracking-issue:
+    name: CI / nightly failure tracking
+    needs: [changes, quality, build, native-core, native-godot-build, native-godot-group, native-godot-runtime]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the nightly failure issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          failed_jobs=$(jq -r '
+            to_entries[]
+            | select(.value.result == "failure" or .value.result == "cancelled"
+                     or .value.result == "timed_out")
+            | "- \(.key): \(.value.result)"
+          ' <<< "$NEEDS_JSON")
+          if [[ -z "$failed_jobs" ]]; then
+            echo "No nightly job failures; leaving tracking issues unchanged."
+            exit 0
+          fi
+
+          body_file="$RUNNER_TEMP/nightly-failure.md"
+          {
+            printf '[Engine Lead]\n\nRun: %s\nCommit: %s\n\n' "$RUN_URL" "$COMMIT_SHA"
+            # needs reports workflow job IDs and aggregates matrix results.
+            # GitHub reports a job timeout as a failure in needs.
+            printf 'Failed jobs (matrix results aggregated):\n%s\n' "$failed_jobs"
+          } > "$body_file"
+
+          issues=$(gh issue list --search 'in:title "Nightly CI failure"' \
+            --state open --limit 100 --json number,title)
+          issue_number=$(jq -r '
+            [.[] | select(.title == "Nightly CI failure")]
+            | sort_by(.number) | .[0].number // empty
+          ' <<< "$issues")
+          if [[ -n "$issue_number" ]]; then
+            gh issue comment "$issue_number" --body-file "$body_file"
+          else
+            gh issue create --title "Nightly CI failure" --body-file "$body_file"
+          fi
