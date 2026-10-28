@@ -42,6 +42,36 @@ cd "$repo_root"
 tools/check_nolint.sh --self-test
 tools/check_nolint.sh
 
+file_regex="^${repo_root}/((src|test)/(?!godot/).*|(src|test)/godot/((contact_(surface|patch)|saved_contact_geometry)(_test)?|freedom_planetary_fixture|freedom_minor_fixture|saved_minor_flight_test))[.]cpp$"
+# APSIS_DRIFT_TIDY_FILES accepts newline/space-separated repository-relative .cpp
+# paths. Unset retains the original full-run regex and invocation; an empty value
+# explicitly selects nothing. Escape filenames before constructing the regex.
+if [[ ${APSIS_DRIFT_TIDY_FILES+x} ]]; then
+  file_regex=$(python3 - "$repo_root" "$file_regex" <<'PY'
+import os
+from pathlib import Path
+import re
+import sys
+
+root, allowed = sys.argv[1:]
+files = []
+for name in os.environ["APSIS_DRIFT_TIDY_FILES"].split():
+    path = Path(name)
+    if path.is_absolute() or any(part in (".", "..") for part in name.split("/")):
+        sys.exit(f"error: expected repository-relative TU path: {name}")
+    absolute = f"{root}/{name}"
+    if path.is_file() and re.search(allowed, absolute):
+        files.append(re.escape(absolute))
+if files:
+    print("^(?:" + "|".join(sorted(set(files))) + ")$")
+PY
+  )
+  if [[ -z "$file_regex" ]]; then
+    echo "Skipping clang-tidy: no changed files match the existing TU scope."
+    exit 0
+  fi
+fi
+
 cmake -S . -B "$build_dir" \
   -DCMAKE_CXX_COMPILER="$compiler" \
   -DCMAKE_BUILD_TYPE=Debug \
@@ -57,4 +87,4 @@ cmake -S . -B "$build_dir" \
   -clang-tidy-binary "$tidy" \
   -warnings-as-errors='*' \
   -quiet \
-  "^${repo_root}/((src|test)/(?!godot/).*|(src|test)/godot/((contact_(surface|patch)|saved_contact_geometry)(_test)?|freedom_planetary_fixture|freedom_minor_fixture|saved_minor_flight_test))[.]cpp$"
+  "$file_regex"

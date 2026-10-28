@@ -14,8 +14,123 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: detect changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      cpp: ${{ steps.paths.outcome == 'success' && steps.paths.outputs.cpp || 'true' }}
+      godot: ${{ steps.paths.outcome == 'success' && steps.paths.outputs.godot || 'true' }}
+      lint_scope: ${{ steps.paths.outcome == 'success' && steps.paths.outputs.lint_scope || 'full' }}
+      lint_files: ${{ steps.paths.outputs.lint_files }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          # Both PR tips and their merge base are needed, even for large PRs.
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Classify changed paths
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          cpp, godot, lint_scope, lint_files = "true", "true", "full", []
+          if os.environ["EVENT_NAME"] == "pull_request":
+              # No API file limit; -z preserves names and --no-renames includes
+              # both sides of a rename, including deleted headers/build inputs.
+              base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
+              raw = subprocess.check_output([
+                  "git", "diff", "--name-only", "--no-renames", "-z",
+                  f"{base}...{head}", "--",
+              ])
+              files = [os.fsdecode(path) for path in raw.split(b"\0") if path]
+              safe = files and all(
+                  not any(c.isspace() or ord(c) < 32 or ord(c) > 126 for c in path)
+                  and not any(part in ("", ".", "..") for part in path.split("/"))
+                  for path in files
+              )
+              if safe:
+                  # CTest's asset-provenance-manifest checks these files and
+                  # local license terms, including docs/ and godot/ references.
+                  manifest = json.loads(Path("assets/provenance.json").read_text())
+                  cpp_files = {"assets/provenance.json", "godot/binding-profile.json",
+                               "godot/freedom.gdextension.in"}
+                  for asset in manifest["assets"]:
+                      cpp_files.update(asset["files"])
+                      terms = asset["license"]["terms"]
+                      if not terms.startswith("https://"):
+                          cpp_files.add(terms)
+                  # NativeData/CoreTests read native packages; TerminalTests
+                  # reads music/SFX. In addition, audio_pack_test.cpp recursively
+                  # copies the entire assets/ tree, so all assets are C++ inputs.
+                  cpp_prefixes = ("assets/",)
+
+                  def is_doc(path):
+                      return path.startswith("docs/") or (
+                          path.lower().endswith(".md")
+                          and ("/" not in path
+                               or (path.startswith(".github/") and path.count("/") == 1))
+                      )
+
+                  relevant = any(path in cpp_files or path.startswith(cpp_prefixes)
+                                 for path in files)
+                  if not relevant:
+                      if all(is_doc(path) for path in files):
+                          cpp, godot = "false", "false"
+                      elif all(is_doc(path) or path.startswith(("godot/", "assets/"))
+                               for path in files):
+                          cpp = "false"
+                  full_lint_files = {".clang-tidy", ".clang-format", "CMakeLists.txt",
+                                     "tools/lint.sh", "tools/check_nolint.sh",
+                                     ".github/workflows/ci.yml"}
+                  full_lint = any(
+                      path in full_lint_files or path.rsplit("/", 1)[-1] in full_lint_files
+                      or path.startswith(("cmake/", "third_party/"))
+                      # Unknown locations fail safe to full analysis as well.
+                      or not (is_doc(path) or path.startswith((
+                          "src/", "include/", "test/", "tools/", ".github/",
+                          "godot/", "assets/", "cmake/", "third_party/")))
+                      or re.search(r"\.(h|hh|hpp|hxx|h\+\+|hp|inl|inc|ipp|tpp|txx|cuh)(\.in)?$",
+                                   path, re.IGNORECASE)
+                      for path in files
+                  )
+                  # Deleted TUs cannot be linted. lint.sh intersects this list
+                  # with its existing TU regex, including the Godot exclusions.
+                  lint_files = sorted(path for path in files
+                                      if path.endswith(".cpp") and Path(path).is_file())
+                  # Bound the job output; unusually large lists use full lint.
+                  if not full_lint and len("\n".join(lint_files)) < 32768:
+                      lint_scope = "changed" if lint_files else "none"
+                  else:
+                      lint_files = []
+              else:
+                  print("Empty or unclassifiable diff: running everything.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"cpp={cpp}\ngodot={godot}\nlint_scope={lint_scope}\n")
+              output.write("lint_files<<APSIS_TIDY_FILES\n" + "\n".join(lint_files)
+                           + "\nAPSIS_TIDY_FILES\n")
+          summary = f"Changed paths: C++={cpp}, Godot={godot}, lint={lint_scope}."
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write(summary + "\n")
+          PY
+
   quality:
     name: formatting and static analysis
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -38,6 +153,11 @@ jobs:
 
       - name: Check formatting
         run: tools/format.sh --check
+
+      - name: Check clang-tidy suppression policy
+        run: |
+          tools/check_nolint.sh --self-test
+          tools/check_nolint.sh
 
       - name: Check native test-runner failure handling
         run: python3 test/native_runner_test.py
@@ -111,10 +231,22 @@ jobs:
           python3 test/wayfarer_dispatch_evidence_test.py
 
       - name: Run static analysis
-        run: tools/lint.sh
+        env:
+          LINT_SCOPE: ${{ needs.changes.outputs.lint_scope }}
+          TIDY_FILES: ${{ needs.changes.outputs.lint_files }}
+        run: |
+          if [[ "$LINT_SCOPE" == "none" ]]; then
+            echo "Skipping clang-tidy: no changed C++ TUs or full-lint triggers."
+          elif [[ "$LINT_SCOPE" == "changed" && -n "$TIDY_FILES" ]]; then
+            APSIS_DRIFT_TIDY_FILES="$TIDY_FILES" tools/lint.sh
+          else
+            tools/lint.sh
+          fi
 
   build:
     name: ${{ matrix.name }}
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
@@ -143,9 +275,24 @@ jobs:
             rtaudio: "OFF"
 
     steps:
+      # Start every matrix entry so protected checks retain their expanded names.
+      - name: Explain changed-path decision
+        env:
+          CPP_NEEDED: ${{ needs.changes.outputs.cpp }}
+        run: |
+          if [[ "$CPP_NEEDED" == "false" ]]; then
+            message="Skipping C++ configure, build and tests: changed paths do not affect C++."
+          else
+            message="Running C++ checks: relevant changes or detection unavailable."
+          fi
+          echo "$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.cpp != 'false'
 
       - name: Restore compiler cache
+        if: needs.changes.outputs.cpp != 'false'
         id: ccache
         uses: actions/cache/restore@v4
         with:
@@ -156,10 +303,11 @@ jobs:
             ccache-${{ runner.os }}-${{ github.job }}-${{ matrix.cxx }}-rtaudio-${{ matrix.rtaudio }}-terminal-Release-
 
       - name: Prefer the Ubuntu package archive
+        if: needs.changes.outputs.cpp != 'false'
         run: sudo bash tools/ci_ubuntu_mirror.sh
 
       - name: Install Clang
-        if: matrix.clang
+        if: needs.changes.outputs.cpp != 'false' && matrix.clang
         env:
           CLANG_VERSION: ${{ matrix.clang }}
         run: |
@@ -169,15 +317,17 @@ jobs:
           sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
 
       - name: Install media test tools
+        if: needs.changes.outputs.cpp != 'false'
         # Fail closed on a stalled package mirror; retain the normal dependencies.
         timeout-minutes: 10
         run: sudo apt-get update && sudo apt-get install -y ffmpeg ccache
 
       - name: Install RtAudio system headers
-        if: matrix.rtaudio == 'ON'
+        if: needs.changes.outputs.cpp != 'false' && matrix.rtaudio == 'ON'
         run: sudo apt-get install -y libasound2-dev
 
       - name: Configure
+        if: needs.changes.outputs.cpp != 'false'
         env:
           CXX: ${{ matrix.cxx }}
         run: >-
@@ -188,18 +338,35 @@ jobs:
           -DAPSIS_DRIFT_GODOT_SPIKE=ON
 
       - name: Build
+        if: needs.changes.outputs.cpp != 'false'
         # Bound compiler concurrency: the material TU and Godot headers are large.
         run: cmake --build build --parallel 4
 
       - name: Test
+        if: needs.changes.outputs.cpp != 'false' && (github.event_name != 'pull_request' || matrix.rtaudio == 'ON')
         id: ctest
         run: ctest --test-dir build --output-on-failure --parallel 2
 
+      - name: RtAudio-off configuration tests
+        if: needs.changes.outputs.cpp != 'false' && github.event_name == 'pull_request' && matrix.rtaudio == 'OFF' && matrix.clang == '20'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_listing=$(ctest --test-dir build -N -L '^rtaudio-config$')
+          printf '%s\n' "$test_listing"
+          test_count=$(printf '%s\n' "$test_listing" | sed -nE 's/^[[:space:]]*Total Tests: ([0-9]+)[[:space:]]*$/\1/p')
+          if [[ ! "$test_count" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Expected at least one CTest test with label rtaudio-config; Total Tests count is missing, invalid, or zero."
+            exit 1
+          fi
+          ctest --test-dir build --output-on-failure --no-tests=error -L '^rtaudio-config$'
+
       - name: Headless benchmark smoke test
+        if: needs.changes.outputs.cpp != 'false' && (github.event_name != 'pull_request' || matrix.rtaudio == 'ON')
         run: ./build/apsis-drift --benchmark 3
 
       - name: Collect compiler and math-library provenance
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         env:
           CTEST_STEP_OUTCOME: ${{ steps.ctest.outcome || 'unknown' }}
           CTEST_JOB_LABEL: ${{ matrix.name }}
@@ -208,7 +375,7 @@ jobs:
           --output ctest-math-provenance.json
 
       - name: Retain compact CTest provenance
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         uses: actions/upload-artifact@v4
         with:
           name: ctest-math-${{ github.job }}-${{ matrix.cxx }}-${{ matrix.rtaudio || 'OFF' }}-${{ github.run_attempt }}
@@ -217,7 +384,7 @@ jobs:
           retention-days: 7
 
       - name: Save compiler cache
-        if: always() && github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -225,12 +392,14 @@ jobs:
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Compiler cache statistics
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         continue-on-error: true
         run: ccache -s
 
   native-core:
     name: ${{ matrix.name }} / native core
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     env:
@@ -249,9 +418,24 @@ jobs:
             cxx: clang++-20
             clang: "20"
     steps:
+      # Start every matrix entry so protected checks retain their expanded names.
+      - name: Explain changed-path decision
+        env:
+          CPP_NEEDED: ${{ needs.changes.outputs.cpp }}
+        run: |
+          if [[ "$CPP_NEEDED" == "false" ]]; then
+            message="Skipping C++ configure, build and tests: changed paths do not affect C++."
+          else
+            message="Running C++ checks: relevant changes or detection unavailable."
+          fi
+          echo "$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.cpp != 'false'
 
       - name: Restore compiler cache
+        if: needs.changes.outputs.cpp != 'false'
         id: ccache
         uses: actions/cache/restore@v4
         with:
@@ -262,15 +446,17 @@ jobs:
             ccache-${{ runner.os }}-${{ github.job }}-${{ matrix.cxx }}-rtaudio-OFF-native-core-Release-
 
       - name: Prefer the Ubuntu package archive
+        if: needs.changes.outputs.cpp != 'false'
         run: sudo bash tools/ci_ubuntu_mirror.sh
 
       - name: Install compiler cache
+        if: needs.changes.outputs.cpp != 'false'
         # Fail closed on a stalled package mirror; retain the normal dependencies.
         timeout-minutes: 10
         run: sudo apt-get update && sudo apt-get install -y ccache
 
       - name: Install Clang
-        if: matrix.clang
+        if: needs.changes.outputs.cpp != 'false' && matrix.clang
         env:
           CLANG_VERSION: ${{ matrix.clang }}
         run: |
@@ -279,6 +465,7 @@ jobs:
           sudo /tmp/llvm.sh "$CLANG_VERSION"
 
       - name: Configure without TermForge
+        if: needs.changes.outputs.cpp != 'false'
         env:
           CXX: ${{ matrix.cxx }}
         run: >-
@@ -290,15 +477,17 @@ jobs:
           -DAPSIS_DRIFT_GODOT_LIVE=ON
 
       - name: Build native core, live Godot bridge and headless targets
+        if: needs.changes.outputs.cpp != 'false'
         # Use the same bounded compiler concurrency as the terminal/native builds.
         run: cmake --build build-core --parallel 4
 
       - name: Test native and headless targets
+        if: needs.changes.outputs.cpp != 'false'
         id: ctest
         run: ctest --test-dir build-core --output-on-failure
 
       - name: Collect compiler and math-library provenance
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         env:
           CTEST_STEP_OUTCOME: ${{ steps.ctest.outcome || 'unknown' }}
           CTEST_JOB_LABEL: ${{ format('{0} / native core', matrix.name) }}
@@ -307,7 +496,7 @@ jobs:
           --output ctest-math-provenance.json
 
       - name: Retain compact CTest provenance
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         uses: actions/upload-artifact@v4
         with:
           name: ctest-math-${{ github.job }}-${{ matrix.cxx }}-OFF-${{ github.run_attempt }}
@@ -316,7 +505,7 @@ jobs:
           retention-days: 7
 
       - name: Save compiler cache
-        if: always() && github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.cpp != 'false' && always() && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -324,12 +513,14 @@ jobs:
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Compiler cache statistics
-        if: always()
+        if: needs.changes.outputs.cpp != 'false' && always()
         continue-on-error: true
         run: ccache -s
 
   native-godot-build:
     name: Godot 4.7.2 / verified native build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.godot != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -451,7 +642,8 @@ jobs:
 
   native-godot-group:
     name: Godot 4.7.2 / native group ${{ matrix.group }}
-    needs: native-godot-build
+    needs: [changes, native-godot-build]
+    if: ${{ !cancelled() && needs.changes.outputs.godot != 'false' && needs.native-godot-build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     strategy:
@@ -557,22 +749,40 @@ jobs:
           retention-days: 7
 
   native-godot-runtime:
-    # Keep the protected context; success requires the build, sky and all groups.
+    # Keep the protected context, including when a PR needs no native coverage.
     name: Godot 4.7.2 / saved Freedom start
     if: always()
-    needs: [native-godot-build, native-godot-group]
+    needs: [changes, native-godot-build, native-godot-group]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Require successful path detection and explain native coverage
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          GODOT_NEEDED: ${{ needs.changes.outputs.godot }}
+        run: |
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Changed-path detection failed or was cancelled; refusing success." >&2
+            exit 1
+          fi
+          if [[ "$GODOT_NEEDED" == "false" ]]; then
+            message="Skipping native build, groups and artifacts: documentation-only PR."
+            echo "$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.godot != 'false'
 
       - name: Download the native build manifest
+        if: needs.changes.outputs.godot != 'false'
         uses: actions/download-artifact@v8
         with:
           name: native-ci-build
           path: native-ci-build
 
       - name: Download the four isolated native results
+        if: needs.changes.outputs.godot != 'false'
         uses: actions/download-artifact@v8
         with:
           pattern: godot-native-group-*
@@ -580,12 +790,14 @@ jobs:
           path: native-ci-results
 
       - name: Download the actual sky result
+        if: needs.changes.outputs.godot != 'false'
         uses: actions/download-artifact@v8
         with:
           name: godot-sky-camera
           path: native-ci-sky
 
       - name: Require complete native and sky coverage
+        if: needs.changes.outputs.godot != 'false'
         run: >-
           python3 tools/native_ci.py check
           --manifest native-ci-build/native-ci-manifest.json
@@ -599,7 +811,7 @@ jobs:
           --output native-ci-summary.json
 
       - name: Retain the complete native runtime proof
-        if: always()
+        if: needs.changes.outputs.godot != 'false' && always()
         uses: actions/upload-artifact@v4
         with:
           name: godot-saved-start-contracts
