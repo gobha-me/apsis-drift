@@ -10967,8 +10967,14 @@ auto main(int argc, char** argv) -> int {
     deterministic_planetary_flight_replay();
     return failures == 0 ? 0 : 1;
   }
+  if (argc == 2 && std::string_view{argv[1]} == "--audio-contract") {
+    audio_contract();
+    return failures == 0 ? 0 : 1;
+  }
   if (argc != 1) {
-    std::fputs("usage: apsis-drift-tests [--planetary-replay]\n", stderr);
+    std::fputs(
+        "usage: apsis-drift-tests [--planetary-replay|--audio-contract]\n",
+        stderr);
     return 2;
   }
   generation_failure_matrix();
