@@ -183,6 +183,9 @@ resolved libc/libm hashes and GNU build IDs when available. Missing builds,
 tools and dependencies are reported as unavailable; a canceled runner may
 produce no artifact. The existing tests and their failure results remain primary.
 Artifact names include the attempt so a job retry retains earlier evidence.
+On pull requests, `ctest-math-*` artifacts are absent when C++ jobs are
+path-skipped and record a skipped CTest outcome for no-RtAudio PR builds;
+push, dispatch and nightly runs retain full artifacts.
 
 `tools/ctest_math_provenance.py` inspects the already-built executable without
 running its tests. Loader dependency resolution does not establish which math
