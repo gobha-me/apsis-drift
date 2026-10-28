@@ -185,7 +185,8 @@ produce no artifact. The existing tests and their failure results remain primary
 Artifact names include the attempt so a job retry retains earlier evidence.
 On pull requests, `ctest-math-*` artifacts are absent when C++ jobs are
 path-skipped and record a skipped CTest outcome for no-RtAudio PR builds;
-push, dispatch and nightly runs retain full artifacts.
+dispatch and nightly runs retain full artifacts. Full CI runs nightly at
+07:17 UTC and on manual dispatch; pushes to main do not trigger CI.
 
 `tools/ctest_math_provenance.py` inspects the already-built executable without
 running its tests. Loader dependency resolution does not establish which math
