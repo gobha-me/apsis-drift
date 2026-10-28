@@ -819,6 +819,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update the nightly failure issue
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -826,6 +827,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           failed_jobs=$(jq -r '
             to_entries[]
             | select(.value.result == "failure" or .value.result == "cancelled"
@@ -846,7 +848,7 @@ jobs:
           } > "$body_file"
 
           issues=$(gh issue list --search 'in:title "Nightly CI failure"' \
-            --state open --json number,title)
+            --state open --limit 100 --json number,title)
           issue_number=$(jq -r '
             [.[] | select(.title == "Nightly CI failure")]
             | sort_by(.number) | .[0].number // empty
