@@ -347,6 +347,20 @@ jobs:
         id: ctest
         run: ctest --test-dir build --output-on-failure --parallel 2
 
+      - name: RtAudio-off configuration tests
+        if: needs.changes.outputs.cpp != 'false' && github.event_name == 'pull_request' && matrix.rtaudio == 'OFF' && matrix.clang == '20'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_listing=$(ctest --test-dir build -N -L '^rtaudio-config$')
+          printf '%s\n' "$test_listing"
+          test_count=$(printf '%s\n' "$test_listing" | sed -nE 's/^[[:space:]]*Total Tests: ([0-9]+)[[:space:]]*$/\1/p')
+          if [[ ! "$test_count" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Expected at least one CTest test with label rtaudio-config; Total Tests count is missing, invalid, or zero."
+            exit 1
+          fi
+          ctest --test-dir build --output-on-failure --no-tests=error -L '^rtaudio-config$'
+
       - name: Headless benchmark smoke test
         if: needs.changes.outputs.cpp != 'false' && (github.event_name != 'pull_request' || matrix.rtaudio == 'ON')
         run: ./build/apsis-drift --benchmark 3
