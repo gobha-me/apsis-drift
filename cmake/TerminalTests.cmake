@@ -7,6 +7,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
     APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
   add_test(NAME planetary-replay COMMAND apsis-drift-tests --planetary-replay)
+  add_test(NAME audio-backend-config COMMAND apsis-drift-tests --audio-contract)
+  set_tests_properties(audio-backend-config PROPERTIES LABELS rtaudio-config)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE
