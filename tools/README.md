@@ -18,6 +18,9 @@ authoring tools below.
 | Opt-in studies and offline film | `run_godot_study.sh`, `render_freedom_film.sh`, `verify_freedom_film.py`, `assemble_godot_reel.py`, `stage_reel_characters.py` | [Study guide](../docs/GODOT_STUDIES.md), [historical preview](../docs/FREEDOM_PREVIEW_01.md), [demo reel](../docs/GODOT_DEMO_REEL.md). Offline output does not qualify a playable journey or runtime frame rate. |
 | Retained audio regeneration | `regenerate_first_light_assets.sh`, `regenerate_issue230_assets.sh`, `issue230_asset_builder.cpp` | [Provenance and source requirements](../docs/ASSET_PROVENANCE.md), [MIDI research decision](../docs/MIDI_SCORE_SPIKE_2026-08-31.md). |
 
+`APSIS_DRIFT_TIDY_FILES` limits `lint.sh` to newline/space-separated repository-relative `.cpp` paths within its existing scope;
+unset runs the full scope, and an empty value selects nothing.
+
 Several scripts share identity/specification modules in this directory and
 `boarding/`. Keep their paths stable unless the imports, CMake consumers and
 documented commands are updated together. The [asset directory guide](../assets/README.md)
