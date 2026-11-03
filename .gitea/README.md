@@ -7,10 +7,17 @@ owner coordination; adding these files does not complete that migration.
 ## Native sanitizers
 
 `workflows/sanitizers.yml` runs nightly at 08:17 UTC, on pushes to `main`, and
-on manual dispatch. The `ci-build` runner must provide Git, CMake 3.28+,
-Python 3.11+, GCC 13 and Clang 20 with their ASan/UBSan runtimes, and network
-access to the existing pinned CMake dependencies. The workflow does not install
-packages or change dependency pins.
+on manual dispatch. The `ci-build` runner must provide Bash, Make, Git,
+CMake 3.28+, Python 3.11+, GCC 13 and Clang 20 with their ASan/UBSan runtimes,
+a Node runtime compatible with the retained `actions/checkout@v7`, and network
+access to that action and the existing pinned CMake dependencies. The workflow
+does not install packages or change dependency pins.
+
+Before activation, verify that the selected Gitea server and runner enforce
+workflow concurrency cancellation and the 180-minute job deadline. Support is
+version-dependent: the [Gitea 1.26 compatibility guide](https://docs.gitea.com/1.26/usage/actions/comparison/)
+lists job `timeout-minutes` as ignored. Declaring a deadline in YAML does not
+qualify such a deployment. Keep these jobs disabled until enforcement is proven.
 
 Both compiler entries build the complete native-core configuration, including
 the live bridge and the retained research contracts, then run the full configured
