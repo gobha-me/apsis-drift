@@ -1,0 +1,68 @@
+name: Native sanitizers
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: native-sanitizers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-sanitizers:
+    name: ${{ matrix.name }} / ASan + UBSan
+    runs-on: ci-build
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      # Each build and CTest invocation also limits its workers to two.
+      max-parallel: 1
+      matrix:
+        include:
+          - name: GCC 13
+            cxx: g++-13
+          - name: Clang 20
+            cxx: clang++-20
+    env:
+      MAKEFLAGS: -j2
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1:disable_coredump=0
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v7
+
+      # ci-build supplies CMake 3.28+, both compilers (including sanitizer
+      # runtimes), Git and Python 3.11+. No privileged runner provisioning here.
+      - name: Check native toolchain
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake --version
+          "$CXX" --version
+          git --version
+          python3 --version
+
+      - name: Configure instrumented native core and bridge
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: >-
+          cmake -S . -B build-sanitizers -DCMAKE_BUILD_TYPE=Debug
+          -DAPSIS_DRIFT_TESTS=ON -DBUILD_TESTING=ON
+          -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF
+          -DAPSIS_DRIFT_GODOT_SPIKE=ON -DAPSIS_DRIFT_GODOT_LIVE=ON
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+          -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+          -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined
+
+      - name: Build all native and headless contracts
+        run: cmake --build build-sanitizers --parallel 2
+
+      # Run the complete configured roster, including boarding research and
+      # freedom-recovery-contract. Keep the CMake per-test deadlines unchanged.
+      - name: Run native and headless CTest with sanitizers
+        run: |
+          ulimit -c unlimited
+          ctest --test-dir build-sanitizers --output-on-failure --parallel 2 --no-tests=error
