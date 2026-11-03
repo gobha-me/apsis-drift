@@ -1,0 +1,12 @@
+# FP: git commit sha in design doc, not a Sourcegraph token
+c89cc4ef94259c3e33ffa75ee3814c09e92694a1:docs/ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md:sourcegraph-access-token:3
+# FP: git commit sha in design doc, not a Sourcegraph token
+c89cc4ef94259c3e33ffa75ee3814c09e92694a1:docs/ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md:sourcegraph-access-token:488
+# FP: English validation error message in asset-prep script, not a key
+347a27a071648f22032ad6e709eddafc9b0ab0d1:tools/prepare_operating_assets.py:generic-api-key:449
+# FP: canonical game object ID in save golden test data, not a key
+77e19666eecffce844fb74f93d1c20523193347d:test/data/save-v2-golden.json:generic-api-key:66
+# FP: expected canonical surface-signal object key in unit test fixture, not a key
+7cde0bddf737f67f4918b296759302d186f790cd:test/test.cpp:generic-api-key:576
+# FP: canonical game object ID in save golden test data, not a key
+6acae5924e95ab7b05a7eb6c13c823ec5e712b11:test/data/save-v1-golden.json:generic-api-key:65
