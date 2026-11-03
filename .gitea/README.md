@@ -14,10 +14,13 @@ access to that action and the existing pinned CMake dependencies. The workflow
 does not install packages or change dependency pins.
 
 Before activation, verify that the selected Gitea server and runner enforce
-workflow concurrency cancellation and the 180-minute job deadline. Support is
-version-dependent: the [Gitea 1.26 compatibility guide](https://docs.gitea.com/1.26/usage/actions/comparison/)
+workflow concurrency cancellation, matrix serialization (`strategy.max-parallel: 1`)
+and the 180-minute job deadline. Support is version-dependent: the
+[Gitea 1.26 compatibility guide](https://docs.gitea.com/1.26/usage/actions/comparison/)
 lists job `timeout-minutes` as ignored. Declaring a deadline in YAML does not
-qualify such a deployment. Keep these jobs disabled until enforcement is proven.
+qualify such a deployment. Verify that only one compiler entry runs at a time,
+even when multiple runner slots are available. Keep these jobs disabled until all
+three limits are proven.
 
 Both compiler entries build the complete native-core configuration, including
 the live bridge and the retained research contracts, then run the full configured
