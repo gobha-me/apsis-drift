@@ -1,0 +1,6 @@
+# Gitea runner labels approved for the CI migration.
+self-hosted-runner:
+  labels:
+    - ci-kind
+    - ci-build
+    - ci-light
