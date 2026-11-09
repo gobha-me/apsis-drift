@@ -75,6 +75,15 @@ env:
   BUILD_DIR: build-sanitizers
   MEASURE_DIR: sanitizer-measure
   MEASURE: .github/scripts/sanitizer-measure.sh
+  # Free-space gates (fail closed). No tree has been measured yet, so the build
+  # gate assumes an 8 GiB ASan Debug tree plus 4 GiB margin (object files,
+  # temporaries, cores) = 12 GiB. The pack gate needs half the measured tree
+  # (zstd -3 output, conservatively) plus 1 GiB. The unpack gate needs the
+  # measured tree size from the manifest plus 2 GiB.
+  BUILD_MIN_FREE_KIB: '12582912'
+  PACK_MARGIN_KIB: '1048576'
+  UNPACK_MARGIN_KIB: '2097152'
+  ARCHIVE: sanitizer-tree/build-tree.tar.zst
 
 jobs:
   plan:
@@ -130,7 +139,9 @@ jobs:
       LINK_JOBS: ${{ inputs.link_jobs }}
       DEBUG_INFO: ${{ inputs.debug_info }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install the toolchain into the pinned image (2 CPU / 2 GiB)
         timeout-minutes: 13
@@ -143,6 +154,7 @@ jobs:
       - name: Configure instrumented native core and bridge
         timeout-minutes: 11
         run: |
+          # Inner 9m + 60s grace < 11m step cap.
           set -- -S . -B "$BUILD_DIR" -G "$GENERATOR" -DCMAKE_BUILD_TYPE=Debug \
             -DAPSIS_DRIFT_TESTS=ON -DBUILD_TESTING=ON \
             -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF \
@@ -162,22 +174,23 @@ jobs:
           fi
           printf 'configure:'; printf ' %q' "$@"; printf '\n'
           bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" configure -- \
-            timeout -s TERM -k 60 10m cmake "$@"
+            timeout -s TERM -k 60 9m cmake "$@"
 
       # Bounded inside the job deadline so the measurements still upload when
-      # the build does not fit.
+      # the build does not fit (inner 50m + 60s grace < 52m step cap).
       - name: Build all native and headless contracts
         timeout-minutes: 52
-        run: >-
-          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" build --
-          timeout -s TERM -k 60 50m
-          cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
+        run: |
+          bash "$MEASURE" diskgate "$GITHUB_WORKSPACE" "$BUILD_MIN_FREE_KIB" before-build
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" build -- \
+            timeout -s TERM -k 60 50m \
+            cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
 
       - name: Record the configured CTest roster
         timeout-minutes: 3
         run: |
           bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" roster -- \
-            ctest --test-dir "$BUILD_DIR" --show-only=json-v1
+            timeout -s TERM -k 15 2m ctest --test-dir "$BUILD_DIR" --show-only=json-v1
           python3 -c 'import json,sys; print("ctest roster:", len(json.load(open(sys.argv[1]))["tests"]), "tests")' \
             "$MEASURE_DIR/roster.log"
 
@@ -188,11 +201,15 @@ jobs:
         timeout-minutes: 7
         run: |
           mkdir -p sanitizer-tree
+          tree_kib=$(du -sk "$BUILD_DIR" | awk '{ print $1 }')
+          printf 'build_tree_kib\t%s\n' "$tree_kib" | tee -a "$MEASURE_DIR/environment.tsv"
+          export TREE_KIB="$tree_kib"
+          bash "$MEASURE" diskgate "$GITHUB_WORKSPACE" "$((tree_kib / 2 + PACK_MARGIN_KIB))" before-pack
           bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" pack -- \
-            timeout -s TERM -k 30 6m tar -I 'zstd -T2 -3' -cf sanitizer-tree/build-tree.tar.zst "$BUILD_DIR"
+            timeout -s TERM -k 30 6m tar -I 'zstd -T2 -3' -cf "$ARCHIVE" "$BUILD_DIR"
           python3 - <<'PY'
           import hashlib, json, os
-          archive = "sanitizer-tree/build-tree.tar.zst"
+          archive = os.environ["ARCHIVE"]
           digest = hashlib.sha256()
           with open(archive, "rb") as fh:
               for block in iter(lambda: fh.read(1 << 20), b""):
@@ -207,6 +224,8 @@ jobs:
               "build_jobs": os.environ["BUILD_JOBS"],
               "link_jobs": os.environ["LINK_JOBS"],
               "debug_info": os.environ["DEBUG_INFO"],
+              "tree_kib": int(os.environ["TREE_KIB"]),
+              "toolchain_versions": open(f"{os.environ['MEASURE_DIR']}/toolchain-{os.environ['COMPILER_ID']}.versions").read(),
               "archive": os.path.basename(archive),
               "archive_bytes": os.path.getsize(archive),
               "archive_sha256": digest.hexdigest(),
@@ -215,11 +234,10 @@ jobs:
               json.dump(manifest, fh, indent=2)
           print(json.dumps(manifest, indent=2))
           PY
-          du -sk "$BUILD_DIR" | awk '{ print "build_tree_kib\t" $1 }' | tee -a "$MEASURE_DIR/environment.tsv"
           cp sanitizer-tree/manifest.json "$MEASURE_DIR/tree-manifest.json"
 
       - name: Share the build tree with the test shards
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sanitizer-tree-${{ matrix.id }}
           path: sanitizer-tree/
@@ -227,9 +245,13 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+      - name: Remove the local archive
+        if: always()
+        run: rm -f -- "$ARCHIVE"
+
       - name: Retain build measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sanitizer-measure-build-${{ matrix.id }}
           path: ${{ env.MEASURE_DIR }}/
@@ -239,7 +261,7 @@ jobs:
   test:
     name: ${{ matrix.name }} / ctest shard ${{ matrix.shard }} of ${{ matrix.shard_count }} (measure)
     needs: [plan, build]
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    if: ${{ needs.plan.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
@@ -255,15 +277,18 @@ jobs:
       SHARD_COUNT: ${{ matrix.shard_count }}
       CTEST_JOBS: ${{ inputs.ctest_jobs }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Download the build tree
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: sanitizer-tree-${{ matrix.id }}
           path: sanitizer-tree
 
       - name: Verify the build tree
+        timeout-minutes: 2
         run: |
           python3 - <<'PY'
           import hashlib, json, os, sys
@@ -286,7 +311,9 @@ jobs:
               print(f"::error::{p}")
           if problems:
               sys.exit(1)
-          print("build tree verified:", json.dumps(m))
+          with open(os.environ["GITHUB_ENV"], "a") as fh:
+              fh.write(f"TREE_KIB={int(m['tree_kib'])}\n")
+          print("build tree verified:", json.dumps({k: v for k, v in m.items() if k != "toolchain_versions"}))
           PY
           if [ -e "$BUILD_DIR" ]; then echo "::error::$BUILD_DIR already exists in a fresh checkout"; exit 1; fi
 
@@ -297,23 +324,44 @@ jobs:
           printf '| phase | exit | wall s | max RSS KiB | cgroup memory.peak | cgroup memory.max | oom_kill delta | start | docker |\n|---|---|---|---|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
           bash "$MEASURE" toolchain "$COMPILER_ID" "${!IMAGE_VAR}" "$TC_TAG" "$MEASURE_DIR"
           bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" environment -- bash "$MEASURE" env "$MEASURE_DIR"
+          # Refuse a shard whose reinstalled toolchain differs from the build's.
+          python3 - <<'PY'
+          import json, os, sys
+          with open("sanitizer-tree/manifest.json") as fh:
+              built = json.load(fh)["toolchain_versions"]
+          with open(f"{os.environ['MEASURE_DIR']}/toolchain-{os.environ['COMPILER_ID']}.versions") as fh:
+              here = fh.read()
+          if here != built:
+              print("::error::shard toolchain differs from the build's; refusing")
+              print("--- build\n" + built + "--- shard\n" + here)
+              sys.exit(1)
+          print("toolchain matches the build:\n" + here)
+          PY
 
       - name: Unpack the build tree
         timeout-minutes: 7
+        run: |
+          bash "$MEASURE" diskgate "$GITHUB_WORKSPACE" "$((TREE_KIB + UNPACK_MARGIN_KIB))" before-unpack
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" unpack -- \
+            timeout -s TERM -k 30 6m tar -I 'zstd -d -T2' -xf "$ARCHIVE"
+          rm -f -- "$ARCHIVE"
+
+      - name: Record this shard's CTest roster
+        timeout-minutes: 3
         run: >-
-          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" unpack --
-          timeout -s TERM -k 30 6m tar -I 'zstd -d -T2' -xf sanitizer-tree/build-tree.tar.zst
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" "roster-shard-${SHARD}" --
+          timeout -s TERM -k 15 2m
+          ctest --test-dir "$BUILD_DIR" --show-only=json-v1 -I "${SHARD},,${SHARD_COUNT}"
 
       # Full configured roster striped across shards with -I start,,stride.
       # The CMake per-test TIMEOUT values stay authoritative (no --timeout);
-      # the outer bound only keeps the job inside 90 minutes so results upload.
+      # the outer bound (60m + 60s grace < 62m step cap) only keeps the job
+      # inside 90 minutes so results upload.
       - name: Run native and headless CTest with sanitizers
-        timeout-minutes: 64
+        timeout-minutes: 62
         run: |
-          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" "roster-shard-${SHARD}" -- \
-            ctest --test-dir "$BUILD_DIR" --show-only=json-v1 -I "${SHARD},,${SHARD_COUNT}"
           bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" "ctest-shard-${SHARD}-of-${SHARD_COUNT}" -- \
-            timeout -s TERM -k 60 62m \
+            timeout -s TERM -k 60 60m \
             ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "$CTEST_JOBS" --no-tests=error \
               -I "${SHARD},,${SHARD_COUNT}" --output-junit "$GITHUB_WORKSPACE/$MEASURE_DIR/ctest-junit.xml"
 
@@ -325,7 +373,7 @@ jobs:
 
       - name: Retain shard measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sanitizer-measure-test-${{ matrix.id }}-shard-${{ matrix.shard }}
           path: ${{ env.MEASURE_DIR }}/
