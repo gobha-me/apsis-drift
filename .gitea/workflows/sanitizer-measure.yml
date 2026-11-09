@@ -1,0 +1,327 @@
+name: Native sanitizer measurement
+
+# Issue #744, measurement step only. This workflow runs on manual dispatch and
+# nothing else: no push, pull_request or schedule trigger, so it never runs
+# nightly. Its job is to record what one ASan + UBSan build and the full CTest
+# roster cost on a ci-build runner (2 CPU, 2 GiB dind sandbox) per compiler, so
+# the later sharded matrix can be sized from measured numbers.
+#
+# It never raises a limit, loosens a CTest deadline or drops a sanitizer. When
+# a heavy translation unit or link runs out of memory, use the knobs below
+# (fewer build jobs, a Ninja link pool of 1, line-table debug info) instead.
+#
+# Gitea 1.25.4 has no needs-dependent (dynamic) matrix and ignores
+# strategy.max-parallel, so the shard matrix is static (1-4) and shards above
+# shard_count finish immediately as no-ops.
+on:
+  workflow_dispatch:
+    inputs:
+      compiler:
+        description: Compiler entries to measure
+        type: choice
+        options: [both, clang-20, gcc-13]
+        default: both
+      build_jobs:
+        description: Build parallelism (2, or 1 as the OOM fallback)
+        type: choice
+        options: ['2', '1']
+        default: '2'
+      generator:
+        description: CMake generator (the link pool below needs Ninja)
+        type: choice
+        options: [Unix Makefiles, Ninja]
+        default: Unix Makefiles
+      link_jobs:
+        description: Ninja link pool size (concurrent links); ignored by Make
+        type: choice
+        options: ['1', '2']
+        default: '1'
+      debug_info:
+        description: Debug info level (line-tables keeps sanitizer stack lines, cuts link memory)
+        type: choice
+        options: [full, line-tables]
+        default: full
+      ctest_jobs:
+        description: CTest parallelism (2, or 1 as the OOM fallback)
+        type: choice
+        options: ['2', '1']
+        default: '2'
+      shard_count:
+        description: Number of CTest shards per compiler (build once, test shards)
+        type: choice
+        options: ['1', '2', '3', '4']
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-sanitizer-measure-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1:disable_coredump=0
+  UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:abort_on_error=1
+  BUILD_DIR: build-sanitizers
+  MEASURE_DIR: sanitizer-measure
+
+jobs:
+  build:
+    name: ${{ matrix.name }} / sanitized build (measure)
+    runs-on: ci-build
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: clang-20
+            name: Clang 20
+            cxx: clang++-20
+          - id: gcc-13
+            name: GCC 13
+            cxx: g++-13
+    env:
+      SELECTED: ${{ github.event.inputs.compiler == 'both' || github.event.inputs.compiler == matrix.id }}
+      CXX: ${{ matrix.cxx }}
+      COMPILER_ID: ${{ matrix.id }}
+      BUILD_JOBS: ${{ github.event.inputs.build_jobs }}
+      GENERATOR: ${{ github.event.inputs.generator }}
+      LINK_JOBS: ${{ github.event.inputs.link_jobs }}
+      DEBUG_INFO: ${{ github.event.inputs.debug_info }}
+    steps:
+      - name: Not selected
+        if: env.SELECTED != 'true'
+        run: echo "compiler=${COMPILER_ID} not selected by this dispatch; nothing to do."
+
+      - uses: actions/checkout@v4
+        if: env.SELECTED == 'true'
+
+      # ci-build must already provide these; this workflow installs nothing.
+      - name: Check native toolchain and record the runner
+        if: env.SELECTED == 'true'
+        run: |
+          missing=0
+          for tool in cmake ctest git python3 tar sha256sum timeout "$CXX"; do
+            command -v "$tool" >/dev/null 2>&1 || { echo "::error::missing tool: $tool"; missing=1; }
+          done
+          case "$GENERATOR" in
+            Ninja) command -v ninja >/dev/null 2>&1 || { echo "::error::generator Ninja selected but ninja is missing"; missing=1; } ;;
+            'Unix Makefiles') command -v make >/dev/null 2>&1 || { echo "::error::missing tool: make"; missing=1; } ;;
+            *) echo "::error::unknown generator: $GENERATOR"; missing=1 ;;
+          esac
+          [ "$missing" -eq 0 ] || exit 1
+          cmake --version
+          "$CXX" --version
+          bash .gitea/scripts/sanitizer-measure.sh env "$MEASURE_DIR"
+
+      - name: Configure instrumented native core and bridge
+        if: env.SELECTED == 'true'
+        timeout-minutes: 15
+        run: |
+          set -- -S . -B "$BUILD_DIR" -G "$GENERATOR" -DCMAKE_BUILD_TYPE=Debug \
+            -DAPSIS_DRIFT_TESTS=ON -DBUILD_TESTING=ON \
+            -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF \
+            -DAPSIS_DRIFT_GODOT_SPIKE=ON -DAPSIS_DRIFT_GODOT_LIVE=ON \
+            "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
+            -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined \
+            -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined
+          if [ "$GENERATOR" = Ninja ]; then
+            # Separate compile and link pools so heavy links run LINK_JOBS at a time.
+            set -- "$@" "-DCMAKE_JOB_POOLS=compile=${BUILD_JOBS};link=${LINK_JOBS}" \
+              -DCMAKE_JOB_POOL_COMPILE=compile -DCMAKE_JOB_POOL_LINK=link
+          else
+            echo "link_jobs=${LINK_JOBS} has no effect with Unix Makefiles; use build_jobs=1 or Ninja to serialize links."
+          fi
+          if [ "$DEBUG_INFO" = line-tables ]; then
+            set -- "$@" -DCMAKE_CXX_FLAGS_DEBUG=-g1
+          fi
+          printf 'configure:'; printf ' %q' "$@"; printf '\n'
+          bash .gitea/scripts/sanitizer-measure.sh phase "$MEASURE_DIR" configure -- \
+            timeout -s TERM -k 60 12m cmake "$@"
+
+      # Bounded inside the job deadline so the measurements still upload when
+      # the build does not fit (exit 124 = deadline, 137 = OOM kill).
+      - name: Build all native and headless contracts
+        if: env.SELECTED == 'true'
+        timeout-minutes: 62
+        run: >-
+          bash .gitea/scripts/sanitizer-measure.sh phase "$MEASURE_DIR" build --
+          timeout -s TERM -k 60 60m
+          cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
+
+      - name: Record the configured CTest roster
+        if: env.SELECTED == 'true'
+        run: |
+          ctest --test-dir "$BUILD_DIR" --show-only=json-v1 > "$MEASURE_DIR/ctest-roster.json"
+          python3 -c 'import json,sys; print("ctest roster:", len(json.load(open(sys.argv[1]))["tests"]), "tests")' \
+            "$MEASURE_DIR/ctest-roster.json"
+
+      # Build once: the whole build tree (including fetched dependencies) moves
+      # to the shard jobs. CTest files hold absolute paths, so the manifest
+      # records the workspace path and the shards refuse a different one.
+      - name: Pack the build tree for the test shards
+        if: env.SELECTED == 'true'
+        timeout-minutes: 10
+        run: |
+          mkdir -p sanitizer-tree
+          if command -v zstd >/dev/null 2>&1; then
+            archive=sanitizer-tree/build-tree.tar.zst; compress='zstd -T2 -3'
+          else
+            archive=sanitizer-tree/build-tree.tar.gz; compress='gzip -1'
+          fi
+          bash .gitea/scripts/sanitizer-measure.sh phase "$MEASURE_DIR" pack -- \
+            timeout -s TERM -k 30 8m tar -I "$compress" -cf "$archive" "$BUILD_DIR"
+          python3 - "$archive" <<'PY'
+          import hashlib, json, os, sys
+          archive = sys.argv[1]
+          digest = hashlib.sha256()
+          with open(archive, "rb") as fh:
+              for block in iter(lambda: fh.read(1 << 20), b""):
+                  digest.update(block)
+          manifest = {
+              "sha": os.environ["GITHUB_SHA"],
+              "compiler": os.environ["COMPILER_ID"],
+              "workspace": os.getcwd(),
+              "build_dir": os.environ["BUILD_DIR"],
+              "generator": os.environ["GENERATOR"],
+              "build_jobs": os.environ["BUILD_JOBS"],
+              "link_jobs": os.environ["LINK_JOBS"],
+              "debug_info": os.environ["DEBUG_INFO"],
+              "archive": os.path.basename(archive),
+              "archive_bytes": os.path.getsize(archive),
+              "archive_sha256": digest.hexdigest(),
+          }
+          with open("sanitizer-tree/manifest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+          print(json.dumps(manifest, indent=2))
+          PY
+          du -sk "$BUILD_DIR" | awk '{ print "build_tree_kib\t" $1 }' | tee -a "$MEASURE_DIR/environment.tsv"
+          cp sanitizer-tree/manifest.json "$MEASURE_DIR/tree-manifest.json"
+
+      - name: Share the build tree with the test shards
+        if: env.SELECTED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-tree-${{ matrix.id }}
+          path: sanitizer-tree/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Retain build measurements
+        if: always() && env.SELECTED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-measure-build-${{ matrix.id }}
+          path: ${{ env.MEASURE_DIR }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+  test:
+    name: ${{ matrix.compiler }} / ctest shard ${{ matrix.shard }} (measure)
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ci-build
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang-20, gcc-13]
+        shard: [1, 2, 3, 4]
+    env:
+      SELECTED: ${{ (github.event.inputs.compiler == 'both' || github.event.inputs.compiler == matrix.compiler) && matrix.shard <= fromJSON(github.event.inputs.shard_count) }}
+      COMPILER_ID: ${{ matrix.compiler }}
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: ${{ github.event.inputs.shard_count }}
+      CTEST_JOBS: ${{ github.event.inputs.ctest_jobs }}
+    steps:
+      - name: Not selected
+        if: env.SELECTED != 'true'
+        run: echo "compiler=${COMPILER_ID} shard=${SHARD} not selected (shard_count=${SHARD_COUNT}); nothing to do."
+
+      - uses: actions/checkout@v4
+        if: env.SELECTED == 'true'
+
+      - name: Download the build tree
+        if: env.SELECTED == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: sanitizer-tree-${{ matrix.compiler }}
+          path: sanitizer-tree
+
+      - name: Verify and unpack the build tree
+        if: env.SELECTED == 'true'
+        timeout-minutes: 10
+        run: |
+          for tool in ctest python3 tar sha256sum timeout; do
+            command -v "$tool" >/dev/null 2>&1 || { echo "::error::missing tool: $tool"; exit 1; }
+          done
+          bash .gitea/scripts/sanitizer-measure.sh env "$MEASURE_DIR"
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+          with open("sanitizer-tree/manifest.json") as fh:
+              m = json.load(fh)
+          problems = []
+          if m["sha"] != os.environ["GITHUB_SHA"]:
+              problems.append(f"tree sha {m['sha']} != {os.environ['GITHUB_SHA']}")
+          if m["compiler"] != os.environ["COMPILER_ID"]:
+              problems.append(f"tree compiler {m['compiler']} != {os.environ['COMPILER_ID']}")
+          if m["workspace"] != os.getcwd():
+              problems.append(f"tree workspace {m['workspace']} != {os.getcwd()} (CTest paths are absolute)")
+          digest = hashlib.sha256()
+          with open(os.path.join("sanitizer-tree", m["archive"]), "rb") as fh:
+              for block in iter(lambda: fh.read(1 << 20), b""):
+                  digest.update(block)
+          if digest.hexdigest() != m["archive_sha256"]:
+              problems.append("archive sha256 mismatch")
+          if problems:
+              for p in problems:
+                  print(f"::error::{p}")
+              sys.exit(1)
+          with open(os.environ["GITHUB_ENV"], "a") as fh:
+              fh.write(f"TREE_ARCHIVE=sanitizer-tree/{m['archive']}\n")
+          print("build tree verified:", json.dumps(m))
+          PY
+          if [ -e "$BUILD_DIR" ]; then echo "::error::$BUILD_DIR already exists in a fresh checkout"; exit 1; fi
+
+      - name: Unpack
+        if: env.SELECTED == 'true'
+        timeout-minutes: 10
+        run: |
+          case "$TREE_ARCHIVE" in
+            *.zst) decompress='zstd -d -T2' ;;
+            *.gz) decompress='gzip -d' ;;
+            *) echo "::error::unknown archive $TREE_ARCHIVE"; exit 1 ;;
+          esac
+          bash .gitea/scripts/sanitizer-measure.sh phase "$MEASURE_DIR" unpack -- \
+            timeout -s TERM -k 30 8m tar -I "$decompress" -xf "$TREE_ARCHIVE"
+
+      # Full configured roster, striped across shards with -I start,,stride.
+      # The CMake per-test TIMEOUT values stay authoritative; the outer bound
+      # only keeps the job inside its deadline so the results still upload.
+      - name: Run native and headless CTest with sanitizers
+        if: env.SELECTED == 'true'
+        timeout-minutes: 72
+        run: |
+          ulimit -c unlimited
+          ctest --test-dir "$BUILD_DIR" --show-only=json-v1 -I "${SHARD},,${SHARD_COUNT}" > "$MEASURE_DIR/ctest-shard.json"
+          bash .gitea/scripts/sanitizer-measure.sh phase "$MEASURE_DIR" "ctest-shard-${SHARD}-of-${SHARD_COUNT}" -- \
+            timeout -s TERM -k 60 70m \
+            ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "$CTEST_JOBS" --no-tests=error \
+              -I "${SHARD},,${SHARD_COUNT}" --output-junit "$PWD/$MEASURE_DIR/ctest-junit.xml"
+
+      - name: Summarize per-test times
+        if: always() && env.SELECTED == 'true'
+        run: >-
+          bash .gitea/scripts/sanitizer-measure.sh tests "$MEASURE_DIR"
+          "ctest-shard-${SHARD}-of-${SHARD_COUNT}"
+          "$MEASURE_DIR/ctest-shard.json" "$MEASURE_DIR/ctest-junit.xml"
+
+      - name: Retain shard measurements
+        if: always() && env.SELECTED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-measure-test-${{ matrix.compiler }}-shard-${{ matrix.shard }}
+          path: ${{ env.MEASURE_DIR }}/
+          if-no-files-found: warn
+          retention-days: 14

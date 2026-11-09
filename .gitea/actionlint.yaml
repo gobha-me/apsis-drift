@@ -1,0 +1,6 @@
+# Gitea runner labels declared for the CI migration (same set as PR #749).
+self-hosted-runner:
+  labels:
+    - ci-kind
+    - ci-build
+    - ci-light
