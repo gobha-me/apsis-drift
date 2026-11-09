@@ -6,10 +6,16 @@
 #       Install the compiler toolchain into the digest-pinned base image inside
 #       a container limited to --cpus=2 --memory=2g --memory-swap=2g, then
 #       commit it as <local-tag> for this job only.
+#       Also writes <outdir>/toolchain-<id>.versions (package versions and
+#       compiler --version), which the shards compare with the build's.
 #   run <local-tag> <outdir> <phase> -- <command> [args...]
 #       Run one measured phase inside a fresh container with the same limits,
 #       the workspace mounted at the same absolute path, as the runner's uid.
-#       Records docker's OOMKilled flag and exit code in containers.tsv.
+#       Only the locally built sanitizer-toolchain:<id> tag is accepted and
+#       it is never pulled. Records docker's OOMKilled flag and exit code in
+#       containers.tsv.
+#   diskgate <path> <min-kib> <label>
+#       Fail closed unless the filesystem holding <path> has >= <min-kib> free.
 #   tests <outdir> <name> <ctest-json> <junit-xml>
 #       Join per-test times from the JUnit file with each test's TIMEOUT.
 #
@@ -26,6 +32,11 @@
 set -euo pipefail
 
 readonly LIMITS=(--cpus=2 --memory=2g --memory-swap=2g)
+# Base images must be pinned by a full digest; run accepts only local tags.
+readonly IMAGE_RE='^[a-z0-9./_-]+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$'
+readonly TAG_RE='^sanitizer-toolchain:(clang-20|gcc-13)$'
+# sha256 of https://apt.llvm.org/llvm.sh as fetched read-only on 2026-11-09.
+readonly LLVM_SH_SHA256=03878e08f47b66cc95bc4b544b0db3c6d9ce8d60e6cf2492ae357984330a9eae
 
 die() { printf 'sanitizer-measure: %s\n' "$*" >&2; exit 2; }
 
@@ -145,8 +156,11 @@ SH
       cat <<'SH'
 apt-get install -y --no-install-recommends wget lsb-release software-properties-common gnupg g++
 wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+SH
+      printf 'echo "%s  /tmp/llvm.sh" | sha256sum -c -\n' "$LLVM_SH_SHA256"
+      cat <<'SH'
 bash /tmp/llvm.sh 20
-apt-get install -y libclang-rt-20-dev
+apt-get install -y --no-install-recommends libclang-rt-20-dev
 clang++-20 --version
 SH
       ;;
@@ -158,10 +172,28 @@ dpkg-query -W -f '${Package}\t${Version}\n' | grep -E '^(g\+\+(-13)?|gcc-13|clan
 SH
 }
 
+versions_script() {
+  # Deterministic toolchain identity: fixed package list, then the compiler.
+  local pkgs cxx
+  case "$1" in
+    gcc-13) pkgs='g++-13 gcc-13 cpp-13 libstdc++-13-dev libgcc-13-dev libasan8 libubsan1 binutils cmake make ninja-build'; cxx=g++-13 ;;
+    clang-20) pkgs='clang-20 libclang-rt-20-dev libclang-common-20-dev llvm-20 g++-13 libstdc++-13-dev libgcc-13-dev binutils cmake make ninja-build'; cxx=clang++-20 ;;
+    *) die "versions: unknown compiler '$1'" ;;
+  esac
+  printf 'pkgs="%s"\ncxx=%s\n' "$pkgs" "$cxx"
+  cat <<'SH'
+for p in $pkgs; do
+  dpkg-query -W -f '${Package}=${Version}\n' "$p" 2>/dev/null || echo "$p=absent"
+done
+"$cxx" --version | head -n 1
+SH
+}
+
 cmd_toolchain() {
   local id=$1 image=$2 tag=$3 out=$4
   check_name "$id"
-  [[ $image == *@sha256:* ]] || die "toolchain: image must be pinned by digest: $image"
+  [[ $image =~ $IMAGE_RE ]] || die "toolchain: image must be name[:tag]@sha256:<64 hex>: $image"
+  [[ $tag =~ $TAG_RE && $tag == "sanitizer-toolchain:$id" ]] || die "toolchain: bad local tag '$tag'"
   mkdir -p "$out"
   local name="sanitizer-tc-$id-$$" rc=0
   docker pull -q "$image"
@@ -170,13 +202,18 @@ cmd_toolchain() {
   script="$(cd "$out" && pwd)/toolchain-$id.sh"
   toolchain_script "$id" > "$script"
   docker run --name "$name" "${LIMITS[@]}" -v "$script:/tmp/toolchain.sh:ro" "$image" \
-    timeout -s TERM -k 30 11m bash /tmp/toolchain.sh 2>&1 | tee "$out/toolchain-$id.log"
+    timeout -s TERM -k 30 10m bash /tmp/toolchain.sh 2>&1 | tee "$out/toolchain-$id.log"
   rc=${PIPESTATUS[0]}
   set -e
   if ((rc == 0)); then
     docker commit -q "$name" "$tag" >/dev/null
   fi
   docker rm -f "$name" >/dev/null
+  if ((rc == 0)); then
+    versions_script "$id" | docker run -i --rm --pull never "${LIMITS[@]}" "$tag" bash -s \
+      > "$out/toolchain-$id.versions"
+    cat "$out/toolchain-$id.versions"
+  fi
   {
     printf 'base_image\t%s\n' "$image"
     printf 'base_image_id\t%s\n' "$(docker image inspect -f '{{.Id}}' "$image")"
@@ -191,10 +228,12 @@ cmd_run() {
   [[ ${1:-} == -- ]] || die 'run: expected -- before the command'
   shift
   check_name "$name"
+  [[ $tag =~ $TAG_RE ]] || die "run: only the local sanitizer-toolchain:<id> tag is accepted, got '$tag'"
+  docker image inspect "$tag" >/dev/null 2>&1 || die "run: local image '$tag' does not exist"
   mkdir -p "$out"
   local ws="${GITHUB_WORKSPACE:-$PWD}" cname="sanitizer-$name-$$" rc=0
   set +e
-  docker run --name "$cname" "${LIMITS[@]}" --ulimit core=-1 \
+  docker run --pull never --name "$cname" "${LIMITS[@]}" --ulimit core=-1 \
     --user "$(id -u):$(id -g)" -e HOME=/tmp -e CXX -e ASAN_OPTIONS -e UBSAN_OPTIONS \
     -v "$ws:$ws" -w "$ws" "$tag" \
     bash .github/scripts/sanitizer-measure.sh phase "$out" "$name" -- "$@"
@@ -219,6 +258,18 @@ cmd_run() {
   fi
   printf 'container phase=%s docker_exit=%s docker_oom_killed=%s\n' "$name" "$exitc" "$oomk"
   return "$rc"
+}
+
+cmd_diskgate() {
+  local path=$1 min=$2 label=$3 free
+  check_name "$label"
+  [[ $min =~ ^[0-9]+$ ]] || die "diskgate: min-kib must be an integer, got '$min'"
+  free=$(df -Pk -- "$path" 2>/dev/null | awk 'NR == 2 { print $4 }') || free=
+  [[ $free =~ ^[0-9]+$ ]] || die "diskgate $label: could not read free space for '$path' (failing closed)"
+  printf 'diskgate %s: free_kib=%s min_kib=%s (%s GiB free, %s GiB needed)\n' "$label" "$free" "$min" \
+    "$((free / 1048576))" "$(((min + 1048575) / 1048576))"
+  summary "| diskgate $label | free $((free / 1048576)) GiB | need $(((min + 1048575) / 1048576)) GiB |"
+  ((free >= min)) || die "diskgate $label: only ${free} KiB free on '$path', need ${min} KiB (failing closed)"
 }
 
 cmd_tests() {
@@ -272,6 +323,7 @@ case "$sub" in
   phase) (($# >= 4)) || die 'usage: phase <outdir> <name> -- <command>'; cmd_phase "$@" ;;
   toolchain) (($# == 4)) || die 'usage: toolchain <id> <image@digest> <tag> <outdir>'; cmd_toolchain "$@" ;;
   run) (($# >= 5)) || die 'usage: run <tag> <outdir> <phase> -- <command>'; cmd_run "$@" ;;
+  diskgate) (($# == 3)) || die 'usage: diskgate <path> <min-kib> <label>'; cmd_diskgate "$@" ;;
   tests) (($# == 4)) || die 'usage: tests <outdir> <name> <ctest-json> <junit-xml>'; cmd_tests "$@" ;;
   *) die "unknown subcommand '$sub'" ;;
 esac
