@@ -1,0 +1,333 @@
+name: Native sanitizer measurement
+
+# Issue #744, measurement only. The only trigger is manual dispatch.
+#
+# Per compiler (Clang 20, GCC 13) this records what one ASan + UBSan build
+# and the full configured CTest roster cost inside a 2 CPU / 2 GiB box:
+# every build and test command runs in
+#   docker run --cpus=2 --memory=2g --memory-swap=2g
+# on a standard GitHub-hosted ubuntu-24.04 runner, from a base image pinned
+# by digest. The container's own cgroup memory.peak and oom_kill count are
+# recorded per phase. See .github/scripts/README.md.
+#
+# Nothing here raises a limit, drops a sanitizer or loosens a CTest deadline
+# (no --timeout is passed to ctest). If a heavy TU or link runs out of memory,
+# use the knobs: build_jobs=1, generator=Ninja with link_jobs=1,
+# debug_info=line-tables, ctest_jobs=1.
+#
+# Exit codes: 124 = inner deadline hit; 137 = SIGKILL, which together with
+# oom_kill_delta > 0 (or docker OOMKilled=true) means out of memory.
+on:
+  workflow_dispatch:
+    inputs:
+      compiler:
+        description: Compiler entries to measure
+        type: choice
+        options: [both, clang-20, gcc-13]
+        default: both
+      build_jobs:
+        description: Build parallelism (2, or 1 as the OOM fallback)
+        type: choice
+        options: ['2', '1']
+        default: '2'
+      generator:
+        description: CMake generator (the link pool needs Ninja)
+        type: choice
+        options: [Unix Makefiles, Ninja]
+        default: Unix Makefiles
+      link_jobs:
+        description: Ninja link pool size (concurrent links); ignored by Make
+        type: choice
+        options: ['1', '2']
+        default: '1'
+      debug_info:
+        description: Debug info (line-tables = -g1, keeps sanitizer stack lines, cuts link memory)
+        type: choice
+        options: [full, line-tables]
+        default: full
+      ctest_jobs:
+        description: CTest parallelism (2, or 1 as the OOM fallback)
+        type: choice
+        options: ['2', '1']
+        default: '2'
+      shard_count:
+        description: CTest shards per compiler (build once, test shards; 1-8)
+        type: string
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # docker.io/library/ubuntu:24.04 OCI index digest (linux/amd64 manifest
+  # sha256:78d4744ead1f5b19b04d0df558ab182a5300903900755e515b2ca4d10eb2044d),
+  # the same OS as the existing CI's ubuntu-24.04 runners. GCC 13 is Ubuntu
+  # 24.04's g++-13 and Clang 20 comes from apt.llvm.org via llvm.sh, as in
+  # the existing CI. Both entries use the same pinned base.
+  GCC13_IMAGE: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+  CLANG20_IMAGE: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+  ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1:disable_coredump=0
+  UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:abort_on_error=1
+  BUILD_DIR: build-sanitizers
+  MEASURE_DIR: sanitizer-measure
+  MEASURE: .github/scripts/sanitizer-measure.sh
+
+jobs:
+  plan:
+    name: plan measurement matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      compilers: ${{ steps.plan.outputs.compilers }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - name: Validate inputs and expand the matrices
+        id: plan
+        env:
+          COMPILER: ${{ inputs.compiler }}
+          SHARD_COUNT: ${{ inputs.shard_count }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          compilers = [
+              {"id": "clang-20", "name": "Clang 20", "cxx": "clang++-20", "image_var": "CLANG20_IMAGE"},
+              {"id": "gcc-13", "name": "GCC 13", "cxx": "g++-13", "image_var": "GCC13_IMAGE"},
+          ]
+          choice = os.environ["COMPILER"]
+          if choice != "both":
+              compilers = [c for c in compilers if c["id"] == choice]
+          count = os.environ["SHARD_COUNT"].strip()
+          if not count.isdigit() or not 1 <= int(count) <= 8:
+              print(f"::error::shard_count must be an integer 1-8, got {count!r}")
+              sys.exit(1)
+          shards = [dict(c, shard=k, shard_count=int(count)) for c in compilers for k in range(1, int(count) + 1)]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"compilers={json.dumps(compilers)}\n")
+              fh.write(f"shards={json.dumps(shards)}\n")
+          print(json.dumps({"compilers": compilers, "shards": shards}, indent=2))
+          PY
+
+  build:
+    name: ${{ matrix.name }} / sanitized build (measure)
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.compilers) }}
+    env:
+      COMPILER_ID: ${{ matrix.id }}
+      CXX: ${{ matrix.cxx }}
+      IMAGE_VAR: ${{ matrix.image_var }}
+      TC_TAG: sanitizer-toolchain:${{ matrix.id }}
+      BUILD_JOBS: ${{ inputs.build_jobs }}
+      GENERATOR: ${{ inputs.generator }}
+      LINK_JOBS: ${{ inputs.link_jobs }}
+      DEBUG_INFO: ${{ inputs.debug_info }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the toolchain into the pinned image (2 CPU / 2 GiB)
+        timeout-minutes: 13
+        run: |
+          df -h "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf '| phase | exit | wall s | max RSS KiB | cgroup memory.peak | cgroup memory.max | oom_kill delta | start | docker |\n|---|---|---|---|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          bash "$MEASURE" toolchain "$COMPILER_ID" "${!IMAGE_VAR}" "$TC_TAG" "$MEASURE_DIR"
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" environment -- bash "$MEASURE" env "$MEASURE_DIR"
+
+      - name: Configure instrumented native core and bridge
+        timeout-minutes: 11
+        run: |
+          set -- -S . -B "$BUILD_DIR" -G "$GENERATOR" -DCMAKE_BUILD_TYPE=Debug \
+            -DAPSIS_DRIFT_TESTS=ON -DBUILD_TESTING=ON \
+            -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF \
+            -DAPSIS_DRIFT_GODOT_SPIKE=ON -DAPSIS_DRIFT_GODOT_LIVE=ON \
+            "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
+            -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined \
+            -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address,undefined
+          if [ "$GENERATOR" = Ninja ]; then
+            # Separate compile and link pools so heavy links run LINK_JOBS at a time.
+            set -- "$@" "-DCMAKE_JOB_POOLS=compile=${BUILD_JOBS};link=${LINK_JOBS}" \
+              -DCMAKE_JOB_POOL_COMPILE=compile -DCMAKE_JOB_POOL_LINK=link
+          else
+            echo "link_jobs=${LINK_JOBS} has no effect with Unix Makefiles; use build_jobs=1 or Ninja to serialize links."
+          fi
+          if [ "$DEBUG_INFO" = line-tables ]; then
+            set -- "$@" -DCMAKE_CXX_FLAGS_DEBUG=-g1
+          fi
+          printf 'configure:'; printf ' %q' "$@"; printf '\n'
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" configure -- \
+            timeout -s TERM -k 60 10m cmake "$@"
+
+      # Bounded inside the job deadline so the measurements still upload when
+      # the build does not fit.
+      - name: Build all native and headless contracts
+        timeout-minutes: 52
+        run: >-
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" build --
+          timeout -s TERM -k 60 50m
+          cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
+
+      - name: Record the configured CTest roster
+        timeout-minutes: 3
+        run: |
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" roster -- \
+            ctest --test-dir "$BUILD_DIR" --show-only=json-v1
+          python3 -c 'import json,sys; print("ctest roster:", len(json.load(open(sys.argv[1]))["tests"]), "tests")' \
+            "$MEASURE_DIR/roster.log"
+
+      # Build once: the whole tree (including fetched dependencies) moves to
+      # the shard jobs. CTest files hold absolute paths, so the manifest
+      # records the workspace path and the shards refuse a different one.
+      - name: Pack the build tree for the test shards
+        timeout-minutes: 7
+        run: |
+          mkdir -p sanitizer-tree
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" pack -- \
+            timeout -s TERM -k 30 6m tar -I 'zstd -T2 -3' -cf sanitizer-tree/build-tree.tar.zst "$BUILD_DIR"
+          python3 - <<'PY'
+          import hashlib, json, os
+          archive = "sanitizer-tree/build-tree.tar.zst"
+          digest = hashlib.sha256()
+          with open(archive, "rb") as fh:
+              for block in iter(lambda: fh.read(1 << 20), b""):
+                  digest.update(block)
+          manifest = {
+              "sha": os.environ["GITHUB_SHA"],
+              "compiler": os.environ["COMPILER_ID"],
+              "image": os.environ[os.environ["IMAGE_VAR"]],
+              "workspace": os.environ["GITHUB_WORKSPACE"],
+              "build_dir": os.environ["BUILD_DIR"],
+              "generator": os.environ["GENERATOR"],
+              "build_jobs": os.environ["BUILD_JOBS"],
+              "link_jobs": os.environ["LINK_JOBS"],
+              "debug_info": os.environ["DEBUG_INFO"],
+              "archive": os.path.basename(archive),
+              "archive_bytes": os.path.getsize(archive),
+              "archive_sha256": digest.hexdigest(),
+          }
+          with open("sanitizer-tree/manifest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+          print(json.dumps(manifest, indent=2))
+          PY
+          du -sk "$BUILD_DIR" | awk '{ print "build_tree_kib\t" $1 }' | tee -a "$MEASURE_DIR/environment.tsv"
+          cp sanitizer-tree/manifest.json "$MEASURE_DIR/tree-manifest.json"
+
+      - name: Share the build tree with the test shards
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-tree-${{ matrix.id }}
+          path: sanitizer-tree/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Retain build measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-measure-build-${{ matrix.id }}
+          path: ${{ env.MEASURE_DIR }}/
+          if-no-files-found: warn
+          retention-days: 7
+
+  test:
+    name: ${{ matrix.name }} / ctest shard ${{ matrix.shard }} of ${{ matrix.shard_count }} (measure)
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env:
+      COMPILER_ID: ${{ matrix.id }}
+      CXX: ${{ matrix.cxx }}
+      IMAGE_VAR: ${{ matrix.image_var }}
+      TC_TAG: sanitizer-toolchain:${{ matrix.id }}
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: ${{ matrix.shard_count }}
+      CTEST_JOBS: ${{ inputs.ctest_jobs }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the build tree
+        uses: actions/download-artifact@v8
+        with:
+          name: sanitizer-tree-${{ matrix.id }}
+          path: sanitizer-tree
+
+      - name: Verify the build tree
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+          with open("sanitizer-tree/manifest.json") as fh:
+              m = json.load(fh)
+          expected = {
+              "sha": os.environ["GITHUB_SHA"],
+              "compiler": os.environ["COMPILER_ID"],
+              "image": os.environ[os.environ["IMAGE_VAR"]],
+              "workspace": os.environ["GITHUB_WORKSPACE"],
+          }
+          problems = [f"tree {k} {m.get(k)!r} != {v!r}" for k, v in expected.items() if m.get(k) != v]
+          digest = hashlib.sha256()
+          with open(os.path.join("sanitizer-tree", m["archive"]), "rb") as fh:
+              for block in iter(lambda: fh.read(1 << 20), b""):
+                  digest.update(block)
+          if digest.hexdigest() != m["archive_sha256"]:
+              problems.append("archive sha256 mismatch")
+          for p in problems:
+              print(f"::error::{p}")
+          if problems:
+              sys.exit(1)
+          print("build tree verified:", json.dumps(m))
+          PY
+          if [ -e "$BUILD_DIR" ]; then echo "::error::$BUILD_DIR already exists in a fresh checkout"; exit 1; fi
+
+      - name: Install the toolchain into the pinned image (2 CPU / 2 GiB)
+        timeout-minutes: 13
+        run: |
+          df -h "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf '| phase | exit | wall s | max RSS KiB | cgroup memory.peak | cgroup memory.max | oom_kill delta | start | docker |\n|---|---|---|---|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          bash "$MEASURE" toolchain "$COMPILER_ID" "${!IMAGE_VAR}" "$TC_TAG" "$MEASURE_DIR"
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" environment -- bash "$MEASURE" env "$MEASURE_DIR"
+
+      - name: Unpack the build tree
+        timeout-minutes: 7
+        run: >-
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" unpack --
+          timeout -s TERM -k 30 6m tar -I 'zstd -d -T2' -xf sanitizer-tree/build-tree.tar.zst
+
+      # Full configured roster striped across shards with -I start,,stride.
+      # The CMake per-test TIMEOUT values stay authoritative (no --timeout);
+      # the outer bound only keeps the job inside 90 minutes so results upload.
+      - name: Run native and headless CTest with sanitizers
+        timeout-minutes: 64
+        run: |
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" "roster-shard-${SHARD}" -- \
+            ctest --test-dir "$BUILD_DIR" --show-only=json-v1 -I "${SHARD},,${SHARD_COUNT}"
+          bash "$MEASURE" run "$TC_TAG" "$MEASURE_DIR" "ctest-shard-${SHARD}-of-${SHARD_COUNT}" -- \
+            timeout -s TERM -k 60 62m \
+            ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "$CTEST_JOBS" --no-tests=error \
+              -I "${SHARD},,${SHARD_COUNT}" --output-junit "$GITHUB_WORKSPACE/$MEASURE_DIR/ctest-junit.xml"
+
+      - name: Summarize per-test times
+        if: always()
+        run: >-
+          bash "$MEASURE" tests "$MEASURE_DIR" "ctest-shard-${SHARD}-of-${SHARD_COUNT}"
+          "$MEASURE_DIR/roster-shard-${SHARD}.log" "$MEASURE_DIR/ctest-junit.xml"
+
+      - name: Retain shard measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-measure-test-${{ matrix.id }}-shard-${{ matrix.shard }}
+          path: ${{ env.MEASURE_DIR }}/
+          if-no-files-found: warn
+          retention-days: 7
