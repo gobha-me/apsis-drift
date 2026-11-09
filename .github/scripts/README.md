@@ -53,7 +53,25 @@ inputs rather than raising any limit:
 - `debug_info=line-tables` (`-g1`)
 - `ctest_jobs=1`
 
-No input drops a sanitizer or loosens a deadline. Each job stays within
+No input drops a sanitizer or loosens a deadline.
+
+Hardening:
+
+- Base images must match `name[:tag]@sha256:<64 hex>`. `run` accepts only the
+  locally built `sanitizer-toolchain:<id>` tag, checks that it exists and
+  passes `--pull never`.
+- `llvm.sh` is checked against a pinned sha256 and fails on a mismatch.
+- The build records its toolchain package versions in the tree manifest. Each
+  test shard reinstalls the toolchain, compares the versions and refuses to
+  run on a mismatch.
+- Free-space gates fail closed before the build (12 GiB, an 8 GiB tree
+  estimate plus 4 GiB margin until a tree is measured), before pack (half the
+  measured tree plus 1 GiB) and before unpack (the measured tree plus 2 GiB).
+  The archive is removed by its exact path after upload and after unpack.
+- Each inner deadline plus its kill grace is strictly below its step's
+  `timeout-minutes`.
+- Checkouts use `persist-credentials: false`, and every action is pinned to a
+  full commit sha. Each job stays within
 90 minutes, and every heavy step has an inner deadline so the measurements
 still upload when the step does not fit.
 
