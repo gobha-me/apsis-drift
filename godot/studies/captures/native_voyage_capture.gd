@@ -168,42 +168,20 @@ func travel_action(view: Control, owner: Variant, op: String, args: Array) -> bo
 	var accepted: bool = state.jump.selected == args[0] if op == "jump_select" else state.jump.phase == "spool" if op == "jump_begin" else state.target_port == int(args[0]) if op == "port_select" else state.attached and state.resources.jump_charges == 3 and state.resources.quantity_quanta == state.resources.capacity_quanta
 	return check(view.error.is_empty() and accepted, "Native travel action refused: " + op)
 
-func run() -> void:
-	var args := OS.get_cmdline_user_args()
-	if args.size() != 3 or not args[0].is_absolute_path() or not args[1].is_absolute_path() or not args[2].is_absolute_path(): quit(1); return
-	var source := FileAccess.open(args[0].path_join("trace.json"), FileAccess.READ)
-	if source == null or source.get_length() > 32768: quit(1); return
-	var trace: Variant = JSON.parse_string(source.get_as_text())
-	source.close()
+# Callers validate the complete manifest and command stream before playing a
+# segment. The retained shell, bridge and model stay owned by the caller.
+func replay_segment(shell: Control, owner: Variant, model_id: int, trace: Dictionary, args: PackedStringArray, stop_after: String = "") -> Dictionary:
 	var labels := labels_for_trace(trace)
-	var travel := travel_commands()
-	var surface := surface_commands()
-	var profile: bool = trace is Dictionary and trace.get("schema_version") == 6
-	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel, surface, profile), "Malformed bounded voyage stream"): quit(1); return
-	var zero := "0000000000000000"
-	check(valid_record(["walk", 15, [zero, zero, zero]]) and decoded_values(["000000000000f03f"])[0] == 1.0, "Valid exact control buffer refused")
-	for bad in [["flight", 0, []], ["walk", 16, [zero, zero, zero]], ["walk", 1.5, [zero, zero, zero]], ["flight", 1, [zero, zero, zero]], ["walk", 1, ["000000000000f87f", zero, zero]], ["walk", 1, ["000000000000f07f", zero, zero]], ["walk", 1, ["0000000000000040", zero, zero]], ["walk", 1, ["z000000000000000", zero, zero]], ["walk", 1, [zero + "00", zero, zero]], ["checkpoint", 0, ["../other"]], ["release", 0, [1]], ["teleport", 0, []]]:
-		check(not valid_record(bad), "Invalid command accepted")
-	if not manifest_refusals(trace) or failed: quit(1); return
-	if not ClassDB.class_exists("FreedomBridge"): GDExtensionManager.load_extension("res://bin/freedom.gdextension")
-	if not check(ClassDB.class_exists("FreedomBridge"), "Native C++ bridge unavailable"): quit(1); return
-	var owner: Variant = ClassDB.instantiate("FreedomBridge")
-	var shell := Shell.new()
-	shell.presentation_only = true
-	# Explicit playback owns cadence. Deferred handoff signals still run; frame
-	# waits and newly activated views cannot advance C++ on their own.
-	shell.process_mode = Node.PROCESS_MODE_DISABLED
-	root.add_child(shell)
-	root.size = Vector2i(1280, 720)
-	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Voyage output unavailable") or not check(shell.select_start(owner, start_options(trace, args)), "Voyage start staging refused: " + shell.error): shell.free(); quit(1); return
-	var model_id: int = shell.current_view.staged_model.get_instance_id()
 	var rendered := DisplayServer.get_name() != "headless"
 	var stream := FileAccess.open(args[0].path_join("commands.jsonl"), FileAccess.READ)
 	var phase := 0
 	var tick := stream_start_tick(trace)
 	var rows := 0
 	var captures: Array = []
+	var reached_stop := false
+	if not check(stop_after.is_empty() or stop_after in labels, "Unknown voyage stop checkpoint") or not check(stream != null, "Voyage command stream unavailable"):
+		if stream != null: stream.close()
+		return {"phase": phase, "rows": rows, "tick": tick, "captures": captures, "complete": false, "stopped": false}
 	while stream.get_position() < stream.get_length() and not failed:
 		var record: Array = JSON.parse_string(stream.get_line())
 		var view: Control = shell.current_view
@@ -221,6 +199,7 @@ func run() -> void:
 			if rendered and not failed: await capture_phase(view, owner, args[2], row, captures)
 			print("Continuous phase: %s tick=%s" % [row.label, row.tick])
 			phase += 1
+			reached_stop = not stop_after.is_empty() and row.label == stop_after
 		elif op in ["walk", "flight", "surface_walk"]:
 			if not resume(view): break
 			var demand := decoded_values(record[2])
@@ -278,8 +257,50 @@ func run() -> void:
 			var frozen: Dictionary = owner.get_freedom_flight_state()
 			await process_frame
 			check(owner.get_freedom_flight_state() == frozen, "Presentation cadence changed the voyage")
+		if reached_stop: break
+	var consumed := stream.get_position() == stream.get_length()
 	stream.close()
-	check(phase == labels.size() and str(tick) == trace.final_tick, "Continuous voyage did not complete")
+	if stop_after.is_empty():
+		check(phase == labels.size() and str(tick) == trace.final_tick, "Continuous voyage did not complete")
+	else:
+		check(reached_stop and phase > 0 and labels[phase - 1] == stop_after and str(tick) == trace.checkpoints[phase - 1].tick, "Continuous voyage did not reach its requested checkpoint")
+	return {"phase": phase, "rows": rows, "tick": tick, "captures": captures, "complete": not failed and consumed and phase == labels.size() and str(tick) == trace.final_tick, "stopped": not failed and reached_stop}
+
+func run() -> void:
+	var args := OS.get_cmdline_user_args()
+	if args.size() != 3 or not args[0].is_absolute_path() or not args[1].is_absolute_path() or not args[2].is_absolute_path(): quit(1); return
+	var source := FileAccess.open(args[0].path_join("trace.json"), FileAccess.READ)
+	if source == null or source.get_length() > 32768: quit(1); return
+	var trace: Variant = JSON.parse_string(source.get_as_text())
+	source.close()
+	var labels := labels_for_trace(trace)
+	var travel := travel_commands()
+	var surface := surface_commands()
+	var profile: bool = trace is Dictionary and trace.get("schema_version") == 6
+	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel, surface, profile), "Malformed bounded voyage stream"): quit(1); return
+	var zero := "0000000000000000"
+	check(valid_record(["walk", 15, [zero, zero, zero]]) and decoded_values(["000000000000f03f"])[0] == 1.0, "Valid exact control buffer refused")
+	for bad in [["flight", 0, []], ["walk", 16, [zero, zero, zero]], ["walk", 1.5, [zero, zero, zero]], ["flight", 1, [zero, zero, zero]], ["walk", 1, ["000000000000f87f", zero, zero]], ["walk", 1, ["000000000000f07f", zero, zero]], ["walk", 1, ["0000000000000040", zero, zero]], ["walk", 1, ["z000000000000000", zero, zero]], ["walk", 1, [zero + "00", zero, zero]], ["checkpoint", 0, ["../other"]], ["release", 0, [1]], ["teleport", 0, []]]:
+		check(not valid_record(bad), "Invalid command accepted")
+	if not manifest_refusals(trace) or failed: quit(1); return
+	if not ClassDB.class_exists("FreedomBridge"): GDExtensionManager.load_extension("res://bin/freedom.gdextension")
+	if not check(ClassDB.class_exists("FreedomBridge"), "Native C++ bridge unavailable"): quit(1); return
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	# Explicit playback owns cadence. Deferred handoff signals still run; frame
+	# waits and newly activated views cannot advance C++ on their own.
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	root.size = Vector2i(1280, 720)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Voyage output unavailable") or not check(shell.select_start(owner, start_options(trace, args)), "Voyage start staging refused: " + shell.error): shell.free(); quit(1); return
+	var model_id: int = shell.current_view.staged_model.get_instance_id()
+	var rendered := DisplayServer.get_name() != "headless"
+	var replay := await replay_segment(shell, owner, model_id, trace, args)
+	var tick: int = replay.tick
+	var rows: int = replay.rows
+	var captures: Array = replay.captures
 	var report := FileAccess.open(args[2].path_join("voyage.json"), FileAccess.WRITE)
 	if report != null:
 		var hashes := {}
