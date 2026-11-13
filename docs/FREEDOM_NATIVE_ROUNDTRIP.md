@@ -130,33 +130,6 @@ not uninterrupted native playback across that file handoff. Existing fresh-start
 round trips keep their original mode and checkpoints. All results remain
 separate from manual/controller, raster and hardware acceptance.
 
-### One native session through the surface and neighboring trip
-
-The optional composed replay keeps one native shell, C++ bridge and Wayfarer
-model from ordinary New Game through surface walking, reboarding, ascent,
-neighboring travel, home capture, service and station return:
-
-```sh
-python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
-  --build-dir build-native --timeout 900 \
-  --test native_first_flight_continuation --continuous-first-flight
-```
-
-The C++ fixture still generates the neighboring suffix from the actual ascent
-save. Native playback reaches that boundary through the recorded surface
-controls and compares its complete live save with those exact source bytes;
-it then runs the suffix on the same session without Continue. Separate prefix
-and suffix output directories retain checkpoints whose names overlap. Both
-complete manifests and streams are validated before playback, including the
-unused home-return tail of the surface fixture.
-
-This option requires exactly the case above and retains the ordinary frame
-policy and assistance selection. The default continuation case and existing
-contract roster remain unchanged. Run it separately for GCC and Clang. Its
-evidence covers accelerated semantic playback and saved state; physical
-controller, GPU appearance, frame pacing and automatic-loss qualification
-remain separate acceptance work.
-
 The dense scrolling HUD and plain planetary materials remain refinements under
 the existing cockpit/terrain owners. The approved
 [standard recovery provider](FREEDOM_RECOVERY.md) separately checks declared losses

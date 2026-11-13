@@ -254,13 +254,9 @@ def main(argv=None):
                         help="explicit physical profile; requires --selected-surface-loop")
     parser.add_argument("--roundtrip-from-save", type=Path,
                         help="continue one actual ascent save; requires only native_roundtrip or native_roundtrip_pilot")
-    parser.add_argument("--continuous-first-flight", action="store_true",
-                        help="replay surface departure and neighboring return in one native session; requires only native_first_flight_continuation")
     parser.add_argument("--keep-work", action="store_true",
                         help="retain successful asset/import/binary copies for replay; failures always retain them")
     args = parser.parse_args(argv)
-    if args.continuous_first_flight and args.test != ["native_first_flight_continuation"]:
-        parser.error("--continuous-first-flight requires --test native_first_flight_continuation only")
     if args.flight_profile and not args.selected_surface_loop:
         parser.error("--flight-profile requires --selected-surface-loop")
     if args.selected_surface_loop and args.test != ["native_surface_loop"]:
@@ -307,8 +303,6 @@ def main(argv=None):
     if not bridge.is_file():
         parser.error(f"missing native bridge: {bridge}; build GODOT_LIVE first")
     selected = list(dict.fromkeys(args.test or TESTS))
-    scripts = {name: ("native_continuous_first_flight" if args.continuous_first_flight
-                      else name) for name in selected}
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
@@ -382,8 +376,8 @@ def main(argv=None):
             if not all((source / path).is_file() for path in
                        ("scenes/native_start_shell.tscn", "scripts/native/native_start_shell.gd")):
                 parser.error("missing native start shell scene or script")
-        elif not (source / "tests" / f"{scripts[name]}_test.gd").is_file():
-            parser.error(f"missing test source: {scripts[name]}")
+        elif not (source / "tests" / f"{name}_test.gd").is_file():
+            parser.error(f"missing test source: {name}")
     args.output_parent.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="native-contracts-",
                                  dir=args.output_parent.resolve()))
@@ -824,9 +818,6 @@ def main(argv=None):
             if name == "native_first_flight_continuation":
                 source_report["native_prefix_test"] = "native_surface_loop"
                 source_report["native_prefix_selected"] = "native_surface_loop" in selected
-                if args.continuous_first_flight:
-                    source_report["scope"] = "C++ suffix generated from actual ascent; native playback retains the New Game session"
-                    source_report["native_prefix_playback"] = "same_session"
             report["setup"][-1]["continuation_source"] = source_report
         save()
         if code != 0 or timed_out:
@@ -1275,8 +1266,6 @@ def main(argv=None):
         elif TESTS[name] == "roundtrip_saves":
             arguments = [str(work / path) for path in
                          (name, "native-assets", name + "-native")]
-            if args.continuous_first_flight:
-                arguments.append(str(work / "surface-loop"))
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
         elif TESTS[name] == "operating_assets":
@@ -1322,7 +1311,7 @@ def main(argv=None):
             arguments = [str(work / path) for path in ("port-approach.json", "port-docked.json", "port-trace.json", "port-far.json", "native-assets")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
-                   "--path", str(project), "--script", f"res://tests/{scripts[name]}_test.gd",
+                   "--path", str(project), "--script", f"res://tests/{name}_test.gd",
                    "--", *arguments]
         code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
         output = log.read_text(errors="replace")
