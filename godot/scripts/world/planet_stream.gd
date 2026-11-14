@@ -123,6 +123,17 @@ static func _morph_key(value: Variant) -> PackedInt32Array:
 	return key
 
 
+static func tile_render_priority(value: Variant) -> int:
+	var key := _morph_key(value)
+	if key.is_empty(): return 0
+	# Opposite cube faces never share a boundary. Three axis groups, fourteen
+	# supported LODs and four coordinate parities use 168 of Godot's 256 bands.
+	# Neighboring tiles have distinct priorities even across faces/LODs, so
+	# equal-depth skirt fragments don't depend on fresh material/mesh RIDs.
+	# Ordinary depth testing remains active; this supplies no geometry or pose.
+	return (((key[0] >> 1) * 14 + key[1]) * 4 + ((key[2] & 1) << 1) + (key[3] & 1)) - 128
+
+
 func _begin_batch(batch: Dictionary) -> bool:
 	var entries: Variant = batch.get("tiles")
 	if not entries is Array or entries.is_empty() or entries.size() > 384:
@@ -338,6 +349,7 @@ func tick(delta: float, observer: Vector3, animate := true) -> void:
 				instance.mesh = mesh
 				var material := ShaderMaterial.new()
 				material.shader = load("res://shaders/terrain.gdshader")
+				material.render_priority = tile_render_priority(entry.id)
 				material.set_shader_parameter("planet_tile", true)
 				material.set_shader_parameter("tile_origin", Vector3(entry.anchor[0], entry.anchor[1], entry.anchor[2]))
 				instance.material_override = material
