@@ -163,6 +163,11 @@ body/recipe, complete Save hash, camera transform/projection, output and actual
 internal dimensions, render method, clip planes, visible tile keys/spacing,
 feature anchors, primitive coverage and image. Name unavailable combinations.
 
+The opt-in [frozen native import comparison](NATIVE_FRAME_IMPORT_CAPTURE.md)
+provides one bounded same-pose system-import/canonical image pair with complete
+Save As and camera metadata. It is a reproducible import-boundary check, not
+execution of this full matrix or a claim that the visual continuum has passed.
+
 The output matrix is compact 800×450, wide 1920×1080 and 3840×2160, with native
 and half-width/half-height internal resolutions. This is a qualification matrix,
 not a claim of a shipped dynamic-resolution setting or 4K GPU acceptance.
