@@ -15,14 +15,37 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 
 
 CAPTURE = "res://studies/captures/native_frame_import_capture.gd"
 HELPERS = "res://tests/native_frame_import_capture_test.gd"
+PAIR_HELPERS = "res://tests/native_frame_import_capture_fixture_test.gd"
 SIZES = ((800, 450), (1920, 1080), (3840, 2160))
 SCRIPT_ERROR = re.compile(r"SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script")
+ENGINE_DIAGNOSTIC = re.compile(
+    r"^\s*(?:ERROR:|SCRIPT ERROR:)|ObjectDB.*instances?.*leak|"
+    r"resources still in use at exit|RID[^\n]*leak", re.IGNORECASE | re.MULTILINE)
+
+
+def run_owned_process(command, *, cwd, env, output, timeout):
+    """Own one session so an xvfb-run timeout also terminates its children."""
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=output,
+                               stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        code = process.wait(timeout=timeout)
+    except BaseException:
+        # Only this newly created process group is signalled. Always reap the
+        # direct child, including on interruption, before propagating the error.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+    return subprocess.CompletedProcess(command, code)
 
 
 def digest(path):
@@ -79,9 +102,8 @@ def main():
         log = work / f"{len(cases):03d}-{name}.log"
         try:
             with log.open("w") as output:
-                result = subprocess.run(list(map(str, command)), cwd=work, env=env,
-                                        stdout=output, stderr=subprocess.STDOUT,
-                                        timeout=timeout, check=False)
+                result = run_owned_process(list(map(str, command)), cwd=work, env=env,
+                                           output=output, timeout=timeout)
             code = result.returncode
         except subprocess.TimeoutExpired:
             code = None
@@ -174,6 +196,15 @@ def main():
         check(case, case["returncode"] == 0 and all((fixtures / name).is_file() for name in ("system-import.json", "canonical-before.json", "malformed-import.json")), "real C++ fixture export failed")
         if case["failures"]:
             return finish()
+    if fixtures.is_dir():
+        case, text = run("fixture-pair-helpers", [*command(PAIR_HELPERS), "--",
+                          fixtures / "system-import.json", fixtures / "canonical-before.json"])
+        check(case, case["returncode"] == 0 and "0 failures" in text
+              and not SCRIPT_ERROR.search(text), "real fixture-pair helper assertions failed")
+        check(case, not ENGINE_DIAGNOSTIC.search(text), "fixture-pair helpers emitted engine/leak diagnostics")
+    else:
+        skipped.append("fixture-pair helpers require real fixtures")
+
     if args.graphical:
         if not shutil.which("xvfb-run"):
             parser.error("--graphical requires installed xvfb-run")
@@ -186,6 +217,56 @@ def main():
             shutil.copy2(fixtures / "system-import.json", partial / "system-import.json")
             output = work / "missing-second"
             refused(output.name, [str(partial), str(assets), str(output), "800", "450"], "Missing authoritative fixture: canonical-before.json", output, True)
+            # Test file kinds with untouched exporter bytes under each required
+            # name, rather than inventing JSON saves to reach the preflight.
+            for name, system_name, canonical_name in (
+                    ("duplicated-canonical", "canonical-before.json", "canonical-before.json"),
+                    ("duplicated-system", "system-import.json", "system-import.json"),
+                    ("reversed-fixture-kinds", "canonical-before.json", "system-import.json")):
+                altered = work / name
+                altered.mkdir()
+                for destination, source in (("system-import.json", system_name),
+                                            ("canonical-before.json", canonical_name)):
+                    shutil.copy2(fixtures / source, altered / destination)
+                copies = {path.name: digest(path) for path in altered.iterdir()}
+                output = work / f"refused-{name}"
+                case = refused(name, [str(altered), str(work / "absent-assets"), str(output), "800", "450"],
+                               "Expected distinct format35 system-frame and format31 canonical planetary fixtures", output, True)
+                check(case, copies == {path.name: digest(path) for path in altered.iterdir()},
+                      "fixture-kind preflight changed authentic file copies")
+
+            for name in ("system-import.json", "canonical-before.json"):
+                nonfile = work / f"nonfile-{Path(name).stem}"
+                nonfile.mkdir()
+                for source in ("system-import.json", "canonical-before.json"):
+                    if source == name:
+                        (nonfile / source).mkdir()
+                    else:
+                        shutil.copy2(fixtures / source, nonfile / source)
+                output = work / f"refused-{nonfile.name}"
+                refused(nonfile.name, [str(nonfile), str(assets), str(output), "800", "450"],
+                        "Missing authoritative fixture: " + name, output, True)
+
+                # Whitespace padding preserves the exported JSON document and
+                # its world. Test the exact inclusive byte boundary on each file.
+                for length in (1048576, 1048577):
+                    padded = work / f"size-{Path(name).stem}-{length}"
+                    padded.mkdir()
+                    for source in ("system-import.json", "canonical-before.json"):
+                        shutil.copy2(fixtures / source, padded / source)
+                    path = padded / name
+                    with path.open("ab") as stream:
+                        stream.write(b" " * (length - path.stat().st_size))
+                    copies = {path.name: digest(path) for path in padded.iterdir()}
+                    output = work / f"refused-{padded.name}"
+                    reason = ("Prepared native assets are required" if length == 1048576 else
+                              "Fixture unavailable or larger than 1 MiB: " + name)
+                    case = refused(padded.name, [str(padded), str(work / "absent-assets"), str(output), "800", "450"],
+                                   reason, output, True)
+                    check(case, path.stat().st_size == length, "fixture boundary test used the wrong byte length")
+                    check(case, copies == {path.name: digest(path) for path in padded.iterdir()},
+                          "fixture size preflight changed its input bytes")
+
             output = work / "missing-prepared-assets"
             refused(output.name, [str(fixtures), str(work / "absent-assets"), str(output), "800", "450"], "Prepared native assets are required", output, True)
             if args.assets:
@@ -251,6 +332,7 @@ def main():
             output = work / f"capture-{size}"
             case, text = run(output.name, [*command(graphical=True, size=(width, height)), "--", *arguments(output, str(width), str(height))], timeout=900)
             check(case, case["returncode"] == 0 and "Native frame import capture: PASS" in text and not SCRIPT_ERROR.search(text), "actual native capture failed")
+            check(case, not ENGINE_DIAGNOSTIC.search(text), "positive capture emitted engine errors or resource-leak diagnostics")
             report_path = output / "capture.json"
             check(case, report_path.is_file(), "capture report missing")
             if not report_path.is_file():
@@ -279,6 +361,7 @@ def main():
                 if all(path.is_file() for path in pngs):
                     audit, text = run(f"png-audit-{size}", [*command(HELPERS), "--", *pngs, str(width), str(height)], timeout=900)
                     check(audit, audit["returncode"] == 0 and "0 failures" in text and not SCRIPT_ERROR.search(text), "independent Godot PNG visibility/dimension audit failed")
+                    check(audit, not ENGINE_DIAGNOSTIC.search(text), "PNG audit emitted engine errors or resource-leak diagnostics")
             check(case, originals == {name: digest(fixtures / name) for name in names}, "capture changed authoritative input bytes")
     else:
         skipped.append("native failure reports and positive captures require --capture and a staged native project")
