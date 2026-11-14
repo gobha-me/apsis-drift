@@ -14,10 +14,12 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import signal
 import subprocess
 import sys
+import time
 
 
 CAPTURE = "res://studies/captures/native_frame_import_capture.gd"
@@ -30,10 +32,12 @@ ENGINE_DIAGNOSTIC = re.compile(
     r"resources still in use at exit|RID[^\n]*leak", re.IGNORECASE | re.MULTILINE)
 
 
-def run_owned_process(command, *, cwd, env, output, timeout):
-    """Own one session so an xvfb-run timeout also terminates its children."""
+def run_owned_process(command, *, cwd, env, output, timeout, log_ownership=False):
+    """Own one session and reap its direct child on every outcome."""
     process = subprocess.Popen(command, cwd=cwd, env=env, stdout=output,
                                stderr=subprocess.STDOUT, start_new_session=True)
+    if log_ownership:
+        print(f"Owned child pid={process.pid} started", file=output, flush=True)
     try:
         code = process.wait(timeout=timeout)
     except BaseException:
@@ -45,7 +49,72 @@ def run_owned_process(command, *, cwd, env, output, timeout):
             pass
         process.wait()
         raise
+    finally:
+        if log_ownership:
+            print(f"Owned child pid={process.pid} reaped returncode={process.returncode}",
+                  file=output, flush=True)
     return subprocess.CompletedProcess(command, code)
+
+
+def run_with_owned_xvfb(command, *, size, cwd, env, output, timeout):
+    """Own Xvfb directly; startup and child share the caller's total deadline."""
+    deadline = time.monotonic() + timeout
+    startup_deadline = min(deadline, time.monotonic() + 15)
+    xvfb = None
+    read_fd = write_fd = None
+    try:
+        read_fd, write_fd = os.pipe()
+        xvfb = subprocess.Popen(
+            ["Xvfb", "-displayfd", str(write_fd), "-screen", "0", size + "x24",
+             "-nolisten", "tcp", "-ac"],
+            cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT,
+            pass_fds=(write_fd,), start_new_session=True)
+        print(f"Owned Xvfb pid={xvfb.pid} started", file=output, flush=True)
+        os.close(write_fd)
+        write_fd = None
+        display = b""
+        while b"\n" not in display and len(display) < 128:
+            remaining = startup_deadline - time.monotonic()
+            if remaining <= 0 or not select.select([read_fd], [], [], remaining)[0]:
+                raise subprocess.TimeoutExpired(command, timeout)
+            chunk = os.read(read_fd, 128 - len(display))
+            if not chunk:
+                raise RuntimeError("Owned Xvfb exited before returning a display")
+            display += chunk
+        number = display.rstrip(b"\n")
+        if not number or not number.isdigit() or not display.endswith(b"\n"):
+            raise RuntimeError("Owned Xvfb returned an invalid display")
+        child_env = env.copy()
+        child_env["DISPLAY"] = ":" + number.decode("ascii")
+        print(f"Owned Xvfb pid={xvfb.pid} display={child_env['DISPLAY']}",
+              file=output, flush=True)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(command, timeout)
+        result = run_owned_process(command, cwd=cwd, env=child_env,
+                                   output=output, timeout=remaining, log_ownership=True)
+    finally:
+        # Do not depend on temporary-directory removal to reach this cleanup.
+        # Signal only the exact Xvfb child created above, then explicitly reap it.
+        if xvfb is not None:
+            if xvfb.poll() is None:
+                xvfb.terminate()
+                try:
+                    xvfb.wait(timeout=max(0, min(5, deadline - time.monotonic())))
+                except subprocess.TimeoutExpired:
+                    xvfb.kill()
+            xvfb.wait()
+            print(f"Owned Xvfb pid={xvfb.pid} reaped returncode={xvfb.returncode}",
+                  file=output, flush=True)
+        if read_fd is not None:
+            os.close(read_fd)
+        if write_fd is not None:
+            os.close(write_fd)
+    if time.monotonic() > deadline:
+        raise subprocess.TimeoutExpired(command, timeout)
+    if xvfb.returncode != 0:
+        raise RuntimeError(f"Owned Xvfb exited with status {xvfb.returncode}")
+    return result
 
 
 def digest(path):
@@ -102,8 +171,14 @@ def main():
         log = work / f"{len(cases):03d}-{name}.log"
         try:
             with log.open("w") as output:
-                result = run_owned_process(list(map(str, command)), cwd=work, env=env,
-                                           output=output, timeout=timeout)
+                values = list(map(str, command))
+                if "--display-driver" in values:
+                    size = values[values.index("--resolution") + 1]
+                    result = run_with_owned_xvfb(values, size=size, cwd=work, env=env,
+                                                 output=output, timeout=timeout)
+                else:
+                    result = run_owned_process(values, cwd=work, env=env,
+                                               output=output, timeout=timeout, log_ownership=True)
             code = result.returncode
         except subprocess.TimeoutExpired:
             code = None
@@ -127,8 +202,7 @@ def main():
         base = [engine, "--audio-driver", "Dummy", "--path", project]
         if graphical:
             w, h = size
-            return ["xvfb-run", "--auto-servernum", f"--server-args=-screen 0 {w}x{h}x24",
-                    *base, "--display-driver", "x11", "--rendering-method", "gl_compatibility",
+            return [*base, "--display-driver", "x11", "--rendering-method", "gl_compatibility",
                     "--resolution", f"{w}x{h}", "--script", script]
         return [*base, "--headless", "--script", script]
 
@@ -206,8 +280,8 @@ def main():
         skipped.append("fixture-pair helpers require real fixtures")
 
     if args.graphical:
-        if not shutil.which("xvfb-run"):
-            parser.error("--graphical requires installed xvfb-run")
+        if not shutil.which("Xvfb"):
+            parser.error("--graphical requires installed Xvfb")
         output = work / "missing-first"
         refused(output.name, [str(work / "absent"), str(assets), str(output), "800", "450"], "Missing authoritative fixture: system-import.json", output, True)
         if fixtures.is_dir():
