@@ -31,8 +31,17 @@ static func valid_image(image: Image, expected: Vector2i) -> bool:
 	return visible and varied
 
 
+static func fixture_kind(document: Variant, version: int, location: String) -> bool:
+	if not document is Dictionary: return false
+	var actual_version: Variant = document.get("format_version")
+	var state: Variant = document.get("state")
+	# Mixed-type equality can itself raise a GDScript error. Reject malformed
+	# shapes before comparing values; JSON numbers may be int or float.
+	return (actual_version is int or actual_version is float) and actual_version == version and state is Dictionary and state.get("location") is String and state.location == location
+
+
 static func valid_fixture_pair(system: Variant, canonical: Variant) -> bool:
-	return system is Dictionary and system.get("format_version") == 35 and system.get("state") is Dictionary and system.state.get("location") == "system_flight" and canonical is Dictionary and canonical.get("format_version") == 31 and canonical.get("state") is Dictionary and canonical.state.get("location") == "planetary_flight"
+	return fixture_kind(system, 35, "system_flight") and fixture_kind(canonical, 31, "planetary_flight")
 
 
 func require(value: bool, reason: String) -> bool:
