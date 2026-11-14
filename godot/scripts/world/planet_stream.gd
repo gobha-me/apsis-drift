@@ -127,7 +127,7 @@ static func tile_render_priority(value: Variant) -> int:
 	var key := _morph_key(value)
 	if key.is_empty(): return 0
 	# Opposite cube faces never share a boundary. Three axis groups, fourteen
-	# supported LODs and four coordinate parities use 168 of Godot's 256 bands.
+	# supported LODs and four coordinate parities reserve 168 of Godot's 256 bands.
 	# Neighboring tiles have distinct priorities even across faces/LODs, so
 	# equal-depth skirt fragments don't depend on fresh material/mesh RIDs.
 	# Ordinary depth testing remains active; this supplies no geometry or pose.

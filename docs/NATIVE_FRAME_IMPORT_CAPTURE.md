@@ -7,6 +7,24 @@ images at the same saved pose, tick and default chase camera. It does not
 qualify the full approach/entry/landing continuum, recognizable relief,
 controller operation, hardware performance or frame pacing.
 
+The comparison exposed a presentation lifecycle defect: reopening the identical
+save changed a few terrain pixels even though the complete save, cameras,
+uploaded mesh arrays, transforms and uniforms matched. Retaining the same view
+stayed identical, and independent cold-process imports also matched. A stable
+tile material priority removes the observed allocation-dependent ordering at
+neighboring terrain boundaries. Depth testing, mesh buffers, clip planes and
+authoritative state retain their existing rules.
+
+The priority uses the existing C++ cube-face/LOD/coordinate key: opposite faces
+share an axis group, each of the fourteen supported LODs has separate bands, and
+coordinate parity distinguishes edge/corner neighbors. This reserves 168 bands
+within Godot's `-128..127` range (159 are reachable because LOD0 has one tile).
+It supplies a consistent order for neighboring fragments with equal stored
+depth. It is not a unique order over every resident tile or a depth-precision
+repair. Godot's pinned [opaque GLES3 sort key](https://github.com/godotengine/godot/blob/ed1daf0bf/drivers/gles3/rasterizer_scene_gles3.h#L248)
+places material priority before allocation-derived material/geometry keys;
+the [opaque pass sorts by that key](https://github.com/godotengine/godot/blob/ed1daf0bf/drivers/gles3/rasterizer_scene_gles3.cpp#L2323).
+
 The existing C++ import fixture supplies `system-import.json` and
 `canonical-before.json`. The headless native contract checks the malformed
 owner, complete projection, one real neutral tick, canonical Save As and
