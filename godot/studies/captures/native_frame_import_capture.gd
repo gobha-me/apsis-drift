@@ -9,7 +9,8 @@ var error := ""
 
 
 static func valid_dimensions(width: int, height: int) -> bool:
-	return Vector2i(width, height) in [Vector2i(800, 450), Vector2i(1920, 1080), Vector2i(3840, 2160)]
+	# Validate the original 64-bit integers before any Vector2i narrowing.
+	return (width == 800 and height == 450) or (width == 1920 and height == 1080) or (width == 3840 and height == 2160)
 
 
 static func valid_image(image: Image, expected: Vector2i) -> bool:
@@ -18,10 +19,20 @@ static func valid_image(image: Image, expected: Vector2i) -> bool:
 	# Refuse blank/uniform readback without claiming that colour variation proves
 	# correct terrain, scale or recognizable relief.
 	var first := image.get_pixel(0, 0)
+	first = Color(first.r * first.a, first.g * first.a, first.b * first.a, first.a)
+	var visible := first.a > 0.0
+	var varied := false
 	for y in [0, expected.y >> 1, expected.y - 1]:
 		for x in [0, expected.x >> 1, expected.x - 1]:
-			if image.get_pixel(x, y) != first: return true
-	return false
+			var color := image.get_pixel(x, y)
+			visible = visible or color.a > 0.0
+			color = Color(color.r * color.a, color.g * color.a, color.b * color.a, color.a)
+			varied = varied or color != first
+	return visible and varied
+
+
+static func valid_fixture_pair(system: Variant, canonical: Variant) -> bool:
+	return system is Dictionary and system.get("format_version") == 35 and system.get("state") is Dictionary and system.state.get("location") == "system_flight" and canonical is Dictionary and canonical.get("format_version") == 31 and canonical.get("state") is Dictionary and canonical.state.get("location") == "planetary_flight"
 
 
 func require(value: bool, reason: String) -> bool:
@@ -70,7 +81,7 @@ func settle(view: Control, owner: Variant) -> bool:
 		return false
 	# Refresh depth ranges after the completed physical mesh cover, still paused.
 	view.update_view(0.0)
-	return true
+	return require(view.error.is_empty() and view.terrain.error.is_empty(), "Presentation refresh failed: " + view.error + view.terrain.error)
 
 
 func _initialize() -> void:
@@ -81,7 +92,9 @@ func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if not require(args.size() == 5, "Expected absolute fixture/assets/new output directories, width and height"):
 		quit(1); return
-	if not require(args[3].is_valid_int() and args[4].is_valid_int() and str(args[3].to_int()) == args[3] and str(args[4].to_int()) == args[4] and valid_dimensions(args[3].to_int(), args[4].to_int()), "Unsupported capture dimensions"):
+	# Whitelist canonical text before conversion: String.to_int() tolerates some
+	# embedded whitespace and oversized strings can emit conversion diagnostics.
+	if not require(args[3] in ["800", "1920", "3840"] and args[4] in ["450", "1080", "2160"] and valid_dimensions(args[3].to_int(), args[4].to_int()), "Unsupported capture dimensions"):
 		quit(1); return
 	for index in 3:
 		if not require(args[index].is_absolute_path(), "Capture directories must be absolute"):
@@ -89,11 +102,19 @@ func run() -> void:
 	if not require(DisplayServer.get_name() != "headless", "Capture requires an isolated rendering display"):
 		quit(1); return
 	var hashes := {}
+	var documents: Array = []
 	for name in INPUTS:
 		var path: String = args[0].path_join(name)
 		if not require(FileAccess.file_exists(path), "Missing authoritative fixture: " + name):
 			quit(1); return
 		hashes[name] = FileAccess.get_sha256(path)
+		var file := FileAccess.open(path, FileAccess.READ)
+		if not require(file != null and file.get_length() <= 1048576, "Fixture unavailable or larger than 1 MiB: " + name):
+			quit(1); return
+		documents.append(JSON.parse_string(file.get_as_text()))
+		file.close()
+	if not require(valid_fixture_pair(documents[0], documents[1]), "Expected distinct format35 system-frame and format31 canonical planetary fixtures"):
+		quit(1); return
 	if not require(FileAccess.file_exists(args[1].path_join("prepared.json")), "Prepared native assets are required"):
 		quit(1); return
 	if not require(not DirAccess.dir_exists_absolute(args[2]) and not FileAccess.file_exists(args[2]), "Capture output must be new"):
@@ -105,6 +126,9 @@ func run() -> void:
 	if not require(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Cannot create capture output"):
 		quit(1); return
 	root.size = Vector2i(args[3].to_int(), args[4].to_int())
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	root.content_scale_size = Vector2i.ZERO
+	root.content_scale_factor = 1.0
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
 	var shell := Shell.new()
 	shell.presentation_only = true
@@ -138,7 +162,11 @@ func run() -> void:
 			await RenderingServer.frame_post_draw
 		if not require(owner.get_freedom_flight_state() == before and view.paused, "Rendering changed authoritative state"):
 			break
+		if not require(view.error.is_empty() and view.terrain.error.is_empty(), "Presentation failed before readback: " + view.error + view.terrain.error):
+			break
 		var camera := {"near": camera_record(view.camera), "terrain": camera_record(view.terrain_camera)}
+		if not require(camera.near.viewport == [root.size.x, root.size.y] and camera.terrain.viewport == [root.size.x, root.size.y], "Capture camera viewports differ from full output resolution"):
+			break
 		if not captures.is_empty() and not require(camera == cameras, "Imported and canonical camera projections differ"):
 			break
 		cameras = camera
