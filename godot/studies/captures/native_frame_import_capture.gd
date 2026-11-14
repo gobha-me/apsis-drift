@@ -18,8 +18,8 @@ static func valid_image(image: Image, expected: Vector2i) -> bool:
 	# Refuse blank/uniform readback without claiming that colour variation proves
 	# correct terrain, scale or recognizable relief.
 	var first := image.get_pixel(0, 0)
-	for y in [0, expected.y / 2, expected.y - 1]:
-		for x in [0, expected.x / 2, expected.x - 1]:
+	for y in [0, expected.y >> 1, expected.y - 1]:
+		for x in [0, expected.x >> 1, expected.x - 1]:
 			if image.get_pixel(x, y) != first: return true
 	return false
 
@@ -37,8 +37,8 @@ static func coordinates(value: Vector3) -> Array:
 
 static func camera_record(camera: Camera3D) -> Dictionary:
 	var size := camera.get_viewport().get_visible_rect().size
-	return {"position_metres": coordinates(camera.position),
-		"basis": [coordinates(camera.basis.x), coordinates(camera.basis.y), coordinates(camera.basis.z)],
+	return {"position_metres": coordinates(camera.global_position),
+		"basis": [coordinates(camera.global_basis.x), coordinates(camera.global_basis.y), coordinates(camera.global_basis.z)],
 		"fov_degrees": camera.fov, "keep_aspect": camera.keep_aspect,
 		"projection": camera.projection, "near_metres": camera.near, "far_metres": camera.far,
 		"viewport": [size.x, size.y]}
@@ -155,7 +155,7 @@ func run() -> void:
 			"canonical_save_sha256": FileAccess.get_sha256(copy),
 			"tick": before.tick, "checksum": before.checksum,
 			"universe_seed": before.universe_seed, "system_id": before.system_id, "planet_id": before.planet_id,
-			"frame_id": before.frame_id, "terrain_policy": before.terrain_policy,
+			"frame_id": before.frame_id, "frame_version": before.frame_version, "terrain_policy": before.terrain_policy,
 			"altitude_metres": before.altitude, "planet_radius_metres": before.planet_radius,
 			"star_direction": coordinates(before.star_direction), "lighting": before.lighting,
 			"camera": camera, "terrain": view.terrain.report()})
