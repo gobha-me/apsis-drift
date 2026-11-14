@@ -12,6 +12,18 @@ static func valid_dimensions(width: int, height: int) -> bool:
 	return Vector2i(width, height) in [Vector2i(800, 450), Vector2i(1920, 1080), Vector2i(3840, 2160)]
 
 
+static func valid_image(image: Image, expected: Vector2i) -> bool:
+	if image == null or image.is_empty() or image.get_size() != expected or not valid_dimensions(expected.x, expected.y):
+		return false
+	# Refuse blank/uniform readback without claiming that colour variation proves
+	# correct terrain, scale or recognizable relief.
+	var first := image.get_pixel(0, 0)
+	for y in [0, expected.y / 2, expected.y - 1]:
+		for x in [0, expected.x / 2, expected.x - 1]:
+			if image.get_pixel(x, y) != first: return true
+	return false
+
+
 func require(value: bool, reason: String) -> bool:
 	if not value:
 		if error.is_empty(): error = reason
@@ -135,7 +147,7 @@ func run() -> void:
 			break
 		var picture := root.get_texture().get_image()
 		var image_name: String = name.get_basename() + ".png"
-		if not require(picture != null and picture.get_size() == root.size and picture.save_png(args[2].path_join(image_name)) == OK, "Capture image unavailable or wrong size"):
+		if not require(valid_image(picture, root.size) and picture.save_png(args[2].path_join(image_name)) == OK, "Capture image unavailable, uniform or wrong size"):
 			break
 		images.append(picture)
 		captures.append({"source": name, "image": image_name,
