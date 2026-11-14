@@ -18,7 +18,7 @@ spec.loader.exec_module(driver)
 
 class ProcessOwnershipTest(unittest.TestCase):
     def test_completed_process_has_its_own_session(self):
-        with tempfile.TemporaryDirectory(dir=os.environ["LANE_TMP"]) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "success.log"
             with log.open("w") as output:
                 result = driver.run_owned_process(
@@ -33,7 +33,7 @@ class ProcessOwnershipTest(unittest.TestCase):
     def test_timeout_terminates_owned_group_and_reaps_direct_child(self):
         # This probe creates no descendants. The timed-out process and its group
         # are both owned here; no owner or unrelated process is ever signalled.
-        with tempfile.TemporaryDirectory(dir=os.environ["LANE_TMP"]) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "timeout.log"
             with log.open("w") as output:
                 with self.assertRaises(subprocess.TimeoutExpired):
@@ -65,7 +65,7 @@ sys.exit(int(sys.argv[1]))
 """
 
     def run_child(self, outcome, timeout=30):
-        directory = tempfile.mkdtemp(prefix="native-xvfb-cleanup-", dir=os.environ["LANE_TMP"])
+        directory = tempfile.mkdtemp(prefix="native-xvfb-cleanup-")
         print(f"Retained Xvfb cleanup evidence: {directory}", flush=True)
         root = Path(directory)
         env = os.environ.copy()
