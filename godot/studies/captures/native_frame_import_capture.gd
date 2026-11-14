@@ -159,6 +159,11 @@ func run() -> void:
 		view.set_process_unhandled_input(false)
 		view.controls_menu.hide_menu()
 		view.cockpit = false
+		# Freeze before yielding, then resolve the newly installed Control layout.
+		# A disabled scene can retain its initial 1280x720 subviewport otherwise.
+		for frame in 2:
+			await process_frame
+			view.layout_hud()
 		view.update_view(0.0)
 		var before: Dictionary = owner.get_freedom_flight_state()
 		if not captures.is_empty() and not require(before == canonical_state, "System import differs from independently opened canonical state"):
@@ -174,7 +179,7 @@ func run() -> void:
 		if not require(view.error.is_empty() and view.terrain.error.is_empty(), "Presentation failed before readback: " + view.error + view.terrain.error):
 			break
 		var camera := {"near": camera_record(view.camera), "terrain": camera_record(view.terrain_camera)}
-		if not require(camera.near.viewport == [root.size.x, root.size.y] and camera.terrain.viewport == [root.size.x, root.size.y], "Capture camera viewports differ from full output resolution"):
+		if not require(camera.near.viewport == [root.size.x, root.size.y] and camera.terrain.viewport == [root.size.x, root.size.y], "Capture camera viewports differ from full output resolution: window=%s view=%s cameras=%s" % [str(root.size), str(view.size), str(camera)]):
 			break
 		if not captures.is_empty() and not require(camera == cameras, "Imported and canonical camera projections differ"):
 			break
