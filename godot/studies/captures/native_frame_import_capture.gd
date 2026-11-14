@@ -179,7 +179,8 @@ func run() -> void:
 		if not require(view.error.is_empty() and view.terrain.error.is_empty(), "Presentation failed before readback: " + view.error + view.terrain.error):
 			break
 		var camera := {"near": camera_record(view.camera), "terrain": camera_record(view.terrain_camera)}
-		if not require(camera.near.viewport == [root.size.x, root.size.y] and camera.terrain.viewport == [root.size.x, root.size.y], "Capture camera viewports differ from full output resolution: window=%s view=%s cameras=%s" % [str(root.size), str(view.size), str(camera)]):
+		var expected_viewport := [float(root.size.x), float(root.size.y)]
+		if not require(camera.near.viewport == expected_viewport and camera.terrain.viewport == expected_viewport, "Capture camera viewports differ from full output resolution: window=%s view=%s cameras=%s" % [str(root.size), str(view.size), str(camera)]):
 			break
 		if not captures.is_empty() and not require(camera == cameras, "Imported and canonical camera projections differ"):
 			break

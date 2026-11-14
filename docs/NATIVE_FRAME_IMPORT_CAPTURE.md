@@ -39,6 +39,9 @@ source. Repeat with the other compiler for publication.
 ## Capture on an owned display
 
 ```sh
+XDG_DATA_HOME="$IMPORT_STAGE/capture-userdata" \
+XDG_CONFIG_HOME="$IMPORT_STAGE/capture-config" \
+XDG_CACHE_HOME="$IMPORT_STAGE/capture-cache" \
 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run --auto-servernum \
   --server-args="-screen 0 800x450x24" \
   "$GODOT_BIN" --display-driver x11 --rendering-method gl_compatibility \
@@ -60,6 +63,8 @@ The main window remains shown on this isolated display. The script does not
 require Godot to hide it, does not connect to a player's display, and does not
 change capture guards elsewhere. The historical failed hidden-window attempt
 remains failed evidence; it is not retroactively counted as a pass.
+The explicit XDG directories isolate engine logs, preferences and caches from
+the player's profile.
 
 ## Read the evidence
 
