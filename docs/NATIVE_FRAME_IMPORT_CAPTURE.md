@@ -10,9 +10,10 @@ controller operation, hardware performance or frame pacing.
 The comparison exposed a presentation lifecycle defect: reopening the identical
 save changed a few terrain pixels even though the complete save, cameras,
 uploaded mesh arrays, transforms and uniforms matched. Retaining the same view
-stayed identical, and independent cold-process imports also matched. A stable
-tile material priority removes the observed allocation-dependent ordering at
-neighboring terrain boundaries. Depth testing, mesh buffers, clip planes and
+stayed identical, and independent cold-process imports also matched. These
+controls and the engine's sort key point to resource-dependent ordering at
+neighboring terrain boundaries. A stable tile material priority removes the
+observed differences. Depth testing, mesh buffers, clip planes and
 authoritative state retain their existing rules.
 
 The priority uses the existing C++ cube-face/LOD/coordinate key: opposite faces
@@ -105,3 +106,43 @@ two equivalent imports produce the same frozen appearance on the recorded
 renderer. They cannot establish correct physical scale, a visible terrain
 feature, broad seams or the complete visual continuum. The wider targets in
 [the scale contract](PLANETARY_SCALE_CONTRACT.md) and #217 remain open.
+
+## Independent regression checks
+
+The capture driver exercises invalid arguments, fixture roles, exact camera
+dimensions, canonical state preservation and both real imports at all three
+sizes. The terrain driver checks the supported key space, real refinement and
+coarsening, rollback, retained materials and repeated imports of the same save.
+Both require the successful import stage described above:
+
+```sh
+python3 test/godot/native_frame_import_capture_test.py \
+  --godot "$GODOT_BIN" --project "$IMPORT_STAGE/project" \
+  --fixtures "$IMPORT_STAGE/frame-import" --assets "$IMPORT_STAGE/native-assets" \
+  --work-dir capture-contract-results --graphical --capture \
+  --size 800x450 --size 1920x1080 --size 3840x2160
+python3 test/godot/terrain_render_priority_test.py \
+  --godot "$GODOT_BIN" --project "$IMPORT_STAGE/project" \
+  --fixtures "$IMPORT_STAGE/frame-import" --assets "$IMPORT_STAGE/native-assets" \
+  --work-dir terrain-priority-results --graphical
+```
+
+## Recorded bounded result — 2026-11-14
+
+At the fixture's 500 km altitude and C++ tick 25, the initial paired readbacks
+differed at 6, 70 and 339 pixels respectively. With stable priorities, the
+qualified replay produced identical decoded RGBA buffers and canonical saves
+at every size. Reports include the software renderer, engine and source hashes;
+this is a bounded historical result for that recorded configuration.
+
+Raw PNGs, resaved fixtures and machine-generated reports are run artifacts,
+kept outside commits as required by CONTRIBUTING. The authored digest record
+below identifies the paired PNGs from the qualified replay (both files in each
+pair have the same SHA-256). Reproduce the checks above to generate fresh
+artifacts; digest equality across different renderers is not required.
+
+| Size | Paired PNG SHA-256 |
+| --- | --- |
+| 800x450 | `0ec84ea6469410c9c3b832c467d12357a81beef2e3145ebffb90b61e765eb344` |
+| 1920x1080 | `ba58d0711552635a8f4c44f88b2438d9c0c0e8aefeab3933046dd80679c87dd9` |
+| 3840x2160 | `b3a5358a916e1313957b009a4f56193f6c934410da3a3facf73f0a8566faf7b5` |
